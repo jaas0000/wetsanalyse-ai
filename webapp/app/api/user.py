@@ -48,7 +48,14 @@ async def login(req: UserLogin, request: Request, response: Response):
         samesite="lax",
     )
 
-    return {"username": user.username, "message": "Ingelogd"}
+    return {
+        "username": user.username,
+        "message": "Ingelogd",
+        "has_api_key": user.has_api_key,
+        "provider": user.provider,
+        "endpoint": user.endpoint,
+        "model": user.model,
+    }
 
 
 @router.post("/logout")
