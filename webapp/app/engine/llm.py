@@ -28,6 +28,22 @@ from app.prompts.betekenis import BETEKENIS_SYSTEM_PROMPT
 
 logger = logging.getLogger(__name__)
 
+# ── Module-level httpx client for connection pooling ──────────────────────
+_client: httpx.AsyncClient | None = None
+
+
+async def _get_client() -> httpx.AsyncClient:
+    global _client
+    if _client is None or _client.is_closed:
+        _client = httpx.AsyncClient(timeout=120)
+    return _client
+
+
+async def shutdown_client():
+    global _client
+    if _client is not None and not _client.is_closed:
+        await _client.aclose()
+
 
 class LlmError(Exception):
     """Fout bij LLM-communicatie."""
@@ -96,21 +112,21 @@ async def _call_llm(
 
     for attempt in range(max_retries):
         try:
-            async with httpx.AsyncClient(timeout=120) as client:
-                resp = await client.post(url, headers=headers, json=body)
+            client = await _get_client()
+            resp = await client.post(url, headers=headers, json=body)
 
-                # Transient errors: retry
-                if resp.status_code in (429, 502, 503, 504):
-                    wait = 2 ** attempt
-                    logger.warning(
-                        "LLM HTTP %d (attempt %d/%d), waiting %ds",
-                        resp.status_code, attempt + 1, max_retries, wait,
-                    )
-                    await asyncio.sleep(wait)
-                    continue
+            # Transient errors: retry
+            if resp.status_code in (429, 502, 503, 504):
+                wait = 2 ** attempt
+                logger.warning(
+                    "LLM HTTP %d (attempt %d/%d), waiting %ds",
+                    resp.status_code, attempt + 1, max_retries, wait,
+                )
+                await asyncio.sleep(wait)
+                continue
 
-                resp.raise_for_status()
-                data = resp.json()
+            resp.raise_for_status()
+            data = resp.json()
 
             content = data["choices"][0]["message"]["content"]
 

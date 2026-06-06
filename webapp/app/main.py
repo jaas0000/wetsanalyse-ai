@@ -6,15 +6,18 @@ bestaande project als een losse subfolder.
 """
 
 import logging
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 
 from app.config import settings, _validate_config
 from app.auth import init_db
 from app.engine.bwb_client import close_client, get_client
+from app.engine.llm import shutdown_client as shutdown_llm_client
 from app.engine.analyse_store import ensure_tables
 from app.api.analyse import router as analyse_router
 from app.api.user import router as user_router
@@ -43,6 +46,7 @@ async def lifespan(app: FastAPI):
     # Shutdown
     logger.info("Wetsanalyse Webapp stopt...")
     await close_client()
+    await shutdown_llm_client()
 
 
 app = FastAPI(
@@ -51,6 +55,17 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
+
+# CORS — env-var controlled origin
+cors_origin = os.getenv("WETSANALYSE_CORS_ORIGIN", "")
+if cors_origin:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=[cors_origin],
+        allow_credentials=True,
+        allow_methods=["GET", "POST", "PUT", "DELETE"],
+        allow_headers=["*"],
+    )
 
 
 # Custom exception handler voor 500 errors — geen interne details lekken

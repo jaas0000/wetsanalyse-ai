@@ -83,30 +83,6 @@ def init_db():
             model TEXT DEFAULT '',
             created_at TEXT DEFAULT (datetime('now'))
         );
-
-        CREATE TABLE IF NOT EXISTS analyses (
-            id TEXT PRIMARY KEY,
-            user_id TEXT NOT NULL,
-            status TEXT NOT NULL,
-            wet TEXT NOT NULL,
-            bwb_id TEXT NOT NULL,
-            artikel TEXT NOT NULL,
-            versiedatum TEXT DEFAULT '',
-            bronreferentie TEXT DEFAULT '',
-            sectie TEXT DEFAULT '',
-            pad TEXT DEFAULT '',
-            activiteit_2_json TEXT DEFAULT '',
-            activiteit_3_json TEXT DEFAULT '',
-            review_feedback_2 TEXT DEFAULT '',
-            review_feedback_3 TEXT DEFAULT '',
-            rapport_md TEXT DEFAULT '',
-            created_at TEXT DEFAULT (datetime('now')),
-            updated_at TEXT DEFAULT (datetime('now')),
-            FOREIGN KEY (user_id) REFERENCES users(username)
-        );
-
-        CREATE INDEX IF NOT EXISTS idx_analyses_user ON analyses(user_id);
-        CREATE INDEX IF NOT EXISTS idx_analyses_status ON analyses(status);
     """)
 
     # Migratie: als oude kolommen bestaan, voeg nieuwe toe

@@ -18,7 +18,7 @@
         <a href="/">Nieuwe analyse</a>
         <a href="/instellingen">Instellingen</a>
         <span id="user-display" class="muted"></span>
-        <button class="btn btn-sm" id="logout-btn" onclick="logout()">Uitloggen</button>
+        <button class="btn btn-sm" id="logout-btn" style="display:none" onclick="logout()">Uitloggen</button>
     </nav>
 </header>
 
@@ -100,6 +100,7 @@ async function loadSettings() {
     const user = await resp.json();
     document.getElementById('settings-username').textContent = user.username;
     document.getElementById('user-display').textContent = user.username;
+    document.getElementById('logout-btn').style.display = '';
 
     if (user.provider) {
         document.getElementById('provider-select').value = user.provider;
