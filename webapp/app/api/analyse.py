@@ -297,7 +297,6 @@ async def submit_review(
             logger.exception("Onverwachte fout bij rapport: %s", e)
             raise HTTPException(500, "Er is een interne fout opgetreden.")
 
-    raise HTTPException(400, "Ongeldige activiteit")
 
 
 @router.get("/rapport/{analyse_id}")

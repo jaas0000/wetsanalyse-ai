@@ -10,7 +10,6 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
 from fastapi.responses import FileResponse, JSONResponse
 
 from app.config import settings, _validate_config
@@ -74,9 +73,6 @@ app.include_router(user_router)
 
 # Static files
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
-
-# Templates
-templates = Jinja2Templates(directory="app/templates")
 
 
 @app.get("/")

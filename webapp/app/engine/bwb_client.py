@@ -19,8 +19,6 @@ from app.models import (
     ArtikelResultaat,
     LidData,
     Regeling,
-    StructuurNode,
-    StructuurResultaat,
     ZoekResultaat,
 )
 
@@ -63,16 +61,6 @@ def _map_regeling(r: dict) -> Regeling:
         repository_url=r.get("repositoryUrl", ""),
     )
 
-
-def _map_structuur_node(s: dict) -> StructuurNode:
-    """Map een MCP-structuur node (recursief)."""
-    return StructuurNode(
-        type=s.get("type", ""),
-        nr=s.get("nr", ""),
-        titel=s.get("titel"),
-        artikelen=s.get("artikelen"),
-        secties=[_map_structuur_node(sub) for sub in s.get("secties", [])] if s.get("secties") else None,
-    )
 
 
 class BwbClient:
@@ -225,34 +213,6 @@ class BwbClient:
         return ZoekResultaat(
             totaal=data["totaal"],
             regelingen=[_map_regeling(r) for r in data["regelingen"]],
-        )
-
-    async def structuur(
-        self,
-        bwb_id: str,
-        peildatum: str | None = None,
-    ) -> StructuurResultaat:
-        """Haal de inhoudsopgave van een wet op."""
-        args: dict[str, Any] = {"bwbId": bwb_id}
-        if peildatum:
-            args["peildatum"] = peildatum
-
-        result = await self._rpc_call("tools/call", {
-            "name": "wettenbank_structuur",
-            "arguments": args,
-        })
-
-        text = result["content"][0]["text"]
-        data = json.loads(text)
-
-        # MCP gebruikt camelCase voor bwb_id in structuur-output
-        bwb_id = data.get("bwb_id") or data.get("bwbId", "")
-
-        return StructuurResultaat(
-            bwb_id=bwb_id,
-            citeertitel=data["citeertitel"],
-            versiedatum=data["versiedatum"],
-            structuur=[_map_structuur_node(s) for s in data["structuur"]],
         )
 
     async def artikel(

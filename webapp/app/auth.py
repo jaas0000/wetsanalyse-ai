@@ -21,9 +21,6 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 
-DB_PATH = None  # Wordt lazy geïnitialiseerd vanuit settings
-FERNET_KEY_PATH = None  # Wordt lazy geïnitialiseerd
-
 
 def _db_path() -> Path:
     """Haal het database pad vanuit settings."""
