@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light">
+    <title>Instellingen — Wetsanalyse</title>
+    <link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,wght@0,400;0,500;1,400;1,500&family=Source+Serif+4:ital,wght@0,300;0,400;0,500;0,600;1,400&family=Outfit:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="/static/extra.css">
+</head>
+<body>
+
+<header>
+    <h1>Wetsanalyse</h1>
+    <nav class="nav">
+        <a href="/">Nieuwe analyse</a>
+        <a href="/instellingen">Instellingen</a>
+        <span id="user-display" class="muted"></span>
+        <button class="btn btn-sm" id="logout-btn" onclick="logout()">Uitloggen</button>
+    </nav>
+</header>
+
+<main>
+    <div class="panel">
+        <h2>Instellingen</h2>
+
+        <h3>Account</h3>
+        <p class="muted">Gebruikersnaam: <strong id="settings-username"></strong></p>
+
+        <h3>LLM Provider</h3>
+        <div class="form-group">
+            <label>Provider</label>
+            <select id="provider-select" onchange="onProviderChange()">
+                <option value="azure">Azure OpenAI</option>
+                <option value="openrouter">OpenRouter</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>Endpoint URL</label>
+            <input type="url" id="azure-endpoint" placeholder="https://xxx.openai.azure.com/">
+            <small class="muted" id="endpoint-hint">Azure: https://xxx.openai.azure.com/</small>
+        </div>
+        <div class="form-group">
+            <label>API Key</label>
+            <input type="password" id="azure-key" placeholder="Voer nieuwe key in om te wijzigen">
+        </div>
+        <div class="form-group">
+            <label id="model-label">Deployment</label>
+            <input type="text" id="azure-deployment" placeholder="claude-sonnet-4-20250514">
+            <small class="muted" id="model-hint">Azure deployment naam</small>
+        </div>
+        <button class="btn btn-primary" onclick="saveSettings()">Opslaan</button>
+    </div>
+
+    <div class="panel">
+        <h2>Mijn analyses</h2>
+        <div id="analyses-list">
+            <p class="muted">Laden...</p>
+        </div>
+    </div>
+</main>
+
+<script>
+// ── HTML escaping (XSS preventie) ────────────────────────────────────────────
+function esc(s) {
+    if (s == null) return '';
+    const d = document.createElement('div');
+    d.textContent = String(s);
+    return d.innerHTML;
+}
+
+function onProviderChange() {
+    const provider = document.getElementById('provider-select').value;
+    const endpointInput = document.getElementById('azure-endpoint');
+    const modelInput = document.getElementById('azure-deployment');
+    const endpointHint = document.getElementById('endpoint-hint');
+    const modelLabel = document.getElementById('model-label');
+    const modelHint = document.getElementById('model-hint');
+
+    if (provider === 'openrouter') {
+        endpointInput.placeholder = 'https://openrouter.ai/api/v1';
+        endpointHint.textContent = 'OpenRouter base URL';
+        modelLabel.textContent = 'Model identifier';
+        modelInput.placeholder = 'anthropic/claude-sonnet-4';
+        modelHint.textContent = 'bijv. anthropic/claude-sonnet-4, google/gemini-2.5-flash';
+    } else {
+        endpointInput.placeholder = 'https://xxx.openai.azure.com/';
+        endpointHint.textContent = 'Azure: https://xxx.openai.azure.com/';
+        modelLabel.textContent = 'Deployment naam';
+        modelInput.placeholder = 'claude-sonnet-4-20250514';
+        modelHint.textContent = 'Azure deployment naam';
+    }
+}
+
+async function loadSettings() {
+    const resp = await fetch('/api/user/me', { credentials: 'include' });
+    if (!resp.ok) { location.href = '/'; return; }
+    const user = await resp.json();
+    document.getElementById('settings-username').textContent = user.username;
+    document.getElementById('user-display').textContent = user.username;
+
+    if (user.provider) {
+        document.getElementById('provider-select').value = user.provider;
+        onProviderChange();
+    }
+    document.getElementById('azure-endpoint').value = user.endpoint || '';
+    document.getElementById('azure-deployment').value = user.model || '';
+
+    // Load analyses
+    const aResp = await fetch('/api/analyses', { credentials: 'include' });
+    if (aResp.ok) {
+        const data = await aResp.json();
+        const list = document.getElementById('analyses-list');
+        if (!data.analyses || data.analyses.length === 0) {
+            list.innerHTML = '<p class="muted">Nog geen analyses.</p>';
+        } else {
+            list.innerHTML = '<ul class="analyse-list">' +
+                data.analyses.map(a => {
+                    const statusBadge = a.status === 'klaar' ? '<span class="badge badge-klaar">Klaar</span>'
+                        : a.status.startsWith('review') ? '<span class="badge badge-review">Review</span>'
+                        : '<span class="badge">' + esc(a.status) + '</span>';
+                    return `<li>
+                        <div><span class="wet-name">${esc(a.wet)}</span> <span class="artikel-num">art. ${esc(a.artikel)}</span> ${statusBadge}</div>
+                        <div>
+                            <span class="date">${a.updated_at || a.created_at || ''}</span>
+                            ${a.status === 'klaar' ? `<a class="btn btn-sm" href="/api/rapport/${a.id}" target="_blank">Rapport</a>` : ''}
+                        </div>
+                    </li>`;
+                }).join('') + '</ul>';
+        }
+    }
+}
+
+async function saveSettings() {
+    const resp = await fetch('/api/user/apikey', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+            provider: document.getElementById('provider-select').value,
+            endpoint: document.getElementById('azure-endpoint').value,
+            api_key: document.getElementById('azure-key').value,
+            model: document.getElementById('azure-deployment').value,
+        }),
+    });
+    if (resp.ok) {
+        alert('Instellingen opgeslagen');
+    } else {
+        const data = await resp.json();
+        alert(data.detail || 'Opslaan mislukt');
+    }
+}
+
+async function logout() {
+    await fetch('/api/user/logout', { method: 'POST', credentials: 'include' });
+    location.href = '/';
+}
+
+loadSettings();
+</script>
+
+</body>
+</html>
