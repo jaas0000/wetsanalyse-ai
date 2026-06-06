@@ -1,5 +1,6 @@
 """API routes voor analyse-operaties."""
 
+import copy
 import logging
 import uuid
 
@@ -163,21 +164,24 @@ async def submit_review(
         if analyse["status"] != "review_2":
             raise HTTPException(400, f"Verwacht status review_2, kreeg {analyse['status']}")
 
+        # Werk op een deepcopy zodat de originele dict bewaard blijft als save faalt
+        analyse_copy = copy.deepcopy(analyse)
+
         # Verwerk feedback activiteit 2
-        analyse["review_feedback_2"] = req.algemeen
+        analyse_copy["review_feedback_2"] = req.algemeen
 
         if req.status == "wijzigingen" and req.items:
-            markeringen = analyse["activiteit_2"]["markeringen"]
+            markeringen = analyse_copy["activiteit_2"]["markeringen"]
             for m in markeringen:
                 if m["id"] in req.items:
                     m["toelichting"] += f" [feedback: {req.items[m['id']]}]"
-            analyse["activiteit_2"]["markeringen"] = markeringen
+            analyse_copy["activiteit_2"]["markeringen"] = markeringen
 
         # Ga door naar activiteit 3
         try:
             user = current_user
             # Herconstrueer Activiteit2Data uit de database dict
-            a2_data = analyse["activiteit_2"]
+            a2_data = analyse_copy["activiteit_2"]
             if isinstance(a2_data, dict):
                 # Map markeringen/leden expliciet naar Pydantic objects (op een kopie, niet de originele dict)
                 a2_converted = dict(a2_data)
@@ -198,17 +202,17 @@ async def submit_review(
                 endpoint=user.endpoint,
                 api_key=user.api_key,
                 model=user.model,
-                wet=analyse["wet"],
-                bwb_id=analyse["bwb_id"],
-                artikel=analyse["artikel"],
-                versiedatum=analyse["versiedatum"],
-                bronreferentie=analyse["bronreferentie"],
+                wet=analyse_copy["wet"],
+                bwb_id=analyse_copy["bwb_id"],
+                artikel=analyse_copy["artikel"],
+                versiedatum=analyse_copy["versiedatum"],
+                bronreferentie=analyse_copy["bronreferentie"],
                 activiteit_2=a2_obj,
             )
 
-            analyse["activiteit_3"] = activiteit_3.model_dump(mode="json")
-            analyse["status"] = "review_3"
-            save_analyse(analyse)
+            analyse_copy["activiteit_3"] = activiteit_3.model_dump(mode="json")
+            analyse_copy["status"] = "review_3"
+            save_analyse(analyse_copy)
 
             return {
                 "analyse_id": req.analyse_id,
@@ -231,18 +235,21 @@ async def submit_review(
             raise HTTPException(400, f"Verwacht status review_3, kreeg {analyse['status']}")
 
         try:
+            # Werk op een deepcopy zodat de originele dict bewaard blijft als save faalt
+            analyse_copy = copy.deepcopy(analyse)
+
             # Verwerk feedback activiteit 3
-            analyse["review_feedback_3"] = req.algemeen
+            analyse_copy["review_feedback_3"] = req.algemeen
 
             if req.status == "wijzigingen" and req.items:
-                begrippen = analyse["activiteit_3"]["begrippen"]
+                begrippen = analyse_copy["activiteit_3"]["begrippen"]
                 for b in begrippen:
                     if b["id"] in req.items:
                         b["twijfel"] += f" [feedback: {req.items[b['id']]}]"
-                analyse["activiteit_3"]["begrippen"] = begrippen
+                analyse_copy["activiteit_3"]["begrippen"] = begrippen
 
             # Genereer rapport — herconstrueer modellen uit DB dicts (op kopie, geen mutatie)
-            a2_data = analyse["activiteit_2"]
+            a2_data = analyse_copy["activiteit_2"]
             if isinstance(a2_data, dict):
                 a2_converted = dict(a2_data)
                 a2_converted["markeringen"] = [Markering(**m) if isinstance(m, dict) else m for m in a2_data.get("markeringen", [])]
@@ -251,7 +258,7 @@ async def submit_review(
             else:
                 activiteit_2 = a2_data
 
-            a3_data = analyse["activiteit_3"]
+            a3_data = analyse_copy["activiteit_3"]
             if isinstance(a3_data, dict):
                 a3_converted = dict(a3_data)
                 a3_converted["begrippen"] = [Begrip(**b) if isinstance(b, dict) else b for b in a3_data.get("begrippen", [])]
@@ -261,22 +268,22 @@ async def submit_review(
                 activiteit_3 = a3_data
 
             rapport = genereer_rapport(
-                wet=analyse["wet"],
-                bwb_id=analyse["bwb_id"],
-                artikel=analyse["artikel"],
-                versiedatum=analyse["versiedatum"],
-                bronreferentie=analyse["bronreferentie"],
-                sectie=analyse.get("sectie"),
-                pad=analyse.get("pad"),
+                wet=analyse_copy["wet"],
+                bwb_id=analyse_copy["bwb_id"],
+                artikel=analyse_copy["artikel"],
+                versiedatum=analyse_copy["versiedatum"],
+                bronreferentie=analyse_copy["bronreferentie"],
+                sectie=analyse_copy.get("sectie"),
+                pad=analyse_copy.get("pad"),
                 activiteit_2=activiteit_2,
                 activiteit_3=activiteit_3,
-                review_feedback_2=analyse.get("review_feedback_2", ""),
-                review_feedback_3=analyse.get("review_feedback_3", ""),
+                review_feedback_2=analyse_copy.get("review_feedback_2", ""),
+                review_feedback_3=analyse_copy.get("review_feedback_3", ""),
             )
 
-            analyse["status"] = "klaar"
-            analyse["rapport_md"] = rapport
-            save_analyse(analyse)
+            analyse_copy["status"] = "klaar"
+            analyse_copy["rapport_md"] = rapport
+            save_analyse(analyse_copy)
 
             return {
                 "analyse_id": req.analyse_id,
