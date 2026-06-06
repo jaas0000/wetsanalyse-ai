@@ -18,18 +18,14 @@ from fastapi import Depends, HTTPException, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 from app.config import settings
+from app.db import db_path, get_db
 
 logger = logging.getLogger(__name__)
 
 
-def _db_path() -> Path:
-    """Haal het database pad vanuit settings."""
-    return Path(settings.database_path)
-
-
 def _fernet_key_path() -> Path:
     """Haal het Fernet key pad (naast de database)."""
-    return _db_path().parent / ".fernet_key"
+    return db_path().parent / ".fernet_key"
 
 security = HTTPBearer(auto_error=False)
 
@@ -73,20 +69,10 @@ def _decrypt(token: str) -> str:
     return _get_fernet().decrypt(token.encode()).decode()
 
 
-def _get_db() -> sqlite3.Connection:
-    """Haal een database-connectie."""
-    db_path = _db_path()
-    db_path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(db_path))
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA foreign_keys=ON")
-    return conn
-
 
 def init_db():
     """Initialiseer de database."""
-    conn = _get_db()
+    conn = get_db()
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS users (
             username TEXT PRIMARY KEY,
@@ -147,7 +133,7 @@ def init_db():
 
     conn.commit()
     conn.close()
-    logger.info("Database geinitialiseerd: %s", _db_path())
+    logger.info("Database geinitialiseerd: %s", db_path())
 
 
 class User:
@@ -180,7 +166,7 @@ class User:
 
 def create_user(username: str, password: str) -> User:
     """Maak een nieuwe gebruiker aan."""
-    conn = _get_db()
+    conn = get_db()
     try:
         password_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
         conn.execute(
@@ -198,7 +184,7 @@ def create_user(username: str, password: str) -> User:
 
 def authenticate(username: str, password: str) -> Optional[User]:
     """Verifieer inloggegevens."""
-    conn = _get_db()
+    conn = get_db()
     row = conn.execute(
         "SELECT * FROM users WHERE username = ?", (username,)
     ).fetchone()
@@ -244,7 +230,7 @@ def update_api_key(
     model: str,
 ):
     """Sla de API-key van een gebruiker op (versleuteld)."""
-    conn = _get_db()
+    conn = get_db()
     encrypted_key = _encrypt(api_key)
     conn.execute(
         """UPDATE users SET provider = ?, endpoint = ?, api_key_encrypted = ?,
@@ -258,7 +244,7 @@ def update_api_key(
 
 def get_user(username: str) -> Optional[User]:
     """Haal een gebruiker op."""
-    conn = _get_db()
+    conn = get_db()
     row = conn.execute(
         "SELECT * FROM users WHERE username = ?", (username,)
     ).fetchone()

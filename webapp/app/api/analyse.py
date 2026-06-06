@@ -12,14 +12,9 @@ from app.engine.bwb_client import get_client, McpError
 from app.engine.llm import LlmError, run_classificatie, run_betekenis
 from app.engine.rapport import genereer_rapport
 from app.engine.analyse_store import save_analyse, load_analyse, list_analyses, delete_analyse
+from app.engine.model_helpers import reconstruct_activiteit_2, reconstruct_activiteit_3
 from app.models import (
-    Activiteit2Data,
-    Activiteit3Data,
-    Afleidingsregel,
     AnalyseStart,
-    Begrip,
-    LidData,
-    Markering,
     ReviewSubmit,
 )
 from app.auth import get_current_user, User
@@ -180,21 +175,7 @@ async def submit_review(
         try:
             user = current_user
             # Herconstrueer Activiteit2Data uit de database dict
-            a2_data = analyse_copy["activiteit_2"]
-            if isinstance(a2_data, dict):
-                # Map markeringen/leden expliciet naar Pydantic objects (op een kopie, niet de originele dict)
-                a2_converted = dict(a2_data)
-                a2_converted["markeringen"] = [
-                    Markering(**m) if isinstance(m, dict) else m
-                    for m in a2_data.get("markeringen", [])
-                ]
-                a2_converted["leden"] = [
-                    LidData(**lid) if isinstance(lid, dict) else lid
-                    for lid in a2_data.get("leden", [])
-                ]
-                a2_obj = Activiteit2Data(**a2_converted)
-            else:
-                a2_obj = a2_data
+            a2_obj = reconstruct_activiteit_2(analyse_copy["activiteit_2"])
 
             activiteit_3 = await run_betekenis(
                 provider=user.provider,
@@ -248,23 +229,8 @@ async def submit_review(
                 analyse_copy["activiteit_3"]["begrippen"] = begrippen
 
             # Genereer rapport — herconstrueer modellen uit DB dicts (op kopie, geen mutatie)
-            a2_data = analyse_copy["activiteit_2"]
-            if isinstance(a2_data, dict):
-                a2_converted = dict(a2_data)
-                a2_converted["markeringen"] = [Markering(**m) if isinstance(m, dict) else m for m in a2_data.get("markeringen", [])]
-                a2_converted["leden"] = [LidData(**lid) if isinstance(lid, dict) else lid for lid in a2_data.get("leden", [])]
-                activiteit_2 = Activiteit2Data(**a2_converted)
-            else:
-                activiteit_2 = a2_data
-
-            a3_data = analyse_copy["activiteit_3"]
-            if isinstance(a3_data, dict):
-                a3_converted = dict(a3_data)
-                a3_converted["begrippen"] = [Begrip(**b) if isinstance(b, dict) else b for b in a3_data.get("begrippen", [])]
-                a3_converted["afleidingsregels"] = [Afleidingsregel(**r) if isinstance(r, dict) else r for r in a3_data.get("afleidingsregels", [])]
-                activiteit_3 = Activiteit3Data(**a3_converted)
-            else:
-                activiteit_3 = a3_data
+            activiteit_2 = reconstruct_activiteit_2(analyse_copy["activiteit_2"])
+            activiteit_3 = reconstruct_activiteit_3(analyse_copy["activiteit_3"])
 
             rapport = genereer_rapport(
                 wet=analyse_copy["wet"],
@@ -315,23 +281,8 @@ async def get_rapport(
     rapport = analyse.get("rapport_md", "")
     if not rapport:
         # Genereer on-the-fly als het rapport niet is opgeslagen (op kopie, geen mutatie)
-        a2_data = analyse["activiteit_2"]
-        if isinstance(a2_data, dict):
-            a2_converted = dict(a2_data)
-            a2_converted["markeringen"] = [Markering(**m) if isinstance(m, dict) else m for m in a2_data.get("markeringen", [])]
-            a2_converted["leden"] = [LidData(**lid) if isinstance(lid, dict) else lid for lid in a2_data.get("leden", [])]
-            activiteit_2 = Activiteit2Data(**a2_converted)
-        else:
-            activiteit_2 = a2_data
-
-        a3_data = analyse["activiteit_3"]
-        if isinstance(a3_data, dict):
-            a3_converted = dict(a3_data)
-            a3_converted["begrippen"] = [Begrip(**b) if isinstance(b, dict) else b for b in a3_data.get("begrippen", [])]
-            a3_converted["afleidingsregels"] = [Afleidingsregel(**r) if isinstance(r, dict) else r for r in a3_data.get("afleidingsregels", [])]
-            activiteit_3 = Activiteit3Data(**a3_converted)
-        else:
-            activiteit_3 = a3_data
+        activiteit_2 = reconstruct_activiteit_2(analyse["activiteit_2"])
+        activiteit_3 = reconstruct_activiteit_3(analyse["activiteit_3"])
 
         rapport = genereer_rapport(
             wet=analyse["wet"],

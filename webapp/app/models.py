@@ -5,6 +5,19 @@ from typing import Optional, Union
 from enum import Enum
 
 
+def _coerce_to_str(v, list_sep: str = ", "):
+    """Converteer dicts en lists naar strings voor Pydantic field validators.
+
+    *list_sep* bepaalt hoe lijst-items samengevoegd worden
+    (bijv. ", " voor korte waarden, "\\n" voor langere blokken).
+    """
+    if isinstance(v, dict):
+        return "; ".join(f"{k}: {val}" for k, val in v.items())
+    if isinstance(v, list):
+        return list_sep.join(str(x) for x in v)
+    return v
+
+
 # ── Gebruikers ────────────────────────────────────────────────────────────────
 
 class UserCreate(BaseModel):
@@ -147,12 +160,7 @@ class Afleidingsregel(BaseModel):
     @field_validator("invoervariabelen", "parameters", "voorwaarden", mode="before")
     @classmethod
     def _to_str(cls, v):
-        """Converteer lijsten en dicts naar strings."""
-        if isinstance(v, dict):
-            return "; ".join(f"{k}: {val}" for k, val in v.items())
-        if isinstance(v, list):
-            return ", ".join(str(x) for x in v)
-        return v
+        return _coerce_to_str(v, list_sep=", ")
 
 
 class Activiteit2Data(BaseModel):
@@ -179,8 +187,4 @@ class Activiteit3Data(BaseModel):
     @field_validator("validatiepunten", mode="before")
     @classmethod
     def _to_str(cls, v):
-        if isinstance(v, dict):
-            return "; ".join(f"{k}: {val}" for k, val in v.items())
-        if isinstance(v, list):
-            return "\n".join(str(x) for x in v)
-        return v
+        return _coerce_to_str(v, list_sep="\n")

@@ -10,31 +10,14 @@ Dataflow:
 """
 
 import json
-import sqlite3
 from typing import Optional
 
-from app.config import settings
-
-
-def _db_path():
-    """Haal het database pad vanuit settings."""
-    from pathlib import Path
-    return Path(settings.database_path)
-
-
-def _get_db() -> sqlite3.Connection:
-    db_path = _db_path()
-    db_path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(db_path))
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA foreign_keys=ON")
-    return conn
+from app.db import db_path, get_db
 
 
 def ensure_tables():
     """Zorg dat de analyses-tabel bestaat (idempotent)."""
-    conn = _get_db()
+    conn = get_db()
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS analyses (
             id TEXT PRIMARY KEY,
@@ -91,7 +74,7 @@ def save_analyse(analyse: dict) -> None:
     activiteit_2 en activiteit_3 worden altijd correct geserialiseerd,
     ongeacht of ze Pydantic modellen of dicts zijn.
     """
-    conn = _get_db()
+    conn = get_db()
     try:
         a2_json = _serialize(analyse.get("activiteit_2"))
         a3_json = _serialize(analyse.get("activiteit_3"))
@@ -147,7 +130,7 @@ def load_analyse(analyse_id: str, user_id: str) -> Optional[dict]:
     Retourneert dicts die direct gebruikt kunnen worden met
     Activiteit2Data(**data) etc.
     """
-    conn = _get_db()
+    conn = get_db()
     try:
         row = conn.execute(
             "SELECT * FROM analyses WHERE id = ? AND user_id = ?",
@@ -184,7 +167,7 @@ def load_analyse(analyse_id: str, user_id: str) -> Optional[dict]:
 
 def list_analyses(user_id: str, limit: int = 50) -> list[dict]:
     """Lijst van analyses voor een gebruiker."""
-    conn = _get_db()
+    conn = get_db()
     try:
         rows = conn.execute(
             """SELECT id, status, wet, artikel, created_at, updated_at
@@ -199,7 +182,7 @@ def list_analyses(user_id: str, limit: int = 50) -> list[dict]:
 
 def delete_analyse(analyse_id: str, user_id: str) -> bool:
     """Verwijder een analyse. Retourneert True als iets verwijderd is."""
-    conn = _get_db()
+    conn = get_db()
     try:
         cursor = conn.execute(
             "DELETE FROM analyses WHERE id = ? AND user_id = ?",
