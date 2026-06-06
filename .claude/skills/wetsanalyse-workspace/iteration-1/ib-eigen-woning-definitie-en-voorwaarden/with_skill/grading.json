@@ -1,0 +1,52 @@
+{
+  "expectations": [
+    {
+      "text": "Traceerbaar: bevat de bronreferentie jci1.3:c:BWBR0011353",
+      "passed": true,
+      "evidence": "Sectie 0: 'Bronreferentie(s): `jci1.3:c:BWBR0011353&artikel=3.111`'; herhaald bij elke afleidingsregel (bv. regel 173, 204)."
+    },
+    {
+      "text": "Herkent 'eigen woning' (lid 1) als Brondefinitie",
+      "passed": true,
+      "evidence": "Tabel rij 1: '\"In deze afdeling ... wordt verstaan onder eigen woning: ...\" | Brondefinitie | lid 1' — 'dé centrale brondefinitie van het artikel'."
+    },
+    {
+      "text": "Classificeert de woning (gebouw/schip/woonwagen) als Rechtsobject",
+      "passed": true,
+      "evidence": "Tabel rij 7: '\"een gebouw, een duurzaam aan een plaats gebonden schip of woonwagen ... aanhorigheden\" | Rechtsobject | lid 1'."
+    },
+    {
+      "text": "Classificeert de terbeschikkingstelling als hoofdverblijf en de eigendoms-/vruchtgebruikgronden (lid 1 a/b) als Voorwaarde, met onderscheid cumulatief/alternatief",
+      "passed": true,
+      "evidence": "Rij 9 'anders dan tijdelijk als hoofdverblijf ... | Voorwaarde'; rij 11 'a. eigendom ... b. vruchtgebruik ... | Voorwaarde (alternatief, OF)'; rij 13 'Voorwaarde (cumulatief, EN)' en rij 15 idem. Onderscheid cumulatief/alternatief expliciet."
+    },
+    {
+      "text": "Herkent tijdsaanduidingen (drie jaren / twee jaren / kalenderjaar) als Tijdsaanduiding",
+      "passed": true,
+      "evidence": "Rij 17 'kalenderjaar | Tijdsaanduiding'; rij 18 'voorafgaande drie jaren ... Tijdsaanduiding'; rij 25 'ten hoogste twee jaren | Tijdsaanduiding (maximumtermijn)'."
+    },
+    {
+      "text": "Maakt een begrip 'eigen woning' met de wettelijke definitie als basis",
+      "passed": true,
+      "evidence": "Begrippentabel 3a: 'eigen woning | Brondefinitie / Rechtsobject | Letterlijk (lid 1): een gebouw, een duurzaam aan een plaats gebonden schip of woonwagen ...' — wettelijke definitie als basis."
+    },
+    {
+      "text": "Gebruikt uitsluitend de 13 JAS-klassen, zonder verzonnen klassen",
+      "passed": true,
+      "evidence": "Alle labels zijn JAS-klassen of combinaties daarvan (Brondefinitie, Rechtssubject, Rechtsobject, Voorwaarde, Operator, Afleidingsregel, Tijdsaanduiding, Rechtsbetrekking, Rechtsfeit). Toevoegingen tussen haakjes ('specialisatie', 'cumulatief') zijn toelichtingen, geen aparte klassen; geen 'rechtsgevolg'/'kwalificatie'/'bevoegdheid' als zelfstandig classificatielabel."
+    },
+    {
+      "text": "Signaleert open normen ('anders dan tijdelijk als hoofdverblijf', 'grotendeels', 'bestemd voor verkoop') als validatiepunt",
+      "passed": true,
+      "evidence": "Sectie 4 > 'Open normen / vage termen': '\"anders dan tijdelijk\" en \"hoofdverblijf\"', '\"grotendeels\"', '\"bestemd voor verkoop\"' expliciet als te valideren open normen benoemd."
+    }
+  ],
+  "passed_count": 8,
+  "total_count": 8,
+  "summary": {
+    "passed": 8,
+    "failed": 0,
+    "total": 8,
+    "pass_rate": 1.0
+  }
+}

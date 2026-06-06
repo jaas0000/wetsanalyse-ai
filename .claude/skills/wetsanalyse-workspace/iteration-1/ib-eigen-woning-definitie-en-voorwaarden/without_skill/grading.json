@@ -1,0 +1,52 @@
+{
+  "expectations": [
+    {
+      "text": "Traceerbaar: bevat de bronreferentie jci1.3:c:BWBR0011353",
+      "passed": true,
+      "evidence": "Kop: 'Bronreferentie: `jci1.3:c:BWBR0011353&artikel=3.111`'."
+    },
+    {
+      "text": "Herkent 'eigen woning' (lid 1) als Brondefinitie",
+      "passed": false,
+      "evidence": "Het rapport behandelt 'eigen woning' als 'Afgeleid hoofdbegrip' / 'samengesteld, afgeleid begrip (resultaat van een afleidingsregel)' (3.1, begrippentabel §4). De JAS-klasse 'Brondefinitie' wordt nergens aan 'eigen woning' (lid 1) toegekend; lid 1 wordt in §2.4 geduid als 'Kwalificatie (gebonden)', niet als Brondefinitie."
+    },
+    {
+      "text": "Classificeert de woning (gebouw/schip/woonwagen) als Rechtsobject",
+      "passed": true,
+      "evidence": "Sectie 2.2 Rechtsobjecten: 'Gebouw / schip / woonwagen (of gedeelte daarvan) | Fysieke verschijningsvormen van het object woning | lid 1'."
+    },
+    {
+      "text": "Classificeert de terbeschikkingstelling als hoofdverblijf en de eigendoms-/vruchtgebruikgronden (lid 1 a/b) als Voorwaarde, met onderscheid cumulatief/alternatief",
+      "passed": true,
+      "evidence": "Afleidingsregels A en B (3.2/3.3) zetten 'hoofdverblijf-anders-dan-tijdelijk' en de titels eigendom (1a) vs. genotsrecht (1b) als voorwaarden, met 'EN cumulatief' en het OF-onderscheid tussen spoor a en b ('eigendomsspoor lid 1a óf genotsrechtspoor lid 1b'). Bewijslast/voorwaarden zijn expliciet cumulatief/alternatief geduid."
+    },
+    {
+      "text": "Herkent tijdsaanduidingen (drie jaren / twee jaren / kalenderjaar) als Tijdsaanduiding",
+      "passed": false,
+      "evidence": "De termijnen worden wel genoemd (drie jaren, twee jaren, kalenderjaar) maar geclassificeerd als 'harde parameters' / 'Objectuitbreiding' (§5: 'deze termijnen zijn harde parameters in de afleidingsregels'); een aparte JAS-klasse 'Tijdsaanduiding' wordt niet als classificatielabel toegekend. Het rapport heeft Tijdsaanduiding ook niet in zijn klassenlijst opgenomen."
+    },
+    {
+      "text": "Maakt een begrip 'eigen woning' met de wettelijke definitie als basis",
+      "passed": true,
+      "evidence": "Sectie 3.1 'Centraal begrip: Eigen woning' met hoofddefinitie (lid 1): object + ter beschikking + anders dan tijdelijk + hoofdverblijf + gekwalificeerde rechtstitel; ook begrippenlijst §4."
+    },
+    {
+      "text": "Gebruikt uitsluitend de 13 JAS-klassen, zonder verzonnen klassen",
+      "passed": false,
+      "evidence": "Het rapport gebruikt diverse niet-JAS-labels als classificatieklasse: 'Rol' (§2.1 kolomtitel 'Rol / toelichting'), 'rechtsgevolg' en 'Kwalificatie (gebonden)', 'Bevoegdheid (discretionair)', 'Sanctie/default', 'Begrenzende norm' (§2.4 kolom 'Type (JAS)'), 'Bewijslast / procedurele voorwaarden' en 'Procedurele voorwaarde / vormvereiste' (§2.5), en 'Definitie / begripsbepaling'. Deze behoren niet tot de 13 JAS-klassen."
+    },
+    {
+      "text": "Signaleert open normen ('anders dan tijdelijk als hoofdverblijf', 'grotendeels', 'bestemd voor verkoop') als validatiepunt",
+      "passed": false,
+      "evidence": "Het rapport noemt 'anders dan tijdelijk' (begrippenlijst, 'niet wettelijk gedefinieerd; duurzaamheidseis') maar signaleert 'grotendeels' en 'bestemd voor verkoop' niet als open norm/validatiepunt; er is geen sectie die open normen als zodanig markeert. §5 'Observaties voor uitvoering' benoemt deze open normen niet. Onvoldoende dekking."
+    }
+  ],
+  "passed_count": 4,
+  "total_count": 8,
+  "summary": {
+    "passed": 4,
+    "failed": 4,
+    "total": 8,
+    "pass_rate": 0.5
+  }
+}

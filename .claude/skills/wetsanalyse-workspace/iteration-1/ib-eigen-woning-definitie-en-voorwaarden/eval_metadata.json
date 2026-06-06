@@ -1,0 +1,15 @@
+{
+  "eval_id": 1,
+  "eval_name": "ib-eigen-woning-definitie-en-voorwaarden",
+  "prompt": "Voer een wetsanalyse uit (activiteit 2 en 3) op artikel 3.111 (Eigen woning) van de Wet inkomstenbelasting 2001. De letterlijke wettekst staat in het bijgevoegde bestand ib-eigen-woning-3.111.json. Lever een traceerbaar Markdown-analyserapport op.",
+  "assertions": [
+    "Traceerbaar: bevat de bronreferentie jci1.3:c:BWBR0011353",
+    "Herkent 'eigen woning' (lid 1) als Brondefinitie",
+    "Classificeert de woning (gebouw/schip/woonwagen) als Rechtsobject",
+    "Classificeert de terbeschikkingstelling als hoofdverblijf en de eigendoms-/vruchtgebruikgronden (lid 1 a/b) als Voorwaarde, met onderscheid cumulatief/alternatief",
+    "Herkent tijdsaanduidingen (drie jaren / twee jaren / kalenderjaar) als Tijdsaanduiding",
+    "Maakt een begrip 'eigen woning' met de wettelijke definitie als basis",
+    "Gebruikt uitsluitend de 13 JAS-klassen, zonder verzonnen klassen",
+    "Signaleert open normen ('anders dan tijdelijk als hoofdverblijf', 'grotendeels', 'bestemd voor verkoop') als validatiepunt"
+  ]
+}

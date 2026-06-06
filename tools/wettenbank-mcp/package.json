@@ -1,0 +1,26 @@
+{
+  "name": "wettenbank-mcp",
+  "version": "2.0.1",
+  "description": "MCP server voor wetten.overheid.nl",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "@xmldom/xmldom": "^0.9.9",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/xmldom": "^0.1.34",
+    "tsx": "^4.7.0",
+    "typescript": "^5.0.0",
+    "vitest": "^2.0.0"
+  }
+}

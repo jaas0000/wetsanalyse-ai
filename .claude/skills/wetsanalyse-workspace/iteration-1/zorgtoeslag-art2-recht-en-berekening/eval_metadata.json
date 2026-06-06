@@ -1,0 +1,16 @@
+{
+  "eval_id": 0,
+  "eval_name": "zorgtoeslag-art2-recht-en-berekening",
+  "prompt": "Voer een wetsanalyse uit (activiteit 2 en 3) op artikel 2 van de Wet op de zorgtoeslag. De letterlijke wettekst staat in de bijgevoegde bestanden: zorgtoeslag-art2.json is het te analyseren artikel, zorgtoeslag-art1.json bevat de begripsbepalingen die je nodig hebt voor de definities. Lever een traceerbaar Markdown-analyserapport op.",
+  "assertions": [
+    "Traceerbaar: bevat de bronreferentie jci1.3:c:BWBR0018451",
+    "Classificeert 'heeft aanspraak op een zorgtoeslag' (lid 1) als Rechtsbetrekking",
+    "Herkent de conditie 'normpremie minder dan standaardpremie' (lid 1) als Voorwaarde",
+    "Legt een afleidingsregel vast voor de hoogte: aanspraak = standaardpremie minus normpremie",
+    "Herkent de percentages 4,289% / 13,730% / 1,912% (lid 3) als Parameter (of parameterwaarde)",
+    "Herkent de delegatie in lid 3 (amvb) en lid 6 (ministeriele regeling) als Delegatiebevoegdheid",
+    "Hergebruikt de brondefinities uit artikel 1 (o.a. verzekerde, normpremie, standaardpremie, drempelinkomen)",
+    "Gebruikt uitsluitend de 13 JAS-klassen, zonder verzonnen klassen zoals 'rechtsgevolg' of 'toepassingsbereik'",
+    "Bevat een sectie met aandachtspunten voor validatie die de openstaande amvb/ministeriele regeling als werkgebied benoemt"
+  ]
+}

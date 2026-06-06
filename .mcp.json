@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "wettenbank": {
+      "type": "stdio",
+      "command": "node",
+      "args": [
+        "/home/willardp/Documenten/Projecten/wetsanalyse-ai/tools/wettenbank-mcp/dist/index.js"
+      ],
+      "env": {}
+    }
+  }
+}

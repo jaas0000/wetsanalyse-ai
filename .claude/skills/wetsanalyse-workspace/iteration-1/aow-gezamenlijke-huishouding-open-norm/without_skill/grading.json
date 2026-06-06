@@ -1,0 +1,42 @@
+{
+  "expectations": [
+    {
+      "text": "Traceerbaar: bevat de bronreferentie jci1.3:c:BWBR0002221",
+      "passed": true,
+      "evidence": "Kop en sectie 4 Traceerbaarheid: 'Bronreferentie van het artikel: `jci1.3:c:BWBR0002221&artikel=1`'."
+    },
+    {
+      "text": "Behandelt de definitie van 'gezamenlijke huishouding' (lid 4) als Brondefinitie of als begrip met de wettelijke definitie",
+      "passed": true,
+      "evidence": "Rij 4.1: lid 4 '\"Van een gezamenlijke huishouding is sprake indien ...\" | Definitie / begripsbepaling (materiële hoofdnorm)'; begrippenlijst 2.1 geeft de wettelijke definitie. (Als begrip met wettelijke definitie behandeld; assertion staat 'Brondefinitie OF begrip met definitie' toe.)"
+    },
+    {
+      "text": "Herkent de voorwaarde 'hoofdverblijf in dezelfde woning' EN 'zorg dragen' (lid 4) met expliciete EN-operator (cumulatief)",
+      "passed": true,
+      "evidence": "Rij 4.3 'Voorwaarde (huisvestingscriterium)', rij 4.5 'Voorwaarde (zorgcriterium) — open norm', rij 4.4 '\"en\" | Logische operator (cumulatie) | Beide voorwaarden moeten gelijktijdig zijn vervuld (AND)'. AR-3 noteert 'EN'."
+    },
+    {
+      "text": "Onderscheidt de delegaties lid 6 (verplichte amvb) en lid 7 (facultatieve amvb)",
+      "passed": true,
+      "evidence": "Rij 6.1 'Delegatiebepaling (gebonden: \"wordt\") | Verplichte delegatie naar AMvB' en rij 7.1 'Delegatiebepaling (facultatief: \"kunnen\") | Bevoegdheid, geen plicht'."
+    },
+    {
+      "text": "Signaleert de open normen ('blijk geven zorg te dragen', 'duurzaam gescheiden leeft') als interpretatiepunt voor validatie",
+      "passed": true,
+      "evidence": "Sectie 3 'Aandachtspunten en open normen': punt 1 'Open norm \"blijk geven zorg te dragen\" (lid 4) ... bron van interpretatieruimte en geschillen' en punt 2 'Open norm \"duurzaam gescheiden leven\" (lid 3b)'."
+    },
+    {
+      "text": "Gebruikt uitsluitend de 13 JAS-klassen, zonder verzonnen klassen",
+      "passed": false,
+      "evidence": "Het rapport definieert en gebruikt niet-JAS-labels als classificatieklasse: 'Afbakening/uitzondering' (rij 3.7a), 'Definitie / begripsbepaling' (rij 4.1, 8.1, 9.1), 'Toepassingsbereik / werkingssfeer' (rij 3.1), 'Rechtsbetrekking / rechtsgevolg' en 'Rechtsgevolg / (onweerlegbaar) wettelijk vermoeden' (rij 3.2, 3.8b, 5.1), en 'Nadere bepaling van de wijze' (rij 4.6). 'Afbakening', 'toepassingsbereik', 'rechtsgevolg' en 'definitie/begripsbepaling' behoren niet tot de 13 JAS-klassen (de juiste klasse voor definities is Brondefinitie)."
+    }
+  ],
+  "passed_count": 5,
+  "total_count": 6,
+  "summary": {
+    "passed": 5,
+    "failed": 1,
+    "total": 6,
+    "pass_rate": 0.83
+  }
+}
