@@ -58,8 +58,7 @@ async def start_analyse(
 
     Doorloopt: ophalen → classificatie → review checkpoint 2.
     """
-    # UUID met 12 hex chars (48 bits) om collision risk te minimaliseren
-    analyse_id = uuid.uuid4().hex[:12]
+    analyse_id = uuid.uuid4().hex
 
     try:
         # Stap 1: Zoek de wet
