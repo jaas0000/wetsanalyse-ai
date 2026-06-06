@@ -1,0 +1,21 @@
+services:
+  wetsanalyse:
+    build:
+      context: ..
+      dockerfile: webapp/Dockerfile
+    container_name: wetsanalyse-webapp
+    ports:
+      - "8080:8080"
+    volumes:
+      - wetsanalyse-data:/app/data
+    env_file:
+      - .env
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '1.0'
+
+volumes:
+  wetsanalyse-data:

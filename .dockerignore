@@ -1,0 +1,11 @@
+**/.venv
+**/__pycache__
+**/.pytest_cache
+**/.ruff_cache
+**/node_modules
+**/.git
+**/data/*.db
+**/data/.fernet_key
+webapp/.env
+*.pyc
+*.egg-info
