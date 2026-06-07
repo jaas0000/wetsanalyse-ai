@@ -30,10 +30,33 @@ from pathlib import Path
 TEMPLATE = Path(__file__).resolve().parent.parent / "assets" / "review.html"
 
 
-def build_html(input_data: dict, activiteit: str) -> str:
+def load_vorige(vorige_dir: Path) -> dict | None:
+    """Laad de vorige ronde (analyse + feedback) als context voor de reviewpagina.
+
+    Verwacht in `vorige_dir`: `analyse.json` en (optioneel) `feedback.json`.
+    Ontbrekende of corrupte bestanden worden stil overgeslagen — de vorige-context
+    is hulpinformatie, geen harde eis.
+    """
+    if not vorige_dir or not vorige_dir.is_dir():
+        return None
+    out: dict = {}
+    for key, naam in (("analyse", "analyse.json"), ("feedback", "feedback.json")):
+        pad = vorige_dir / naam
+        if pad.exists():
+            try:
+                out[key] = json.loads(pad.read_text())
+            except (json.JSONDecodeError, OSError):
+                pass
+    return out or None
+
+
+def build_html(input_data: dict, activiteit: str, ronde: int = 1,
+               vorige: dict | None = None) -> str:
     """Embed het tussenresultaat in de HTML-template."""
     template = TEMPLATE.read_text()
-    embedded = {"activiteit": activiteit, "analyse": input_data}
+    embedded = {"activiteit": activiteit, "analyse": input_data, "ronde": ronde}
+    if vorige:
+        embedded["vorige"] = vorige
     data_json = json.dumps(embedded, ensure_ascii=False)
     return template.replace(
         "/*__EMBEDDED_DATA__*/",
@@ -106,6 +129,11 @@ def main():
                         help="Welke activiteit wordt gereviewd")
     parser.add_argument("--feedback-out", type=Path, required=True,
                         help="Pad waar de feedback-JSON wordt weggeschreven")
+    parser.add_argument("--ronde", type=int, default=1,
+                        help="Welke reviewronde dit is (default 1)")
+    parser.add_argument("--vorige", type=Path, default=None,
+                        help="Map van de vorige ronde (met analyse.json + feedback.json) "
+                             "om als context te tonen; weglaten bij ronde 1")
     parser.add_argument("--port", type=int, default=3118, help="Serverpoort (default 3118)")
     parser.add_argument("--no-browser", action="store_true",
                         help="Open de browser niet automatisch")
@@ -119,7 +147,8 @@ def main():
         sys.exit(1)
 
     input_data = json.loads(args.input.read_text())
-    html = build_html(input_data, args.activiteit)
+    vorige = load_vorige(args.vorige) if args.vorige else None
+    html = build_html(input_data, args.activiteit, args.ronde, vorige)
 
     _kill_port(args.port)
     handler = partial(ReviewHandler, html=html, feedback_out=args.feedback_out)
@@ -131,11 +160,13 @@ def main():
         port = server.server_address[1]
 
     url = f"http://localhost:{port}"
-    print(f"\n  Wetsanalyse — review activiteit {args.activiteit}")
+    print(f"\n  Wetsanalyse — review activiteit {args.activiteit} (ronde {args.ronde})")
     print(f"  ─────────────────────────────────────────")
     print(f"  URL:       {url}")
     print(f"  Invoer:    {args.input}")
     print(f"  Feedback:  {args.feedback_out}")
+    if vorige:
+        print(f"  Vorige:    {args.vorige}")
     print(f"\n  Open de URL, geef feedback (of klik Akkoord) en verstuur.")
     print(f"  Druk daarna Ctrl+C of laat de skill verdergaan.\n")
     if not args.no_browser:

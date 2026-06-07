@@ -70,11 +70,14 @@
 
 ### Reviewlog
 
-> Uitkomst van de twee review-checkpoints (zie de skill). Per activiteit: akkoord of de
-> doorgevoerde wijzigingen na feedback van de analist.
+> Uitkomst van de twee iteratieve review-checkpoints (zie de skill). Per activiteit: het
+> aantal reviewrondes en, per ronde, de op grond van de feedback doorgevoerde wijzigingen
+> (of dat de analist meteen akkoord ging).
 
-- **Na activiteit 2:** [akkoord zonder wijzigingen | samenvatting van verwerkte feedback]
-- **Na activiteit 3:** [akkoord zonder wijzigingen | samenvatting van verwerkte feedback]
+- **Activiteit 2:** [aantal rondes] — [akkoord in ronde 1 | per ronde: samenvatting van
+  verwerkte feedback]
+- **Activiteit 3:** [aantal rondes] — [akkoord in ronde 1 | per ronde: samenvatting van
+  verwerkte feedback]
 
 ### Aandachtspunten voor multidisciplinaire validatie
 

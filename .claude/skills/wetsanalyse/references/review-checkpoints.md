@@ -9,17 +9,31 @@ wetgeving — en zeker de interpretatiekeuzes — moeten door mensen (jurist,
 informatieanalist, ICT) worden gevalideerd vóórdat de analyse de uitvoering in gaat. De
 review-momenten maken die validatie expliciet en traceerbaar.
 
-## Werkmap
+## Werkmap — één map per ronde
 
-Schrijf tussenresultaten en feedback naar een werkmap naast (of bij) het eindrapport,
-bijvoorbeeld `werk/` in de outputmap. Vaste bestandsnamen:
+De review is **iteratief**: na elke ronde feedback verwerk je en toon je het herziene
+resultaat opnieuw. Bewaar daarom de volledige historie — overschrijf niets. Schrijf naar
+een werkmap bij het eindrapport (`werk/`), met per activiteit een submap en daarin per
+ronde een map met twee vaste bestanden:
 
-- `werk/activiteit-2.json` — tussenresultaat activiteit 2 (jij schrijft dit)
-- `werk/feedback-activiteit-2.json` — feedback van de analist (de viewer schrijft dit)
-- `werk/activiteit-3.json` — tussenresultaat activiteit 3
-- `werk/feedback-activiteit-3.json` — feedback activiteit 3
+```
+werk/
+  activiteit-2/
+    ronde-1/  analyse.json  feedback.json
+    ronde-2/  analyse.json  feedback.json
+    ...
+  activiteit-3/
+    ronde-1/  analyse.json  feedback.json
+    ...
+```
 
-## Schema — `activiteit-2.json`
+- `ronde-N/analyse.json` — tussenresultaat van die ronde (jij schrijft dit).
+- `ronde-N/feedback.json` — feedback van de analist op die ronde (de viewer schrijft dit).
+
+Het auditspoor laat zo zien hoe de analyse onder de feedback van de analist evolueerde —
+dat past bij de traceerbaarheidseis van het project.
+
+## Schema — `analyse.json` (activiteit 2)
 
 ```json
 {
@@ -42,7 +56,7 @@ bijvoorbeeld `werk/` in de outputmap. Vaste bestandsnamen:
 }
 ```
 
-## Schema — `activiteit-3.json`
+## Schema — `analyse.json` (activiteit 3)
 
 ```json
 {
@@ -72,11 +86,27 @@ Gebruik **stabiele id's** (`m1`, `m2`, … / `b1`, `r1`, …). De feedback koppe
 
 ## De server starten
 
+Ronde 1 (geen vorige context):
+
 ```bash
 python "<skill>/scripts/review_server.py" \
-  --input "<werkmap>/activiteit-2.json" \
+  --input "<werkmap>/activiteit-2/ronde-1/analyse.json" \
   --activiteit 2 \
-  --feedback-out "<werkmap>/feedback-activiteit-2.json"
+  --feedback-out "<werkmap>/activiteit-2/ronde-1/feedback.json" \
+  --ronde 1
+```
+
+Ronde 2 en verder: geef met `--vorige` de map van de vorige ronde mee. De server laadt
+dan `analyse.json` en `feedback.json` van die ronde en toont per item wat de analist toen
+vroeg en hoe het item er toen uitzag, zodat zichtbaar is of de correctie geland is:
+
+```bash
+python "<skill>/scripts/review_server.py" \
+  --input "<werkmap>/activiteit-2/ronde-2/analyse.json" \
+  --activiteit 2 \
+  --feedback-out "<werkmap>/activiteit-2/ronde-2/feedback.json" \
+  --ronde 2 \
+  --vorige "<werkmap>/activiteit-2/ronde-1"
 ```
 
 Default poort 3118. Start de server in de achtergrond, geef de analist de URL
@@ -84,7 +114,7 @@ Default poort 3118. Start de server in de achtergrond, geef de analist de URL
 ("Bekijk de review, geef feedback of klik Akkoord, en laat het me weten als je klaar bent").
 Ga niet zelf door tot de analist bevestigt.
 
-## Schema — `feedback-activiteit-N.json` (door de viewer geschreven)
+## Schema — `feedback.json` (door de viewer geschreven, per ronde)
 
 ```json
 {
@@ -95,18 +125,35 @@ Ga niet zelf door tot de analist bevestigt.
 }
 ```
 
-## Feedback verwerken
+Gebruik **stabiele id's** (`m1`, `m2`, … / `b1`, `r1`, …) en **houd ze stabiel tussen
+rondes**: hetzelfde concept houdt hetzelfde id, ook na een correctie. Daarop koppelt de
+feedback terug én daarop matcht de viewer de vorige versie van een item.
 
-1. Lees het feedbackbestand zodra de analist bevestigt dat die klaar is.
-2. Bij `status: "akkoord"` zonder `items` en zonder `algemeen`: ga ongewijzigd verder.
-3. Anders: verwerk **elk** gevuld veld. Per `id` pas je de betreffende markering / begrip /
-   regel aan (herclassificeren, toelichting/definitie bijstellen). De `algemeen`-tekst kan
-   leiden tot toegevoegde of verwijderde items, of methodische aanpassingen.
-4. Stop de server (Ctrl+C / kill) zodra de feedback verwerkt is.
-5. Houd bij wat je hebt gewijzigd; dit komt in de **Reviewlog** van het eindrapport.
+## De iteratieve lus
+
+De review herhaalt zich tot de analist akkoord is zonder verdere opmerkingen:
+
+1. **Schrijf** `ronde-{N}/analyse.json` en start de server (ronde 1 zonder `--vorige`,
+   ronde 2+ met `--vorige ronde-{N-1}` en `--ronde N`).
+2. **Pauzeer** en wacht tot de analist bevestigt dat die klaar is.
+3. **Lees** `ronde-{N}/feedback.json`.
+   - Bij `status: "akkoord"` **zonder** `items` en **zonder** `algemeen`: de lus is klaar.
+     Stop de server en ga door (naar activiteit 3, of naar het rapport).
+   - Anders: verwerk **elk** gevuld veld. Per `id` pas je de betreffende markering /
+     begrip / regel aan (herclassificeren, toelichting/definitie bijstellen). De
+     `algemeen`-tekst kan leiden tot toegevoegde of verwijderde items, of methodische
+     aanpassingen. Stop de server, verhoog `N`, en ga terug naar stap 1 met het herziene
+     resultaat.
+4. **Veiligheidscap:** stop na maximaal **6 rondes**, ook als er nog feedback is. Meld dit
+   aan de analist en noteer het in de reviewlog (de resterende punten horen dan bij de
+   aandachtspunten voor validatie).
+
+Houd per ronde bij wat je hebt gewijzigd; het aantal rondes en de wijzigingen komen in de
+**Reviewlog** van het eindrapport.
 
 ## Niet-interactief draaien (alleen voor evals/automatisering)
 
-Bij `WETSANALYSE_NO_REVIEW=1` in de omgeving sla je de review-stops over (geen server, geen
-pauze) en noteer je in het eindrapport dat de reviews zijn overgeslagen. Gebruik dit
-uitsluitend voor geautomatiseerde tests; voor mensen blijven de checkpoints altijd aan.
+Bij `WETSANALYSE_NO_REVIEW=1` in de omgeving sla je de hele lus over: schrijf één keer
+`ronde-1/analyse.json` (geen server, geen pauze) en noteer in het eindrapport dat de
+reviews zijn overgeslagen. Gebruik dit uitsluitend voor geautomatiseerde tests; voor
+mensen blijven de checkpoints altijd aan.

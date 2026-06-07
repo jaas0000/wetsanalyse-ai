@@ -123,25 +123,34 @@ maakt.
 ## Stap 2b — Review-checkpoint na activiteit 2
 
 Wetsanalyse is multidisciplinair werk: de analist (jurist/informatieanalist) hoort de
-markeringen en classificaties te valideren vóórdat je betekenis gaat vaststellen. Pauzeer
-hier daarom voor een review. Lees `references/review-checkpoints.md` voor het datacontract
-en de details; in het kort:
+markeringen en classificaties te valideren vóórdat je betekenis gaat vaststellen. Dit is
+een **iteratieve lus**: je verwerkt feedback en toont het herziene resultaat opnieuw, tot
+de analist akkoord is zonder opmerkingen. Zo kan de analist controleren of zijn correcties
+geland zijn. Lees `references/review-checkpoints.md` voor het datacontract; in het kort,
+met `N` = rondenummer (start op 1):
 
-1. Schrijf het tussenresultaat naar `werk/activiteit-2.json` (markeringen met stabiele
-   id's, leden-tekst, samenhang) volgens het schema in de referentie.
-2. Start de review-server in de achtergrond:
-   `python "<skill>/scripts/review_server.py" --input werk/activiteit-2.json --activiteit 2 --feedback-out werk/feedback-activiteit-2.json`
+1. Schrijf het tussenresultaat naar `werk/activiteit-2/ronde-{N}/analyse.json` (markeringen
+   met **stabiele id's**, leden-tekst, samenhang) volgens het schema in de referentie.
+   Overschrijf eerdere rondes niet; houd id's gelijk aan de vorige ronde.
+2. Start de review-server in de achtergrond. Ronde 1:
+   `python "<skill>/scripts/review_server.py" --input werk/activiteit-2/ronde-1/analyse.json --activiteit 2 --feedback-out werk/activiteit-2/ronde-1/feedback.json --ronde 1`
+   Ronde 2+: voeg `--ronde {N}` en `--vorige werk/activiteit-2/ronde-{N-1}` toe, zodat de
+   analist per item zijn vorige feedback en de vorige versie ziet.
 3. Geef de analist de URL (`http://localhost:3118`) en **rond je beurt af**: vraag de
    analist de review te bekijken, per item of in het algemeen feedback te geven, en
    **"Akkoord"** of **"Verstuur feedback"** te klikken. Ga niet zelf verder.
-4. Zodra de analist bevestigt dat die klaar is: lees `werk/feedback-activiteit-2.json`.
-   Bij `akkoord` zonder opmerkingen ga je ongewijzigd door; anders verwerk je elke
-   per-item-correctie en de algemene feedback (herclassificeren, toelichting bijstellen,
-   markeringen toevoegen/verwijderen). Stop daarna de server. Noteer wat je hebt gewijzigd
-   voor de reviewlog.
+4. Zodra de analist bevestigt dat die klaar is: lees `werk/activiteit-2/ronde-{N}/feedback.json`.
+   - Bij `akkoord` **zonder** items en **zonder** algemene feedback: stop de server, de lus
+     is klaar — ga door naar activiteit 3.
+   - Anders: verwerk **elke** per-item-correctie en de algemene feedback (herclassificeren,
+     toelichting bijstellen, markeringen toevoegen/verwijderen), stop de server, verhoog `N`
+     en ga terug naar stap 1. Noteer per ronde wat je wijzigde voor de reviewlog.
+5. **Veiligheidscap:** stop na maximaal 6 rondes, ook als er nog feedback is; meld dit en
+   neem de resterende punten op bij de aandachtspunten voor validatie.
 
-Sla deze stop alleen over als `WETSANALYSE_NO_REVIEW=1` in de omgeving staat (alleen voor
-geautomatiseerde tests); noteer dat dan in het rapport.
+Sla deze hele lus alleen over als `WETSANALYSE_NO_REVIEW=1` in de omgeving staat (alleen
+voor geautomatiseerde tests): schrijf dan één keer `ronde-1/analyse.json` en noteer in het
+rapport dat de reviews zijn overgeslagen.
 
 ## Stap 3 — Activiteit 3: begrippen en afleidingsregels
 
@@ -166,24 +175,31 @@ operatoren expliciet). Verwijs naar de bron. Houd parameters (vaste waarden) en 
 ## Stap 3b — Review-checkpoint na activiteit 3
 
 Net als na activiteit 2: laat de begrippen en afleidingsregels door de analist valideren
-voordat je het eindrapport opmaakt. Werkwijze identiek (zie `references/review-checkpoints.md`):
+voordat je het eindrapport opmaakt — als dezelfde **iteratieve lus**, tot akkoord zonder
+opmerkingen (zie `references/review-checkpoints.md`). Met `N` = rondenummer:
 
-1. Schrijf `werk/activiteit-3.json` (begrippen + afleidingsregels met stabiele id's,
-   concept-validatiepunten).
-2. Start de server met `--activiteit 3 --feedback-out werk/feedback-activiteit-3.json`.
+1. Schrijf `werk/activiteit-3/ronde-{N}/analyse.json` (begrippen + afleidingsregels met
+   **stabiele id's**, concept-validatiepunten). Overschrijf eerdere rondes niet.
+2. Start de server met `--input werk/activiteit-3/ronde-{N}/analyse.json --activiteit 3
+   --feedback-out werk/activiteit-3/ronde-{N}/feedback.json --ronde {N}`; vanaf ronde 2 ook
+   `--vorige werk/activiteit-3/ronde-{N-1}`.
 3. Geef de URL, **pauzeer**, en wacht op bevestiging van de analist.
-4. Lees `werk/feedback-activiteit-3.json`, verwerk de feedback, stop de server, en noteer
-   de wijzigingen voor de reviewlog.
+4. Lees `werk/activiteit-3/ronde-{N}/feedback.json`. Bij `akkoord` zonder items en zonder
+   algemene feedback: stop de server, de lus is klaar. Anders: verwerk de feedback, stop de
+   server, verhoog `N` en herhaal vanaf stap 1. Noteer de wijzigingen per ronde voor de
+   reviewlog. Veiligheidscap: maximaal 6 rondes.
 
-Dezelfde `WETSANALYSE_NO_REVIEW=1`-uitzondering geldt.
+Dezelfde `WETSANALYSE_NO_REVIEW=1`-uitzondering geldt (één keer `ronde-1/analyse.json`
+schrijven, lus overslaan).
 
 ## Stap 4 — Rapport opstellen
 
 Schrijf het resultaat (de gevalideerde inhoud na beide reviews) naar een Markdown-bestand
 volgens `assets/analyserapport-sjabloon.md`. Houd de structuur van het sjabloon aan; vul
 geen secties met holle tekst maar laat ze gericht de analyse dragen. Het rapport bevat een
-**reviewlog** (sectie 4) waarin per activiteit staat of de analist akkoord ging of wat is
-gewijzigd, en sluit af met **aandachtspunten voor multidisciplinaire validatie**: de
+**reviewlog** (sectie 4) waarin per activiteit staat hoeveel reviewrondes er waren en wat
+in elke ronde op grond van de feedback is gewijzigd (of dat de analist meteen akkoord ging),
+en sluit af met **aandachtspunten voor multidisciplinaire validatie**: de
 resterende interpretatiekeuzes, open normen, twijfelgevallen, aannames en openstaande
 delegaties die een mens moet bevestigen. Dit is geen bijzaak — het is wat de analyse
 bruikbaar en eerlijk maakt als hulpmiddel.
@@ -196,6 +212,7 @@ bruikbaar en eerlijk maakt als hulpmiddel.
 - Zijn brondefinities opgehaald en hergebruikt waar de bepaling naar gedefinieerde termen
   verwijst?
 - Zijn interpretatiekeuzes en twijfel expliciet benoemd in plaats van weggepoetst?
-- Zijn beide review-checkpoints doorlopen (of bewust overgeslagen via `WETSANALYSE_NO_REVIEW`)
-  en is de feedback van de analist verwerkt en in de reviewlog vastgelegd?
+- Zijn beide iteratieve review-checkpoints doorlopen tot de analist akkoord was zonder
+  opmerkingen (of bewust overgeslagen via `WETSANALYSE_NO_REVIEW`), en is de feedback per
+  ronde verwerkt en in de reviewlog vastgelegd?
 - Klopt de letterlijke wettekst met de bron (geen parafrase als citaat)?

@@ -53,6 +53,10 @@
   button.ok { background: var(--ok); color: #fff; border-color: var(--ok); }
   .status { color: var(--muted); font-size: 13px; }
   .status.done { color: var(--ok); font-weight: 600; }
+  .panel.banner { background: #fff8e6; border-color: #f0d98c; color: var(--ink); }
+  details.vorige { margin-top: 8px; padding-top: 6px; border-top: 1px dashed var(--line); }
+  details.vorige summary { font-size: 12px; color: var(--muted); }
+  details.vorige .meta { font-size: 13px; }
 </style>
 </head>
 <body>
@@ -72,7 +76,27 @@
 
 const A = EMBEDDED_DATA.analyse || {};
 const ACT = String(EMBEDDED_DATA.activiteit);
-const DRAFT_KEY = "wetsanalyse-review-act" + ACT;
+const RONDE = Number(EMBEDDED_DATA.ronde) || 1;
+const VORIGE = EMBEDDED_DATA.vorige || null;
+// Draft per ronde, zodat een concept uit een vorige ronde niet terugkomt.
+const DRAFT_KEY = "wetsanalyse-review-act" + ACT + "-ronde" + RONDE;
+
+// Index de vorige ronde op stabiele id, zodat we per item kunnen tonen wat de
+// analist toen vroeg en hoe dat item er toen uitzag.
+const VORIGE_FEEDBACK = (VORIGE && VORIGE.feedback && VORIGE.feedback.items) || {};
+const VORIGE_ALGEMEEN = (VORIGE && VORIGE.feedback && VORIGE.feedback.algemeen) || "";
+const VORIGE_ITEMS = buildVorigeItems(VORIGE && VORIGE.analyse);
+
+function buildVorigeItems(analyse) {
+  const map = {};
+  if (!analyse) return map;
+  for (const key of ["markeringen", "begrippen", "afleidingsregels"]) {
+    for (const it of (analyse[key] || [])) {
+      if (it && it.id != null) map[it.id] = it;
+    }
+  }
+  return map;
+}
 
 function esc(s) {
   return String(s == null ? "" : s)
@@ -88,14 +112,44 @@ function fb(id) {
   return `<textarea data-fid="${esc(id)}" placeholder="Feedback / correctie (laat leeg = akkoord)"></textarea>`;
 }
 
+// Ingeklapt context-blok bij een item in ronde 2+: wat de analist vorige ronde
+// vroeg, en hoe het item er toen uitzag — zodat zichtbaar is of de feedback geland is.
+function vorigeBlok(id, velden) {
+  if (!VORIGE) return "";
+  const fbVorig = VORIGE_FEEDBACK[id];
+  const itVorig = VORIGE_ITEMS[id];
+  if (!fbVorig && !itVorig) return "";
+  let inner = "";
+  if (fbVorig) {
+    inner += `<div class="meta"><span class="lbl">Jouw vorige feedback:</span> ${esc(fbVorig)}</div>`;
+  }
+  if (itVorig) {
+    const rows = velden
+      .filter(([, k]) => itVorig[k])
+      .map(([label, k]) => `<span class="lbl">${esc(label)}</span><span>${esc(itVorig[k])}</span>`)
+      .join("");
+    if (rows) inner += `<div class="grid" style="margin-top:6px">${rows}</div>`;
+  }
+  return `<details class="vorige"><summary>Vorige ronde</summary>
+    <div style="margin-top:8px">${inner}</div></details>`;
+}
+
 function renderHeader() {
   const meta = [A.wet, A.artikel ? "artikel " + A.artikel : "", A.versiedatum]
     .filter(Boolean).join(" · ");
   document.getElementById("title").textContent =
     "Wetsanalyse — Review activiteit " + ACT +
-    (ACT === "2" ? " (markeren & classificeren)" : " (begrippen & afleidingsregels)");
+    (ACT === "2" ? " (markeren & classificeren)" : " (begrippen & afleidingsregels)") +
+    (RONDE > 1 ? " — ronde " + RONDE : "");
   document.getElementById("subtitle").textContent =
     meta + (A.bronreferentie ? "  —  " + A.bronreferentie : "");
+}
+
+function renderBanner() {
+  if (RONDE <= 1) return "";
+  return `<div class="panel banner"><b>Ronde ${RONDE}</b> — dit is een herziening na
+    je feedback. Klap per item "Vorige ronde" open om te zien wat je vroeg en hoe het
+    er toen uitzag, en bevestig of je correctie verwerkt is.</div>`;
 }
 
 function renderWettekst() {
@@ -118,6 +172,8 @@ function renderMarkeringen() {
       <div class="formulering">"${esc(m.formulering)}"</div>
       ${m.toelichting ? `<div class="meta">${esc(m.toelichting)}</div>` : ""}
       ${fb(m.id)}
+      ${vorigeBlok(m.id, [["Formulering", "formulering"], ["Klasse", "klasse"],
+        ["Vindplaats", "vindplaats"], ["Toelichting", "toelichting"]])}
     </div>`).join("");
   return `<div class="panel"><h2>Markeringen &amp; classificaties (${(A.markeringen||[]).length})</h2>${items}</div>`;
 }
@@ -142,6 +198,9 @@ function renderBegrippen() {
         ${b.twijfel ? `<span class="lbl">Twijfel/aanname</span><span>${esc(b.twijfel)}</span>` : ""}
       </div>
       ${fb(b.id)}
+      ${vorigeBlok(b.id, [["Naam", "naam"], ["Klasse", "klasse"],
+        ["Definitie", "definitie"], ["Kenmerken/relaties", "kenmerken"],
+        ["Vindplaats", "vindplaats"], ["Twijfel/aanname", "twijfel"]])}
     </div>`).join("");
   return `<div class="panel"><h2>Begrippen (${(A.begrippen||[]).length})</h2>${items}</div>`;
 }
@@ -162,6 +221,11 @@ function renderRegels() {
       </div>
       ${r.formulering ? `<pre>${esc(r.formulering)}</pre>` : ""}
       ${fb(r.id)}
+      ${vorigeBlok(r.id, [["Naam", "naam"], ["Type", "type"],
+        ["Uitvoer", "uitvoervariabele"], ["Invoer", "invoervariabelen"],
+        ["Parameters", "parameters"], ["Voorwaarden", "voorwaarden"],
+        ["Formulering", "formulering"], ["Vindplaats", "vindplaats"],
+        ["Twijfel/aanname", "twijfel"]])}
     </div>`).join("");
   return `<div class="panel"><h2>Afleidingsregels (${(A.afleidingsregels||[]).length})</h2>${items}</div>`;
 }
@@ -173,14 +237,18 @@ function renderValidatie() {
 }
 
 function renderAlgemeen() {
-  return `<div class="panel"><h2>Algemene feedback (hele activiteit ${ACT})</h2>
+  const vorig = VORIGE_ALGEMEEN
+    ? `<div class="meta" style="margin-bottom:8px"><span class="lbl">Jouw vorige
+        algemene feedback:</span> ${esc(VORIGE_ALGEMEEN)}</div>`
+    : "";
+  return `<div class="panel"><h2>Algemene feedback (hele activiteit ${ACT})</h2>${vorig}
     <textarea data-fid="__algemeen__" style="min-height:90px"
       placeholder="Algemene opmerkingen, ontbrekende markeringen/begrippen, methodische punten…"></textarea></div>`;
 }
 
 function render() {
   renderHeader();
-  let html = renderWettekst();
+  let html = renderBanner() + renderWettekst();
   if (ACT === "2") {
     html += renderMarkeringen() + renderSamenhang();
   } else {
