@@ -69,10 +69,13 @@ kernstructuur die meerdere bestanden raakt:
 - **Stap 1** haalt tekst op via de MCP-tools `wettenbank_zoek` → `wettenbank_structuur` →
   `wettenbank_artikel` (en `wettenbank_zoekterm` voor brondefinities in definitieartikelen).
 - **Activiteit 2 → checkpoint → Activiteit 3 → checkpoint → rapport.** Na elke activiteit
-  is er een **human-in-the-loop review**: de skill schrijft `werk/activiteit-{2,3}.json`, start
-  `scripts/review_server.py` (lokale webpagina op poort 3118, alleen stdlib), pauzeert, en
-  verwerkt daarna `werk/feedback-activiteit-{2,3}.json`. De skill gaat **niet** zelf door zonder
-  bevestiging van de analist. De datacontracten van die JSON-bestanden staan in
+  is er een **iteratief human-in-the-loop review**: de skill schrijft
+  `werk/activiteit-{2,3}/ronde-{N}/analyse.json`, start `scripts/review_server.py` (lokale
+  webpagina op poort 3118, alleen stdlib; vanaf ronde 2 met `--ronde N --vorige <ronde-N-1>`),
+  pauzeert, en verwerkt daarna `werk/activiteit-{2,3}/ronde-{N}/feedback.json`. Is er feedback,
+  dan schrijft de skill een volgende ronde en herhaalt — tot de analist akkoord is zonder
+  opmerkingen (veiligheidscap: max. 6 rondes). De skill gaat **niet** zelf door zonder
+  bevestiging van de analist. De datacontracten en de lus staan in
   `references/review-checkpoints.md`.
 - De review-stops worden alleen overgeslagen als `WETSANALYSE_NO_REVIEW=1` in de omgeving staat
   (uitsluitend voor geautomatiseerde evals).
