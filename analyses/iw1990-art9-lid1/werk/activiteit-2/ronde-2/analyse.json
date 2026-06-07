@@ -31,25 +31,32 @@
       "toelichting": "Drukt het rechtsgevolg uit: de invorderbaarheid. Vanaf dat moment kan de ontvanger de belastingaanslag invorderen (recht) en moet de belastingschuldige betalen (plicht) — de kern-rechtsverhouding van hoofdstuk II. Twijfel/alternatief: 'invorderbaar' kan ook als variabele(waarde) met booleaanse status (invorderbaar ja/nee) worden gelezen; hier gekozen voor Rechtsbetrekking omdat de formulering de afdwingbare recht-plichtverhouding markeert, niet louter een kenmerkwaarde. Mee te nemen bij de validatie."
     },
     {
+      "id": "m7",
+      "formulering": "invorderbaar zes weken na de dagtekening van het aanslagbiljet",
+      "klasse": "Afleidingsregel",
+      "vindplaats": "lid 1",
+      "toelichting": "Toegevoegd na ronde 1 (feedback analist: afleidingsregel ontbrak). De bepaling bevat een rekenregel die het tijdstip van invorderbaarheid afleidt: invorderbaarheidsmoment = dagtekening van het aanslagbiljet + zes weken. De markeringen m3 (termijn 'zes weken'), m4 (operator 'na') en m5 (aanvangsmoment 'dagtekening van het aanslagbiljet') zijn de bouwstenen van deze afleidingsregel. De volledige, gestructureerde uitwerking (in-/uitvoervariabelen, parameters, voorwaarden) volgt in activiteit 3."
+    },
+    {
       "id": "m3",
       "formulering": "zes weken",
       "klasse": "Tijdsaanduiding",
       "vindplaats": "lid 1",
-      "toelichting": "De termijnlengte (tijdvak) die na het aanvangsmoment moet verstrijken voordat invorderbaarheid intreedt. Meest specifieke klasse wint: hoewel 'zes weken' een vaste waarde is (parameter-achtig: gelijk voor alle gevallen), prevaleert de klasse Tijdsaanduiding omdat het een termijn betreft. NB: lid 10 bepaalt dat de Algemene termijnenwet niet op deze termijn van toepassing is (context, buiten scope)."
+      "toelichting": "De termijnlengte (tijdvak) die na het aanvangsmoment moet verstrijken voordat invorderbaarheid intreedt; invoer-bouwsteen van de afleidingsregel m7. Meest specifieke klasse wint: hoewel 'zes weken' een vaste waarde is (parameter-achtig: gelijk voor alle gevallen), prevaleert de klasse Tijdsaanduiding omdat het een termijn betreft. NB: lid 10 bepaalt dat de Algemene termijnenwet niet op deze termijn van toepassing is (context, buiten scope)."
     },
     {
       "id": "m4",
       "formulering": "na",
       "klasse": "Operator",
       "vindplaats": "lid 1",
-      "toelichting": "Temporele/rekenkundige operator die de termijn (m3) optelt bij het aanvangsmoment (m5): het invorderbaarheidsmoment ligt 'na', d.w.z. dagtekening + zes weken. Vormt samen met m3 en m5 de basis voor de rekenregel in activiteit 3."
+      "toelichting": "Temporele/rekenkundige operator die de termijn (m3) optelt bij het aanvangsmoment (m5): het invorderbaarheidsmoment ligt 'na', d.w.z. dagtekening + zes weken. Vormt samen met m3 en m5 de afleidingsregel m7."
     },
     {
       "id": "m5",
       "formulering": "de dagtekening van het aanslagbiljet",
       "klasse": "Tijdsaanduiding",
       "vindplaats": "lid 1",
-      "toelichting": "Het aanvangsmoment (peildatum) waarvandaan de termijn van zes weken loopt. De dagtekening zelf is per geval een andere datum (variabele-achtig), maar als peilmoment voor de termijn wint de meest specifieke klasse Tijdsaanduiding. Verwijst naar het aanslagbiljet (m6)."
+      "toelichting": "Het aanvangsmoment (peildatum) waarvandaan de termijn van zes weken loopt; invoer-bouwsteen van de afleidingsregel m7. De dagtekening zelf is per geval een andere datum (variabele-achtig), maar als peilmoment voor de termijn wint de meest specifieke klasse Tijdsaanduiding. Verwijst naar het aanslagbiljet (m6)."
     },
     {
       "id": "m6",
@@ -59,5 +66,5 @@
       "toelichting": "Genest in m5, apart gemarkeerd voor traceerbaarheid van de brondefinitie. 'Aanslagbiljet' is gedefinieerd in art. 2, tweede lid, onder d (de kennisgeving van de beschikking/uitspraak). Het is het document waarvan de dagtekening het peilmoment levert; volgens art. 8, eerste lid, maakt de ontvanger de belastingaanslag bekend door verzending of uitreiking ervan."
     }
   ],
-  "samenhang": "De bepaling koppelt aan het rechtsobject 'belastingaanslag' (m1) het rechtsgevolg invorderbaarheid (m2), dat intreedt op een tijdstip bepaald door een rekenkundige tijdsrelatie: aanvangsmoment 'dagtekening van het aanslagbiljet' (m5) + termijn 'zes weken' (m3), verbonden door de operator 'na' (m4). De rechtssubjecten blijven in lid 1 impliciet: rechthebbende is de ontvanger (mag invorderen; vgl. art. 8 lid 1) en plichthebbende is de belastingschuldige (degene te wiens naam de aanslag is gesteld — art. 2, eerste lid, onder k). Lid 1 geeft de hoofdregel; lid 2 t/m 9 en 11 bevatten afwijkende termijnen voor specifieke aanslagsoorten en lid 12 regelt dat bezwaar/beroep de betalingsverplichting niet schorst."
+  "samenhang": "De bepaling koppelt aan het rechtsobject 'belastingaanslag' (m1) het rechtsgevolg invorderbaarheid (m2). Het tijdstip waarop dat rechtsgevolg intreedt wordt bepaald door een afleidingsregel (m7): aanvangsmoment 'dagtekening van het aanslagbiljet' (m5) + termijn 'zes weken' (m3), verbonden door de operator 'na' (m4). De rechtssubjecten blijven in lid 1 impliciet: rechthebbende is de ontvanger (mag invorderen; vgl. art. 8 lid 1) en plichthebbende is de belastingschuldige (degene te wiens naam de aanslag is gesteld — art. 2, eerste lid, onder k). Lid 1 geeft de hoofdregel; lid 2 t/m 9 en 11 bevatten afwijkende termijnen voor specifieke aanslagsoorten en lid 12 regelt dat bezwaar/beroep de betalingsverplichting niet schorst."
 }

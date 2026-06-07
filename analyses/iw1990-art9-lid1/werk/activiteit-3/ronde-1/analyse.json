@@ -9,88 +9,98 @@
       "id": "b1",
       "naam": "belastingaanslag",
       "klasse": "Rechtsobject",
-      "definitie": "[brondefinitie art. 2, eerste lid, onderdeel m] de voorlopige aanslag, de aanslag, de uitnodiging tot betaling, de navorderingsaanslag en de naheffingsaanslag, alsmede de voorlopige conserverende aanslag, de conserverende aanslag en de conserverende navorderingsaanslag in de inkomstenbelasting en in de schenk- en erfbelasting.",
+      "definitie": "Brondefinitie (art. 2, eerste lid, onder m): de voorlopige aanslag, de aanslag, de uitnodiging tot betaling, de navorderingsaanslag en de naheffingsaanslag, alsmede de voorlopige conserverende aanslag, de conserverende aanslag en de conserverende navorderingsaanslag in de inkomstenbelasting en in de schenk- en erfbelasting. Mede (art. 2, tweede lid, onder c) een vastgestelde beschikking of uitspraak strekkende tot vaststelling van een verschuldigd of terug te geven bedrag.",
       "voorbeeld": "Een definitieve aanslag inkomstenbelasting 2025 ten name van een belastingplichtige.",
-      "kenmerken": "Rechtsobject van de rechtsbetrekking 'invorderbaarheid' (b4). Draagt de variabele 'dagtekening van het aanslagbiljet' (b3) via het bijbehorende aanslagbiljet (b2). De soort belastingaanslag bepaalt of de hoofdregel (lid 1) geldt dan wel een afwijkende termijn (leden 2-9): bv. navorderings-/naheffingsaanslag → lid 2.",
-      "vindplaats": "art. 9 lid 1 (gebruik); brondefinitie art. 2 lid 1 onderdeel m (jci1.3:c:BWBR0004770&artikel=2)",
-      "twijfel": "Geen — wettelijk gedefinieerd. Let op: de definitie is een limitatieve enumeratie; per opgesomde soort kan een afwijkende invorderingstermijn gelden."
+      "kenmerken": "Rechtsobject van de rechtsbetrekking invorderbaarheid (b3). Wordt door de ontvanger (b5) bekendgemaakt via het aanslagbiljet (b2) (art. 8 lid 1). Is door de belastingschuldige in zijn geheel verschuldigd (art. 8 lid 5).",
+      "vindplaats": "art. 9 lid 1 (m1); brondefinitie art. 2 lid 1 onder m en lid 2 onder c",
+      "twijfel": ""
     },
     {
       "id": "b2",
       "naam": "aanslagbiljet",
       "klasse": "Rechtsobject",
-      "definitie": "[brondefinitie art. 2, tweede lid, onderdeel d] de kennisgeving van de beschikking of de uitspraak, bedoeld in [art. 2, tweede lid] onderdeel c.",
-      "voorbeeld": "Het papieren of digitale biljet waarmee de aanslag inkomstenbelasting 2025 aan de belastingschuldige bekend wordt gemaakt, met een dagtekening van 31 januari 2026.",
-      "kenmerken": "Rechtsobject dat het peilmoment draagt: zijn dagtekening (b3) is het ankerpunt van de invorderingstermijn. Relatie: hoort bij één belastingaanslag (b1).",
-      "vindplaats": "art. 9 lid 1 (gebruik); brondefinitie art. 2 lid 2 onderdeel d (jci1.3:c:BWBR0004770&artikel=2)",
-      "twijfel": "Geen — wettelijk gedefinieerd."
+      "definitie": "Brondefinitie (art. 2, tweede lid, onder d): de kennisgeving van de beschikking of de uitspraak, bedoeld in onderdeel c (de belastingaanslag).",
+      "voorbeeld": "Het fysieke of digitale biljet waarmee de aanslag inkomstenbelasting 2025 aan de belastingschuldige wordt toegezonden.",
+      "kenmerken": "Draagt de dagtekening (b6) die als peilmoment dient. Wordt door de ontvanger verzonden of uitgereikt om de belastingaanslag bekend te maken (art. 8 lid 1).",
+      "vindplaats": "art. 9 lid 1 (m6); brondefinitie art. 2 lid 2 onder d",
+      "twijfel": ""
     },
     {
       "id": "b3",
-      "naam": "dagtekening van het aanslagbiljet",
-      "klasse": "Tijdsaanduiding",
-      "definitie": "[interpretatie — geen brondefinitie in de Invorderingswet 1990] de op het aanslagbiljet (b2) vermelde datum; deze geldt als het peilmoment waarvandaan de invorderingstermijn wordt gerekend.",
-      "voorbeeld": "Vermeldt het aanslagbiljet als dagtekening 31 januari 2026, dan vangt de termijn van zes weken op die datum aan.",
-      "kenmerken": "Variabele tijdsaanduiding (verschilt per aanslag); invoervariabele van de rekenregel 'aanvang invorderbaarheid' (r1). Ankerpunt, niet zelf de invorderbaarheidsdatum.",
-      "vindplaats": "art. 9 lid 1 (jci1.3:c:BWBR0004770&artikel=9)",
-      "twijfel": "Werkdefinitie. 'Dagtekening' is niet in art. 2 IW 1990 gedefinieerd; in de praktijk de op het biljet afgedrukte datum (vgl. art. 5 AwR voor de dagtekening van aanslagen). Ter validatie aan de jurist: of een nadere/afwijkende uitleg van 'dagtekening' nodig is."
+      "naam": "invorderbaarheid",
+      "klasse": "Rechtsbetrekking",
+      "definitie": "[Interpretatie] De rechtstoestand waarin de ontvanger de belastingaanslag van de belastingschuldige mag invorderen en de belastingschuldige gehouden is te betalen. De wet definieert 'invorderbaar' niet; werkdefinitie op basis van art. 9 lid 1 in samenhang met hoofdstuk II.",
+      "voorbeeld": "Zes weken na de dagtekening van het aanslagbiljet kan de ontvanger tot (dwang)invordering overgaan als niet is betaald.",
+      "kenmerken": "Rechthebbende: ontvanger (b5). Plichthebbende: belastingschuldige (b4). Rechtsobject: belastingaanslag (b1). Het moment waarop deze rechtsbetrekking ingaat (het invorderbaarheidsmoment, b7) wordt afgeleid door rekenregel r1. NB: de betalingsverplichting wordt niet geschorst door bezwaar of beroep (art. 9 lid 12, buiten scope).",
+      "vindplaats": "art. 9 lid 1 (m2)",
+      "twijfel": "Alternatieve lezing: 'invorderbaar' als booleaanse statuswaarde (variabele) van de belastingaanslag in plaats van een zelfstandige rechtsbetrekking. Gekozen voor rechtsbetrekking; te valideren door de jurist."
     },
     {
       "id": "b4",
-      "naam": "invorderbaarheid van een belastingaanslag",
-      "klasse": "Rechtsbetrekking",
-      "definitie": "[interpretatie] de juridische toestand waarin een belastingaanslag invorderbaar is: de ontvanger (b6) is jegens de belastingschuldige (b5) gerechtigd tot invordering en de belastingschuldige is gehouden te betalen. Treedt in door verloop van de wettelijke termijn.",
-      "voorbeeld": "Zes weken na dagtekening 31 januari 2026 (dus vanaf 14 maart 2026) is de aanslag invorderbaar en kan de ontvanger invorderingsmaatregelen treffen.",
-      "kenmerken": "Rechthebbende: ontvanger (b6). Plichthebbende: belastingschuldige (b5). Rechtsobject: belastingaanslag (b1). Doet-ontstaan-rechtsfeit: het verstrijken van zes weken na de dagtekening (markering m7). Kenmerk: aanvangsmoment = uitkomst van r1.",
-      "vindplaats": "art. 9 lid 1 (jci1.3:c:BWBR0004770&artikel=9)",
-      "twijfel": "Begripsnaam zelfgevormd. 'Invorderbaar' is ook te modelleren als booleaanse variabele van b1 (zie r2); de rechtsbetrekking en de boolean zijn twee zichten op hetzelfde. Open norm/nuance voor de jurist: 'invorderbaar' markeert vanaf wanneer invordering mág; de feitelijke betaaltermijn en het dwangbevel (art. 11 e.v.) zijn aparte, navolgende stappen."
+      "naam": "belastingschuldige",
+      "klasse": "Rechtssubject",
+      "definitie": "Brondefinitie (art. 2, eerste lid, onder k): degene te wiens naam de belastingaanslag is gesteld.",
+      "voorbeeld": "De natuurlijke persoon op wiens naam de aanslag inkomstenbelasting staat.",
+      "kenmerken": "Plichthebbende in de rechtsbetrekking invorderbaarheid (b3): is de belastingaanslag in zijn geheel verschuldigd (art. 8 lid 5). Impliciet in art. 9 lid 1; ontleend aan de brondefinitie.",
+      "vindplaats": "art. 9 lid 1 (impliciet, via b1); brondefinitie art. 2 lid 1 onder k",
+      "twijfel": "Niet letterlijk in lid 1 genoemd; afgeleid uit de gedefinieerde term belastingaanslag en de systematiek van hoofdstuk II."
     },
     {
       "id": "b5",
-      "naam": "belastingschuldige",
+      "naam": "ontvanger",
       "klasse": "Rechtssubject",
-      "definitie": "[brondefinitie art. 2, eerste lid, onderdeel k] degene te wiens naam de belastingaanslag is gesteld.",
-      "voorbeeld": "De belastingplichtige op wiens naam de aanslag inkomstenbelasting 2025 staat.",
-      "kenmerken": "Plichthebbende rechtssubject in de rechtsbetrekking invorderbaarheid (b4). In art. 9 lid 1 impliciet (niet letterlijk genoemd).",
-      "vindplaats": "art. 9 lid 1 (impliciet); brondefinitie art. 2 lid 1 onderdeel k (jci1.3:c:BWBR0004770&artikel=2)",
-      "twijfel": "Impliciet in lid 1; afgeleid uit de systematiek en de brondefinitie."
+      "definitie": "Brondefinitie (art. 2, eerste lid, onder i): de functionaris die als zodanig bij ministeriële regeling is aangewezen.",
+      "voorbeeld": "De ontvanger van de Belastingdienst die de aanslag invordert.",
+      "kenmerken": "Rechthebbende in de rechtsbetrekking invorderbaarheid (b3): mag de belastingaanslag invorderen zodra het invorderbaarheidsmoment (b7) is bereikt. Maakt de belastingaanslag bekend via het aanslagbiljet (art. 8 lid 1). Impliciet in art. 9 lid 1.",
+      "vindplaats": "art. 9 lid 1 (impliciet); brondefinitie art. 2 lid 1 onder i; art. 8 lid 1",
+      "twijfel": "Niet letterlijk in lid 1 genoemd; afgeleid uit de systematiek van hoofdstuk II (invordering in eerste aanleg)."
     },
     {
       "id": "b6",
-      "naam": "ontvanger",
-      "klasse": "Rechtssubject",
-      "definitie": "[brondefinitie art. 2, eerste lid, onderdeel i] de functionaris die als zodanig bij ministeriële regeling is aangewezen.",
-      "voorbeeld": "De ontvanger van de Belastingdienst die de aanslag invordert.",
-      "kenmerken": "Rechthebbende rechtssubject in de rechtsbetrekking invorderbaarheid (b4). In art. 9 lid 1 impliciet. De concrete aanwijzing volgt uit een ministeriële regeling (delegatie-invulling: Uitvoeringsregeling Invorderingswet 1990).",
-      "vindplaats": "art. 9 lid 1 (impliciet); brondefinitie art. 2 lid 1 onderdeel i (jci1.3:c:BWBR0004770&artikel=2)",
-      "twijfel": "Impliciet in lid 1. De aanwijzing 'bij ministeriële regeling' is een delegatie-invulling buiten het bestek van art. 9 lid 1."
+      "naam": "dagtekening van het aanslagbiljet",
+      "klasse": "Tijdsaanduiding",
+      "definitie": "[Interpretatie] De op het aanslagbiljet vermelde datum, die als peilmoment dient voor de berekening van de invorderbaarheidstermijn. Niet apart wettelijk gedefinieerd in de Invorderingswet 1990.",
+      "voorbeeld": "Staat op het aanslagbiljet een dagtekening van 15 januari 2026, dan is dat het startpunt van de termijn van zes weken.",
+      "kenmerken": "Invoervariabele (per geval verschillende datum) van rekenregel r1. Hoort bij het aanslagbiljet (b2).",
+      "vindplaats": "art. 9 lid 1 (m5)",
+      "twijfel": "De wijze van vaststelling/betekenis van 'dagtekening' (bv. verhouding tot daadwerkelijke verzending) volgt niet uit lid 1 zelf."
+    },
+    {
+      "id": "b7",
+      "naam": "invorderbaarheidsmoment",
+      "klasse": "Tijdsaanduiding",
+      "definitie": "[Interpretatie] Het tijdstip waarop een belastingaanslag invorderbaar wordt; voor de hoofdregel: zes weken na de dagtekening van het aanslagbiljet.",
+      "voorbeeld": "Bij dagtekening 15 januari 2026 is het invorderbaarheidsmoment 26 februari 2026.",
+      "kenmerken": "Uitvoervariabele van rekenregel r1. Markeert het ingaan van de rechtsbetrekking invorderbaarheid (b3).",
+      "vindplaats": "art. 9 lid 1 (m7)",
+      "twijfel": ""
     }
   ],
   "afleidingsregels": [
     {
       "id": "r1",
-      "naam": "aanvang invorderbaarheid (peilmoment)",
+      "naam": "invorderbaarheidsmoment van een belastingaanslag",
       "type": "rekenregel",
-      "uitvoervariabele": "datum_invorderbaar (de datum waarop de belastingaanslag invorderbaar wordt)",
-      "invoervariabelen": "dagtekening_aanslagbiljet (b3)",
-      "parameters": "invorderingstermijn_hoofdregel = 6 weken (vaste termijn, art. 9 lid 1; geldig voor alle belastingaanslagen waarop de hoofdregel van toepassing is)",
-      "voorwaarden": "Geldt als HOOFDREGEL, dat wil zeggen TENZIJ voor de betreffende belastingaanslag een afwijkende termijn van toepassing is op grond van art. 9 leden 2 t/m 9 (o.a. navorderings-/naheffingsaanslag, conserverende aanslagen, voorlopige aanslagen, uitnodiging tot betaling, terstond invorderbaar). De Algemene termijnenwet is NIET van toepassing op deze termijn (art. 9 lid 10), zodat de termijn niet wordt verlengd bij een einde in het weekend of op een feestdag.",
-      "formulering": "datum_invorderbaar := dagtekening_aanslagbiljet + 6 weken   [Algemene termijnenwet niet van toepassing; art. 9 lid 10]",
-      "vindplaats": "art. 9 lid 1 (jci1.3:c:BWBR0004770&artikel=9); uitsluiting Atw: art. 9 lid 10",
-      "twijfel": "De parameter 6 weken is vast in de wet. De voorwaarde 'tenzij afwijkende termijn' verwijst naar de specialisaties in leden 2-9, die als aparte bepalingen moeten worden geanalyseerd om de volledige beslisboom 'welke termijn geldt' op te bouwen."
+      "uitvoervariabele": "invorderbaarheidsmoment (b7) — datum",
+      "invoervariabelen": "dagtekening_aanslagbiljet (b6) — datum",
+      "parameters": "termijn = 6 weken (vaste waarde, hoofdregel art. 9 lid 1)",
+      "voorwaarden": "Geldt als hoofdregel voor een belastingaanslag (b1), VOOR ZOVER geen van de afwijkende termijnen van art. 9 lid 2 t/m 9 of 11 van toepassing is.",
+      "formulering": "invorderbaarheidsmoment := dagtekening_aanslagbiljet + termijn[6 weken]",
+      "vindplaats": "art. 9 lid 1 (m7, m3, m4, m5)",
+      "twijfel": "De Algemene termijnenwet is NIET van toepassing op deze termijn (art. 9 lid 10) — de termijn wordt dus niet verlengd bij een einde in het weekend/op een feestdag. Dit raakt de berekening en moet in de uitvoering worden meegenomen; lid 10 valt formeel buiten de scope van deze analyse."
     },
     {
       "id": "r2",
-      "naam": "is de belastingaanslag invorderbaar?",
+      "naam": "is een belastingaanslag invorderbaar",
       "type": "beslisregel",
-      "uitvoervariabele": "invorderbaar (ja/nee — booleaanse toestand van de belastingaanslag)",
-      "invoervariabelen": "peildatum (de dag waarop wordt beoordeeld, bv. vandaag); datum_invorderbaar (uitkomst van r1)",
-      "parameters": "geen eigen parameters (gebruikt de uitkomst van r1)",
-      "voorwaarden": "invorderbaar = ja zodra de peildatum op of na het peilmoment datum_invorderbaar ligt. Operator: 'na' (m4) = op of na afloop van de termijn (>=).",
-      "formulering": "invorderbaar := peildatum >= datum_invorderbaar\n            ( = dagtekening_aanslagbiljet + 6 weken )",
-      "vindplaats": "art. 9 lid 1 (jci1.3:c:BWBR0004770&artikel=9)",
-      "twijfel": "Randvraag (open voor de jurist): geldt 'na zes weken' inclusief of exclusief de aanvangsdag, en is de aanslag invorderbaar vanaf het begin van de dag dagtekening+6weken? Aangenomen is: op of na die dag (>=). Validatie gewenst."
+      "uitvoervariabele": "is_invorderbaar — ja/nee",
+      "invoervariabelen": "peildatum (de datum waarop wordt beoordeeld); invorderbaarheidsmoment (b7, uitkomst van r1)",
+      "parameters": "geen",
+      "voorwaarden": "is_invorderbaar = ja zodra de peildatum gelijk is aan of ligt na het invorderbaarheidsmoment.",
+      "formulering": "is_invorderbaar := peildatum >= invorderbaarheidsmoment (= dagtekening_aanslagbiljet + 6 weken)",
+      "vindplaats": "art. 9 lid 1 (m2, m7)",
+      "twijfel": "[Interpretatie] Deze beslisregel maakt de logische consequentie van lid 1 expliciet; lid 1 formuleert primair het tijdstip (rekenregel r1). Te valideren of de uitvoering een aparte ja/nee-status wenst naast het berekende moment."
     }
   ],
-  "validatiepunten": "1) 'Invorderbaar' is gemodelleerd als rechtsbetrekking (b4) én als booleaanse uitkomst (r2); bevestig dat dit dubbelzicht gewenst is voor de uitvoering. 2) Werkdefinitie 'dagtekening' (b3) — geen wettelijke definitie in IW 1990; uitleg bevestigen. 3) Rechtssubjecten ontvanger (b6) en belastingschuldige (b5) zijn impliciet in lid 1; bevestig de toekenning van rechthebbende/plichthebbende. 4) De Algemene termijnenwet is uitgesloten (lid 10): de termijn schuift niet op naar een werkdag — relevant voor de berekening in r1. 5) Lid 1 is hoofdregel; de afwijkende termijnen (leden 2-9) en de opschortingsgronden (lid 11) zijn specialisaties die apart geanalyseerd moeten worden om r1 compleet te maken. 6) Inclusief/exclusief de aanvangsdag bij '>=' in r2 (zie twijfel r2)."
+  "validatiepunten": "1) Interpretatiekeuze m2/b3: 'invorderbaar' als rechtsbetrekking vs. booleaanse statuswaarde. 2) Impliciete rechtssubjecten (ontvanger b5, belastingschuldige b4) zijn afgeleid uit art. 2 en art. 8, niet uit lid 1 zelf — juridisch valideren. 3) De termijn van zes weken wordt niet verlengd door de Algemene termijnenwet (art. 9 lid 10); dit moet in de berekening worden verwerkt hoewel lid 10 buiten scope valt. 4) Begrip 'dagtekening' is niet wettelijk gedefinieerd — betekenis/verhouding tot verzending te valideren. 5) Beslisregel r2 is een afgeleide explicitering; bevestigen of die als zelfstandige regel gewenst is. 6) Reikwijdte: alleen de hoofdregel (lid 1) is geanalyseerd; de afwijkende termijnen (lid 2 t/m 9, 11) en de schorsingsbepaling (lid 12) vallen buiten scope en vergen eigen analyse."
 }
