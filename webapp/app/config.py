@@ -12,6 +12,7 @@ class Settings(BaseSettings):
 
     # Beveiliging
     secret_key: str = "verander-dit-in-productie"
+    fernet_key: str = ""
 
     # Database
     database_path: str = "data/wetsanalyse.db"
@@ -24,7 +25,7 @@ class Settings(BaseSettings):
     # Cache
     cache_ttl_seconds: int = 3600  # 1 uur
 
-    model_config = {"env_file": ".env", "env_prefix": "WETSANALYSE_"}
+    model_config = {"env_file": ".env", "env_prefix": "WETSANALYSE_", "extra": "ignore"}
 
 
 settings = Settings()
