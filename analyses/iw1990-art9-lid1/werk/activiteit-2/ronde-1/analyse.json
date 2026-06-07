@@ -1,0 +1,65 @@
+{
+  "wet": "Invorderingswet 1990",
+  "bwbId": "BWBR0004770",
+  "artikel": "9",
+  "versiedatum": "2026-01-01",
+  "bronreferentie": "jci1.3:c:BWBR0004770&artikel=9",
+  "leden": [
+    {
+      "lid": "1",
+      "tekst": "Een belastingaanslag is invorderbaar zes weken na de dagtekening van het aanslagbiljet."
+    }
+  ],
+  "markeringen": [
+    {
+      "id": "m1",
+      "formulering": "Een belastingaanslag",
+      "klasse": "Rechtsobject",
+      "vindplaats": "lid 1",
+      "toelichting": "Voorwerp van de invorderingsrechtsbetrekking (m2): datgene wat invorderbaar wordt. Een belastingaanslag is zelf geen drager van rechten/plichten en dus geen rechtssubject. 'Belastingaanslag' is een in de wet gedefinieerde term (brondefinitie art. 2, eerste lid, onderdeel m): de voorlopige aanslag, de aanslag, de uitnodiging tot betaling, de navorderingsaanslag en de naheffingsaanslag, alsmede de voorlopige conserverende aanslag, de conserverende aanslag en de conserverende navorderingsaanslag in de inkomstenbelasting en in de schenk- en erfbelasting. De definitie wordt in activiteit 3 als begrip uitgewerkt."
+    },
+    {
+      "id": "m2",
+      "formulering": "is invorderbaar",
+      "klasse": "Rechtsbetrekking",
+      "vindplaats": "lid 1",
+      "toelichting": "Drukt de juridische toestand uit waarin de ontvanger gerechtigd is tot invordering en de belastingschuldige gehouden is tot betaling. De rechtssubjecten (ontvanger = rechthebbende; belastingschuldige = plichthebbende, art. 2, eerste lid, onderdeel k) worden in lid 1 niet letterlijk genoemd; zij zijn impliciet. ALTERNATIEF/TWIJFEL: voor de informatieanalyse is 'invorderbaar' ook te lezen als een booleaanse variabele (ja/nee) als kenmerk van de belastingaanslag, die na het verstrijken van de termijn 'waar' wordt. Die lezing is relevant voor de beslisregel in activiteit 3; ter validatie voorgelegd."
+    },
+    {
+      "id": "m3",
+      "formulering": "zes weken",
+      "klasse": "Tijdsaanduiding",
+      "vindplaats": "lid 1",
+      "toelichting": "Termijnduur (tijdvak) die het tijdsverloop tot invorderbaarheid bepaalt. Genest in m7. SAMENLOOP: als vaste, voor allen gelijke termijn heeft 'zes weken' ook een parameter-/constante-karakter; bij samenloop wint de meest specifieke klasse en dat is Tijdsaanduiding (tijdvak)."
+    },
+    {
+      "id": "m4",
+      "formulering": "na",
+      "klasse": "Operator",
+      "vindplaats": "lid 1",
+      "toelichting": "Temporele operator: de invorderbaarheid treedt in ná afloop van de termijn (vergelijking 'op of na' het peilmoment dagtekening + zes weken; feitelijk groter-dan/gelijk-aan). Verbindt de termijnduur (m3) met het ankerpunt (m5). Fijnmazige markering; 'zes weken na de dagtekening' is samen als één tijdsaanduiding/rechtsfeit (m7) te lezen."
+    },
+    {
+      "id": "m5",
+      "formulering": "de dagtekening van het aanslagbiljet",
+      "klasse": "Tijdsaanduiding",
+      "vindplaats": "lid 1",
+      "toelichting": "Peildatum/ankerpunt waarvandaan de termijn van zes weken wordt gerekend: de datum die op het aanslagbiljet is vermeld. 'Dagtekening' is in de Invorderingswet 1990 niet zelf gedefinieerd (geen brondefinitie aangetroffen in art. 2); werkdefinitie volgt in activiteit 3. Genest: bevat het rechtsobject 'het aanslagbiljet' (m6)."
+    },
+    {
+      "id": "m6",
+      "formulering": "het aanslagbiljet",
+      "klasse": "Rechtsobject",
+      "vindplaats": "lid 1",
+      "toelichting": "Het document dat het peilmoment draagt: de kennisgeving van de beschikking/uitspraak. In de wet gedefinieerd (brondefinitie art. 2, tweede lid, onderdeel d: 'de kennisgeving van de beschikking of de uitspraak, bedoeld in onderdeel c'). Genest in m5. Wordt in activiteit 3 als begrip uitgewerkt."
+    },
+    {
+      "id": "m7",
+      "formulering": "zes weken na de dagtekening van het aanslagbiljet",
+      "klasse": "Rechtsfeit",
+      "vindplaats": "lid 1",
+      "toelichting": "Tijdsverloop dat de rechtsbetrekking (m2) doet intreden: het verstrijken van zes weken na de dagtekening is de gebeurtenis (tijdsverloop met rechtsgevolg) waardoor de belastingaanslag invorderbaar wordt. SAMENLOOP: deze formulering omvat de tijdsaanduidingen m3 en m5 en de operator m4; ze is hier als geheel als Rechtsfeit geclassificeerd omdat het verstrijken ervan het rechtsgevolg veroorzaakt. Ter validatie voorgelegd of het rechtsfeit als aparte markering naast de tijdsaanduidingen gewenst is."
+    }
+  ],
+  "samenhang": "Centrale rechtsbetrekking (m2): de invorderbaarheid. Rechthebbende is de ontvanger (impliciet; functionaris uit art. 2, eerste lid, onderdeel i), plichthebbende is de belastingschuldige (impliciet; art. 2, eerste lid, onderdeel k: degene te wiens naam de belastingaanslag is gesteld). Rechtsobject van die betrekking is de belastingaanslag (m1) — het in te vorderen bedrag. Het rechtsfeit dat de betrekking doet ontstaan is het tijdsverloop (m7): het verstrijken van zes weken (m3) na (m4) de dagtekening van het aanslagbiljet (m5), welk biljet als rechtsobject (m6) het peilmoment draagt. Lid 1 is de HOOFDREGEL voor invorderbaarheid; de leden 2 t/m 11 bevatten 'in afwijking van het eerste lid' afwijkende termijnen (navordering/naheffing, conserverende aanslagen, voorlopige aanslagen, UTB's, terstond invorderbaar, opschorting). Die afwijkingen zijn specialisaties op deze hoofdregel en moeten als aparte bepalingen worden geanalyseerd; lid 10 sluit de Algemene termijnenwet uit op deze termijnen."
+}
