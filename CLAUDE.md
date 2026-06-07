@@ -79,8 +79,14 @@ kernstructuur die meerdere bestanden raakt:
   `references/review-checkpoints.md`.
 - De review-stops worden alleen overgeslagen als `WETSANALYSE_NO_REVIEW=1` in de omgeving staat
   (uitsluitend voor geautomatiseerde evals).
-- Het rapport volgt `assets/analyserapport-sjabloon.md` en eindigt met een **reviewlog** en
-  **aandachtspunten voor multidisciplinaire validatie** (open normen, twijfel, aannames).
+- **Het rapport wordt gegenereerd, niet overgetypt.** `scripts/render_rapport.py` rendert de
+  deterministische delen (secties 0–3 en het reviewlog-skelet) brongetrouw uit de
+  gevalideerde `analyse.json`'s van de hoogste reviewronde, volgens
+  `assets/analyserapport-sjabloon.md`. Het script zet `_TODO_`-markeringen op de plekken die
+  synthese vragen — de **aandachtspunten voor multidisciplinaire validatie** (sectie 4: open
+  normen, twijfel, aannames) en de prozasamenvatting in de **reviewlog** — die de skill
+  daarna handmatig invult. Raak de gegenereerde inhoud verder niet aan; opnieuw renderen
+  overschrijft die `_TODO_`-invullingen.
 
 Inhoudelijke regels die je moet kennen voordat je classificeert of begrippen opstelt:
 `references/jas-klassen.md` (de dertien JAS-klassen — verzin er geen), en
