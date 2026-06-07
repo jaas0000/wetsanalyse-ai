@@ -42,6 +42,11 @@ dat past bij de traceerbaarheidseis van het project.
   "artikel": "2",
   "versiedatum": "2026-01-01",
   "bronreferentie": "jci1.3:c:BWBR0018451&artikel=2",
+  "type": "wet",
+  "pad": "Hoofdstuk 1 > Artikel 2",
+  "analysefocus": "<hoofdvraag, of weglaten voor volledige analyse>",
+  "reikwijdte": "<welke leden zijn geanalyseerd; wat valt buiten scope>",
+  "geraadpleegde": "<definitie-/aanpalende artikelen, bv. art. 1 (begripsbepalingen)>",
   "leden": [{ "lid": "1", "tekst": "<letterlijke wettekst van het lid>" }],
   "markeringen": [
     {
@@ -55,6 +60,12 @@ dat past bij de traceerbaarheidseis van het project.
   "samenhang": "<korte tekst over samenhang rond rechtsbetrekking/rechtsfeit>"
 }
 ```
+
+De velden `type`, `pad`, `analysefocus`, `reikwijdte` en `geraadpleegde` voeden sectie 0
+(Bron en afbakening) van het eindrapport. `pad` en `type` komen uit `wettenbank_artikel` /
+`wettenbank_structuur`; `analysefocus`/`reikwijdte`/`geraadpleegde` leg je vast uit de
+opdracht en je afbakening. Ze zijn optioneel: ontbreken ze, dan zet de rapportgenerator
+(`scripts/render_rapport.py`) een `_TODO_`-markering die je handmatig invult.
 
 ## Schema — `analyse.json` (activiteit 3)
 

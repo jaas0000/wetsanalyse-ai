@@ -194,15 +194,36 @@ schrijven, lus overslaan).
 
 ## Stap 4 — Rapport opstellen
 
-Schrijf het resultaat (de gevalideerde inhoud na beide reviews) naar een Markdown-bestand
-volgens `assets/analyserapport-sjabloon.md`. Houd de structuur van het sjabloon aan; vul
-geen secties met holle tekst maar laat ze gericht de analyse dragen. Het rapport bevat een
-**reviewlog** (sectie 4) waarin per activiteit staat hoeveel reviewrondes er waren en wat
-in elke ronde op grond van de feedback is gewijzigd (of dat de analist meteen akkoord ging),
-en sluit af met **aandachtspunten voor multidisciplinaire validatie**: de
-resterende interpretatiekeuzes, open normen, twijfelgevallen, aannames en openstaande
-delegaties die een mens moet bevestigen. Dit is geen bijzaak — het is wat de analyse
-bruikbaar en eerlijk maakt als hulpmiddel.
+Type het rapport **niet** zelf over. De secties 0–3 en het reviewlog-skelet zijn een
+mechanische transformatie van de gevalideerde `analyse.json`'s; laat die genereren door de
+rapportgenerator. Dat scheelt tokens en garandeert dat de wettekst, markeringen, begrippen
+en regels brongetrouw met de laatste reviewronde overeenkomen.
+
+```bash
+python "<skill>/scripts/render_rapport.py" \
+  --werk <werkmap> \
+  --out  <analysemap>/analyserapport-<slug>.md
+```
+
+De generator kiest per activiteit automatisch de hoogste ronde, rendert secties 0–3, en
+vult het reviewlog op basis van de `feedback.json`'s. Hij zet `_TODO_` op de plekken die
+synthese of metadata vragen. **Werk daarna alléén die `_TODO_`'s bij** (de generator meldt
+hoeveel er zijn); raak de gegenereerde inhoud verder niet aan. Het gaat om:
+
+- **Sectie 0-metadata** — `type`, `pad`, `analysefocus`, `reikwijdte`, `geraadpleegde`. Vul
+  deze bij voorkeur al vóór de review in het act-2-`analyse.json` in (zie het schema in
+  `references/review-checkpoints.md`); dan rendert de generator ze direct en blijft alleen
+  sectie 4 over.
+- **Sectie 4 — aandachtspunten voor multidisciplinaire validatie.** Vervang het `_TODO_`-blok
+  door de gestructureerde aandachtspunten (interpretatiekeuzes, open normen, openstaande
+  delegaties, aannames, buiten scope), op basis van de twijfelvelden in de tabellen en het
+  ruwe `validatiepunten`-materiaal dat de generator eronder zette. Verwijder daarna het
+  ruw-materiaal-blok. Dit is geen bijzaak — het is wat de analyse bruikbaar en eerlijk maakt
+  als hulpmiddel.
+- **Reviewlog** — als er meer dan één ronde was, vat het `_TODO_` per activiteit samen wat
+  op grond van de feedback is gewijzigd (het ruwe materiaal per ronde staat eronder).
+
+Was een review overgeslagen via `WETSANALYSE_NO_REVIEW=1`, noteer dat dan in de reviewlog.
 
 ## Kwaliteitscheck voordat je oplevert
 
