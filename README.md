@@ -30,9 +30,13 @@ artikel + lid + bronreferentie — en doorloopt:
    afleidingsregels (beslis-, reken- en specialisatieregels) vastleggen.
 4. **Rapport** met reviewlog en aandachtspunten voor multidisciplinaire validatie.
 
-Na activiteit 2 én na activiteit 3 is er een **human-in-the-loop review-checkpoint**: een lokale
-reviewpagina waarin de analist de tussenresultaten valideert en feedback geeft voordat de skill
-verdergaat.
+Na activiteit 2 én na activiteit 3 is er een **iteratief human-in-the-loop review-checkpoint**:
+een lokale reviewpagina waarin de analist de tussenresultaten per onderdeel valideert en feedback
+geeft. De skill verwerkt die feedback en toont het herziene resultaat in een nieuwe ronde — met
+per item de vorige versie en de eerder gegeven feedback ernaast, zodat zichtbaar is of een
+correctie geland is. Dit herhaalt tot de analist akkoord is zonder opmerkingen (met een
+veiligheidscap op het aantal rondes). Elke ronde wordt bewaard onder `werk/activiteit-N/ronde-M/`
+voor een volledig auditspoor.
 
 ## Aan de slag
 
