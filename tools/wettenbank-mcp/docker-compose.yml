@@ -10,8 +10,8 @@
 #
 # Stack-omgeving (in Portainer):
 #   MCP_AUTH_TOKEN  — sterke, geheime token; clients sturen die als `Authorization: Bearer ...`
-#   PROXY_NETWORK   — naam van het bestaande NPM-netwerk (zie `docker network ls`,
-#                     vaak `npm_default` of `proxy`); default hieronder is `proxy`.
+#   PROXY_NETWORK   — naam van het bestaande NPM-netwerk; hier `homeinfra_internal`
+#                     (het `internal`-netwerk van de homeinfra-stack waar NPM op zit).
 
 services:
   wettenbank-mcp:
@@ -40,4 +40,4 @@ services:
 networks:
   proxy:
     external: true
-    name: ${PROXY_NETWORK:-proxy}
+    name: ${PROXY_NETWORK:-homeinfra_internal}
