@@ -40,20 +40,28 @@ voor een volledig auditspoor.
 
 ## Aan de slag
 
-De MCP-server bouwen en testen:
+De wettenbank-MCP is standaard een **remote HTTP-server** (`.mcp.json` → `https://wettenbank-mcp.ipalm.nl/mcp`).
+Je hoeft niets te bouwen; zet alleen het toegangstoken in de omgeving:
 
 ```bash
-cd tools/wettenbank-mcp
-npm install
-npm run build      # TypeScript → dist/
-npm test           # vitest
+export WETTENBANK_TOKEN=<jouw-token>   # gaat als 'Authorization: Bearer' mee
 ```
 
 Controleer dat Claude Code de server ziet:
 
 ```bash
-claude mcp list    # verwacht: wettenbank → ✓ Connected
+claude mcp list    # verwacht: wettenbank → ✓ Connected (HTTP)
 ```
+
+> **Lokaal draaien (fallback).** Wil je de MCP-server zelf draaien i.p.v. de remote endpoint,
+> bouw hem dan en zet `.mcp.json` op het stdio-alternatief (zie `tools/wettenbank-mcp/CLAUDE.md`):
+>
+> ```bash
+> cd tools/wettenbank-mcp
+> npm install
+> npm run build      # TypeScript → dist/
+> npm test           # vitest
+> ```
 
 Vraag daarna in Claude Code om een wetsanalyse van een artikel (bijvoorbeeld *"doe een
 wetsanalyse van artikel 9 lid 1 Invorderingswet 1990"*); de wetsanalyse-skill haalt de tekst
