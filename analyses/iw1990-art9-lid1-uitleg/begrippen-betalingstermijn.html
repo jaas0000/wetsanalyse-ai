@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>IW 1990 art. 9 lid 1 — Dagtekening, betalingstermijn en invorderbaarheid</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,wght@0,400;0,500;1,400;1,500&family=Source+Serif+4:ital,wght@0,300;0,400;0,500;0,600;1,400&family=Outfit:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f5f0e8;
+    --panel: #fffcf6;
+    --ink: #1c1917;
+    --muted: #6b6560;
+    --line: #ddd5c8;
+    --rule-ink: #c4b9a8;
+    --accent: #a0522d;
+    --accent-light: #c4713f;
+    --ok: #2d6a4f;
+    --ok-bg: #f0f7f4;
+    --gold: #8b6914;
+    --gold-bg: #fef9ed;
+    --warn-bg: #fdf3e7;
+    --serif: 'Source Serif 4', Georgia, 'Times New Roman', serif;
+    --display: 'Newsreader', Georgia, serif;
+    --sans: 'Outfit', system-ui, sans-serif;
+    --mono: 'JetBrains Mono', ui-monospace, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font: 15px/1.7 var(--serif);
+    -webkit-font-smoothing: antialiased;
+  }
+  header {
+    background: var(--panel);
+    border-bottom: 1px solid var(--rule-ink);
+    padding: 20px 40px 18px;
+  }
+  header h1 {
+    font-family: var(--display);
+    font-weight: 400;
+    font-style: italic;
+    font-size: 24px;
+    color: var(--accent);
+    letter-spacing: -0.02em;
+    line-height: 1.2;
+  }
+  header .sub {
+    font-family: var(--sans);
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 5px;
+    letter-spacing: 0.03em;
+  }
+  main {
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 36px 24px 60px;
+  }
+
+  /* Bronnen */
+  .bronnen {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 36px;
+  }
+  @media (max-width: 620px) { .bronnen { grid-template-columns: 1fr; } }
+  .bron {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-top: 3px solid var(--accent);
+    border-radius: 2px;
+    padding: 16px 18px;
+  }
+  .bron .label {
+    font-family: var(--sans);
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 8px;
+  }
+  .bron blockquote {
+    font-size: 13.5px;
+    line-height: 1.6;
+    color: var(--ink);
+    font-style: italic;
+    border-left: 2px solid var(--rule-ink);
+    padding-left: 12px;
+    margin: 0;
+  }
+
+  /* Sectietitels */
+  h2 {
+    font-family: var(--display);
+    font-weight: 500;
+    font-size: 18px;
+    color: var(--ink);
+    margin: 36px 0 14px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--line);
+  }
+  h3 {
+    font-family: var(--sans);
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin: 24px 0 10px;
+  }
+
+  /* Tijdlijn */
+  .tijdlijn {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 2px;
+    padding: 24px 28px;
+    margin: 20px 0 28px;
+    overflow-x: auto;
+  }
+  .tl-track {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    min-width: 500px;
+    margin-bottom: 20px;
+  }
+  .tl-punt {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-width: 110px;
+  }
+  .tl-punt .dot {
+    width: 13px;
+    height: 13px;
+    border-radius: 50%;
+    background: var(--accent);
+    flex-shrink: 0;
+    position: relative;
+    z-index: 1;
+  }
+  .tl-punt .dot.eind {
+    background: var(--ok);
+  }
+  .tl-punt .lijn-label {
+    font-family: var(--sans);
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--accent);
+    margin-top: 8px;
+    text-align: center;
+  }
+  .tl-punt .lijn-label.eind { color: var(--ok); }
+  .tl-punt .lijn-sub {
+    font-family: var(--sans);
+    font-size: 10px;
+    color: var(--muted);
+    text-align: center;
+    margin-top: 2px;
+  }
+  .tl-brug {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    position: relative;
+    padding: 0 4px;
+    min-width: 160px;
+  }
+  .tl-brug .lijn {
+    width: 100%;
+    height: 2px;
+    background: var(--rule-ink);
+    margin-top: 5px;
+  }
+  .tl-brug .lijn-tekst {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--gold);
+    margin-top: 8px;
+    text-align: center;
+    white-space: nowrap;
+  }
+  .tl-brug .lijn-sub {
+    font-family: var(--sans);
+    font-size: 10px;
+    color: var(--muted);
+    margin-top: 1px;
+    text-align: center;
+  }
+  .tl-legenda {
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+    margin-top: 6px;
+  }
+  .tl-legenda-item {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-family: var(--sans);
+    font-size: 11.5px;
+    color: var(--muted);
+  }
+  .tl-legenda-item .dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    background: var(--accent);
+    flex-shrink: 0;
+  }
+  .tl-legenda-item .dot.ok { background: var(--ok); }
+
+  /* Begrippen grid */
+  .begrippen {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+    margin: 20px 0;
+  }
+  @media (max-width: 620px) { .begrippen { grid-template-columns: 1fr; } }
+  .begrip {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 2px;
+    padding: 14px 16px;
+  }
+  .begrip .naam {
+    font-family: var(--sans);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 6px;
+  }
+  .begrip p {
+    font-size: 13.5px;
+    line-height: 1.55;
+    color: var(--ink);
+  }
+  .begrip .bron-ref {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--muted);
+    margin-top: 7px;
+  }
+
+  /* Callout */
+  .callout {
+    display: flex;
+    gap: 12px;
+    border-radius: 2px;
+    padding: 13px 16px;
+    margin: 18px 0;
+    font-size: 13.5px;
+    line-height: 1.55;
+  }
+  .callout.info { background: var(--gold-bg); border-left: 3px solid var(--gold); }
+  .callout.ok   { background: var(--ok-bg);   border-left: 3px solid var(--ok);   }
+  .callout.warn { background: var(--warn-bg);  border-left: 3px solid #c4843f;     }
+  .callout .icon { font-size: 15px; flex-shrink: 0; margin-top: 1px; }
+
+  /* Voorbeeldkaarten */
+  .voorbeelden {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin: 20px 0;
+  }
+  @media (max-width: 640px) { .voorbeelden { grid-template-columns: 1fr; } }
+  .voorbeeld {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .voorbeeld .vb-hoofd {
+    background: var(--accent);
+    color: #fff8f0;
+    font-family: var(--sans);
+    font-size: 11.5px;
+    font-weight: 600;
+    padding: 8px 14px;
+    letter-spacing: 0.04em;
+  }
+  .voorbeeld table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  .voorbeeld table tr:not(:last-child) td {
+    border-bottom: 1px solid var(--line);
+  }
+  .voorbeeld table td {
+    padding: 8px 14px;
+    vertical-align: top;
+  }
+  .voorbeeld table td:first-child {
+    font-family: var(--sans);
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    width: 42%;
+    padding-top: 10px;
+  }
+  .voorbeeld .uitkomst td {
+    background: var(--ok-bg);
+    font-weight: 600;
+    color: var(--ok);
+  }
+  .voorbeeld .uitkomst td:first-child {
+    color: var(--ok);
+  }
+  .voorbeeld .opmerking {
+    padding: 8px 14px 10px;
+    font-size: 12px;
+    color: var(--muted);
+    font-style: italic;
+    border-top: 1px solid var(--line);
+    background: var(--bg);
+  }
+
+  /* Samenvattingstabel */
+  table.samenvatting {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--panel);
+    font-size: 13.5px;
+    margin: 20px 0;
+  }
+  table.samenvatting thead tr {
+    background: var(--accent);
+    color: #fff8f0;
+  }
+  table.samenvatting thead th {
+    font-family: var(--sans);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    padding: 10px 14px;
+    text-align: left;
+  }
+  table.samenvatting tbody tr:not(:last-child) td {
+    border-bottom: 1px solid var(--line);
+  }
+  table.samenvatting tbody td {
+    padding: 10px 14px;
+    vertical-align: top;
+    line-height: 1.5;
+  }
+  table.samenvatting tbody td:first-child {
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--accent);
+    white-space: nowrap;
+  }
+
+  footer {
+    text-align: center;
+    padding: 24px;
+    font-family: var(--sans);
+    font-size: 11px;
+    color: var(--muted);
+    border-top: 1px solid var(--line);
+    margin-top: 48px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Dagtekening, betalingstermijn en invorderbaarheid</h1>
+  <div class="sub">Invorderingswet 1990, art. 9 lid 1 &nbsp;·&nbsp; Leidraad Invordering 2008, art. 9.5 &nbsp;·&nbsp; versiedatum 2026-01-01</div>
+</header>
+
+<main>
+
+  <!-- Bronnen -->
+  <h2>Wettelijke grondslag</h2>
+  <div class="bronnen">
+    <div class="bron">
+      <div class="label">IW 1990 &mdash; art. 9 lid 1</div>
+      <blockquote>Een belastingaanslag is invorderbaar zes weken na de dagtekening van het aanslagbiljet.</blockquote>
+    </div>
+    <div class="bron">
+      <div class="label">Leidraad Invordering 2008 &mdash; art. 9.5</div>
+      <blockquote>Als de betalingstermijn van een aanslag is gesteld op zes weken, dan houdt dat in dat als de dagtekening van een aanslagbiljet valt op 31 oktober, de betalingstermijn van zes weken vervalt op 12 december. Als de dagtekening 28 februari is, dan vervalt de betalingstermijn van zes weken op 11 april, tenzij het [een] schrikkeljaar is, in welk geval de termijn vervalt op 10 april.</blockquote>
+    </div>
+  </div>
+
+  <!-- Tijdlijn -->
+  <h2>Hoe de begrippen samenhangen</h2>
+
+  <div class="tijdlijn">
+    <div class="tl-track">
+      <div class="tl-punt">
+        <div class="dot"></div>
+        <div class="lijn-label">Dagtekening</div>
+        <div class="lijn-sub">datum op biljet</div>
+      </div>
+      <div class="tl-brug">
+        <div class="lijn"></div>
+        <div class="lijn-tekst">+ 42 dagen (6 weken)</div>
+        <div class="lijn-sub">betalingstermijn</div>
+      </div>
+      <div class="tl-punt">
+        <div class="dot eind"></div>
+        <div class="lijn-label eind">Vervaldatum</div>
+        <div class="lijn-sub">= invorderbaar</div>
+      </div>
+    </div>
+    <div class="tl-legenda">
+      <div class="tl-legenda-item"><div class="dot"></div> Startpunt: dagtekening aanslagbiljet</div>
+      <div class="tl-legenda-item"><div class="dot ok"></div> Eindpunt: vervaldatum = invorderbaarheid</div>
+    </div>
+  </div>
+
+  <div class="callout info">
+    <div class="icon">&#9432;</div>
+    <div><strong>Vervaldatum en invorderbaarheid zijn hetzelfde moment</strong>, maar vanuit twee perspectieven beschreven. <em>Invorderbaar</em> (art. 9 lid 1) is de juridische term voor het moment waarop de ontvanger handhavend mag optreden. <em>Vervaldatum</em> (Leidraad 9.5) is dezelfde dag, maar dan als de dag waarop de betalingstermijn voor de belastingschuldige afloopt.</div>
+  </div>
+
+  <!-- Begrippen -->
+  <h2>De vier begrippen</h2>
+  <div class="begrippen">
+    <div class="begrip">
+      <div class="naam">Dagtekening</div>
+      <p>De datum die op het aanslagbiljet staat. Dit is het <strong>startpunt</strong> van de betalingstermijn. Het is niet de verzenddatum, niet de ontvangstdatum &mdash; maar de datum die de Belastingdienst op het biljet heeft gezet bij het vaststellen van de aanslag.</p>
+      <div class="bron-ref">IW 1990 art. 9 lid 1</div>
+    </div>
+    <div class="begrip">
+      <div class="naam">6 weken (42 dagen)</div>
+      <p>De wettelijke betalingstermijn voor een reguliere belastingaanslag. De Leidraad 9.5 legt uit hoe deze 42 kalenderdagen worden geteld bij maandeinden en schrikkeljaren.</p>
+      <div class="bron-ref">IW 1990 art. 9 lid 1 · Leidraad 9.5</div>
+    </div>
+    <div class="begrip">
+      <div class="naam">Vervaldatum</div>
+      <p>De dag waarop de betalingstermijn afloopt. Op of v&oacute;&oacute;r deze dag moet de belastingschuldige betaald hebben. Berekening: dagtekening + 42 kalenderdagen, met de berekeningsregels uit Leidraad 9.5 voor maandeinden.</p>
+      <div class="bron-ref">Leidraad 2008 art. 9.5</div>
+    </div>
+    <div class="begrip">
+      <div class="naam">Invorderbaarheid</div>
+      <p>Het juridische moment waarop de schuld opeisbaar wordt en de ontvanger het recht krijgt dwingend in te vorderen (aanmaning, dwangbevel). Valt samen met de vervaldatum: zes weken na de dagtekening.</p>
+      <div class="bron-ref">IW 1990 art. 9 lid 1</div>
+    </div>
+  </div>
+
+  <div class="callout warn">
+    <div class="icon">&#9888;</div>
+    <div><strong>Algemene Termijnenwet is uitdrukkelijk uitgesloten</strong> (IW 1990 art. 9 lid 10). Een vervaldatum die op zaterdag, zondag of een feestdag valt, schuift <em>niet</em> op naar de eerstvolgende werkdag. De belastingschuldige moet zorgen dat de betaling v&oacute;&oacute;r of op die dag verwerkt is.</div>
+  </div>
+
+  <!-- Voorbeelden -->
+  <h2>Voorbeelden</h2>
+
+  <div class="voorbeelden">
+
+    <div class="voorbeeld">
+      <div class="vb-hoofd">Voorbeeld 1 &mdash; Standaard</div>
+      <table>
+        <tr><td>Dagtekening</td><td>15 maart</td></tr>
+        <tr><td>Berekening</td><td>16&ndash;31 mrt = 16 dagen<br>1&ndash;26 apr = 26 dagen<br>Totaal = 42 dagen</td></tr>
+        <tr class="uitkomst"><td>Vervaldatum</td><td>26 april</td></tr>
+      </table>
+      <div class="opmerking">Gewone maanddoorgang, geen bijzonderheden.</div>
+    </div>
+
+    <div class="voorbeeld">
+      <div class="vb-hoofd">Voorbeeld 2 &mdash; Maandeinde (Leidraad 9.5)</div>
+      <table>
+        <tr><td>Dagtekening</td><td>31 oktober</td></tr>
+        <tr><td>Berekening</td><td>1&ndash;30 nov = 30 dagen<br>1&ndash;12 dec = 12 dagen<br>Totaal = 42 dagen</td></tr>
+        <tr class="uitkomst"><td>Vervaldatum</td><td>12 december</td></tr>
+      </table>
+      <div class="opmerking">Letterlijk voorbeeld uit Leidraad art. 9.5.</div>
+    </div>
+
+    <div class="voorbeeld">
+      <div class="vb-hoofd">Voorbeeld 3 &mdash; Februari (geen schrikkeljaar)</div>
+      <table>
+        <tr><td>Dagtekening</td><td>28 februari</td></tr>
+        <tr><td>Berekening</td><td>1&ndash;31 mrt = 31 dagen<br>1&ndash;11 apr = 11 dagen<br>Totaal = 42 dagen</td></tr>
+        <tr class="uitkomst"><td>Vervaldatum</td><td>11 april</td></tr>
+      </table>
+      <div class="opmerking">In schrikkeljaar: 10 april (februari telt 29 dagen).</div>
+    </div>
+
+    <div class="voorbeeld">
+      <div class="vb-hoofd">Voorbeeld 4 &mdash; ATW uitgesloten</div>
+      <table>
+        <tr><td>Dagtekening</td><td>2 april 2026 (do)</td></tr>
+        <tr><td>Berekening</td><td>3&ndash;30 apr = 28 dagen<br>1&ndash;14 mei = 14 dagen<br>Totaal = 42 dagen</td></tr>
+        <tr class="uitkomst"><td>Vervaldatum</td><td>14 mei 2026 (do)</td></tr>
+      </table>
+      <div class="opmerking">Valt op een doordeweekse dag &mdash; geen issue. Zou de uitkomst op zondag 10 mei vallen, dan blijft de vervaldatum zondag 10 mei (ATW uitgesloten).</div>
+    </div>
+
+  </div>
+
+  <!-- Samenvatting -->
+  <h2>Samenvatting</h2>
+  <table class="samenvatting">
+    <thead>
+      <tr>
+        <th>Begrip</th>
+        <th>Wat het is</th>
+        <th>Perspectief</th>
+        <th>Bepaald door</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Dagtekening</td>
+        <td>Datum op het aanslagbiljet; startpunt van de termijn</td>
+        <td>Neutraal (feitelijk)</td>
+        <td>Belastingdienst bij vaststelling</td>
+      </tr>
+      <tr>
+        <td>6 weken</td>
+        <td>Wettelijke betalingstermijn = 42 kalenderdagen</td>
+        <td>Tijdsduur</td>
+        <td>IW 1990 art. 9 lid 1</td>
+      </tr>
+      <tr>
+        <td>Vervaldatum</td>
+        <td>Dagtekening + 42 dagen; uiterste betaaldag</td>
+        <td>Belastingschuldige</td>
+        <td>Leidraad 2008 art. 9.5</td>
+      </tr>
+      <tr>
+        <td>Invorderbaar</td>
+        <td>Dezelfde dag; ontvanger mag handhaven</td>
+        <td>Ontvanger</td>
+        <td>IW 1990 art. 9 lid 1</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="callout ok">
+    <div class="icon">&#10003;</div>
+    <div><strong>Kern in &eacute;&eacute;n zin:</strong> De Leidraad (art. 9.5) maakt de wet (art. 9 lid 1) concreet berekenbaar &mdash; de wet zegt <em>zes weken</em>, de Leidraad legt uit hoe die 42 dagen worden geteld bij maandeinden en schrikkeljaren. Vervaldatum en invorderbaarheid zijn juridisch hetzelfde moment, alleen vanuit een ander perspectief benoemd.</div>
+  </div>
+
+</main>
+
+<footer>
+  IW 1990 &nbsp;&middot;&nbsp; BWBR0004770 &nbsp;&middot;&nbsp; Leidraad Invordering 2008 &nbsp;&middot;&nbsp; BWBR0024096 &nbsp;&middot;&nbsp; versiedatum 2026-01-01
+</footer>
+
+</body>
+</html>

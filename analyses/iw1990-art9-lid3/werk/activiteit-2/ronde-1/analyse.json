@@ -1,0 +1,112 @@
+{
+  "wet": "Invorderingswet 1990",
+  "bwbId": "BWBR0004770",
+  "artikel": "9",
+  "versiedatum": "2026-01-01",
+  "bronreferentie": "jci1.3:c:BWBR0004770&artikel=9",
+  "type": "wet",
+  "pad": "Hoofdstuk II Invordering in eerste aanleg > Artikel 9",
+  "analysefocus": "Vaststelling van het tijdstip van invorderbaarheid van gelijkgestelde beschikkingen inzake bestuurlijke boete en belasting-/revisierente",
+  "reikwijdte": "Uitsluitend lid 3 van artikel 9 geanalyseerd (twee volzinnen). De overige leden (1, 2, 4–12) vallen buiten scope, evenals de invorderbaarheidsregels voor de onderliggende belastingaanslagen zelf.",
+  "geraadpleegde": "Artikel 2 IW 1990: lid 1 ond. b (belastingrente en revisierente), lid 1 ond. g (bestuurlijke boeten), lid 1 ond. m (belastingaanslag — enumeratieve definitie), lid 2 ond. c (belastingaanslag — ruime definitie inclusief gelijkgestelde beschikkingen)",
+  "leden": [
+    {
+      "lid": "3",
+      "tekst": "Een ingevolge artikel 2, tweede lid, onderdeel c, met een belastingaanslag gelijkgestelde beschikking inzake een bestuurlijke boete die gelijktijdig en in verband met de vaststelling van een belastingaanslag als bedoeld in artikel 2, eerste lid, onderdeel m, is opgelegd, is invorderbaar overeenkomstig de bepalingen die gelden voor die belastingaanslag. Een ingevolge artikel 2, tweede lid, onderdeel c, met een belastingaanslag gelijkgestelde beschikking inzake belasting- of revisierente is invorderbaar overeenkomstig de bepalingen die gelden voor de belastingaanslag, bedoeld in artikel 2, eerste lid, onderdeel m, waarop de belasting- of revisierente betrekking heeft."
+    }
+  ],
+  "markeringen": [
+    {
+      "id": "m1",
+      "formulering": "beschikking inzake een bestuurlijke boete",
+      "klasse": "Rechtsobject",
+      "vindplaats": "lid 3, eerste volzin",
+      "toelichting": "Het voorwerp van de invorderingsrechtsbetrekking in de eerste volzin: de (gelijkgestelde) beschikking is datgene dat invorderbaar is. Hoewel 'beschikking' grammaticaal het onderwerp van de zin is, is het in JAS-termen een rechtsobject — het voorwerp waarover de invorderingsplicht bestaat. De term 'bestuurlijke boete' is gedefinieerd in art. 2, lid 1, ond. g (zie m12)."
+    },
+    {
+      "id": "m2",
+      "formulering": "ingevolge artikel 2, tweede lid, onderdeel c, met een belastingaanslag gelijkgestelde",
+      "klasse": "Voorwaarde",
+      "vindplaats": "lid 3, eerste volzin",
+      "toelichting": "Kwalificatievoorwaarde: de beschikking inzake de bestuurlijke boete moet op grond van art. 2, lid 2, ond. c gelijkgesteld zijn met een belastingaanslag. Dit is een verwijzing naar de ruime definitie van 'belastingaanslag' (zie m10), die beschikkingen strekkende tot vaststelling van een verschuldigd of terug te geven bedrag omvat. Zonder deze gelijkstelling is lid 3 niet van toepassing."
+    },
+    {
+      "id": "m3",
+      "formulering": "die gelijktijdig en in verband met de vaststelling van een belastingaanslag als bedoeld in artikel 2, eerste lid, onderdeel m, is opgelegd",
+      "klasse": "Voorwaarde",
+      "vindplaats": "lid 3, eerste volzin",
+      "toelichting": "Samengestelde cumulatieve voorwaarde voor de bestuurlijke boete-beschikking, verbonden door de logische conjunctie 'en': (1) de beschikking moet gelijktijdig met de belastingaanslag zijn opgelegd (temporeel element — 'gelijktijdig' heeft ook trekken van een tijdsaanduiding, maar functioneert hier als conditie, niet als zelfstandige tijdsbepaling); (2) de beschikking moet opgelegd zijn in verband met de vaststelling van die belastingaanslag (causaal/functioneel verband). Beide eisen moeten zijn vervuld. De belastingaanslag in kwestie is die van art. 2, lid 1, ond. m (de formele, enumeratieve definitie — zie m11), niet de ruime fictie van art. 2, lid 2, ond. c. Dit onderscheid is uitvoeringstechnisch relevant: het gaat om de 'echte' aanslagen (voorlopige aanslag, aanslag, navorderingsaanslag etc.), niet om andere gelijkgestelde beschikkingen."
+    },
+    {
+      "id": "m4",
+      "formulering": "is invorderbaar",
+      "klasse": "Rechtsbetrekking",
+      "vindplaats": "lid 3, eerste volzin",
+      "toelichting": "De centrale rechtsbetrekking: de beschikking is opeisbaar/invorderbaar. Dit drukt de plicht van de belastingschuldige (plichthebbende — degene te wiens naam de beschikking is gesteld, art. 2, lid 1, ond. k) uit om te betalen, en het recht van de ontvanger (rechthebbende — art. 2, lid 1, ond. i) om de schuld in te vorderen. Rechtssubjecten zijn in lid 3 zelf niet benoemd maar zijn via art. 2, lid 1, ond. i en k bepaalbaar (zie validatiepunt in samenhang)."
+    },
+    {
+      "id": "m5",
+      "formulering": "overeenkomstig de bepalingen die gelden voor die belastingaanslag",
+      "klasse": "Afleidingsregel",
+      "vindplaats": "lid 3, eerste volzin",
+      "toelichting": "Specialisatieregel (gelijkstellingsregel): het tijdstip van invorderbaarheid van de bestuurlijke boete-beschikking wordt afgeleid van — gelijkgesteld aan — de invorderingsregels die gelden voor de belastingaanslag waarmee de beschikking gelijktijdig en in verband is opgelegd. 'Die belastingaanslag' verwijst terug naar de belastingaanslag in voorwaarde m3. De uitvoervariabele is het tijdstip van invorderbaarheid van de beschikking; de invoer is het tijdstip van invorderbaarheid van de bijbehorende belastingaanslag. Twijfel: 'overeenkomstig de bepalingen' is ruimer dan alleen de invorderingstermijn — het verwijst naar alle invorderingsbepalingen van de betreffende belastingaanslag (inclusief uitstelregels, art. 9 lid 5–7 e.d.). Dit vereist verdere interpretatie bij implementatie."
+    },
+    {
+      "id": "m6",
+      "formulering": "beschikking inzake belasting- of revisierente",
+      "klasse": "Rechtsobject",
+      "vindplaats": "lid 3, tweede volzin",
+      "toelichting": "Het voorwerp van de invorderingsrechtsbetrekking in de tweede volzin: de (gelijkgestelde) beschikking inzake belasting- of revisierente. De alternatieve verbinding 'belasting- of revisierente' geeft aan dat de regel voor beide rentesoorten geldt (alternatieve voorwaarde, logische disjunctie). Belastingrente en revisierente zijn gedefinieerd in art. 2, lid 1, ond. b (zie m13). Opvallend verschil met de eerste volzin: voor rentebesschikkingen geldt géén eis van gelijktijdige opleggging (geen equivalent van m3) — de koppeling verloopt uitsluitend via 'betrekking hebbend op' de bijbehorende belastingaanslag."
+    },
+    {
+      "id": "m7",
+      "formulering": "ingevolge artikel 2, tweede lid, onderdeel c, met een belastingaanslag gelijkgestelde",
+      "klasse": "Voorwaarde",
+      "vindplaats": "lid 3, tweede volzin",
+      "toelichting": "Dezelfde kwalificatievoorwaarde als m2: ook voor de beschikking inzake belasting-/revisierente geldt dat zij op grond van art. 2, lid 2, ond. c gelijkgesteld moet zijn met een belastingaanslag. Zie toelichting m2."
+    },
+    {
+      "id": "m8",
+      "formulering": "is invorderbaar",
+      "klasse": "Rechtsbetrekking",
+      "vindplaats": "lid 3, tweede volzin",
+      "toelichting": "Dezelfde invorderingsrechtsbetrekking als m4, maar nu voor de beschikking inzake belasting-/revisierente. Rechtssubjecten zijn ook hier impliciet (zie m4)."
+    },
+    {
+      "id": "m9",
+      "formulering": "overeenkomstig de bepalingen die gelden voor de belastingaanslag, bedoeld in artikel 2, eerste lid, onderdeel m, waarop de belasting- of revisierente betrekking heeft",
+      "klasse": "Afleidingsregel",
+      "vindplaats": "lid 3, tweede volzin",
+      "toelichting": "Specialisatieregel (gelijkstellingsregel): het tijdstip van invorderbaarheid van de belasting-/revisierente-beschikking wordt afgeleid van de invorderingsregels die gelden voor de belastingaanslag waarop de rente betrekking heeft. Explicieter dan m5: de belastingaanslag is hier uitdrukkelijk omschreven als die bedoeld in art. 2, lid 1, ond. m (de formele definitie) 'waarop de belasting- of revisierente betrekking heeft'. De koppeling is inhoudelijk (de rente is functioneel verbonden aan de aanslag), niet temporeel (geen gelijktijdigheidseis). Uitvoervariabele: tijdstip van invorderbaarheid van de rente-beschikking; invoer: tijdstip van invorderbaarheid van de onderliggende belastingaanslag."
+    },
+    {
+      "id": "m10",
+      "formulering": "belastingaanslag: een ingevolge de Algemene wet inzake rijksbelastingen dan wel Algemene douanewet of enige andere wettelijke regeling betreffende de heffing van rijksbelastingen vastgestelde beschikking of uitspraak strekkende tot - al dan niet nadere - vaststelling van een ingevolge die regelingen verschuldigd of terug te geven bedrag",
+      "klasse": "Brondefinitie",
+      "vindplaats": "art. 2, lid 2, ond. c (geraadpleegd t.b.v. lid 3)",
+      "toelichting": "De ruime (fictieve) definitie van belastingaanslag: omvat alle beschikkingen en uitspraken die strekken tot vaststelling van een verschuldigd of terug te geven bedrag. Dit is de grondslag voor de gelijkstelling in m2 en m7: de beschikkingen inzake bestuurlijke boete en belasting-/revisierente zijn ingevolge deze definitie met een belastingaanslag gelijkgesteld."
+    },
+    {
+      "id": "m11",
+      "formulering": "belastingaanslag: de voorlopige aanslag, de aanslag, de uitnodiging tot betaling, de navorderingsaanslag en de naheffingsaanslag, alsmede de voorlopige conserverende aanslag, de conserverende aanslag en de conserverende navorderingsaanslag in de inkomstenbelasting en in de schenk- en erfbelasting",
+      "klasse": "Brondefinitie",
+      "vindplaats": "art. 2, lid 1, ond. m (geraadpleegd t.b.v. lid 3)",
+      "toelichting": "De enumeratieve (formele) definitie van belastingaanslag: een limitatieve opsomming. Dit is de belastingaanslag waarnaar lid 3 verwijst als 'anker' voor de invorderingstermijn. Het gebruik van art. 2, lid 1, ond. m (en niet art. 2, lid 2, ond. c) in m3 en m9 is bewust: het gaat om de formele belastingaanslagen, niet om andere gelijkgestelde beschikkingen. Interpretatiepunt: de uitnodiging tot betaling staat in de opsomming — het tijdstip van invorderbaarheid van de boetebeschikking of rente kan dus ook worden afgeleid van een utb (art. 9 lid 4)."
+    },
+    {
+      "id": "m12",
+      "formulering": "bestuurlijke boeten: de verzuimboeten en de vergrijpboeten, bedoeld in hoofdstuk VIIA van deze wet, hoofdstuk VIIIA van de Algemene wet inzake rijksbelastingen of hoofdstuk 9 van de Algemene douanewet, dan wel in enig ander wettelijk voorschrift betreffende de heffing van rijksbelastingen",
+      "klasse": "Brondefinitie",
+      "vindplaats": "art. 2, lid 1, ond. g (geraadpleegd t.b.v. lid 3)",
+      "toelichting": "Definitie van bestuurlijke boeten in IW 1990. Omvat twee subtypen (verzuimboete en vergrijpboete) uit meerdere wettelijke bronnen. De eerste volzin van lid 3 is uitsluitend van toepassing op beschikkingen inzake bestuurlijke boeten in de zin van deze definitie."
+    },
+    {
+      "id": "m13",
+      "formulering": "belastingrente en revisierente: de belastingrente en de revisierente, bedoeld in hoofdstuk VA van de Algemene wet inzake rijksbelastingen",
+      "klasse": "Brondefinitie",
+      "vindplaats": "art. 2, lid 1, ond. b (geraadpleegd t.b.v. lid 3)",
+      "toelichting": "Definitie van belastingrente en revisierente: beide zijn gedefinieerd in hfdst. VA AWR. De tweede volzin van lid 3 is van toepassing op beschikkingen inzake beide rentesoorten. De definitie omvat uitsluitend rente op grond van de AWR, niet rente op achterstallen (douane) of vertragingsrente — die vallen onder art. 9, lid 4."
+    }
+  ],
+  "samenhang": "Lid 3 regelt de invorderbaarheid van twee categorieën beschikkingen die ingevolge art. 2, lid 2, ond. c met een belastingaanslag zijn gelijkgesteld: (1) beschikkingen inzake een bestuurlijke boete (eerste volzin) en (2) beschikkingen inzake belasting- of revisierente (tweede volzin). De centrale rechtsbetrekking in beide volzinnen is 'is invorderbaar' (m4, m8). De invorderingstermijn wordt in beide gevallen bepaald door een afleidingsregel die verwijst naar de invorderingsbepalingen van de bijbehorende formele belastingaanslag (art. 2, lid 1, ond. m). De twee volzinnen kennen een structureel verschil: voor de bestuurlijke boete gelden twee cumulatieve aanvullende voorwaarden (gelijktijdig opleggen én verband met vaststelling — m3), terwijl voor belasting-/revisierente uitsluitend de kwalificatievoorwaarde geldt (gelijkgesteld zijn per art. 2, lid 2, ond. c — m7). Rechtssubjecten zijn niet expliciet benoemd in lid 3; zij zijn afleidbaar uit art. 2, lid 1, ond. i (ontvanger als rechthebbende) en art. 2, lid 1, ond. k (belastingschuldige als plichthebbende). Validatiepunt: de precieze reikwijdte van 'overeenkomstig de bepalingen die gelden voor die belastingaanslag' (m5, m9) — de verwijzing omvat mogelijk meer dan alleen de invorderingstermijn (bv. uitstelregelingen, rentebepalingen) en vraagt uitvoeringsnader interpretatie."
+}
