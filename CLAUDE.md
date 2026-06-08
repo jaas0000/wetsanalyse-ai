@@ -26,11 +26,11 @@ herleidbaar naar artikel + lid + `bronreferentie` (jci-uri).
 Dit is een verzameling losse onderdelen, geen monorepo met één buildsysteem. Het bindmiddel
 zijn **projectrelatieve paden**, zodat de map portabel is tussen machines/OS'en:
 
-- `.mcp.json` → `command: "node"` (uit PATH) + relatief argument
-  `tools/wettenbank-mcp/dist/index.js`. Claude Code start de MCP met de projectroot als
-  werkmap, dus het relatieve pad resolvet daartegen. Dit is de lokale **stdio**-modus; de MCP
-  kan ook als remote **HTTP**-service draaien (Docker/Portainer, met bearer-token) — zie
-  `tools/wettenbank-mcp/CLAUDE.md` (Deployment).
+- `.mcp.json` → **remote HTTP**: `type: "http"`, `url: https://wettenbank-mcp.ipalm.nl/mcp`,
+  met `Authorization: Bearer ${WETTENBANK_TOKEN}` (token via env, niet in de repo). De server
+  draait als Portainer-stack achter Nginx Proxy Manager — zie `tools/wettenbank-mcp/CLAUDE.md`
+  (Deployment). Het lokale **stdio**-alternatief (`command: "node"`,
+  `args: ["tools/wettenbank-mcp/dist/index.js"]`) staat daar ook beschreven als fallback.
 - `.claude/skills/wetsanalyse-workspace/mcp_fetch.py` (`SERVER`) → leidt de projectroot af van
   de eigen scriptlocatie (`Path(__file__).resolve().parents[3]`) en gebruikt `node` uit PATH;
   `iteration-1/benchmark.json` (`skill_path`) → relatief eval-artefact (`.claude/skills/wetsanalyse`).

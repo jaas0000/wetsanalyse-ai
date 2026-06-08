@@ -1,12 +1,11 @@
 {
   "mcpServers": {
     "wettenbank": {
-      "type": "stdio",
-      "command": "node",
-      "args": [
-        "tools/wettenbank-mcp/dist/index.js"
-      ],
-      "env": {}
+      "type": "http",
+      "url": "https://wettenbank-mcp.ipalm.nl/mcp",
+      "headers": {
+        "Authorization": "Bearer ${WETTENBANK_TOKEN}"
+      }
     }
   }
 }
