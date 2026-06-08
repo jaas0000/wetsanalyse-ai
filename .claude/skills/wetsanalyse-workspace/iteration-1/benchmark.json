@@ -1,7 +1,7 @@
 {
   "metadata": {
     "skill_name": "wetsanalyse",
-    "skill_path": "C:/Users/admin-willard/Documents/wetsanalyse-ai/.claude/skills/wetsanalyse",
+    "skill_path": ".claude/skills/wetsanalyse",
     "executor_model": "claude-opus-4-8",
     "analyzer_model": "claude-opus-4-8",
     "timestamp": "2026-06-06T11:31:35Z",

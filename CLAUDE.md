@@ -24,19 +24,23 @@ herleidbaar naar artikel + lid + `bronreferentie` (jci-uri).
 ## De drie delen hangen via paden samen
 
 Dit is een verzameling losse onderdelen, geen monorepo met één buildsysteem. Het bindmiddel
-zijn **absolute paden** die alle naar déze projectmap moeten wijzen
-(`C:/Users/admin-willard/Documents/wetsanalyse-ai`):
+zijn **projectrelatieve paden**, zodat de map portabel is tussen machines/OS'en:
 
-- `.mcp.json` → pad naar `tools/wettenbank-mcp/dist/index.js` (start de MCP-server).
+- `.mcp.json` → `command: "node"` (uit PATH) + relatief argument
+  `tools/wettenbank-mcp/dist/index.js`. Claude Code start de MCP met de projectroot als
+  werkmap, dus het relatieve pad resolvet daartegen.
+- `.claude/skills/wetsanalyse-workspace/mcp_fetch.py` (`SERVER`) → leidt de projectroot af van
+  de eigen scriptlocatie (`Path(__file__).resolve().parents[3]`) en gebruikt `node` uit PATH;
+  `iteration-1/benchmark.json` (`skill_path`) → relatief eval-artefact (`.claude/skills/wetsanalyse`).
 - `.claude/settings.local.json` → `enabledMcpjsonServers: ["wettenbank"]`, plus allow-regels die
-  `review_server.py` met absoluut pad aanroepen.
-- `.claude/skills/wetsanalyse-workspace/mcp_fetch.py` (`SERVER = ...`) en
-  `iteration-1/benchmark.json` (`skill_path`) → eval-artefacten die ook naar deze map verwijzen.
+  `review_server.py` aanroepen. Dit zijn machine-specifieke **permissie-grants** met een absoluut
+  pad (de skill resolvet `<skill>` bij runtime tot een absoluut pad), dus die blijven absoluut en
+  zijn niet portabel — een mismatch leidt hooguit tot een extra permissieprompt, niet tot stille breuk.
 
-Let op bij hernoemen/verplaatsen van de projectmap: een verkeerd pad breekt de MCP stil
-(`claude mcp list` → `Failed to connect`).
-Bij twijfel: `grep -rn "admin-willard" --include="*.json" --include="*.py" . | grep -v node_modules`
-en controleer dat elk pad exact `C:/Users/admin-willard/Documents/wetsanalyse-ai` is.
+Let op bij hernoemen/verplaatsen van de projectmap: controleer de absolute permissie-paden in
+`settings.local.json` (en draai `claude mcp list` → verwacht `✓ Connected`).
+Bij twijfel naar achtergebleven absolute paden:
+`grep -rn -e "admin-willard" -e ":/Users" --include="*.json" --include="*.py" . | grep -v node_modules`.
 
 ## Veelgebruikte commando's
 
@@ -53,12 +57,10 @@ npx vitest run -t "naam van de test"      # één test op naam
 # MCP-gezondheid (vanuit de projectroot)
 claude mcp list                            # verwacht: wettenbank → ✓ Connected
 
-# MCP direct aanroepen zonder Claude (debug)
-# Opmerking: python en node staan niet automatisch in de bash-PATH op dit systeem.
-# Gebruik altijd het volledige pad naar de Python-executable:
-PYTHON="C:/Users/admin-willard/AppData/Local/Programs/Python/Python313/python.exe"
-"$PYTHON" .claude/skills/wetsanalyse-workspace/mcp_fetch.py zoek '{"titel":"Wet op de zorgtoeslag"}'
-"$PYTHON" .claude/skills/wetsanalyse-workspace/mcp_fetch.py artikel '{"bwbId":"BWBR0018451","artikel":"2"}'
+# MCP direct aanroepen zonder Claude (debug); vanuit de projectroot draaien.
+# mcp_fetch.py vindt de MCP-server zelf (relatief aan de scriptlocatie) en gebruikt `node` uit PATH.
+python3 .claude/skills/wetsanalyse-workspace/mcp_fetch.py zoek '{"titel":"Wet op de zorgtoeslag"}'
+python3 .claude/skills/wetsanalyse-workspace/mcp_fetch.py artikel '{"bwbId":"BWBR0018451","artikel":"2"}'
 ```
 
 Na het bouwen of wijzigen van de MCP-server: `claude mcp list` om te bevestigen dat hij nog

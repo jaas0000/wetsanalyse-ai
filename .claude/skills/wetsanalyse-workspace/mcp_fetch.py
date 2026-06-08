@@ -9,9 +9,12 @@ Gebruik:
 import json
 import subprocess
 import sys
+from pathlib import Path
 
-SERVER = "C:/Users/admin-willard/Documents/wetsanalyse-ai/tools/wettenbank-mcp/dist/index.js"
-NODE   = "C:/Program Files/nodejs/node.exe"
+# Projectroot = drie niveaus boven dit script (.claude/skills/wetsanalyse-workspace/).
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+SERVER = str(PROJECT_ROOT / "tools" / "wettenbank-mcp" / "dist" / "index.js")
+NODE   = "node"
 TOOL = {
     "zoek": "wettenbank_zoek",
     "structuur": "wettenbank_structuur",

@@ -2,9 +2,9 @@
   "mcpServers": {
     "wettenbank": {
       "type": "stdio",
-      "command": "C:/Program Files/nodejs/node.exe",
+      "command": "node",
       "args": [
-        "C:/Users/admin-willard/Documents/wetsanalyse-ai/tools/wettenbank-mcp/dist/index.js"
+        "tools/wettenbank-mcp/dist/index.js"
       ],
       "env": {}
     }
