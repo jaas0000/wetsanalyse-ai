@@ -171,7 +171,7 @@ Entry point is `dist/index.js` (re-exports + startup); de serverlogica zit in `d
 **Remote (HTTP) via Docker** — voor een gedeelde, gecontaineriseerde server.
 
 - `Dockerfile` (multi-stage, non-root, `HEALTHCHECK` op `/health`, default `MCP_TRANSPORT=http`). Build-context = deze map: `docker build -t wettenbank-mcp tools/wettenbank-mcp`.
-- `docker-compose.yml` — Portainer-stack (poort 3000, `restart: unless-stopped`, `MCP_AUTH_TOKEN` als stack-env).
+- `docker-compose.yml` — Portainer-stack achter Nginx Proxy Manager: géén host-poort, container op het gedeelde NPM-netwerk (`PROXY_NETWORK`), NPM proxyt `wettenbank-mcp.ipalm.nl` → `wettenbank-mcp:3000` met TLS. `MCP_AUTH_TOKEN` als stack-env.
 - `.github/workflows/docker-publish.yml` — bouwt en pusht `ghcr.io/<owner>/wettenbank-mcp` (CI is de build-route; lokaal hoeft geen Docker-engine aanwezig te zijn).
 
 Client-config (`.mcp.json`), met de token via env-expansie zodat hij niet in de repo belandt:
@@ -181,7 +181,7 @@ Client-config (`.mcp.json`), met de token via env-expansie zodat hij niet in de 
   "mcpServers": {
     "wettenbank": {
       "type": "http",
-      "url": "http://<host>:3000/mcp",
+      "url": "https://wettenbank-mcp.ipalm.nl/mcp",
       "headers": { "Authorization": "Bearer ${WETTENBANK_TOKEN}" }
     }
   }

@@ -1,24 +1,31 @@
-# Portainer-stack voor de Wettenbank MCP-server (HTTP-transport).
+# Portainer-stack voor de Wettenbank MCP-server (HTTP-transport), achter Nginx Proxy Manager.
 #
-# Gebruik in Portainer: Stacks → Add stack → plak deze compose. Zet onder
-# "Environment variables" een sterke MCP_AUTH_TOKEN; clients sturen die mee als
-# `Authorization: Bearer <token>`.
+# De image komt van GHCR (zie .github/workflows/docker-publish.yml).
+# De container publiceert GÉÉN host-poort: NPM bereikt 'm via het gedeelde Docker-netwerk
+# op hostnaam `wettenbank-mcp`, poort 3000.
 #
-# De image wordt door CI naar GHCR gepusht (zie .github/workflows/docker-publish.yml).
-# Pull lokaal bouwen kan ook met `build: .` i.p.v. `image:` (context = deze map).
+# In NPM → Proxy Hosts → Add: Domain `wettenbank-mcp.ipalm.nl`, Scheme `http`,
+# Forward Hostname `wettenbank-mcp`, Forward Port `3000`, SSL (Let's Encrypt) aan.
+# De bearer-token (MCP_AUTH_TOKEN) blijft de authenticatie; TLS regelt NPM.
+#
+# Stack-omgeving (in Portainer):
+#   MCP_AUTH_TOKEN  — sterke, geheime token; clients sturen die als `Authorization: Bearer ...`
+#   PROXY_NETWORK   — naam van het bestaande NPM-netwerk (zie `docker network ls`,
+#                     vaak `npm_default` of `proxy`); default hieronder is `proxy`.
 
 services:
   wettenbank-mcp:
     image: ghcr.io/palmw01/wettenbank-mcp:latest
     container_name: wettenbank-mcp
     restart: unless-stopped
-    ports:
-      - "3000:3000"
+    expose:
+      - "3000"
     environment:
       MCP_TRANSPORT: http
       PORT: "3000"
-      # Verplicht in een gedeelde/bereikbare opstelling. Leeglaten = géén auth.
       MCP_AUTH_TOKEN: ${MCP_AUTH_TOKEN:?zet MCP_AUTH_TOKEN in de stack-omgeving}
+    networks:
+      - proxy
     healthcheck:
       test:
         - CMD
@@ -29,3 +36,8 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+
+networks:
+  proxy:
+    external: true
+    name: ${PROXY_NETWORK:-proxy}
