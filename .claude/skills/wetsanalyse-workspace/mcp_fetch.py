@@ -10,7 +10,8 @@ import json
 import subprocess
 import sys
 
-SERVER = "/home/willardp/Documenten/Projecten/wetsanalyse-ai/tools/wettenbank-mcp/dist/index.js"
+SERVER = "C:/Users/admin-willard/Documents/wetsanalyse-ai/tools/wettenbank-mcp/dist/index.js"
+NODE   = "C:/Program Files/nodejs/node.exe"
 TOOL = {
     "zoek": "wettenbank_zoek",
     "structuur": "wettenbank_structuur",
@@ -31,7 +32,7 @@ def main():
          "params": {"name": tool, "arguments": args}},
     ]
     payload = "".join(json.dumps(m) + "\n" for m in msgs)
-    proc = subprocess.run(["node", SERVER], input=payload,
+    proc = subprocess.run([NODE, SERVER], input=payload,
                           capture_output=True, text=True, timeout=60)
     for line in proc.stdout.splitlines():
         line = line.strip()

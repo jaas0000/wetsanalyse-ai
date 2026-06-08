@@ -25,7 +25,7 @@ herleidbaar naar artikel + lid + `bronreferentie` (jci-uri).
 
 Dit is een verzameling losse onderdelen, geen monorepo met één buildsysteem. Het bindmiddel
 zijn **absolute paden** die alle naar déze projectmap moeten wijzen
-(`/home/willardp/Documenten/Projecten/wetsanalyse-ai`):
+(`C:/Users/admin-willard/Documents/wetsanalyse-ai`):
 
 - `.mcp.json` → pad naar `tools/wettenbank-mcp/dist/index.js` (start de MCP-server).
 - `.claude/settings.local.json` → `enabledMcpjsonServers: ["wettenbank"]`, plus allow-regels die
@@ -33,10 +33,10 @@ zijn **absolute paden** die alle naar déze projectmap moeten wijzen
 - `.claude/skills/wetsanalyse-workspace/mcp_fetch.py` (`SERVER = ...`) en
   `iteration-1/benchmark.json` (`skill_path`) → eval-artefacten die ook naar deze map verwijzen.
 
-Let op bij hernoemen/verplaatsen van de projectmap: Linux is hoofdlettergevoelig, dus een
-verkeerde casing in een pad breekt de MCP stil (`claude mcp list` → `Failed to connect`).
-Bij twijfel: `grep -rn "Projecten/" --include="*.json" --include="*.py" . | grep -v node_modules`
-en controleer dat elk pad exact `wetsanalyse-ai` is.
+Let op bij hernoemen/verplaatsen van de projectmap: een verkeerd pad breekt de MCP stil
+(`claude mcp list` → `Failed to connect`).
+Bij twijfel: `grep -rn "admin-willard" --include="*.json" --include="*.py" . | grep -v node_modules`
+en controleer dat elk pad exact `C:/Users/admin-willard/Documents/wetsanalyse-ai` is.
 
 ## Veelgebruikte commando's
 
@@ -54,8 +54,11 @@ npx vitest run -t "naam van de test"      # één test op naam
 claude mcp list                            # verwacht: wettenbank → ✓ Connected
 
 # MCP direct aanroepen zonder Claude (debug)
-python3 .claude/skills/wetsanalyse-workspace/mcp_fetch.py zoek '{"titel":"Wet op de zorgtoeslag"}'
-python3 .claude/skills/wetsanalyse-workspace/mcp_fetch.py artikel '{"bwbId":"BWBR0018451","artikel":"2"}'
+# Opmerking: python en node staan niet automatisch in de bash-PATH op dit systeem.
+# Gebruik altijd het volledige pad naar de Python-executable:
+PYTHON="C:/Users/admin-willard/AppData/Local/Programs/Python/Python313/python.exe"
+"$PYTHON" .claude/skills/wetsanalyse-workspace/mcp_fetch.py zoek '{"titel":"Wet op de zorgtoeslag"}'
+"$PYTHON" .claude/skills/wetsanalyse-workspace/mcp_fetch.py artikel '{"bwbId":"BWBR0018451","artikel":"2"}'
 ```
 
 Na het bouwen of wijzigen van de MCP-server: `claude mcp list` om te bevestigen dat hij nog
