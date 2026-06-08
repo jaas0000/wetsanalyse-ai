@@ -23,8 +23,13 @@ jobs:
       contents: read
       packages: write
     env:
-      # Optioneel: Portainer stack-webhook (scoped redeploy-trigger, géén API-key).
-      PORTAINER_WEBHOOK: ${{ secrets.PORTAINER_WEBHOOK }}
+      # CI → Portainer stack-redeploy. Inactief tot PORTAINER_API_KEY als secret bestaat.
+      PORTAINER_URL: ${{ secrets.PORTAINER_URL }}
+      PORTAINER_API_KEY: ${{ secrets.PORTAINER_API_KEY }}
+      MCP_AUTH_TOKEN: ${{ secrets.MCP_AUTH_TOKEN }}
+      PORTAINER_STACK_ID: "219"
+      PORTAINER_ENDPOINT_ID: "1"
+      PROXY_NETWORK: "homeinfra_internal"
     steps:
       - uses: actions/checkout@v4
 
@@ -59,6 +64,18 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Portainer redeploy (alleen als PORTAINER_WEBHOOK is gezet)
-        if: ${{ github.ref == 'refs/heads/master' && env.PORTAINER_WEBHOOK != '' }}
-        run: curl -fsS -X POST "$PORTAINER_WEBHOOK"
+      - name: Portainer redeploy via stack-update (pull :latest)
+        if: ${{ github.ref == 'refs/heads/master' && env.PORTAINER_API_KEY != '' }}
+        run: |
+          payload=$(jq -n \
+            --rawfile compose tools/wettenbank-mcp/docker-compose.yml \
+            --arg tok "$MCP_AUTH_TOKEN" \
+            --arg net "$PROXY_NETWORK" \
+            '{stackFileContent:$compose,
+              env:[{name:"MCP_AUTH_TOKEN",value:$tok},{name:"PROXY_NETWORK",value:$net}],
+              pullImage:true, prune:false}')
+          curl -fsS -X PUT \
+            "$PORTAINER_URL/api/stacks/$PORTAINER_STACK_ID?endpointId=$PORTAINER_ENDPOINT_ID" \
+            -H "X-API-Key: $PORTAINER_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d "$payload" -o /dev/null -w "redeploy HTTP %{http_code}\n"
