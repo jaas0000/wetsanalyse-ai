@@ -1,41 +1,45 @@
-# Dockerfile voor de Wettenbank MCP Server
+# Dockerfile voor de Wettenbank MCP-server.
+# Build-context = deze map (tools/wettenbank-mcp/), dus paden zijn lokaal.
+#   docker build -t wettenbank-mcp tools/wettenbank-mcp
+# Default draait de server in HTTP-modus (Streamable HTTP op /mcp, poort 3000).
+# Stel MCP_TRANSPORT=stdio in om in plaats daarvan als stdio-subproces te draaien.
 
-# Stap 1: Build fase
+# ── Build-fase ────────────────────────────────────────────────────────────────
 FROM node:20-slim AS builder
 
 WORKDIR /app
 
-# Kopieer package files
-COPY tools/wettenbank-mcp/package*.json ./
-COPY tools/wettenbank-mcp/tsconfig.json ./
+# Eerst alleen de manifests → betere layer-caching bij ongewijzigde dependencies.
+COPY package*.json tsconfig.json ./
+RUN npm ci
 
-# Installeer alle dependencies (inclusief dev)
-RUN npm install
-
-# Kopieer de broncode
-COPY tools/wettenbank-mcp/src ./src
-
-# Bouw de TypeScript code naar Javascript (dist/)
+# Broncode + TypeScript-build naar dist/.
+COPY src ./src
 RUN npm run build
 
-# Stap 2: Runtime fase
-FROM node:20-slim
+# ── Runtime-fase ──────────────────────────────────────────────────────────────
+FROM node:20-slim AS runtime
+
+ENV NODE_ENV=production \
+    MCP_TRANSPORT=http \
+    PORT=3000
 
 WORKDIR /app
 
-# Kopieer alleen de noodzakelijke runtime files
-COPY tools/wettenbank-mcp/package*.json ./
-RUN npm install --omit=dev
+# Alleen productie-dependencies in de runtime-image.
+COPY package*.json ./
+RUN npm ci --omit=dev && npm cache clean --force
 
-# Kopieer de gebouwde code van de builder fase
+# Gecompileerde JS uit de build-fase.
 COPY --from=builder /app/dist ./dist
 
-# De MCP server communiceert via StdIO (standaard) of kan worden 
-# geconfigureerd voor SSE (HTTP). Docker containers gebruiken vaak SSE
-# als ze als cloud-service draaien.
-# Voor StdIO gebruik:
-ENTRYPOINT ["node", "dist/index.js"]
+# Draai als de non-root `node`-gebruiker uit de base image.
+USER node
 
-# Voor HTTP/SSE (als de server dat ondersteunt):
-# EXPOSE 3000
-# CMD ["node", "dist/index.js", "--transport", "sse", "--port", "3000"]
+EXPOSE 3000
+
+# Healthcheck via Node's globale fetch (de slim-image heeft geen curl).
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||3000)+'/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+
+CMD ["node", "dist/index.js"]

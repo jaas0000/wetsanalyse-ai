@@ -1,0 +1,53 @@
+# Bouwt de Wettenbank MCP-image en pusht naar GitHub Container Registry (GHCR).
+# Draait bij wijzigingen in de MCP-map op main en bij versietags (v*).
+# Portainer pullt vervolgens ghcr.io/<owner>/wettenbank-mcp:latest.
+
+name: docker-publish
+
+on:
+  push:
+    branches: [master]
+    tags: ["v*"]
+    paths:
+      - "tools/wettenbank-mcp/**"
+      - ".github/workflows/docker-publish.yml"
+  workflow_dispatch:
+
+env:
+  IMAGE: ghcr.io/${{ github.repository_owner }}/wettenbank-mcp
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in bij GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Metadata (tags + labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=ref,event=tag
+            type=sha,format=short
+
+      - name: Build en push
+        uses: docker/build-push-action@v6
+        with:
+          context: tools/wettenbank-mcp
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

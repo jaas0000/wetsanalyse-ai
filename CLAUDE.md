@@ -28,7 +28,9 @@ zijn **projectrelatieve paden**, zodat de map portabel is tussen machines/OS'en:
 
 - `.mcp.json` → `command: "node"` (uit PATH) + relatief argument
   `tools/wettenbank-mcp/dist/index.js`. Claude Code start de MCP met de projectroot als
-  werkmap, dus het relatieve pad resolvet daartegen.
+  werkmap, dus het relatieve pad resolvet daartegen. Dit is de lokale **stdio**-modus; de MCP
+  kan ook als remote **HTTP**-service draaien (Docker/Portainer, met bearer-token) — zie
+  `tools/wettenbank-mcp/CLAUDE.md` (Deployment).
 - `.claude/skills/wetsanalyse-workspace/mcp_fetch.py` (`SERVER`) → leidt de projectroot af van
   de eigen scriptlocatie (`Path(__file__).resolve().parents[3]`) en gebruikt `node` uit PATH;
   `iteration-1/benchmark.json` (`skill_path`) → relatief eval-artefact (`.claude/skills/wetsanalyse`).

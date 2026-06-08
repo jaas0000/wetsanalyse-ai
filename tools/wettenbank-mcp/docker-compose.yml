@@ -1,0 +1,31 @@
+# Portainer-stack voor de Wettenbank MCP-server (HTTP-transport).
+#
+# Gebruik in Portainer: Stacks → Add stack → plak deze compose. Zet onder
+# "Environment variables" een sterke MCP_AUTH_TOKEN; clients sturen die mee als
+# `Authorization: Bearer <token>`.
+#
+# De image wordt door CI naar GHCR gepusht (zie .github/workflows/docker-publish.yml).
+# Pull lokaal bouwen kan ook met `build: .` i.p.v. `image:` (context = deze map).
+
+services:
+  wettenbank-mcp:
+    image: ghcr.io/palmw01/wettenbank-mcp:latest
+    container_name: wettenbank-mcp
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      MCP_TRANSPORT: http
+      PORT: "3000"
+      # Verplicht in een gedeelde/bereikbare opstelling. Leeglaten = géén auth.
+      MCP_AUTH_TOKEN: ${MCP_AUTH_TOKEN:?zet MCP_AUTH_TOKEN in de stack-omgeving}
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

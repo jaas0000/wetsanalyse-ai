@@ -133,7 +133,12 @@ Two public schemas from `repository.officiele-overheidspublicaties.nl` are the s
 
 **`BWB-WTI/2016-1`** — record structure returned by the SRU service. Path names in `parseRecords()` are WTI-XSD elements and namespaces: `gzd → originalData → overheidbwb:meta → owmskern (dcterms:*, overheid:*)` and `enrichedData → overheidbwb:locatie_toestand`.
 
-**Communication:** StdIO — Claude Desktop launches the server as a subprocess and exchanges JSON over stdin/stdout via `StdioServerTransport`. Entry point is `dist/index.js` (re-exports + startup); actual server logic is in `dist/server.js`.
+**Communication:** twee transports, gekozen in `dist/index.js` op basis van `MCP_TRANSPORT` (env) of `--transport <modus>` (CLI-flag); default is `stdio`.
+
+- **stdio** (default) — de client start de server als subproces en wisselt JSON uit over stdin/stdout via `StdioServerTransport`. Gebruikt de singleton `server` uit `server.ts`.
+- **http** (`MCP_TRANSPORT=http`) — langlevende netwerkservice via `StreamableHTTPServerTransport` op `0.0.0.0:${PORT:-3000}`, endpoint `/mcp`. Code in `http-server.ts` (Node-stdlib `http`, geen extra dependency): sessiebeheer per `mcp-session-id`, een verse `createServer()`-instantie per sessie, `/health` (200, geen auth) en optionele bearer-auth via `MCP_AUTH_TOKEN`. Bedoeld voor de gecontaineriseerde deployment.
+
+Entry point is `dist/index.js` (re-exports + startup); de serverlogica zit in `dist/server.js`, het HTTP-transport in `dist/http-server.js`.
 
 ## Deployment
 
@@ -150,7 +155,7 @@ Two public schemas from `repository.officiele-overheidspublicaties.nl` are the s
 }
 ```
 
-**Claude Code CLI** — add to `.claude/settings.json` (project) or `~/.claude/settings.json` (global):
+**Claude Code CLI (lokaal, stdio)** — add to `.claude/settings.json` (project) or `~/.claude/settings.json` (global):
 
 ```json
 {
@@ -158,6 +163,26 @@ Two public schemas from `repository.officiele-overheidspublicaties.nl` are the s
     "wettenbank": {
       "command": "node",
       "args": ["/absolute/path/to/wettenbank-mcp/dist/index.js"]
+    }
+  }
+}
+```
+
+**Remote (HTTP) via Docker** — voor een gedeelde, gecontaineriseerde server.
+
+- `Dockerfile` (multi-stage, non-root, `HEALTHCHECK` op `/health`, default `MCP_TRANSPORT=http`). Build-context = deze map: `docker build -t wettenbank-mcp tools/wettenbank-mcp`.
+- `docker-compose.yml` — Portainer-stack (poort 3000, `restart: unless-stopped`, `MCP_AUTH_TOKEN` als stack-env).
+- `.github/workflows/docker-publish.yml` — bouwt en pusht `ghcr.io/<owner>/wettenbank-mcp` (CI is de build-route; lokaal hoeft geen Docker-engine aanwezig te zijn).
+
+Client-config (`.mcp.json`), met de token via env-expansie zodat hij niet in de repo belandt:
+
+```json
+{
+  "mcpServers": {
+    "wettenbank": {
+      "type": "http",
+      "url": "http://<host>:3000/mcp",
+      "headers": { "Authorization": "Bearer ${WETTENBANK_TOKEN}" }
     }
   }
 }

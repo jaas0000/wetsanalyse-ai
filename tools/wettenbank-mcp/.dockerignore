@@ -1,0 +1,17 @@
+# Wordt in de image opnieuw opgebouwd / niet nodig:
+node_modules
+dist
+
+# Tests horen niet in de runtime-image.
+**/*.test.ts
+**/*.test.js
+
+# Diversen
+*.log
+.git
+.gitignore
+README.md
+CLAUDE.md
+Dockerfile
+.dockerignore
+docker-compose.yml
