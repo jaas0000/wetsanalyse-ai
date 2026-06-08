@@ -10,3 +10,6 @@ __pycache__/
 
 # Build/runtime rommel
 .DS_Store
+
+# Machine-lokale tool-config (symlinks naar ~/.gemini e.d.)
+.antigravitycli/
