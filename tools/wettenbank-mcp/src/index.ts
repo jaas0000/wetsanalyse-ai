@@ -10,11 +10,30 @@ import { fileURLToPath } from "url";
 import { server, StdioServerTransport } from "./server.js";
 
 // ── Startup ───────────────────────────────────────────────────────────────────
+// Transport-keuze: stdio (default, lokaal subproces) of http (langlevende service).
+// Stuur via env MCP_TRANSPORT=http of CLI-flag `--transport http`.
+
+function gekozenTransport(): string {
+  const flagIndex = process.argv.indexOf("--transport");
+  if (flagIndex !== -1 && process.argv[flagIndex + 1]) {
+    return process.argv[flagIndex + 1];
+  }
+  return process.env.MCP_TRANSPORT ?? "stdio";
+}
 
 const __filename = fileURLToPath(import.meta.url);
 if (process.argv[1] === __filename) {
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
+  if (gekozenTransport() === "http") {
+    // Dynamische import: het stdio-pad laadt de HTTP-laag zo nooit.
+    const { startHttpServer } = await import("./http-server.js");
+    startHttpServer({
+      port: Number(process.env.PORT ?? 3000),
+      token: process.env.MCP_AUTH_TOKEN,
+    });
+  } else {
+    const transport = new StdioServerTransport();
+    await server.connect(transport);
+  }
 }
 
 // ── Re-exports voor backward-compatibiliteit (tests) ─────────────────────────
