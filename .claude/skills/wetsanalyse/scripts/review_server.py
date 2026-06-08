@@ -19,6 +19,7 @@ Het tussenresultaat-JSON volgt het schema in references/review-checkpoints.md.
 """
 
 import argparse
+import io
 import json
 import subprocess
 import sys
@@ -44,7 +45,7 @@ def load_vorige(vorige_dir: Path) -> dict | None:
         pad = vorige_dir / naam
         if pad.exists():
             try:
-                out[key] = json.loads(pad.read_text())
+                out[key] = json.loads(pad.read_text(encoding="utf-8"))
             except (json.JSONDecodeError, OSError):
                 pass
     return out or None
@@ -53,7 +54,7 @@ def load_vorige(vorige_dir: Path) -> dict | None:
 def build_html(input_data: dict, activiteit: str, ronde: int = 1,
                vorige: dict | None = None) -> str:
     """Embed het tussenresultaat in de HTML-template."""
-    template = TEMPLATE.read_text()
+    template = TEMPLATE.read_text(encoding="utf-8")
     embedded = {"activiteit": activiteit, "analyse": input_data, "ronde": ronde}
     if vorige:
         embedded["vorige"] = vorige
@@ -106,17 +107,32 @@ class ReviewHandler(BaseHTTPRequestHandler):
 
 
 def _kill_port(port: int) -> None:
-    """Beëindig een eventueel proces dat al op de poort luistert."""
+    """Beëindig een eventueel proces dat al op de poort luistert (Windows + Unix)."""
+    import sys as _sys
     try:
-        result = subprocess.run(
-            ["lsof", "-ti", f":{port}"],
-            capture_output=True, text=True, timeout=5,
-        )
-        for pid in result.stdout.split():
-            try:
-                subprocess.run(["kill", "-9", pid], timeout=5)
-            except subprocess.SubprocessError:
-                pass
+        if _sys.platform == "win32":
+            result = subprocess.run(
+                ["powershell", "-Command",
+                 f"Get-NetTCPConnection -LocalPort {port} -ErrorAction SilentlyContinue"
+                 " | Select-Object -ExpandProperty OwningProcess"],
+                capture_output=True, text=True, timeout=10,
+            )
+            for pid in set(result.stdout.split()):
+                if pid.strip() and pid.strip() != "0":
+                    try:
+                        subprocess.run(["taskkill", "/F", "/PID", pid.strip()], timeout=5)
+                    except subprocess.SubprocessError:
+                        pass
+        else:
+            result = subprocess.run(
+                ["lsof", "-ti", f":{port}"],
+                capture_output=True, text=True, timeout=5,
+            )
+            for pid in result.stdout.split():
+                try:
+                    subprocess.run(["kill", "-9", pid], timeout=5)
+                except subprocess.SubprocessError:
+                    pass
     except (FileNotFoundError, subprocess.SubprocessError):
         pass
 
@@ -146,7 +162,7 @@ def main():
         print(f"Template niet gevonden: {TEMPLATE}", file=sys.stderr)
         sys.exit(1)
 
-    input_data = json.loads(args.input.read_text())
+    input_data = json.loads(args.input.read_text(encoding="utf-8"))
     vorige = load_vorige(args.vorige) if args.vorige else None
     html = build_html(input_data, args.activiteit, args.ronde, vorige)
 
@@ -159,9 +175,13 @@ def main():
         server = HTTPServer(("127.0.0.1", 0), handler)
         port = server.server_address[1]
 
+    # Zorg voor UTF-8 stdout op Windows (cp1252-terminals crashen op em-dash e.d.)
+    if sys.stdout.encoding and sys.stdout.encoding.lower() not in ("utf-8", "utf8"):
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+
     url = f"http://localhost:{port}"
-    print(f"\n  Wetsanalyse — review activiteit {args.activiteit} (ronde {args.ronde})")
-    print(f"  ─────────────────────────────────────────")
+    print(f"\n  Wetsanalyse - review activiteit {args.activiteit} (ronde {args.ronde})")
+    print(f"  -----------------------------------------")
     print(f"  URL:       {url}")
     print(f"  Invoer:    {args.input}")
     print(f"  Feedback:  {args.feedback_out}")
@@ -179,6 +199,7 @@ def main():
         server.serve_forever()
     except KeyboardInterrupt:
         print("\n  Server gestopt.")
+        sys.stdout.flush()
 
 
 if __name__ == "__main__":

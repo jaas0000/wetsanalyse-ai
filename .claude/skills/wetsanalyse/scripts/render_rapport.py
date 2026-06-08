@@ -52,7 +52,7 @@ def laatste_ronde(activiteit_dir: Path) -> Path | None:
 
 def laad_json(pad: Path) -> dict:
     try:
-        return json.loads(pad.read_text())
+        return json.loads(pad.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError) as e:
         sys.exit(f"FOUT: kan {pad} niet lezen: {e}")
 
@@ -72,7 +72,7 @@ def verzamel_rondes(activiteit_dir: Path) -> list[tuple[int, dict | None]]:
         fb = None
         if fb_pad.exists():
             try:
-                fb = json.loads(fb_pad.read_text())
+                fb = json.loads(fb_pad.read_text(encoding="utf-8"))
             except (json.JSONDecodeError, OSError):
                 fb = None
         out.append((int(m.group(1)), fb))
@@ -301,7 +301,7 @@ def main() -> None:
     regels += sectie_4(a3, rondes2, rondes3)
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
-    args.out.write_text("\n".join(regels) + "\n")
+    args.out.write_text("\n".join(regels) + "\n", encoding="utf-8")
 
     aantal_todo = ("\n".join(regels)).count(TODO)
     print(f"Rapport geschreven naar {args.out}")
