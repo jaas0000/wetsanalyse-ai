@@ -12,7 +12,7 @@ Operationele documentatie voor de gecontaineriseerde HTTP-deployment, afgestemd 
 |---|---|---|
 | `MCP_TRANSPORT` | `stdio` | Zet op `http` voor de netwerkservice. |
 | `PORT` | `3000` | Luisterpoort (HTTP-modus). |
-| `MCP_AUTH_TOKENS` | — | Per-client tokens: `"belastingdienst:abc, analist-jan:def"`. **Aanbevolen.** |
+| `MCP_AUTH_TOKENS` | — | Per-client tokens: `"belastingdienst:abc, analist-jan:def"`. **Aanbevolen.** Een token zónder `id:`-prefix wordt geaccepteerd als clientId `default` (backward-compat). |
 | `MCP_AUTH_TOKEN` | — | Legacy enkelvoud → clientId `default`. Fallback. |
 | `MCP_AUTH_TOKENS_FILE` | — | Pad naar bestand met de tokenlijst (Docker secret / vault). Voorrang op inline. |
 | `MCP_AUTH_TOKEN_FILE` | — | Pad naar bestand met de legacy enkelvoudtoken. |
@@ -40,11 +40,11 @@ bewust auth-vrij (healthcheck Portainer/Azure). TLS wordt door Nginx Proxy Manag
 JWT-bearer wordt gevalideerd tegen de IdP: signatuur via JWKS, plus `iss`/`aud`/`exp`/`nbf`.
 De `clientId` komt uit `OIDC_CLIENT_CLAIM` (default `azp`, val terug op `sub`). De statische/
 file-tokens blijven werken als fallback, zodat migratie geleidelijk kan. Implementatie:
-`src/oidc.ts` (met de vetted `jose`-library); zie issue #16.
+`src/oidc.ts` (met de vetted `jose`-library).
 
 **Secret-management.** Tokens kunnen uit een **bestand** komen (`*_FILE`-env) i.p.v. inline env —
 het standaardpatroon voor Docker secrets en vault-agents. Rotatie: vervang een `id:token`-paar
-(of het secret-bestand) en herdeploy; per-client intrekken raakt de andere clients niet. Zie issue #18.
+(of het secret-bestand) en herdeploy; per-client intrekken raakt de andere clients niet.
 
 ## Logging
 
@@ -89,16 +89,21 @@ nodig; alert-regels (herhaalde 401's, 429-pieken) horen in het SIEM.
 ## CI-borging (ISO 27002 §8.8 kwetsbaarhedenbeheer)
 
 `.github/workflows/docker-publish.yml`:
-- `test`-job: `npm test` + `npm audit --audit-level=high` (faalt bij high/critical).
+- `test`-job (draait op node 26): `npm test` + `npm audit --audit-level=moderate` (faalt bij moderate of hoger).
 - Trivy image-scan: SARIF → GitHub Security-tab; aparte gate faalt bij `CRITICAL`.
 - SBOM + provenance als attestatie bij de gepushte image.
+- Deploy (Portainer stack-update) **verifieert `/health`** na de redeploy en faalt zichtbaar als de
+  container niet gezond opkomt; tolereert een gateway-timeout (502/504) op de API-call zelf.
 - `.github/dependabot.yml`: wekelijkse update-PR's (npm, docker, github-actions).
 
 ## Bekende restpunten (vervolg)
 
-- **OAuth2/OIDC** — codepad aanwezig (`src/oidc.ts`); resteert: IdP-keuze + client-registratie
-  bij de afnemer en een integratietest tegen die IdP (issue #16).
-- **Secret-management** — file-based secrets ondersteund; resteert: keuze + inrichting van de
-  concrete vault/secret-store bij de afnemer (issue #18).
-- **Externe pentest** vóór productie (BIO/NIS2-aantoonbaarheid) — externe partij vereist (issue #17).
+Het codewerk is afgerond; de resterende punten vergen keuzes/acties bij de afnemer:
+
+- **OAuth2/OIDC** — codepad aanwezig en getest (`src/oidc.ts`); resteert de IdP-keuze +
+  client-registratie en een integratietest tegen die IdP. Tot die tijd dormant.
+- **Secret-management** — file-based secrets (`*_FILE`) ondersteund; resteert de keuze + inrichting
+  van de concrete vault/secret-store en een gedocumenteerde rotatieprocedure.
+- **Externe pentest** vóór productie (BIO/NIS2-aantoonbaarheid) — vereist een externe partij;
+  voorlopig geparkeerd.
 - Optioneel: IP-allowlist op NPM voor bekende afnemers; `Origin`/DNS-rebinding-check op `/mcp`.
