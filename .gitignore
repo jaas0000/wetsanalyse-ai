@@ -13,3 +13,6 @@ __pycache__/
 
 # Machine-lokale tool-config (symlinks naar ~/.gemini e.d.)
 .antigravitycli/
+
+# Machine-specifieke Claude Code config met secrets (tokens, paden)
+.claude/settings.local.json
