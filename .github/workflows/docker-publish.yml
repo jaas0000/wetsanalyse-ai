@@ -17,16 +17,42 @@ env:
   IMAGE: ghcr.io/${{ github.repository_owner }}/wettenbank-mcp
 
 jobs:
+  # ── Kwaliteits- en kwetsbaarhedenpoort (BIO2 / ISO 27002:2022 §8.8) ──────────
+  # Unit-tests + npm audit. Faalt de build bij hoge/kritieke kwetsbaarheden in
+  # dependencies, zodat een lek niet ongemerkt naar productie wordt gepusht.
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: tools/wettenbank-mcp
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: tools/wettenbank-mcp/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - name: npm audit (faalt bij high/critical)
+        run: npm audit --omit=dev --audit-level=high
+
   build-and-push:
+    needs: test
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
+      security-events: write
     env:
       # CI → Portainer stack-redeploy. Inactief tot PORTAINER_API_KEY als secret bestaat.
       PORTAINER_URL: ${{ secrets.PORTAINER_URL }}
       PORTAINER_API_KEY: ${{ secrets.PORTAINER_API_KEY }}
-      MCP_AUTH_TOKEN: ${{ secrets.MCP_AUTH_TOKEN }}
+      # Per-client tokens als id:token-lijst. Valt terug op de legacy single-secret
+      # zodat een bestaande deploy niet breekt (zet bij voorkeur secret MCP_AUTH_TOKENS).
+      MCP_AUTH_TOKENS: ${{ secrets.MCP_AUTH_TOKENS || secrets.MCP_AUTH_TOKEN }}
       PORTAINER_STACK_ID: "219"
       PORTAINER_ENDPOINT_ID: "1"
       PROXY_NETWORK: "homeinfra_internal"
@@ -55,6 +81,7 @@ jobs:
             type=sha,format=short
 
       - name: Build en push
+        id: build
         uses: docker/build-push-action@v6
         with:
           context: tools/wettenbank-mcp
@@ -63,16 +90,46 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          # SBOM + provenance als attestatie bij de image (ISO 27002:2022 §8.8).
+          sbom: true
+          provenance: mode=max
+
+      # ── Image-scan (BIO2 / ISO 27002:2022 §8.8) ───────────────────────────────
+      # Scant de gepushte image op OS-/library-kwetsbaarheden. Rapporteert naar het
+      # GitHub Security-tabblad (SARIF) en faalt bij CRITICAL.
+      - name: Trivy image-scan (SARIF)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ env.IMAGE }}@${{ steps.build.outputs.digest }}
+          format: sarif
+          output: trivy-results.sarif
+          ignore-unfixed: true
+          vuln-type: os,library
+
+      - name: Upload Trivy-resultaten naar Security-tab
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-results.sarif
+
+      - name: Trivy gate (faalt bij CRITICAL)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ env.IMAGE }}@${{ steps.build.outputs.digest }}
+          format: table
+          ignore-unfixed: true
+          severity: CRITICAL
+          exit-code: "1"
 
       - name: Portainer redeploy via stack-update (pull :latest)
         if: ${{ github.ref == 'refs/heads/master' && env.PORTAINER_API_KEY != '' }}
         run: |
           payload=$(jq -n \
             --rawfile compose tools/wettenbank-mcp/docker-compose.yml \
-            --arg tok "$MCP_AUTH_TOKEN" \
+            --arg tok "$MCP_AUTH_TOKENS" \
             --arg net "$PROXY_NETWORK" \
             '{stackFileContent:$compose,
-              env:[{name:"MCP_AUTH_TOKEN",value:$tok},{name:"PROXY_NETWORK",value:$net}],
+              env:[{name:"MCP_AUTH_TOKENS",value:$tok},{name:"PROXY_NETWORK",value:$net}],
               pullImage:true, prune:false}')
           curl -fsS -X PUT \
             "$PORTAINER_URL/api/stacks/$PORTAINER_STACK_ID?endpointId=$PORTAINER_ENDPOINT_ID" \

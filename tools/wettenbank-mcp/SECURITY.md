@@ -1,0 +1,89 @@
+# Beveiliging & logging — Wettenbank-MCP (HTTP-modus)
+
+Operationele documentatie voor de gecontaineriseerde HTTP-deployment, afgestemd op
+**BIO2 / NEN-EN-ISO/IEC 27002:2022**, **AVG** en (waar van toepassing) **NIS2**.
+Achtergrond en fasering staan in [`ENTERPRISE-PLAN.md`](./ENTERPRISE-PLAN.md).
+
+> De stdio-modus (lokaal subproces op de machine van de gebruiker) heeft geen
+> netwerk-attackoppervlak en valt buiten deze documentatie.
+
+## Configuratie (environment)
+
+| Variabele | Default | Doel |
+|---|---|---|
+| `MCP_TRANSPORT` | `stdio` | Zet op `http` voor de netwerkservice. |
+| `PORT` | `3000` | Luisterpoort (HTTP-modus). |
+| `MCP_AUTH_TOKENS` | — | Per-client tokens: `"belastingdienst:abc, analist-jan:def"`. **Aanbevolen.** |
+| `MCP_AUTH_TOKEN` | — | Legacy enkelvoud → clientId `default`. Fallback. |
+| `MCP_ALLOW_NO_AUTH` | — | `1` = bewust zonder auth starten (alleen achter vertrouwd netwerk). |
+| `MCP_RATE_BURST` | `60` | Max. burst (emmergrootte) per IP. |
+| `MCP_RATE_PER_MIN` | `120` | Aanvulsnelheid per IP per minuut. |
+| `MCP_SESSION_IDLE_MS` | `1800000` | Idle-sessie-opruiming (30 min). |
+| `LOG_LEVEL` | `info` | `debug` \| `info` \| `warn` \| `error`. |
+| `LOG_ZOEKTERMEN` | — | `1` = log volledige zoektermen. **Alleen debug** (AVG-risico). |
+
+Tokens horen in een secret-store (Portainer stack-env → bij voorkeur een vault) en worden
+**periodiek geroteerd**. Eén client intrekken = zijn `id:token`-paar verwijderen.
+
+## Authenticatie
+
+Per-client bearer-tokens, constant-tijd vergeleken (geen timing-oracle). Elke afnemer heeft een
+eigen `clientId` die in de auditlog belandt, zodat aanroepen herleidbaar zijn. `/health` is
+bewust auth-vrij (healthcheck Portainer/Azure). TLS wordt door Nginx Proxy Manager getermineerd.
+
+**Eindbeeld (Fase 3):** OAuth2/OIDC tegen de IdP van de afnemer i.p.v. statische tokens.
+
+## Logging
+
+Gestructureerde JSON, één regel per event naar **stderr**. De app schrijft geen eigen
+logbestanden; de containerruntime/SIEM vangt stderr op (12-factor + NORA "centrale verzameling").
+
+**Categorieën:** `functioneel` (verkeer/sessies) · `audit` (welke client riep welke tool op welke
+wet aan) · `security` (auth-weigeringen, rate-limit-overschrijdingen).
+
+**Voorbeeld audit-regel:**
+```json
+{"ts":"2026-06-09T07:11:20.573Z","niveau":"info","categorie":"audit","bericht":"tool aangeroepen",
+ "tool":"wettenbank_artikel","clientId":"belastingdienst","sessionId":"…","bwbId":"BWBR0004770",
+ "artikel":"9","uitkomst":"ok","duur_ms":142}
+```
+
+**Niet gelogd (AVG + secrets):** de bearer-token en `Authorization`-header (defensief gestript in
+`logger.ts`), en **rauwe zoektermen** — die kunnen onthullen wat een ambtenaar onderzoekt. Default
+wordt alleen de lengte gelogd (`zoekterm_lengte` + `[geredacteerd]`).
+
+**Clock sync (ISO 27002 §8.17):** tijdstempels in UTC (ISO-8601). Zorg dat de container-host
+NTP-gesynchroniseerd is, anders zijn de logs forensisch niet te correleren.
+
+## Bewaartermijn (voorstel — AVG-onderbouwing vereist)
+
+Er is geen vaste wettelijke termijn; de termijn is functioneel bepaald met doelbinding.
+
+| Logsoort | Doel | Voorstel |
+|---|---|---|
+| `functioneel` | Operationele troubleshooting | 90 dagen |
+| `audit` | Verantwoording/herleidbaarheid | 6–12 maanden |
+| `security` | Incidentonderzoek/detectie | 6–12 maanden |
+
+Vast te leggen mét verwerkingsdoel in het verwerkingsregister van de afnemer.
+
+## SIEM-koppeling
+
+De app levert vendor-neutrale JSON op stdout/stderr. Afspraak met de afnemer: de log-shipper
+(bijv. Fluent Bit/Filebeat → centraal SIEM) pikt de containerlogs op. Geen wijziging aan de app
+nodig; alert-regels (herhaalde 401's, 429-pieken) horen in het SIEM.
+
+## CI-borging (ISO 27002 §8.8 kwetsbaarhedenbeheer)
+
+`.github/workflows/docker-publish.yml`:
+- `test`-job: `npm test` + `npm audit --audit-level=high` (faalt bij high/critical).
+- Trivy image-scan: SARIF → GitHub Security-tab; aparte gate faalt bij `CRITICAL`.
+- SBOM + provenance als attestatie bij de gepushte image.
+- `.github/dependabot.yml`: wekelijkse update-PR's (npm, docker, github-actions).
+
+## Bekende restpunten (vervolg)
+
+- OAuth2/OIDC i.p.v. statische tokens (Fase 3, vereist IdP bij afnemer).
+- Externe pentest vóór productie (BIO/NIS2-aantoonbaarheid).
+- Secret-management naar een echte vault + gedocumenteerde rotatieprocedure.
+- Optioneel: IP-allowlist op NPM voor bekende afnemers; `Origin`/DNS-rebinding-check op `/mcp`.

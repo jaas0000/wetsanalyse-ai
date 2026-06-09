@@ -18,11 +18,12 @@ import { handleZoek } from "./tools/zoek.js";
 import { handleStructuur } from "./tools/structuur.js";
 import { handleArtikel } from "./tools/artikel.js";
 import { handleZoekterm } from "./tools/zoekterm.js";
+import { log, veiligeToolVelden } from "./logger.js";
 // ── Server-factory ──────────────────────────────────────────────────────────
 // createServer() bouwt een verse, volledig geconfigureerde Server. De stdio-modus
 // gebruikt één singleton (export `server` onderaan); de HTTP-modus maakt per sessie
 // een eigen instantie, omdat een Server 1-op-1 aan één transport is gekoppeld.
-export function createServer() {
+export function createServer(ctx = {}) {
     const server = new Server({ name: "wettenbank-mcp", version: pkgVersion }, { capabilities: { tools: {} } });
     // ── Tool-definities ─────────────────────────────────────────────────────────
     server.setRequestHandler(ListToolsRequestSchema, async () => ({
@@ -147,6 +148,14 @@ export function createServer() {
     // ── Tool-handlers ───────────────────────────────────────────────────────────
     server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const { name, arguments: args } = request.params;
+        const start = Date.now();
+        // Gedeelde audit-velden: wie (clientId/sessionId), welke tool, welke wet/artikel.
+        const auditBasis = {
+            tool: name,
+            clientId: ctx.clientId,
+            sessionId: ctx.getSessionId?.(),
+            ...veiligeToolVelden(args),
+        };
         try {
             let text;
             if (name === "wettenbank_zoek") {
@@ -162,14 +171,29 @@ export function createServer() {
                 text = await handleZoekterm(args);
             }
             else {
+                log("warn", "audit", "onbekende tool aangeroepen", {
+                    ...auditBasis,
+                    uitkomst: "onbekend",
+                });
                 return {
                     content: [{ type: "text", text: `Onbekende tool: ${name}` }],
                     isError: true,
                 };
             }
+            log("info", "audit", "tool aangeroepen", {
+                ...auditBasis,
+                uitkomst: "ok",
+                duur_ms: Date.now() - start,
+            });
             return { content: [{ type: "text", text }] };
         }
         catch (err) {
+            log("warn", "audit", "tool gefaald", {
+                ...auditBasis,
+                uitkomst: "fout",
+                fout: err.message,
+                duur_ms: Date.now() - start,
+            });
             return {
                 content: [
                     { type: "text", text: JSON.stringify({ fout: err.message }) },

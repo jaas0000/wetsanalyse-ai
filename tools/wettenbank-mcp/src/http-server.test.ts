@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import type { AddressInfo } from "node:net";
 import type { Server as HttpServer } from "node:http";
 import { startHttpServer } from "./http-server.js";
+import { maakRateLimiter } from "./rate-limit.js";
 
 const TOKEN = "test-token-123";
 
@@ -64,5 +65,78 @@ describe("http-server", () => {
       headers: { authorization: `Bearer ${TOKEN}` },
     });
     expect(res.status).toBe(404);
+  });
+
+  it("zet securityheaders op /health", async () => {
+    const res = await fetch(`${baseUrl}/health`);
+    expect(res.headers.get("x-content-type-options")).toBe("nosniff");
+  });
+});
+
+describe("http-server — per-client tokens", () => {
+  let server: HttpServer;
+  let url: string;
+
+  beforeAll(async () => {
+    server = startHttpServer({
+      port: 0,
+      clients: [
+        { id: "alice", token: "tok-a" },
+        { id: "bob", token: "tok-b" },
+      ],
+    });
+    await new Promise<void>((r) => server.once("listening", () => r()));
+    url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  });
+
+  afterAll(async () => {
+    await new Promise<void>((r) => server.close(() => r()));
+  });
+
+  it("accepteert een geldige client-token (geen 401)", async () => {
+    const res = await fetch(`${url}/mcp`, {
+      method: "POST",
+      headers: { authorization: "Bearer tok-b", "content-type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }),
+    });
+    expect(res.status).not.toBe(401);
+  });
+
+  it("weigert een onbekende token met 401", async () => {
+    const res = await fetch(`${url}/mcp`, {
+      method: "POST",
+      headers: { authorization: "Bearer onbekend" },
+      body: "{}",
+    });
+    expect(res.status).toBe(401);
+  });
+});
+
+describe("http-server — rate limiting", () => {
+  let server: HttpServer;
+  let url: string;
+
+  beforeAll(async () => {
+    // Krappe limiter: 2 requests, daarna 429.
+    server = startHttpServer({
+      port: 0,
+      token: "t",
+      rateLimiter: maakRateLimiter({ capaciteit: 2, perSeconde: 0 }),
+    });
+    await new Promise<void>((r) => server.once("listening", () => r()));
+    url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  });
+
+  afterAll(async () => {
+    await new Promise<void>((r) => server.close(() => r()));
+  });
+
+  it("geeft 429 zodra de emmer leeg is", async () => {
+    const statussen: number[] = [];
+    for (let i = 0; i < 3; i++) {
+      const res = await fetch(`${url}/mcp`, { method: "POST", body: "{}" });
+      statussen.push(res.status);
+    }
+    expect(statussen[2]).toBe(429); // derde request over de limiet
   });
 });

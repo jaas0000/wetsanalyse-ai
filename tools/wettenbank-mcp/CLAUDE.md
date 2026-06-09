@@ -159,6 +159,29 @@ Two public schemas from `repository.officiele-overheidspublicaties.nl` are the s
 
 Entry point is `dist/index.js` (re-exports + startup); de serverlogica zit in `dist/server.js`, het HTTP-transport in `dist/http-server.js`.
 
+## Logging & beveiliging (HTTP-modus / enterprise)
+
+Voor de gecontaineriseerde HTTP-deployment is een logging- en hardeningslaag toegevoegd,
+afgestemd op BIO2 / NEN-EN-ISO/IEC 27002:2022. Zie `SECURITY.md` voor het volledige overzicht
+(logvelden, bewaartermijn, SIEM) en `ENTERPRISE-PLAN.md` voor de onderbouwing/fasering.
+
+- **Logging** (`src/logger.ts`): gestructureerde JSON, één regel per event naar **stderr**
+  (geen eigen logbestanden; de runtime/SIEM vangt stderr op). Categorieën `functioneel` |
+  `audit` | `security`. `server.ts` logt per tool-aanroep een **audit**-regel met `clientId`,
+  `sessionId`, tool en BWB-id/artikel. **Tokens en rauwe zoektermen worden nooit gelogd**
+  (AVG-dataminimalisatie); zet `LOG_ZOEKTERMEN=1` alleen voor debug. `LOG_LEVEL` stelt de drempel in.
+- **Auth** (`src/auth.ts`): **per-client bearer-tokens** via `MCP_AUTH_TOKENS="id:token,id2:token2"`
+  (constant-tijd vergeleken), met de legacy `MCP_AUTH_TOKEN` als fallback (clientId `default`).
+  In HTTP-modus is de start fail-closed: zonder enige token weigert `index.ts` te starten, tenzij
+  `MCP_ALLOW_NO_AUTH=1`.
+- **Rate limiting** (`src/rate-limit.ts`): token-bucket per IP. `MCP_RATE_BURST` (default 60) en
+  `MCP_RATE_PER_MIN` (default 120); over de limiet → `429`.
+- **Securityheaders**: `X-Content-Type-Options: nosniff`, `Referrer-Policy`, `Cache-Control: no-store`
+  op elke respons. `/health` blijft auth-vrij en wordt niet gelogd.
+- **CI** (`.github/workflows/docker-publish.yml`): aparte `test`-job met `npm test` + `npm audit`
+  (faalt bij high/critical), Trivy image-scan (SARIF → Security-tab, faalt bij CRITICAL), en
+  SBOM/provenance-attestatie bij de image. Dependabot in `.github/dependabot.yml`.
+
 ## Deployment
 
 **Claude Desktop** — add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
