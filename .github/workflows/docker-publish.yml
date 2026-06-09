@@ -15,6 +15,10 @@ on:
 
 env:
   IMAGE: ghcr.io/${{ github.repository_owner }}/wettenbank-mcp
+  # Forceer Node 24 voor JS-actions, inclusief transitief gepinde (bv. actions/cache
+  # binnen setup-node). Ruimt de Node 20-deprecatiewaarschuwing op; wordt een no-op
+  # zodra Node 24 de default is (vanaf 16 juni 2026).
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
   # ── Kwaliteits- en kwetsbaarhedenpoort (BIO2 / ISO 27002:2022 §8.8) ──────────
