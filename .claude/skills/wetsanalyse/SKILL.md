@@ -237,3 +237,13 @@ Was een review overgeslagen via `WETSANALYSE_NO_REVIEW=1`, noteer dat dan in de 
   opmerkingen (of bewust overgeslagen via `WETSANALYSE_NO_REVIEW`), en is de feedback per
   ronde verwerkt en in de reviewlog vastgelegd?
 - Klopt de letterlijke wettekst met de bron (geen parafrase als citaat)?
+
+## Diagnose bij falen
+
+Dit gaat **niet** over gewone review-feedback: feedback die niet meteen "akkoord" is, is het
+normale proces — verwerk die in de volgende ronde (stap 2b/3b). Maar gaat het om
+*onbetrouwbaarheid of storing* — verzonnen wettekst, een niet-bestaande JAS-klasse, een
+overgeslagen reviewstop, een MCP die niets teruggeeft, of een lus die niet convergeert —
+verdenk dan niet het model maar de harness eromheen. Loop de vier hendels langs: Context
+(wat zag het model?), Tools (wat kon het doen?), Loop (hoe bewoog het?) en Governance (wat
+hield het in toom?). Gebruik de symptoom→hendel-tabel in `references/harness-diagnose.md`.

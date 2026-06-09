@@ -92,6 +92,11 @@ Inhoudelijke regels die je moet kennen voordat je classificeert of begrippen ops
 `references/jas-klassen.md` (de dertien JAS-klassen — verzin er geen), en
 `references/activiteit-3-vuistregels.md`. Voorbeeld-output staat in `analyses/iw1990-art9-lid1/`.
 
+Komt een analyse onbetrouwbaar uit (verzonnen tekst, niet-bestaande klasse, overgeslagen
+review, niet-convergerende lus — géén gewone review-feedback), dan is
+`references/harness-diagnose.md` de troubleshooting-ingang: het diagnosticeert de skill via
+vier hendels (Context, Tools, Loop, Governance) in plaats van het model te verdenken.
+
 ## Skills
 
 De wetsanalyse-skill staat in `.claude/skills/wetsanalyse/`.
