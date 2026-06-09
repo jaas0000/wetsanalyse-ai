@@ -127,7 +127,16 @@ jobs:
 
       - name: Portainer redeploy via stack-update (pull :latest)
         if: ${{ github.ref == 'refs/heads/master' && env.PORTAINER_API_KEY != '' }}
+        env:
+          HEALTH_URL: https://wettenbank-mcp.ipalm.nl/health
         run: |
+          set -euo pipefail
+          # Fail-fast: deploy geen stack zonder token. Een lege MCP_AUTH_TOKENS zou de
+          # draaiende container fail-closed laten crashen (zie auth.ts / index.ts).
+          if [ -z "${MCP_AUTH_TOKENS:-}" ]; then
+            echo "::error::MCP_AUTH_TOKENS is leeg — zet de GitHub-secret (id:token,... of een kale token). Redeploy overgeslagen."
+            exit 1
+          fi
           payload=$(jq -n \
             --rawfile compose tools/wettenbank-mcp/docker-compose.yml \
             --arg tok "$MCP_AUTH_TOKENS" \
@@ -135,8 +144,27 @@ jobs:
             '{stackFileContent:$compose,
               env:[{name:"MCP_AUTH_TOKENS",value:$tok},{name:"PROXY_NETWORK",value:$net}],
               pullImage:true, prune:false}')
-          curl -fsS -X PUT \
+          # De synchrone stack-update kan langer duren dan de gateway-timeout. Een 502/504
+          # betekent niet dat de update mislukte; de health-check hieronder bepaalt succes.
+          code=$(curl -sS -X PUT --max-time 180 \
             "$PORTAINER_URL/api/stacks/$PORTAINER_STACK_ID?endpointId=$PORTAINER_ENDPOINT_ID" \
             -H "X-API-Key: $PORTAINER_API_KEY" \
             -H "Content-Type: application/json" \
-            -d "$payload" -o /dev/null -w "redeploy HTTP %{http_code}\n"
+            -d "$payload" -o /tmp/portainer-resp.json -w "%{http_code}" || echo "000")
+          echo "redeploy HTTP $code"
+          case "$code" in
+            2*) echo "Stack-update geaccepteerd." ;;
+            502|503|504|000) echo "::warning::Gateway-timeout ($code) — update draait async door; verifieer via health." ;;
+            *) echo "::error::Stack-update faalde (HTTP $code)"; cat /tmp/portainer-resp.json || true; exit 1 ;;
+          esac
+          # Bevestig dat de nieuwe container daadwerkelijk gezond opstart (max ~5 min).
+          echo "Health-verificatie op $HEALTH_URL ..."
+          for i in $(seq 1 20); do
+            if curl -fsS --max-time 10 "$HEALTH_URL" -o /dev/null; then
+              echo "Service gezond na redeploy (poging $i)."
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "::error::Service niet gezond na redeploy. Controleer de containerlogs in Portainer."
+          exit 1
