@@ -1,8 +1,8 @@
 # Wettenbank MCP — Documentatie
 
-**Versie:** 3.0.0
+**Versie:** 2.1.0
 **Taal:** TypeScript (ESM)
-**Transportprotocol:** StdIO (MCP)
+**Transportprotocol:** StdIO + HTTP (Streamable HTTP MCP)
 **Databron:** wetten.overheid.nl — publieke SRU-interface (CC-0, geen API-sleutel vereist)
 
 ---
@@ -134,7 +134,7 @@ Elke laag is puur en testbaar in isolatie. Informatie gaat nooit verloren tussen
 
 ### In-memory cache
 
-`repository-client.ts` beheert een `xmlCache: Map<string, CacheEntry>` met TTL van 1 uur. Sleutel: `"bwbId|peildatum"`. Voorkomt herhaalde netwerkverzoeken voor dezelfde wet op dezelfde datum.
+`repository-client.ts` beheert een `xmlCache: Map<string, CacheEntry>` met TTL van 1 uur. Sleutel: `"bwbId|peildatum"`. Voorkomt herhaalde netwerkverzoeken voor dezelfde wet op dezelfde datum. Verlopen entries worden elk uur opgeschoond via een `setInterval(...).unref()`. Naast de TTL gelden twee groottegrenzen: een **LRU-cap** (`MAX_CACHE_ENTRIES = 50`) die de oudste entry evicteert vóór een nieuwe wordt toegevoegd, en een **per-entry groottegrens** (`MAX_XML_BYTES = 5 MB`) die voorkomt dat één zeer grote wet (bijv. Omgevingswet) een onevenredig groot deel van het geheugen inneemt.
 
 ---
 
@@ -607,4 +607,4 @@ Unit tests staan in `src/index.test.ts` (via `src/index.ts` re-exports) en `src/
 | Vervallen artikelen | De SRU-dienst retourneert alleen geldende artikelen; gaten in de nummering zijn normaal |
 | EU-verordeningen niet beschikbaar | Het Douanewetboek van de Unie en andere EU-regelgeving zit niet in het BWB |
 | Leidraad-subartikelen | Subartikelen (bijv. `25.1`) zijn bereikbaar via `wettenbank_artikel`; hoofdartikel toont alleen de inleidende tekst |
-| In-memory cache | De `xmlCache` wordt niet periodiek opgeschoond; bij langlopende processen kan geheugengebruik oplopen |
+| In-memory cache | Groeit maximaal tot `MAX_CACHE_ENTRIES` entries (LRU) × `MAX_XML_BYTES` (5 MB) per entry; verlopen entries worden elk uur opgeschoond. Geheugengebruik is begrensd maar kan in het worst-case nog altijd meerdere honderden MB bedragen. |
