@@ -5,7 +5,7 @@
 # Stel MCP_TRANSPORT=stdio in om in plaats daarvan als stdio-subproces te draaien.
 
 # ── Build-fase ────────────────────────────────────────────────────────────────
-FROM node:20-slim AS builder
+FROM node:26-slim AS builder
 
 WORKDIR /app
 
@@ -18,7 +18,7 @@ COPY src ./src
 RUN npm run build
 
 # ── Runtime-fase ──────────────────────────────────────────────────────────────
-FROM node:20-slim AS runtime
+FROM node:26-slim AS runtime
 
 ENV NODE_ENV=production \
     MCP_TRANSPORT=http \
