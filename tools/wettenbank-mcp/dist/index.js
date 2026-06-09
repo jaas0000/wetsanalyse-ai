@@ -8,6 +8,7 @@
 import { fileURLToPath } from "url";
 import { server, StdioServerTransport } from "./server.js";
 import { leesClients } from "./auth.js";
+import { oidcConfigUitEnv } from "./oidc.js";
 // ── Startup ───────────────────────────────────────────────────────────────────
 // Transport-keuze: stdio (default, lokaal subproces) of http (langlevende service).
 // Stuur via env MCP_TRANSPORT=http of CLI-flag `--transport http`.
@@ -22,11 +23,12 @@ const __filename = fileURLToPath(import.meta.url);
 if (process.argv[1] === __filename) {
     if (gekozenTransport() === "http") {
         const clients = leesClients();
+        const oidcAan = oidcConfigUitEnv() !== null;
         // Fail-closed: weiger te starten als de HTTP-service publiek bereikbaar is zonder
-        // token. Bewust open draaien (bv. achter een vertrouwd netwerk) kan met MCP_ALLOW_NO_AUTH=1.
-        if (clients.length === 0 && process.env.MCP_ALLOW_NO_AUTH !== "1") {
-            console.error("Weigering te starten: geen tokens geconfigureerd in HTTP-modus. " +
-                "Zet MCP_AUTH_TOKENS (id:token,...) of MCP_AUTH_TOKEN, " +
+        // enige auth. Bewust open draaien (bv. achter een vertrouwd netwerk) kan met MCP_ALLOW_NO_AUTH=1.
+        if (clients.length === 0 && !oidcAan && process.env.MCP_ALLOW_NO_AUTH !== "1") {
+            console.error("Weigering te starten: geen auth geconfigureerd in HTTP-modus. " +
+                "Zet MCP_AUTH_TOKENS (id:token,...), MCP_AUTH_TOKEN, OIDC_ISSUER, " +
                 "of MCP_ALLOW_NO_AUTH=1 om bewust zonder auth te draaien.");
             process.exit(1);
         }

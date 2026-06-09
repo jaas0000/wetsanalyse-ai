@@ -12,9 +12,32 @@
  *      Komma- of newline-gescheiden lijst van `id:token`-paren.
  *   MCP_AUTH_TOKEN  = "abc123"   (legacy, enkelvoud → clientId "default")
  *
+ * Secret-management (BIO2 / ISO 27002:2022 §8.24 + §5.17): in plaats van de token
+ * als plain env mee te geven, kan hij uit een **bestand** worden gelezen. Dat is het
+ * standaardpatroon voor Docker secrets en vault-agents (secret als file gemount):
+ *   MCP_AUTH_TOKENS_FILE = "/run/secrets/mcp_tokens"
+ *   MCP_AUTH_TOKEN_FILE  = "/run/secrets/mcp_token"   (legacy enkelvoud)
+ * De *_FILE-variant heeft voorrang op de gelijknamige inline env.
+ *
  * Tokenvergelijking is constant-tijd om een timing-oracle te voorkomen.
  */
 import { timingSafeEqual } from "node:crypto";
+import { readFileSync } from "node:fs";
+/** Lees een waarde uit een bestand (*_FILE) als dat is gezet, anders de inline env. */
+function envOfBestand(env, naam) {
+    const pad = env[`${naam}_FILE`];
+    if (pad && pad.trim()) {
+        try {
+            return readFileSync(pad.trim(), "utf8");
+        }
+        catch (err) {
+            // Fail-closed elders: een onleesbaar secret levert geen clients op.
+            console.error(`Kon secret-bestand niet lezen (${naam}_FILE): ${err.message}`);
+            return undefined;
+        }
+    }
+    return env[naam];
+}
 /** Constant-tijd vergelijking van twee strings (lengteverschil lekt enkel de lengte). */
 export function veiligGelijk(a, b) {
     const ba = Buffer.from(a);
@@ -31,7 +54,7 @@ export function veiligGelijk(a, b) {
 export function leesClients(env = process.env) {
     const clients = [];
     const gezien = new Set();
-    const ruw = env.MCP_AUTH_TOKENS ?? "";
+    const ruw = envOfBestand(env, "MCP_AUTH_TOKENS") ?? "";
     let kaalIndex = 0;
     for (const deel of ruw.split(/[,\n]/)) {
         const trimmed = deel.trim();
@@ -56,7 +79,7 @@ export function leesClients(env = process.env) {
         gezien.add(id);
         clients.push({ id, token });
     }
-    const legacy = env.MCP_AUTH_TOKEN?.trim();
+    const legacy = envOfBestand(env, "MCP_AUTH_TOKEN")?.trim();
     if (legacy && !gezien.has("default")) {
         clients.push({ id: "default", token: legacy });
     }

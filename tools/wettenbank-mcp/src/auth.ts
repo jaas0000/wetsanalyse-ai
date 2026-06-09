@@ -12,10 +12,36 @@
  *      Komma- of newline-gescheiden lijst van `id:token`-paren.
  *   MCP_AUTH_TOKEN  = "abc123"   (legacy, enkelvoud → clientId "default")
  *
+ * Secret-management (BIO2 / ISO 27002:2022 §8.24 + §5.17): in plaats van de token
+ * als plain env mee te geven, kan hij uit een **bestand** worden gelezen. Dat is het
+ * standaardpatroon voor Docker secrets en vault-agents (secret als file gemount):
+ *   MCP_AUTH_TOKENS_FILE = "/run/secrets/mcp_tokens"
+ *   MCP_AUTH_TOKEN_FILE  = "/run/secrets/mcp_token"   (legacy enkelvoud)
+ * De *_FILE-variant heeft voorrang op de gelijknamige inline env.
+ *
  * Tokenvergelijking is constant-tijd om een timing-oracle te voorkomen.
  */
 
 import { timingSafeEqual } from "node:crypto";
+import { readFileSync } from "node:fs";
+
+/** Lees een waarde uit een bestand (*_FILE) als dat is gezet, anders de inline env. */
+function envOfBestand(
+  env: NodeJS.ProcessEnv,
+  naam: "MCP_AUTH_TOKENS" | "MCP_AUTH_TOKEN"
+): string | undefined {
+  const pad = env[`${naam}_FILE`];
+  if (pad && pad.trim()) {
+    try {
+      return readFileSync(pad.trim(), "utf8");
+    } catch (err) {
+      // Fail-closed elders: een onleesbaar secret levert geen clients op.
+      console.error(`Kon secret-bestand niet lezen (${naam}_FILE): ${(err as Error).message}`);
+      return undefined;
+    }
+  }
+  return env[naam];
+}
 
 export interface ClientToken {
   id: string;
@@ -39,7 +65,7 @@ export function leesClients(env: NodeJS.ProcessEnv = process.env): ClientToken[]
   const clients: ClientToken[] = [];
   const gezien = new Set<string>();
 
-  const ruw = env.MCP_AUTH_TOKENS ?? "";
+  const ruw = envOfBestand(env, "MCP_AUTH_TOKENS") ?? "";
   let kaalIndex = 0;
   for (const deel of ruw.split(/[,\n]/)) {
     const trimmed = deel.trim();
@@ -62,7 +88,7 @@ export function leesClients(env: NodeJS.ProcessEnv = process.env): ClientToken[]
     clients.push({ id, token });
   }
 
-  const legacy = env.MCP_AUTH_TOKEN?.trim();
+  const legacy = envOfBestand(env, "MCP_AUTH_TOKEN")?.trim();
   if (legacy && !gezien.has("default")) {
     clients.push({ id: "default", token: legacy });
   }

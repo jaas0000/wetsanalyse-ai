@@ -1,4 +1,7 @@
 import { describe, it, expect } from "vitest";
+import { writeFileSync, mkdtempSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { leesClients, authenticeer, veiligGelijk } from "./auth.js";
 
 describe("auth — leesClients", () => {
@@ -56,6 +59,33 @@ describe("auth — leesClients", () => {
 
   it("geeft lege lijst zonder configuratie", () => {
     expect(leesClients({} as NodeJS.ProcessEnv)).toEqual([]);
+  });
+
+  it("leest tokens uit MCP_AUTH_TOKENS_FILE (Docker secret / vault)", () => {
+    const dir = mkdtempSync(join(tmpdir(), "mcp-auth-"));
+    const pad = join(dir, "tokens");
+    writeFileSync(pad, "belastingdienst:abc\nanalist:def\n");
+    const clients = leesClients({ MCP_AUTH_TOKENS_FILE: pad } as NodeJS.ProcessEnv);
+    expect(clients).toEqual([
+      { id: "belastingdienst", token: "abc" },
+      { id: "analist", token: "def" },
+    ]);
+  });
+
+  it("MCP_AUTH_TOKENS_FILE heeft voorrang op de inline env", () => {
+    const dir = mkdtempSync(join(tmpdir(), "mcp-auth-"));
+    const pad = join(dir, "tokens");
+    writeFileSync(pad, "uit-bestand:tok");
+    const clients = leesClients({
+      MCP_AUTH_TOKENS_FILE: pad,
+      MCP_AUTH_TOKENS: "inline:negeren",
+    } as NodeJS.ProcessEnv);
+    expect(clients).toEqual([{ id: "uit-bestand", token: "tok" }]);
+  });
+
+  it("onleesbaar secret-bestand → geen clients (fail-closed elders)", () => {
+    const clients = leesClients({ MCP_AUTH_TOKENS_FILE: "/bestaat/niet/echt" } as NodeJS.ProcessEnv);
+    expect(clients).toEqual([]);
   });
 });
 

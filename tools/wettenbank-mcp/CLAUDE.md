@@ -172,8 +172,10 @@ afgestemd op BIO2 / NEN-EN-ISO/IEC 27002:2022. Zie `SECURITY.md` voor het volled
   (AVG-dataminimalisatie); zet `LOG_ZOEKTERMEN=1` alleen voor debug. `LOG_LEVEL` stelt de drempel in.
 - **Auth** (`src/auth.ts`): **per-client bearer-tokens** via `MCP_AUTH_TOKENS="id:token,id2:token2"`
   (constant-tijd vergeleken), met de legacy `MCP_AUTH_TOKEN` als fallback (clientId `default`).
-  In HTTP-modus is de start fail-closed: zonder enige token weigert `index.ts` te starten, tenzij
-  `MCP_ALLOW_NO_AUTH=1`.
+  Tokens mogen ook uit een bestand komen (`MCP_AUTH_TOKENS_FILE`, voor Docker secrets/vault).
+  Optioneel **OIDC** (`src/oidc.ts`, dormant tenzij `OIDC_ISSUER` gezet): JWT-bearer-validatie via
+  JWKS, met de statische tokens als fallback. In HTTP-modus is de start fail-closed: zonder enige
+  auth weigert `index.ts` te starten, tenzij `MCP_ALLOW_NO_AUTH=1`.
 - **Rate limiting** (`src/rate-limit.ts`): token-bucket per IP. `MCP_RATE_BURST` (default 60) en
   `MCP_RATE_PER_MIN` (default 120); over de limiet → `429`.
 - **Securityheaders**: `X-Content-Type-Options: nosniff`, `Referrer-Policy`, `Cache-Control: no-store`
