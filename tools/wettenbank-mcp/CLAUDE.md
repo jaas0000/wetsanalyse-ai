@@ -163,7 +163,7 @@ Entry point is `dist/index.js` (re-exports + startup); de serverlogica zit in `d
 
 Voor de gecontaineriseerde HTTP-deployment is een logging- en hardeningslaag toegevoegd,
 afgestemd op BIO2 / NEN-EN-ISO/IEC 27002:2022. Zie `SECURITY.md` voor het volledige overzicht
-(logvelden, bewaartermijn, SIEM) en `ENTERPRISE-PLAN.md` voor de onderbouwing/fasering.
+(env-vars, logvelden, bewaartermijn, SIEM).
 
 - **Logging** (`src/logger.ts`): gestructureerde JSON, één regel per event naar **stderr**
   (geen eigen logbestanden; de runtime/SIEM vangt stderr op). Categorieën `functioneel` |
