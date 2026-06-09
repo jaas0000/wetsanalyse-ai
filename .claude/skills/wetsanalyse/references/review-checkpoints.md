@@ -89,7 +89,7 @@ opdracht en je afbakening. Ze zijn optioneel: ontbreken ze, dan zet de rapportge
       "vindplaats": "art. 2 lid 1", "twijfel": "..."
     }
   ],
-  "validatiepunten": "<concept-aandachtspunten voor validatie>"
+  "validatiepunten": ["<aandachtspunt 1>", "<aandachtspunt 2>"]
 }
 ```
 
