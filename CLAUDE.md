@@ -95,7 +95,7 @@ Inhoudelijke regels die je moet kennen voordat je classificeert of begrippen ops
 
 ## Skills
 
-Evals voor de wetsanalyse-skill staan in `.claude/skills/wetsanalyse/evals/` (cases in `files/`).
+De wetsanalyse-skill staat in `.claude/skills/wetsanalyse/`.
 
 ## Referentiedocumentatie
 
