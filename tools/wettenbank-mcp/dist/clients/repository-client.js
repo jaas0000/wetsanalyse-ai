@@ -2,7 +2,7 @@
  * Repository-client voor officiele-overheidspublicaties.nl
  * Haalt BWB-wetstekst XML op, beheert in-memory cache en extraheert doc-metadata.
  */
-import { sruRequest, parseRecords, parseXmlDoc, getElText, getAttr } from "./sru-client.js";
+import { sruRequest, parseRecords, parseXmlDoc, getElText, getAttr, isVertrouwdeRepoUrl, } from "./sru-client.js";
 export const xmlCache = new Map();
 const CACHE_TTL = 1000 * 60 * 60; // 1 uur
 // Bovengrens op het aantal entries (elke entry bevat de volledige rauwe XML + geparsed
@@ -45,6 +45,11 @@ export async function haalWetstekstOp(bwbId, peildatum) {
         throw new Error(`Geen regeling gevonden voor BWB-id: ${bwbId} op datum ${datum}.`);
     }
     const r = lijst[0];
+    // SSRF-vangnet (defence-in-depth): parseRecords filtert al, maar we fetchen hier
+    // rechtstreeks, dus weigeren we expliciet elke niet-vertrouwde repository-URL.
+    if (!isVertrouwdeRepoUrl(r.repositoryUrl)) {
+        throw new Error(`Niet-vertrouwde wetstekst-URL geweigerd voor BWB-id: ${bwbId}.`);
+    }
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 15_000);
     let resp;

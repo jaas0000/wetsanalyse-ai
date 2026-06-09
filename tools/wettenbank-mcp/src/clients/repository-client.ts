@@ -3,7 +3,14 @@
  * Haalt BWB-wetstekst XML op, beheert in-memory cache en extraheert doc-metadata.
  */
 
-import { sruRequest, parseRecords, parseXmlDoc, getElText, getAttr } from "./sru-client.js";
+import {
+  sruRequest,
+  parseRecords,
+  parseXmlDoc,
+  getElText,
+  getAttr,
+  isVertrouwdeRepoUrl,
+} from "./sru-client.js";
 import type { Regeling } from "./sru-client.js";
 
 type XNode = any;
@@ -87,6 +94,12 @@ export async function haalWetstekstOp(
     throw new Error(`Geen regeling gevonden voor BWB-id: ${bwbId} op datum ${datum}.`);
   }
   const r = lijst[0];
+
+  // SSRF-vangnet (defence-in-depth): parseRecords filtert al, maar we fetchen hier
+  // rechtstreeks, dus weigeren we expliciet elke niet-vertrouwde repository-URL.
+  if (!isVertrouwdeRepoUrl(r.repositoryUrl)) {
+    throw new Error(`Niet-vertrouwde wetstekst-URL geweigerd voor BWB-id: ${bwbId}.`);
+  }
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 15_000);

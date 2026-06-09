@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import type { AddressInfo } from "node:net";
 import type { Server as HttpServer } from "node:http";
-import { startHttpServer } from "./http-server.js";
+import { startHttpServer, kiesClientIp } from "./http-server.js";
 import { maakRateLimiter } from "./rate-limit.js";
 
 const TOKEN = "test-token-123";
@@ -18,6 +18,29 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await new Promise<void>((resolve) => httpServer.close(() => resolve()));
+});
+
+describe("kiesClientIp (X-Forwarded-For)", () => {
+  it("neemt bij 1 vertrouwde hop het IP dat de proxy toevoegde (rechtse waarde)", () => {
+    // Client spooft "1.1.1.1"; de proxy voegt het echte IP "9.9.9.9" rechts toe.
+    expect(kiesClientIp("1.1.1.1, 9.9.9.9", "10.0.0.1", 1)).toBe("9.9.9.9");
+  });
+
+  it("kiest de juiste hop bij meerdere vertrouwde proxies", () => {
+    expect(kiesClientIp("1.1.1.1, echt, proxyA", "10.0.0.1", 2)).toBe("echt");
+  });
+
+  it("valt terug op de socket als XFF ontbreekt", () => {
+    expect(kiesClientIp(undefined, "10.0.0.1", 1)).toBe("10.0.0.1");
+  });
+
+  it("valt terug op de socket als XFF te kort is voor het aantal hops", () => {
+    expect(kiesClientIp("1.1.1.1", "10.0.0.1", 2)).toBe("10.0.0.1");
+  });
+
+  it("geeft 'onbekend' als noch XFF noch socket bekend is", () => {
+    expect(kiesClientIp(undefined, undefined, 1)).toBe("onbekend");
+  });
 });
 
 describe("http-server", () => {

@@ -251,10 +251,20 @@ describe("parseRecords", () => {
     expect(r.rechtsgebied).toBe("Belastingrecht, Formeel belastingrecht");
   });
 
-  it("gebruikt repositoryUrl uit enrichedData", () => {
+  it("gebruikt repositoryUrl uit enrichedData als die naar de vertrouwde repository wijst", () => {
+    const vertrouwd =
+      "https://repository.officiele-overheidspublicaties.nl/bwb/BWBR0002320/2024-01-01_0/xml/BWBR0002320.xml";
+    const xml = makeSruXml(makeRecord({ locatie: vertrouwd }));
+    const [r] = parseRecords(xml);
+    expect(r.repositoryUrl).toBe(vertrouwd);
+  });
+
+  it("weigert een niet-vertrouwde locatie_toestand (SSRF) en valt terug op de vaste host", () => {
     const xml = makeSruXml(makeRecord({ locatie: "https://example.com/test.xml" }));
     const [r] = parseRecords(xml);
-    expect(r.repositoryUrl).toBe("https://example.com/test.xml");
+    expect(r.repositoryUrl).toBe(
+      "https://repository.officiele-overheidspublicaties.nl/bwb/BWBR0002320/"
+    );
   });
 
   it("parseert twee records", () => {
@@ -758,6 +768,12 @@ describe("ZoektermInputSchema", () => {
   it("faalt bij lege bwbId", () => {
     const result = ZoektermInputSchema.safeParse({ bwbId: "", zoekterm: "termijn" });
     expect(result.success).toBe(false);
+  });
+
+  it("faalt bij een bwbId met onjuist formaat (geen BWBR<cijfers>)", () => {
+    for (const bwbId of ["foo", "BWBR", "0004770", "BWBR0004770 and 1=1", "../etc"]) {
+      expect(ZoektermInputSchema.safeParse({ bwbId, zoekterm: "x" }).success).toBe(false);
+    }
   });
 
   it("accepteert maxResultaten tot 50", () => {

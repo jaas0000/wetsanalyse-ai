@@ -23,6 +23,7 @@ Operationele documentatie voor de gecontaineriseerde HTTP-deployment, afgestemd 
 | `MCP_ALLOW_NO_AUTH` | — | `1` = bewust zonder auth starten (alleen achter vertrouwd netwerk). |
 | `MCP_RATE_BURST` | `60` | Max. burst (emmergrootte) per IP. |
 | `MCP_RATE_PER_MIN` | `120` | Aanvulsnelheid per IP per minuut. |
+| `MCP_TRUSTED_PROXY_HOPS` | `1` | Aantal vertrouwde reverse-proxies dat zelf een `X-Forwarded-For`-waarde toevoegt (NPM = 1). Bepaalt welk XFF-element als client-IP geldt. |
 | `MCP_SESSION_IDLE_MS` | `1800000` | Idle-sessie-opruiming (30 min). |
 | `LOG_LEVEL` | `info` | `debug` \| `info` \| `warn` \| `error`. |
 | `LOG_ZOEKTERMEN` | — | `1` = log volledige zoektermen. **Alleen debug** (AVG-risico). |
@@ -45,6 +46,25 @@ file-tokens blijven werken als fallback, zodat migratie geleidelijk kan. Impleme
 **Secret-management.** Tokens kunnen uit een **bestand** komen (`*_FILE`-env) i.p.v. inline env —
 het standaardpatroon voor Docker secrets en vault-agents. Rotatie: vervang een `id:token`-paar
 (of het secret-bestand) en herdeploy; per-client intrekken raakt de andere clients niet.
+
+## Invoer- en uitvoerhardening
+
+- **Client-IP / X-Forwarded-For (anti-spoofing).** De rate-limit-key en het audit-IP worden
+  afgeleid uit `X-Forwarded-For` via de **N-de waarde van rechts** (`MCP_TRUSTED_PROXY_HOPS`,
+  default 1), niet de eerste van links. Zo kan een door de client zélf meegestuurde XFF de
+  rate-limiting niet omzeilen of het audit-IP vervalsen. Voorwaarde: de reverse-proxy moet XFF
+  **zetten/append**en (NPM doet dit); zet `MCP_TRUSTED_PROXY_HOPS` gelijk aan het aantal
+  vertrouwde proxies vóór de container. Code: `kiesClientIp` in `src/http-server.ts`.
+- **SSRF-mitigatie op de wetstekst-fetch.** De repository-URL komt uit de SRU-respons
+  (`overheidbwb:locatie_toestand`) en is dus door de bron bepaald. `parseRecords` accepteert die
+  alleen als hij `https:` naar `repository.officiele-overheidspublicaties.nl` wijst
+  (`isVertrouwdeRepoUrl`); anders een zelf-geconstrueerde URL met die vaste host. `haalWetstekstOp`
+  weigert defensief elke niet-vertrouwde URL vóór de `fetch`. Code: `src/clients/sru-client.ts`,
+  `src/clients/repository-client.ts`. Het `bwbId` wordt op formaat (`^BWBR\d+$`) gevalideerd
+  (`src/shared/schemas.ts`), zodat het geen CQL-query of URL-pad kan manipuleren.
+- **Geen interne foutdetails naar de client.** Het HTTP-transport stuurt bij een onverwachte fout
+  een generieke melding; de volledige fouttekst (upstream-status, timeout) blijft in de
+  stderr-log (`src/http-server.ts`).
 
 ## Logging
 

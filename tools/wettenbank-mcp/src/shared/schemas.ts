@@ -33,6 +33,12 @@ const peildatumSchema = z
   .refine(isEchteKalenderdatum, "peildatum is geen bestaande kalenderdatum")
   .default(vandaag);
 
+// BWB-id valideren op vorm (BWBR + cijfers). De waarde belandt in een CQL-query en een
+// repository-URL-pad; een strikt formaat sluit query-/pad-manipulatie uit.
+const bwbIdSchema = z
+  .string()
+  .regex(/^BWBR\d+$/, "bwbId moet de vorm BWBR<cijfers> hebben, bijv. BWBR0004770");
+
 // ── Input schemas ─────────────────────────────────────────────────────────────
 
 export const ZoekInputSchema = z
@@ -52,7 +58,7 @@ export const ZoekInputSchema = z
   );
 
 export const ZoektermInputSchema = z.object({
-  bwbId: z.string().min(1, "bwbId mag niet leeg zijn"),
+  bwbId: bwbIdSchema,
   zoekterm: z.string().min(1, "zoekterm mag niet leeg zijn"),
   peildatum: peildatumSchema,
   maxResultaten: z.number().int().min(1).max(50).default(10),
@@ -60,14 +66,14 @@ export const ZoektermInputSchema = z.object({
 });
 
 export const ArtikelInputSchema = z.object({
-  bwbId: z.string().min(1, "bwbId mag niet leeg zijn"),
+  bwbId: bwbIdSchema,
   artikel: z.string().min(1, "artikel mag niet leeg zijn"),
   lid: z.string().nullish(),
   peildatum: peildatumSchema,
 });
 
 export const StructuurInputSchema = z.object({
-  bwbId: z.string().min(1, "bwbId mag niet leeg zijn"),
+  bwbId: bwbIdSchema,
   peildatum: peildatumSchema,
 });
 
