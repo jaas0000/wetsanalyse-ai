@@ -35,7 +35,9 @@ Tokens horen in een secret-store (Portainer stack-env → bij voorkeur een vault
 
 Per-client bearer-tokens, constant-tijd vergeleken (geen timing-oracle). Elke afnemer heeft een
 eigen `clientId` die in de auditlog belandt, zodat aanroepen herleidbaar zijn. `/health` is
-bewust auth-vrij (healthcheck Portainer/Azure). TLS wordt door Nginx Proxy Manager getermineerd.
+bewust auth-vrij (healthcheck Portainer/Azure) en geeft naast `status` alleen niet-gevoelige
+build-info terug (`version`, `commit`, `builtAt`) — geen tokens of secrets. TLS wordt door
+Nginx Proxy Manager getermineerd.
 
 **OAuth2/OIDC (optioneel, dormant tenzij `OIDC_ISSUER` is gezet).** Een binnenkomende
 JWT-bearer wordt gevalideerd tegen de IdP: signatuur via JWKS, plus `iss`/`aud`/`exp`/`nbf`.

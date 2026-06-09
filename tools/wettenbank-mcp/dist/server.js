@@ -9,11 +9,10 @@
  *   wettenbank_artikel   — Haal één artikel op in Markdown-JSON
  *   wettenbank_zoekterm  — Full-text zoeken in een wet
  */
-import { createRequire } from "module";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { CallToolRequestSchema, ListToolsRequestSchema, } from "@modelcontextprotocol/sdk/types.js";
-const { version: pkgVersion } = createRequire(import.meta.url)("../package.json");
+import { buildInfo } from "./build-info.js";
 import { handleZoek } from "./tools/zoek.js";
 import { handleStructuur } from "./tools/structuur.js";
 import { handleArtikel } from "./tools/artikel.js";
@@ -24,7 +23,7 @@ import { log, veiligeToolVelden } from "./logger.js";
 // gebruikt één singleton (export `server` onderaan); de HTTP-modus maakt per sessie
 // een eigen instantie, omdat een Server 1-op-1 aan één transport is gekoppeld.
 export function createServer(ctx = {}) {
-    const server = new Server({ name: "wettenbank-mcp", version: pkgVersion }, { capabilities: { tools: {} } });
+    const server = new Server({ name: "wettenbank-mcp", version: buildInfo.version }, { capabilities: { tools: {} } });
     // ── Tool-definities ─────────────────────────────────────────────────────────
     server.setRequestHandler(ListToolsRequestSchema, async () => ({
         tools: [

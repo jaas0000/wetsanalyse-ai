@@ -27,6 +27,7 @@ import { createServer } from "./server.js";
 import { authenticeer } from "./auth.js";
 import { maakRateLimiter, leesRateConfig } from "./rate-limit.js";
 import { maakOidcVerifier, oidcConfigUitEnv } from "./oidc.js";
+import { buildInfo } from "./build-info.js";
 import { log } from "./logger.js";
 const MAX_BODY_BYTES = 1_000_000;
 // Sessies zonder activiteit worden na dit interval opgeruimd. Een client die wegvalt
@@ -137,9 +138,11 @@ export function startHttpServer(opts) {
         const url = new URL(req.url ?? "/", "http://localhost");
         zetSecurityHeaders(res);
         // Healthcheck — altijd vrij toegankelijk, geen logging (ruis van Portainer/Azure).
+        // Geeft naast de status ook build-info terug (version/commit/builtAt), zodat
+        // deploy-pariteit met één request controleerbaar is. Geen secrets — alleen herkomst.
         if (req.method === "GET" && url.pathname === "/health") {
             res.writeHead(200, { "content-type": "application/json" });
-            res.end(JSON.stringify({ status: "ok" }));
+            res.end(JSON.stringify({ status: "ok", ...buildInfo }));
             return;
         }
         if (url.pathname !== "/mcp") {

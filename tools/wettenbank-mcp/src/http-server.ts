@@ -33,6 +33,7 @@ import { createServer } from "./server.js";
 import { authenticeer, type ClientToken } from "./auth.js";
 import { maakRateLimiter, leesRateConfig, type RateLimiter } from "./rate-limit.js";
 import { maakOidcVerifier, oidcConfigUitEnv, type OidcVerifier } from "./oidc.js";
+import { buildInfo } from "./build-info.js";
 import { log } from "./logger.js";
 
 const MAX_BODY_BYTES = 1_000_000;
@@ -171,9 +172,11 @@ export function startHttpServer(opts: HttpServerOpties): HttpServer {
     zetSecurityHeaders(res);
 
     // Healthcheck — altijd vrij toegankelijk, geen logging (ruis van Portainer/Azure).
+    // Geeft naast de status ook build-info terug (version/commit/builtAt), zodat
+    // deploy-pariteit met één request controleerbaar is. Geen secrets — alleen herkomst.
     if (req.method === "GET" && url.pathname === "/health") {
       res.writeHead(200, { "content-type": "application/json" });
-      res.end(JSON.stringify({ status: "ok" }));
+      res.end(JSON.stringify({ status: "ok", ...buildInfo }));
       return;
     }
 
