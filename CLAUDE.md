@@ -34,13 +34,15 @@ zijn **projectrelatieve paden**, zodat de map portabel is tussen machines/OS'en:
 - `.claude/skills/wetsanalyse-workspace/mcp_fetch.py` (`SERVER`) → leidt de projectroot af van
   de eigen scriptlocatie (`Path(__file__).resolve().parents[3]`) en gebruikt `node` uit PATH;
   `iteration-1/benchmark.json` (`skill_path`) → relatief eval-artefact (`.claude/skills/wetsanalyse`).
-- `.claude/settings.local.json` → `enabledMcpjsonServers: ["wettenbank"]`, plus allow-regels die
-  `review_server.py` aanroepen. Dit zijn machine-specifieke **permissie-grants** met een absoluut
-  pad (de skill resolvet `<skill>` bij runtime tot een absoluut pad), dus die blijven absoluut en
-  zijn niet portabel — een mismatch leidt hooguit tot een extra permissieprompt, niet tot stille breuk.
+- `.claude/settings.local.json` → `enabledMcpjsonServers: ["wettenbank"]` plus een **machine-lokale**
+  allowlist. Dit bestand is **gitignored** (`.gitignore`), dus het reist niet mee en is per definitie
+  niet gedeeld: een andere machine/analist bouwt z'n eigen lijst gewoon opnieuw op via de
+  permissieprompts. De allowlist is bewust krap en portabel gehouden — de `review_server.py`-grant
+  gebruikt een wildcard (`Bash(python *review_server.py *)`) i.p.v. een absoluut pad — zodat er in
+  de praktijk geen absolute paden meer in staan om te patchen.
 
-Let op bij hernoemen/verplaatsen van de projectmap: controleer de absolute permissie-paden in
-`settings.local.json` (en draai `claude mcp list` → verwacht `✓ Connected`).
+Let op bij hernoemen/verplaatsen van de projectmap: een padmismatch leidt hooguit tot een extra
+permissieprompt (geen stille breuk). Draai daarna `claude mcp list` → verwacht `✓ Connected`.
 Bij twijfel naar achtergebleven absolute paden:
 `grep -rn -e "admin-willard" -e ":/Users" --include="*.json" --include="*.py" . | grep -v node_modules`.
 
