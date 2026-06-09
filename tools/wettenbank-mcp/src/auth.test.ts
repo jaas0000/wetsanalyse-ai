@@ -10,16 +10,38 @@ describe("auth — leesClients", () => {
     ]);
   });
 
-  it("parseert newline-gescheiden en negeert lege/ongeldige regels", () => {
+  it("parseert newline-gescheiden, negeert lege regels, kale regel = default", () => {
     const clients = leesClients({
-      MCP_AUTH_TOKENS: "a:tok1\n\n  \nzonderdubbelepunt\nb:tok2",
+      MCP_AUTH_TOKENS: "a:tok1\n\n  \nkaal\nb:tok2",
     } as NodeJS.ProcessEnv);
-    expect(clients.map((c) => c.id)).toEqual(["a", "b"]);
+    // Lege regels weg; 'kaal' is een kale token (id 'default').
+    expect(clients.map((c) => c.id)).toEqual(["a", "default", "b"]);
   });
 
   it("ondersteunt tokens met een dubbele punt erin", () => {
     const clients = leesClients({ MCP_AUTH_TOKENS: "a:pre:fix:tok" } as NodeJS.ProcessEnv);
     expect(clients).toEqual([{ id: "a", token: "pre:fix:tok" }]);
+  });
+
+  it("accepteert een kale token in MCP_AUTH_TOKENS als clientId 'default' (backward-compat)", () => {
+    const clients = leesClients({ MCP_AUTH_TOKENS: "kaletoken" } as NodeJS.ProcessEnv);
+    expect(clients).toEqual([{ id: "default", token: "kaletoken" }]);
+  });
+
+  it("geeft meerdere kale tokens oplopende ids", () => {
+    const clients = leesClients({ MCP_AUTH_TOKENS: "tok1, tok2" } as NodeJS.ProcessEnv);
+    expect(clients).toEqual([
+      { id: "default", token: "tok1" },
+      { id: "client2", token: "tok2" },
+    ]);
+  });
+
+  it("mengt kale en id:token-entries", () => {
+    const clients = leesClients({ MCP_AUTH_TOKENS: "kaal, jan:tok2" } as NodeJS.ProcessEnv);
+    expect(clients).toEqual([
+      { id: "default", token: "kaal" },
+      { id: "jan", token: "tok2" },
+    ]);
   });
 
   it("voegt de legacy MCP_AUTH_TOKEN toe als clientId 'default'", () => {

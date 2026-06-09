@@ -40,13 +40,23 @@ export function leesClients(env: NodeJS.ProcessEnv = process.env): ClientToken[]
   const gezien = new Set<string>();
 
   const ruw = env.MCP_AUTH_TOKENS ?? "";
+  let kaalIndex = 0;
   for (const deel of ruw.split(/[,\n]/)) {
     const trimmed = deel.trim();
     if (!trimmed) continue;
     const scheiding = trimmed.indexOf(":");
-    if (scheiding <= 0) continue; // geen id of geen token
-    const id = trimmed.slice(0, scheiding).trim();
-    const token = trimmed.slice(scheiding + 1).trim();
+    let id: string;
+    let token: string;
+    if (scheiding > 0) {
+      id = trimmed.slice(0, scheiding).trim();
+      token = trimmed.slice(scheiding + 1).trim();
+    } else {
+      // Geen id-prefix → behandel als kale token (backward-compat met MCP_AUTH_TOKEN).
+      // Voorkomt een fail-closed outage als de stack-env nog een kale token bevat.
+      token = scheiding === 0 ? trimmed.slice(1).trim() : trimmed;
+      id = kaalIndex === 0 ? "default" : `client${kaalIndex + 1}`;
+      kaalIndex++;
+    }
     if (!id || !token || gezien.has(id)) continue;
     gezien.add(id);
     clients.push({ id, token });
