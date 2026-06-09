@@ -1,0 +1,22 @@
+# Automatisch kwetsbaarheids-/update-PR's (BIO2 / ISO 27002:2022 §8.8 kwetsbaarhedenbeheer).
+# Houdt de npm-dependencies, de basis-image en de GitHub Actions actueel.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /tools/wettenbank-mcp
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      dev-dependencies:
+        dependency-type: development
+
+  - package-ecosystem: docker
+    directory: /tools/wettenbank-mcp
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

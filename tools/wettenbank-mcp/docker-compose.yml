@@ -6,10 +6,15 @@
 #
 # In NPM → Proxy Hosts → Add: Domain `wettenbank-mcp.ipalm.nl`, Scheme `http`,
 # Forward Hostname `wettenbank-mcp`, Forward Port `3000`, SSL (Let's Encrypt) aan.
-# De bearer-token (MCP_AUTH_TOKEN) blijft de authenticatie; TLS regelt NPM.
+# Per-client bearer-tokens regelen de authenticatie; TLS regelt NPM.
 #
 # Stack-omgeving (in Portainer):
-#   MCP_AUTH_TOKEN  — sterke, geheime token; clients sturen die als `Authorization: Bearer ...`
+#   MCP_AUTH_TOKENS — per-client tokens als `id:token`-lijst (komma-gescheiden), bijv.
+#                     `belastingdienst:sterk-geheim, analist-jan:ander-geheim`.
+#                     Clients sturen hun token als `Authorization: Bearer <token>`.
+#                     Elke client krijgt een eigen `clientId` in de auditlog en is los
+#                     intrekbaar/roteerbaar. (Legacy enkelvoud MCP_AUTH_TOKEN werkt nog
+#                     als fallback, maar wordt afgeraden.)
 #   PROXY_NETWORK   — naam van het bestaande NPM-netwerk; hier `homeinfra_internal`
 #                     (het `internal`-netwerk van de homeinfra-stack waar NPM op zit).
 
@@ -23,7 +28,7 @@ services:
     environment:
       MCP_TRANSPORT: http
       PORT: "3000"
-      MCP_AUTH_TOKEN: ${MCP_AUTH_TOKEN:?zet MCP_AUTH_TOKEN in de stack-omgeving}
+      MCP_AUTH_TOKENS: ${MCP_AUTH_TOKENS:?zet MCP_AUTH_TOKENS (id:token,...) in de stack-omgeving}
     networks:
       - proxy
     healthcheck:

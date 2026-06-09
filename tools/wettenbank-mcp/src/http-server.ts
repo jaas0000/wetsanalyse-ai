@@ -12,7 +12,11 @@
  *   DELETE /mcp     — sessie sluiten
  *   GET    /health  — healthcheck (200, geen auth) voor Portainer/Azure
  *
- * Auth: als MCP_AUTH_TOKEN is gezet, eist /mcp een `Authorization: Bearer <token>`.
+ * Beveiliging (BIO2 / ISO 27002:2022):
+ *   - 8.5  Per-client bearer-tokens (auth.ts), constant-tijd vergeleken.
+ *   - 8.6  Rate limiting per IP (rate-limit.ts) tegen DoS/brute-force.
+ *   - 8.15/8.16 Gestructureerde logging van auth-, security- en verkeers-events.
+ *   - Securityheaders + 1 MB body-cap + idle-sessie-opruiming.
  * /health blijft altijd vrij toegankelijk.
  */
 
@@ -22,10 +26,13 @@ import {
   type Server as HttpServer,
   type ServerResponse,
 } from "node:http";
-import { randomUUID, timingSafeEqual } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import { createServer } from "./server.js";
+import { authenticeer, type ClientToken } from "./auth.js";
+import { maakRateLimiter, leesRateConfig, type RateLimiter } from "./rate-limit.js";
+import { log } from "./logger.js";
 
 const MAX_BODY_BYTES = 1_000_000;
 
@@ -33,12 +40,20 @@ const MAX_BODY_BYTES = 1_000_000;
 // zonder DELETE laat zijn transport anders permanent in het geheugen achter.
 const SESSION_IDLE_MS = Number(process.env.MCP_SESSION_IDLE_MS ?? 30 * 60 * 1000);
 
-/** Constant-tijd vergelijking van twee strings (voorkomt timing-oracle op de token). */
-function veiligGelijk(a: string, b: string): boolean {
-  const ba = Buffer.from(a);
-  const bb = Buffer.from(b);
-  if (ba.length !== bb.length) return false;
-  return timingSafeEqual(ba, bb);
+/** Securityheaders op elke respons (defence-in-depth; geen info-lekkage). */
+function zetSecurityHeaders(res: ServerResponse): void {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Referrer-Policy", "no-referrer");
+  res.setHeader("Cache-Control", "no-store");
+}
+
+/** Client-IP achter de proxy: eerste waarde van X-Forwarded-For, anders de socket. */
+function clientIp(req: IncomingMessage): string {
+  const xff = req.headers["x-forwarded-for"];
+  if (typeof xff === "string" && xff.length > 0) {
+    return xff.split(",")[0].trim();
+  }
+  return req.socket.remoteAddress ?? "onbekend";
 }
 
 /** Lees en JSON-parse de request-body; undefined bij een lege body. */
@@ -78,8 +93,12 @@ function stuurFout(res: ServerResponse, status: number, message: string): void {
 
 export interface HttpServerOpties {
   port: number;
-  /** Optionele bearer-token; indien gezet is /mcp afgeschermd. */
+  /** Per-client tokens; indien niet leeg is /mcp afgeschermd. */
+  clients?: ClientToken[];
+  /** Legacy: één gedeelde token (wordt vertaald naar clientId "default"). */
   token?: string;
+  /** Optionele rate-limiter; default leest config uit de omgeving. */
+  rateLimiter?: RateLimiter;
 }
 
 /**
@@ -87,6 +106,15 @@ export interface HttpServerOpties {
  * (en tests) op 'listening' kunnen wachten en hem netjes kunnen sluiten.
  */
 export function startHttpServer(opts: HttpServerOpties): HttpServer {
+  // Auth-config: nieuwe per-client lijst + legacy enkelvoud samengevoegd.
+  const clients: ClientToken[] = [...(opts.clients ?? [])];
+  if (opts.token && !clients.some((c) => c.id === "default")) {
+    clients.push({ id: "default", token: opts.token });
+  }
+  const authVereist = clients.length > 0;
+
+  const rateLimiter = opts.rateLimiter ?? maakRateLimiter(leesRateConfig());
+
   // Eén transport per sessie; gekoppeld aan een verse Server-instantie.
   const transports: Record<string, StreamableHTTPServerTransport> = {};
   // Laatste activiteit per sessie, voor idle-opruiming.
@@ -104,15 +132,19 @@ export function startHttpServer(opts: HttpServerOpties): HttpServer {
         }
         delete transports[sid];
         delete lastSeen[sid];
+        log("info", "functioneel", "sessie opgeruimd (idle)", { sessionId: sid });
       }
     }
   }, Math.min(SESSION_IDLE_MS, 5 * 60 * 1000));
   cleanup.unref();
 
   const httpServer = createHttpServer(async (req, res) => {
+    const requestId = randomUUID();
+    const ip = clientIp(req);
     const url = new URL(req.url ?? "/", "http://localhost");
+    zetSecurityHeaders(res);
 
-    // Healthcheck — altijd vrij toegankelijk.
+    // Healthcheck — altijd vrij toegankelijk, geen logging (ruis van Portainer/Azure).
     if (req.method === "GET" && url.pathname === "/health") {
       res.writeHead(200, { "content-type": "application/json" });
       res.end(JSON.stringify({ status: "ok" }));
@@ -124,15 +156,34 @@ export function startHttpServer(opts: HttpServerOpties): HttpServer {
       return;
     }
 
-    // Auth: alleen afdwingen als er een token is geconfigureerd. Constant-tijd vergelijking.
-    if (opts.token && !veiligGelijk((req.headers["authorization"] as string) ?? "", `Bearer ${opts.token}`)) {
-      stuurFout(res, 401, "Ongeautoriseerd: ontbrekende of onjuiste bearer-token");
+    // Rate limiting per IP — beschermt ook het auth-pad tegen brute-force.
+    if (!rateLimiter.staToe(ip)) {
+      log("warn", "security", "rate limit overschreden", { requestId, ip, pad: url.pathname });
+      res.setHeader("Retry-After", "1");
+      stuurFout(res, 429, "Te veel verzoeken");
       return;
+    }
+
+    // Auth: per-client bearer-token. clientId belandt in de auditlog.
+    let clientId: string | undefined;
+    if (authVereist) {
+      const result = authenticeer(req.headers["authorization"] as string | undefined, clients);
+      if (!result) {
+        log("warn", "security", "authenticatie geweigerd", {
+          requestId,
+          ip,
+          reden: req.headers["authorization"] ? "onjuiste token" : "ontbrekende token",
+        });
+        stuurFout(res, 401, "Ongeautoriseerd: ontbrekende of onjuiste bearer-token");
+        return;
+      }
+      clientId = result;
     }
 
     const sessionId = req.headers["mcp-session-id"] as string | undefined;
     if (sessionId) lastSeen[sessionId] = Date.now();
 
+    const start = Date.now();
     try {
       if (req.method === "POST") {
         const body = await leesBody(req);
@@ -142,27 +193,46 @@ export function startHttpServer(opts: HttpServerOpties): HttpServer {
           // Bestaande sessie.
           transport = transports[sessionId];
         } else if (!sessionId && isInitializeRequest(body)) {
-          // Nieuwe sessie: maak transport + verse Server-instantie.
+          // Nieuwe sessie: maak transport + verse Server-instantie met audit-context.
           transport = new StreamableHTTPServerTransport({
             sessionIdGenerator: () => randomUUID(),
             onsessioninitialized: (sid) => {
               transports[sid] = transport;
               lastSeen[sid] = Date.now();
+              log("info", "functioneel", "sessie geïnitialiseerd", {
+                requestId,
+                sessionId: sid,
+                clientId,
+                ip,
+              });
             },
           });
           transport.onclose = () => {
             if (transport.sessionId) {
               delete transports[transport.sessionId];
               delete lastSeen[transport.sessionId];
+              log("info", "functioneel", "sessie gesloten", { sessionId: transport.sessionId });
             }
           };
-          await createServer().connect(transport);
+          // clientId vast, sessionId laat-gebonden via closure.
+          await createServer({
+            clientId,
+            getSessionId: () => transport.sessionId,
+          }).connect(transport);
         } else {
           stuurFout(res, 400, "Bad Request: geen geldige sessie-ID");
           return;
         }
 
         await transport.handleRequest(req, res, body);
+        log("info", "functioneel", "request afgehandeld", {
+          requestId,
+          methode: "POST",
+          clientId,
+          sessionId: sessionId ?? transport.sessionId,
+          ip,
+          duur_ms: Date.now() - start,
+        });
         return;
       }
 
@@ -178,20 +248,28 @@ export function startHttpServer(opts: HttpServerOpties): HttpServer {
 
       res.writeHead(405).end();
     } catch (err) {
+      log("error", "functioneel", "verwerkingsfout", {
+        requestId,
+        ip,
+        clientId,
+        fout: (err as Error).message,
+      });
       if (!res.headersSent) {
         stuurFout(res, 400, `Verwerkingsfout: ${(err as Error).message}`);
       }
     }
   });
 
-  httpServer.on("close", () => clearInterval(cleanup));
+  httpServer.on("close", () => {
+    clearInterval(cleanup);
+    rateLimiter.stop();
+  });
 
   httpServer.listen(opts.port, "0.0.0.0", () => {
-    const auth = opts.token ? "met bearer-token" : "zonder auth";
-    // Naar stderr: stdout blijft zo schoon voor eventueel parallel stdio-gebruik.
-    console.error(
-      `Wettenbank MCP (HTTP) luistert op 0.0.0.0:${opts.port}/mcp (${auth})`
-    );
+    log("info", "functioneel", "HTTP-server gestart", {
+      poort: opts.port,
+      auth: authVereist ? `per-client (${clients.length})` : "geen",
+    });
   });
 
   return httpServer;

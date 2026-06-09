@@ -7,6 +7,7 @@
  */
 import { fileURLToPath } from "url";
 import { server, StdioServerTransport } from "./server.js";
+import { leesClients } from "./auth.js";
 // ── Startup ───────────────────────────────────────────────────────────────────
 // Transport-keuze: stdio (default, lokaal subproces) of http (langlevende service).
 // Stuur via env MCP_TRANSPORT=http of CLI-flag `--transport http`.
@@ -20,18 +21,20 @@ function gekozenTransport() {
 const __filename = fileURLToPath(import.meta.url);
 if (process.argv[1] === __filename) {
     if (gekozenTransport() === "http") {
+        const clients = leesClients();
         // Fail-closed: weiger te starten als de HTTP-service publiek bereikbaar is zonder
         // token. Bewust open draaien (bv. achter een vertrouwd netwerk) kan met MCP_ALLOW_NO_AUTH=1.
-        if (!process.env.MCP_AUTH_TOKEN && process.env.MCP_ALLOW_NO_AUTH !== "1") {
-            console.error("Weigering te starten: MCP_AUTH_TOKEN ontbreekt in HTTP-modus. " +
-                "Zet een token, of MCP_ALLOW_NO_AUTH=1 om bewust zonder auth te draaien.");
+        if (clients.length === 0 && process.env.MCP_ALLOW_NO_AUTH !== "1") {
+            console.error("Weigering te starten: geen tokens geconfigureerd in HTTP-modus. " +
+                "Zet MCP_AUTH_TOKENS (id:token,...) of MCP_AUTH_TOKEN, " +
+                "of MCP_ALLOW_NO_AUTH=1 om bewust zonder auth te draaien.");
             process.exit(1);
         }
         // Dynamische import: het stdio-pad laadt de HTTP-laag zo nooit.
         const { startHttpServer } = await import("./http-server.js");
         startHttpServer({
             port: Number(process.env.PORT ?? 3000),
-            token: process.env.MCP_AUTH_TOKEN,
+            clients,
         });
     }
     else {
