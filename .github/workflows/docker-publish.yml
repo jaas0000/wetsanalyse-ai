@@ -10,6 +10,11 @@ on:
     tags: ["v*"]
     paths:
       - "tools/wettenbank-mcp/**"
+      # Pure documentatiewijzigingen (*.md) triggeren géén build/deploy. De negatie
+      # na de include sluit markdown uit; een commit met alléén .md-wijzigingen draait
+      # de workflow dus niet. Handmatig draaien kan altijd via workflow_dispatch.
+      - "!tools/wettenbank-mcp/**/*.md"
+      - "!tools/wettenbank-mcp/*.md"
       - ".github/workflows/docker-publish.yml"
   workflow_dispatch:
 
