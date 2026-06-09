@@ -31,9 +31,6 @@ zijn **projectrelatieve paden**, zodat de map portabel is tussen machines/OS'en:
   draait als Portainer-stack achter Nginx Proxy Manager — zie `tools/wettenbank-mcp/CLAUDE.md`
   (Deployment). Het lokale **stdio**-alternatief (`command: "node"`,
   `args: ["tools/wettenbank-mcp/dist/index.js"]`) staat daar ook beschreven als fallback.
-- `.claude/skills/wetsanalyse-workspace/mcp_fetch.py` (`SERVER`) → leidt de projectroot af van
-  de eigen scriptlocatie (`Path(__file__).resolve().parents[3]`) en gebruikt `node` uit PATH;
-  `iteration-1/benchmark.json` (`skill_path`) → relatief eval-artefact (`.claude/skills/wetsanalyse`).
 - `.claude/settings.local.json` → `enabledMcpjsonServers: ["wettenbank"]` plus een **machine-lokale**
   allowlist. Dit bestand is **gitignored** (`.gitignore`), dus het reist niet mee en is per definitie
   niet gedeeld: een andere machine/analist bouwt z'n eigen lijst gewoon opnieuw op via de
@@ -60,11 +57,6 @@ npx vitest run -t "naam van de test"      # één test op naam
 
 # MCP-gezondheid (vanuit de projectroot)
 claude mcp list                            # verwacht: wettenbank → ✓ Connected
-
-# MCP direct aanroepen zonder Claude (debug); vanuit de projectroot draaien.
-# mcp_fetch.py vindt de MCP-server zelf (relatief aan de scriptlocatie) en gebruikt `node` uit PATH.
-python3 .claude/skills/wetsanalyse-workspace/mcp_fetch.py zoek '{"titel":"Wet op de zorgtoeslag"}'
-python3 .claude/skills/wetsanalyse-workspace/mcp_fetch.py artikel '{"bwbId":"BWBR0018451","artikel":"2"}'
 ```
 
 Na het bouwen of wijzigen van de MCP-server: `claude mcp list` om te bevestigen dat hij nog
@@ -101,13 +93,9 @@ Inhoudelijke regels die je moet kennen voordat je classificeert of begrippen ops
 `references/jas-klassen.md` (de dertien JAS-klassen — verzin er geen), en
 `references/activiteit-3-vuistregels.md`. Voorbeeld-output staat in `analyses/iw1990-art9-lid1/`.
 
-## Skills & vendoring
+## Skills
 
-`.claude/skills/skill-creator` is een **symlink** naar `.agents/skills/skill-creator` (gevendord
-uit `anthropics/skills`, vastgelegd in `skills-lock.json` met hash). Wijzig die niet handmatig;
-gebruik de skill-creator zelf voor wijzigingen aan skills. Evals voor de wetsanalyse-skill staan
-in `.claude/skills/wetsanalyse/evals/` (cases in `files/`); de eval-run-output zit in
-`.claude/skills/wetsanalyse-workspace/`.
+Evals voor de wetsanalyse-skill staan in `.claude/skills/wetsanalyse/evals/` (cases in `files/`).
 
 ## Referentiedocumentatie
 
