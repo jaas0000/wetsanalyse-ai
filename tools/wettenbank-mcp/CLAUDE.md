@@ -69,11 +69,11 @@ Uses `@xmldom/xmldom` (`DOMParser`) throughout. Mixed-content elements (`<al>`, 
 
 ### In-memory cache
 
-`xmlCache` in `repository-client.ts` (exported `Map<string, CacheEntry>`, 1-hour TTL) caches raw XML + parsed `Document` per BWB-id + date combination. Verlopen entries worden automatisch elk uur verwijderd via een `setInterval(...).unref()` zodat de cache niet onbegrensd groeit.
+`xmlCache` in `repository-client.ts` (exported `Map<string, CacheEntry>`, 1-hour TTL) caches raw XML + parsed `Document` per BWB-id + date combination. Verlopen entries worden elk uur verwijderd via een `setInterval(...).unref()`; daarnaast geldt een **LRU-cap** (`MAX_CACHE_ENTRIES`) die de oudste entry evicteert vóór een nieuwe wordt toegevoegd, zodat de cache ook binnen één uur niet onbegrensd groeit (elke entry kan MB's XML+DOM bevatten).
 
 ### HTTP timeouts
 
-Beide HTTP clients (`sruRequest` in `sru-client.ts` en `haalWetstekstOp` in `repository-client.ts`) gebruiken een `AbortController` met 15 seconden timeout. Na afloop wordt de timer altijd gecleard via `finally { clearTimeout(timeoutId) }`.
+Beide HTTP clients (`sruRequest` in `sru-client.ts` en `haalWetstekstOp` in `repository-client.ts`) gebruiken een `AbortController` met 15 seconden timeout. Na afloop wordt de timer altijd gecleard via `finally { clearTimeout(timeoutId) }`; een `AbortError` wordt hervertaald naar een duidelijke `"…timeout na 15s"`-melding. Malformed/lege XML-responses gaan via `parseXmlDoc()` en geven een expliciete fout (geen stil leeg resultaat).
 
 ### Data flow
 
@@ -110,6 +110,21 @@ Key exports from `bwb-parser/index.ts`:
 
 `McpLiteNode` has: `bwbId`, `citeertitel`, `sectie`, `tekst`, `bronreferentie`.
 
+**Brongetrouwheid in de normalisatie/render-stap (let op bij wijzigen):**
+
+- `NormalizedLid` heeft naast `content`/`tekst`/`children` ook `blocks` — alle content-blokken
+  (`al`, `lijst`, `table`, …) in **documentvolgorde**. `transformToMcpLite` rendert uit `blocks`,
+  zodat de interleave *tekst → tabel/lijst → tekst* binnen een lid behouden blijft. `content`/`tekst`
+  blijven de platte concatenatie van uitsluitend de `al`-blokken (voor zoekbaarheid).
+- `circulaire.divisie` wordt **recursief** genormaliseerd: een divisie krijgt zijn eigen content als
+  lid(eren) plus `subdivisies: NormalizedArtikel[]` voor geneste niveaus. `processNode` daalt
+  recursief af, zodat elk niveau (ook ≥3 diep) een eigen node met volledig sectiepad én tekst krijgt
+  — geen platslaan, geen tekstverlies. Dit raakt de Leidraad Invordering 2008 (792 geneste divisies).
+- `renderTableToMarkdown` legt cellen in een raster dat `colspan`/`rowspan` respecteert (elke rij
+  exact `cols` kolommen), escapet `|` in celtekst, fabriceert bij ontbrekende `<thead>` géén
+  dubbele rij, en scheidt meerdere `<al>` in één cel. Inline refs zonder target renderen als
+  platte label (geen `[x](undefined)`).
+
 ### `wettenbank_zoekterm` — wildcards and operators
 
 `bouwTermPatroon(zoekterm)` converts a search term to a regex pattern:
@@ -121,7 +136,11 @@ Key exports from `bwb-parser/index.ts`:
 | `*termijn` | `\w*termijn\b` | `termijn`, `betalingstermijn` |
 | `*termijn*` | `\w*termijn\w*` | anything containing `termijn` |
 
-`parseZoekterm(zoekterm)` normalises ` AND ` → ` EN ` and ` OR ` → ` OF `, splits on ` EN ` or ` OF `, and returns `ZoekInput { patronen: RegExp[], operator: "EN"|"OF" }`. With EN, only articles where all patterns occur are returned. Patterns carry the `gi` flags; `pat.lastIndex` is explicitly reset to `0` before every `.match()` / `.test()` call to prevent stateful drift when the same instance is reused across articles.
+`parseZoekterm(zoekterm)` detecteert operatoren **case-insensitief en op woordgrenzen**
+(`EN`/`AND` → EN, `OF`/`OR` → OF; dus ook lowercase `en`/`of`, en `ENERGIE` telt niet als
+operator), splitst, en bouwt per deelterm een patroon via **`bouwTermPatroon`** (één bron van
+waarheid — het testpad = het productiepad). Lege deeltermen en bare `*` worden geweigerd.
+Resultaat: `ZoekInput { patronen: RegExp[], operator: "EN"|"OF" }`. With EN, only articles where all patterns occur are returned. Patterns carry the `gi` flags; `pat.lastIndex` is explicitly reset to `0` before every `.match()` / `.test()` call to prevent stateful drift when the same instance is reused across articles.
 
 Special characters are pre-escaped via `escapeerRegex()`.
 
@@ -136,7 +155,7 @@ Two public schemas from `repository.officiele-overheidspublicaties.nl` are the s
 **Communication:** twee transports, gekozen in `dist/index.js` op basis van `MCP_TRANSPORT` (env) of `--transport <modus>` (CLI-flag); default is `stdio`.
 
 - **stdio** (default) — de client start de server als subproces en wisselt JSON uit over stdin/stdout via `StdioServerTransport`. Gebruikt de singleton `server` uit `server.ts`.
-- **http** (`MCP_TRANSPORT=http`) — langlevende netwerkservice via `StreamableHTTPServerTransport` op `0.0.0.0:${PORT:-3000}`, endpoint `/mcp`. Code in `http-server.ts` (Node-stdlib `http`, geen extra dependency): sessiebeheer per `mcp-session-id`, een verse `createServer()`-instantie per sessie, `/health` (200, geen auth) en optionele bearer-auth via `MCP_AUTH_TOKEN`. Bedoeld voor de gecontaineriseerde deployment.
+- **http** (`MCP_TRANSPORT=http`) — langlevende netwerkservice via `StreamableHTTPServerTransport` op `0.0.0.0:${PORT:-3000}`, endpoint `/mcp`. Code in `http-server.ts` (Node-stdlib `http`, geen extra dependency): sessiebeheer per `mcp-session-id` met **idle-opruiming** van verlaten sessies (`MCP_SESSION_IDLE_MS`, default 30 min), een verse `createServer()`-instantie per sessie, `/health` (200, geen auth) en bearer-auth via `MCP_AUTH_TOKEN` (constant-tijd vergelijking). In HTTP-modus is de start **fail-closed**: zonder `MCP_AUTH_TOKEN` weigert `index.ts` te starten, tenzij `MCP_ALLOW_NO_AUTH=1`. Bedoeld voor de gecontaineriseerde deployment.
 
 Entry point is `dist/index.js` (re-exports + startup); de serverlogica zit in `dist/server.js`, het HTTP-transport in `dist/http-server.js`.
 

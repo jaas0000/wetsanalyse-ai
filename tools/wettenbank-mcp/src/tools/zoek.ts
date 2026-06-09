@@ -12,11 +12,14 @@ export async function handleZoek(args: unknown): Promise<string> {
 
   const { titel, rechtsgebied, ministerie, regelingsoort, maxResultaten, peildatum } = parsed.data;
 
+  // Escape dubbele quotes in zoekwaarden zodat een titel met " de CQL-query niet breekt.
+  const cql = (s: string) => s.replace(/"/g, '\\"');
+
   const queryDelen: string[] = [];
-  if (titel) queryDelen.push(`overheidbwb.titel any "${titel}"`);
-  if (rechtsgebied) queryDelen.push(`overheidbwb.rechtsgebied == "${rechtsgebied}"`);
-  if (ministerie) queryDelen.push(`overheid.authority == "${ministerie}"`);
-  if (regelingsoort) queryDelen.push(`dcterms.type == "${regelingsoort}"`);
+  if (titel) queryDelen.push(`overheidbwb.titel any "${cql(titel)}"`);
+  if (rechtsgebied) queryDelen.push(`overheidbwb.rechtsgebied == "${cql(rechtsgebied)}"`);
+  if (ministerie) queryDelen.push(`overheid.authority == "${cql(ministerie)}"`);
+  if (regelingsoort) queryDelen.push(`dcterms.type == "${cql(regelingsoort)}"`);
   queryDelen.push(`overheidbwb.geldigheidsdatum==${peildatum}`);
 
   const xml = await sruRequest(queryDelen.join(" and "), maxResultaten);

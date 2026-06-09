@@ -16,17 +16,26 @@ export function bouwTermPatroon(zoekterm) {
     return `${pre}${kern}${post}`;
 }
 // ── Publieke API ──────────────────────────────────────────────────────────────
+// Operatoren worden case-insensitief en op woordgrenzen herkend, zodat zowel
+// "uitstel EN belasting" als "uitstel en belasting" werkt en "ENERGIE" níét als
+// operator telt. EN/AND betekenen EN; OF/OR betekenen OF.
+const EN_OPERATOR = /\s+(?:EN|AND)\s+/i;
+const SPLIT_EN = /\s+(?:EN|AND)\s+/gi;
+const SPLIT_OF = /\s+(?:OF|OR)\s+/gi;
 export function parseZoekterm(zoekterm) {
-    const t = zoekterm.replace(/ AND /g, " EN ").replace(/ OR /g, " OF ");
-    const op = t.includes(" EN ") ? "EN" : "OF";
-    const parts = t.split(op === "EN" ? " EN " : " OF ").map((p) => p.trim());
-    const regexify = (s) => {
-        const kern = s.replace(/\*/g, "");
-        const pre = s.startsWith("*") ? "\\w*" : "\\b";
-        const post = s.endsWith("*") ? "\\w*" : "\\b";
-        return new RegExp(`${pre}${kern.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}${post}`, "gi");
-    };
-    return { patronen: parts.map(regexify), operator: op };
+    const operator = EN_OPERATOR.test(zoekterm) ? "EN" : "OF";
+    const delen = zoekterm
+        .split(operator === "EN" ? SPLIT_EN : SPLIT_OF)
+        .map((p) => p.trim())
+        // Weiger lege deeltermen en bare wildcards (zouden overal/leeg matchen).
+        .filter((p) => p && p.replace(/\*/g, "").length > 0);
+    // Eén bron van waarheid voor het patroon: hergebruik bouwTermPatroon, zodat het
+    // werkelijk gebruikte pad gelijk is aan wat de unit-tests dekken.
+    const patronen = delen.map((p) => new RegExp(bouwTermPatroon(p), "gi"));
+    // Geen geldige term over (bijv. invoer "*"): geef een patroon dat nooit matcht.
+    if (patronen.length === 0)
+        return { patronen: [/(?!)/gi], operator };
+    return { patronen, operator };
 }
 export function zoekTermInArtikelDom(doc, invoer, maxResultaten = 10) {
     const { patronen, operator } = invoer instanceof RegExp

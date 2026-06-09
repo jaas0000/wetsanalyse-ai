@@ -13,6 +13,26 @@ function vandaag(): string {
   return `${year}-${month}-${day}`;
 }
 
+/** Controleert of een YYYY-MM-DD-string een bestaande kalenderdatum is (bv. niet 2024-13-45). */
+function isEchteKalenderdatum(s: string): boolean {
+  const [j, m, d] = s.split("-").map(Number);
+  const dt = new Date(Date.UTC(j, m - 1, d));
+  return (
+    dt.getUTCFullYear() === j &&
+    dt.getUTCMonth() === m - 1 &&
+    dt.getUTCDate() === d
+  );
+}
+
+// Herbruikbaar peildatum-schema: vorm én geldigheid valideren, met default = vandaag.
+// .default(vandaag) — factory-functie, lazy geëvalueerd per parse-call. .default(vandaag())
+// zou de datum eenmalig bij module-load bevriezen en is dus fout.
+const peildatumSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "peildatum moet YYYY-MM-DD zijn")
+  .refine(isEchteKalenderdatum, "peildatum is geen bestaande kalenderdatum")
+  .default(vandaag);
+
 // ── Input schemas ─────────────────────────────────────────────────────────────
 
 export const ZoekInputSchema = z
@@ -24,9 +44,7 @@ export const ZoekInputSchema = z
       .enum(["wet", "AMvB", "ministeriele-regeling", "regeling", "besluit"])
       .optional(),
     maxResultaten: z.number().int().min(1).max(50).default(10),
-    // .default(vandaag) — Zod v3 accepteert een factory-function; wordt lazy geëvalueerd per parse-call.
-    // .default(vandaag()) zou fout zijn: evalueert eenmalig bij module-load en bevriest de datum.
-    peildatum: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "peildatum moet YYYY-MM-DD zijn").default(vandaag),
+    peildatum: peildatumSchema,
   })
   .refine(
     (d) => d.titel || d.rechtsgebied || d.ministerie || d.regelingsoort,
@@ -36,7 +54,7 @@ export const ZoekInputSchema = z
 export const ZoektermInputSchema = z.object({
   bwbId: z.string().min(1, "bwbId mag niet leeg zijn"),
   zoekterm: z.string().min(1, "zoekterm mag niet leeg zijn"),
-  peildatum: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "peildatum moet YYYY-MM-DD zijn").default(vandaag),
+  peildatum: peildatumSchema,
   maxResultaten: z.number().int().min(1).max(50).default(10),
   includeerTekst: z.boolean().default(false),
 });
@@ -45,12 +63,12 @@ export const ArtikelInputSchema = z.object({
   bwbId: z.string().min(1, "bwbId mag niet leeg zijn"),
   artikel: z.string().min(1, "artikel mag niet leeg zijn"),
   lid: z.string().nullish(),
-  peildatum: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "peildatum moet YYYY-MM-DD zijn").default(vandaag),
+  peildatum: peildatumSchema,
 });
 
 export const StructuurInputSchema = z.object({
   bwbId: z.string().min(1, "bwbId mag niet leeg zijn"),
-  peildatum: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "peildatum moet YYYY-MM-DD zijn").default(vandaag),
+  peildatum: peildatumSchema,
 });
 
 // ── Output schemas ────────────────────────────────────────────────────────────

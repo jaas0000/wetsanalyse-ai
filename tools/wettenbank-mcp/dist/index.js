@@ -20,6 +20,13 @@ function gekozenTransport() {
 const __filename = fileURLToPath(import.meta.url);
 if (process.argv[1] === __filename) {
     if (gekozenTransport() === "http") {
+        // Fail-closed: weiger te starten als de HTTP-service publiek bereikbaar is zonder
+        // token. Bewust open draaien (bv. achter een vertrouwd netwerk) kan met MCP_ALLOW_NO_AUTH=1.
+        if (!process.env.MCP_AUTH_TOKEN && process.env.MCP_ALLOW_NO_AUTH !== "1") {
+            console.error("Weigering te starten: MCP_AUTH_TOKEN ontbreekt in HTTP-modus. " +
+                "Zet een token, of MCP_ALLOW_NO_AUTH=1 om bewust zonder auth te draaien.");
+            process.exit(1);
+        }
         // Dynamische import: het stdio-pad laadt de HTTP-laag zo nooit.
         const { startHttpServer } = await import("./http-server.js");
         startHttpServer({
@@ -33,6 +40,6 @@ if (process.argv[1] === __filename) {
     }
 }
 // ── Re-exports voor backward-compatibiliteit (tests) ─────────────────────────
-export { domParser, sruRequest, parseRecords, dedupliceerOpBwbId, getElText, getAttr, stripXml, } from "./clients/sru-client.js";
+export { domParser, sruRequest, parseRecords, parseXmlDoc, dedupliceerOpBwbId, getElText, getAttr, stripXml, } from "./clients/sru-client.js";
 export { xmlCache, haalWetstekstOp, extraheerDocMetadata, zoekElementInDom, zoekPadEnElementInDom, extractTextForSearch, } from "./clients/repository-client.js";
 export { escapeerRegex, bouwTermPatroon, parseZoekterm, zoekTermInArtikelDom, } from "./search/zoekterm-engine.js";

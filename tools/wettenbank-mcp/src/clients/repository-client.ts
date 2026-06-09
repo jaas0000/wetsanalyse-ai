@@ -3,7 +3,7 @@
  * Haalt BWB-wetstekst XML op, beheert in-memory cache en extraheert doc-metadata.
  */
 
-import { domParser, sruRequest, parseRecords, getElText, getAttr } from "./sru-client.js";
+import { sruRequest, parseRecords, parseXmlDoc, getElText, getAttr } from "./sru-client.js";
 import type { Regeling } from "./sru-client.js";
 
 type XNode = any;
@@ -21,6 +21,10 @@ interface CacheEntry {
 
 export const xmlCache = new Map<string, CacheEntry>();
 const CACHE_TTL = 1000 * 60 * 60; // 1 uur
+// Bovengrens op het aantal entries (elke entry bevat de volledige rauwe XML + geparsed
+// Document, dus potentieel MB's). Naast de TTL voorkomt dit onbegrensde groei binnen
+// één uur bij veel verschillende bwbId×datum-combinaties (LRU-evictie).
+const MAX_CACHE_ENTRIES = 50;
 
 // Verwijder verlopen entries elk uur zodat de cache niet onbegrensd groeit.
 setInterval(() => {
@@ -68,6 +72,9 @@ export async function haalWetstekstOp(
   const cached = xmlCache.get(cacheKey);
 
   if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+    // LRU: verversde toegang naar achteren verplaatsen.
+    xmlCache.delete(cacheKey);
+    xmlCache.set(cacheKey, cached);
     return { rawXml: cached.rawXml, doc: cached.doc, regeling: cached.regeling };
   }
 
@@ -86,13 +93,24 @@ export async function haalWetstekstOp(
   let resp: Response;
   try {
     resp = await fetch(r.repositoryUrl, { signal: controller.signal });
+  } catch (err) {
+    if ((err as Error).name === "AbortError") {
+      throw new Error("Wetstekst-repository timeout na 15s");
+    }
+    throw err;
   } finally {
     clearTimeout(timeoutId);
   }
   if (!resp.ok) throw new Error(`Wetstekst repository onbereikbaar: ${resp.status}`);
 
   const rawXml = await resp.text();
-  const doc = domParser.parseFromString(rawXml, "text/xml");
+  const doc = parseXmlDoc(rawXml, "wetstekst-repository");
+
+  // LRU-cap: gooi de oudste entry weg vóór we de nieuwe toevoegen.
+  if (xmlCache.size >= MAX_CACHE_ENTRIES) {
+    const oudste = xmlCache.keys().next().value;
+    if (oudste !== undefined) xmlCache.delete(oudste);
+  }
 
   const result = { rawXml, doc, regeling: r };
   xmlCache.set(cacheKey, { ...result, timestamp: Date.now() });

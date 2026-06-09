@@ -110,6 +110,9 @@ export interface NormalizedArtikel {
   nr: string;
   titel?: string;
   leden: NormalizedLid[];
+  // Geneste circulaire.divisie-subsecties (Leidraad). Recursief; behoudt nesting,
+  // kop én tekst van diepere niveaus i.p.v. ze plat te slaan tot één niveau.
+  subdivisies?: NormalizedArtikel[];
 }
 
 export interface NormalizedLid {
@@ -118,7 +121,10 @@ export interface NormalizedLid {
   lidnr: string;          // "" voor artikelen zonder genummerde leden
   tekst: string;          // platte tekst (concatenatie van al-nodes)
   content: ContentItem[]; // gestructureerde content van de al-nodes
-  children: NormalizedNode[]; // lijst, tabel, sub-structuren
+  children: NormalizedNode[]; // lijst, tabel, sub-structuren (niet-al blokken)
+  // Alle content-blokken (al, lijst, tabel, …) in documentvolgorde. Hierdoor blijft
+  // de interleave tekst → tabel/lijst → tekst behouden bij het renderen.
+  blocks: NormalizedNode[];
 }
 
 /** Lijst (expliciet/ongemarkeerd) met genormaliseerde items */

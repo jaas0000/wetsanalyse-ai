@@ -16,11 +16,22 @@
  * /health blijft altijd vrij toegankelijk.
  */
 import { createServer as createHttpServer, } from "node:http";
-import { randomUUID } from "node:crypto";
+import { randomUUID, timingSafeEqual } from "node:crypto";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import { createServer } from "./server.js";
 const MAX_BODY_BYTES = 1_000_000;
+// Sessies zonder activiteit worden na dit interval opgeruimd. Een client die wegvalt
+// zonder DELETE laat zijn transport anders permanent in het geheugen achter.
+const SESSION_IDLE_MS = Number(process.env.MCP_SESSION_IDLE_MS ?? 30 * 60 * 1000);
+/** Constant-tijd vergelijking van twee strings (voorkomt timing-oracle op de token). */
+function veiligGelijk(a, b) {
+    const ba = Buffer.from(a);
+    const bb = Buffer.from(b);
+    if (ba.length !== bb.length)
+        return false;
+    return timingSafeEqual(ba, bb);
+}
 /** Lees en JSON-parse de request-body; undefined bij een lege body. */
 function leesBody(req) {
     return new Promise((resolve, reject) => {
@@ -61,6 +72,25 @@ function stuurFout(res, status, message) {
 export function startHttpServer(opts) {
     // Eén transport per sessie; gekoppeld aan een verse Server-instantie.
     const transports = {};
+    // Laatste activiteit per sessie, voor idle-opruiming.
+    const lastSeen = {};
+    // Periodiek verlaten sessies sluiten (clients die zonder DELETE wegvallen).
+    const cleanup = setInterval(() => {
+        const nu = Date.now();
+        for (const sid of Object.keys(transports)) {
+            if (nu - (lastSeen[sid] ?? 0) > SESSION_IDLE_MS) {
+                try {
+                    transports[sid].close();
+                }
+                catch {
+                    /* close kan al gebeurd zijn */
+                }
+                delete transports[sid];
+                delete lastSeen[sid];
+            }
+        }
+    }, Math.min(SESSION_IDLE_MS, 5 * 60 * 1000));
+    cleanup.unref();
     const httpServer = createHttpServer(async (req, res) => {
         const url = new URL(req.url ?? "/", "http://localhost");
         // Healthcheck — altijd vrij toegankelijk.
@@ -73,12 +103,14 @@ export function startHttpServer(opts) {
             res.writeHead(404).end();
             return;
         }
-        // Auth: alleen afdwingen als er een token is geconfigureerd.
-        if (opts.token && req.headers["authorization"] !== `Bearer ${opts.token}`) {
+        // Auth: alleen afdwingen als er een token is geconfigureerd. Constant-tijd vergelijking.
+        if (opts.token && !veiligGelijk(req.headers["authorization"] ?? "", `Bearer ${opts.token}`)) {
             stuurFout(res, 401, "Ongeautoriseerd: ontbrekende of onjuiste bearer-token");
             return;
         }
         const sessionId = req.headers["mcp-session-id"];
+        if (sessionId)
+            lastSeen[sessionId] = Date.now();
         try {
             if (req.method === "POST") {
                 const body = await leesBody(req);
@@ -93,11 +125,14 @@ export function startHttpServer(opts) {
                         sessionIdGenerator: () => randomUUID(),
                         onsessioninitialized: (sid) => {
                             transports[sid] = transport;
+                            lastSeen[sid] = Date.now();
                         },
                     });
                     transport.onclose = () => {
-                        if (transport.sessionId)
+                        if (transport.sessionId) {
                             delete transports[transport.sessionId];
+                            delete lastSeen[transport.sessionId];
+                        }
                     };
                     await createServer().connect(transport);
                 }
@@ -125,6 +160,7 @@ export function startHttpServer(opts) {
             }
         }
     });
+    httpServer.on("close", () => clearInterval(cleanup));
     httpServer.listen(opts.port, "0.0.0.0", () => {
         const auth = opts.token ? "met bearer-token" : "zonder auth";
         // Naar stderr: stdout blijft zo schoon voor eventueel parallel stdio-gebruik.

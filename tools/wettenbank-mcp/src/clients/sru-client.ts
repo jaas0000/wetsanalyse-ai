@@ -46,6 +46,24 @@ export function getAttr(el: XNode | null, attrName: string): string {
   return el.getAttribute(attrName) ?? "";
 }
 
+/**
+ * Parseert XML strikt: een `fatalError` gooit xmldom zelf al; daarnaast vangen we
+ * een ontbrekend `documentElement` af. Zo lekt malformed/leeg XML niet stil door
+ * als een lege resultaatlijst, maar als een expliciete fout met bronvermelding.
+ */
+export function parseXmlDoc(xml: string, bron: string): XNode {
+  let doc: XNode;
+  try {
+    doc = domParser.parseFromString(xml, "text/xml");
+  } catch (err) {
+    throw new Error(`Ongeldige XML van ${bron}: ${(err as Error).message}`);
+  }
+  if (!doc || !doc.documentElement) {
+    throw new Error(`Ongeldige of lege XML-respons van ${bron}`);
+  }
+  return doc;
+}
+
 // ── SRU client ───────────────────────────────────────────────────────────────
 
 const FETCH_TIMEOUT_MS = 15_000;
@@ -67,14 +85,19 @@ export async function sruRequest(query: string, maxRecords = 10): Promise<string
     });
     if (!res.ok) throw new Error(`SRU HTTP ${res.status}`);
     return res.text();
+  } catch (err) {
+    if ((err as Error).name === "AbortError") {
+      throw new Error(`SRU-timeout na ${FETCH_TIMEOUT_MS / 1000}s`);
+    }
+    throw err;
   } finally {
     clearTimeout(timeoutId);
   }
 }
 
 export function parseRecords(xml: string): Regeling[] {
-  const doc = domParser.parseFromString(xml, "text/xml");
-  const records = Array.from(doc.getElementsByTagName("record"));
+  const doc = parseXmlDoc(xml, "SRU-service");
+  const records = Array.from(doc.getElementsByTagName("record")) as XNode[];
 
   return records.map((rec) => {
     const gzd = rec.getElementsByTagName("gzd")[0];

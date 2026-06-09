@@ -104,56 +104,25 @@ function normalizeArtikel(node: BwbNode): NormalizedArtikel {
   const nr = node.metadata.nr ?? "";
   const titel = node.metadata.titel;
   const leden: NormalizedLid[] = [];
+  let subdivisies: NormalizedArtikel[] | undefined;
 
   if (node.type === "circulaire_divisie") {
-    // Leidraad-structuur: circulaire.divisie → kop, tekst?, lijst*, circulaire.divisie*
-    const alNodes: BwbNode[] = [];
-    const overige: BwbNode[] = [];
-
-    // Verzamel alles wat GEEN sub-divisie is als de 'hoofdcontent' van dit artikel
+    // Leidraad-structuur: circulaire.divisie → kop, tekst?, lijst*, circulaire.divisie*.
+    // Eigen content (alles behalve kop en sub-divisies) in documentvolgorde; <tekst>
+    // wordt uitgepakt zodat al/lijst/tabel op één niveau staan.
+    const contentChildren: BwbNode[] = [];
     for (const child of node.children) {
-      if (child.type === "tekst") {
-        // Tekst blok bevat meestal de al-nodes
-        alNodes.push(...child.children.filter(c => c.type === "al"));
-        overige.push(...child.children.filter(c => c.type !== "al"));
-      } else if (child.type === "al") {
-        alNodes.push(child);
-      } else if (child.type === "circulaire_divisie") {
-        // Sub-divisies worden later apart als 'leden' toegevoegd
-      } else if (child.type !== "kop") {
-        overige.push(child);
-      }
+      if (child.type === "kop" || child.type === "circulaire_divisie") continue;
+      if (child.type === "tekst") contentChildren.push(...child.children);
+      else contentChildren.push(child);
+    }
+    if (contentChildren.length > 0) {
+      leden.push(buildLid(`${node.id}:lid:0`, "", contentChildren, node.metadata));
     }
 
-    if (alNodes.length > 0 || overige.length > 0) {
-      leden.push(buildLid(`${node.id}:lid:0`, "", alNodes, overige, node.metadata));
-    }
-
-    // Sub-divisies als aparte leden (voor geneste divisies)
-    const subDivisies = node.children.filter((c) => c.type === "circulaire_divisie");
-    for (const sub of subDivisies) {
-      const subAl: BwbNode[] = [];
-      const subOverige: BwbNode[] = [];
-      
-      for (const c of sub.children) {
-        if (c.type === "tekst") {
-          subAl.push(...c.children.filter(gc => gc.type === "al"));
-          subOverige.push(...c.children.filter(gc => gc.type !== "al"));
-        } else if (c.type === "al") {
-          subAl.push(c);
-        } else if (c.type !== "kop" && c.type !== "circulaire_divisie") {
-          subOverige.push(c);
-        }
-      }
-      
-      leden.push(buildLid(
-        `${node.id}:sub:${sub.metadata.nr ?? leden.length}`,
-        sub.metadata.nr ?? "",
-        subAl,
-        subOverige,
-        sub.metadata,
-      ));
-    }
+    // Sub-divisies recursief — behoudt nesting, kop én tekst op elk niveau (geen verlies).
+    const subs = node.children.filter((c) => c.type === "circulaire_divisie");
+    if (subs.length > 0) subdivisies = subs.map((c) => normalizeArtikel(c));
   } else {
     // Regulier artikel
     const lidNodes = node.children.filter((c) => c.type === "lid");
@@ -161,16 +130,13 @@ function normalizeArtikel(node: BwbNode): NormalizedArtikel {
     if (lidNodes.length > 0) {
       for (const lid of lidNodes) {
         const lidnr = lid.metadata.lidnr ?? "";
-        const alNodes = lid.children.filter((c) => c.type === "al");
-        const overige = lid.children.filter((c) => c.type !== "al");
-        leden.push(buildLid(lid.id, lidnr, alNodes, overige, lid.metadata));
+        leden.push(buildLid(lid.id, lidnr, lid.children, lid.metadata));
       }
     } else {
-      // Artikel zonder genummerde leden: directe al-nodes
-      const alNodes = node.children.filter((c) => c.type === "al");
-      const overige = node.children.filter((c) => c.type !== "al");
-      if (alNodes.length > 0 || overige.length > 0) {
-        leden.push(buildLid(`${node.id}:lid:0`, "", alNodes, overige, node.metadata));
+      // Artikel zonder genummerde leden: directe content-kinderen
+      const contentChildren = node.children.filter((c) => c.type !== "kop");
+      if (contentChildren.length > 0) {
+        leden.push(buildLid(`${node.id}:lid:0`, "", contentChildren, node.metadata));
       }
     }
   }
@@ -182,27 +148,32 @@ function normalizeArtikel(node: BwbNode): NormalizedArtikel {
     nr,
     ...(titel && { titel }),
     leden,
+    ...(subdivisies && { subdivisies }),
   };
 }
 
 /**
- * Bouwt een NormalizedLid uit al-nodes (content) en overige kinderen (children).
+ * Bouwt een NormalizedLid uit de content-kinderen van een lid/artikel, in
+ * documentvolgorde. `blocks` behoudt die volgorde (al, lijst, tabel, …) zodat
+ * de interleave tekst → tabel/lijst → tekst niet wordt herordend; `content`/`tekst`
+ * blijven de platte concatenatie van uitsluitend de al-blokken (voor zoekbaarheid).
  */
 function buildLid(
   id: string,
   lidnr: string,
-  alNodes: BwbNode[],
-  overigeChildren: BwbNode[],
+  contentChildren: BwbNode[],
   metadata: BwbMetadata,
 ): NormalizedLid {
-  // Concateneer alle content van de al-nodes
-  const content: ContentItem[] = alNodes.flatMap((al) => al.content ?? []);
+  const blocks: NormalizedNode[] = contentChildren.map(normalizeNode);
+
+  const alLeaves = blocks.filter((b): b is NormalizedLeaf => b.type === "al");
+  const content: ContentItem[] = alLeaves.flatMap((a) => a.content);
   const tekst = extractPlainText(content);
 
-  // Overige kinderen (lijst, tabel, sub-structuren) recursief normaliseren
-  const children: NormalizedNode[] = overigeChildren.map(normalizeNode);
+  // children = niet-al blokken (lijst, tabel, sub-structuren) — backward-compat.
+  const children: NormalizedNode[] = blocks.filter((b) => b.type !== "al");
 
-  return { id, lidnr, tekst, content, children, metadata };
+  return { id, lidnr, tekst, content, children, blocks, metadata };
 }
 
 // ── Lijst ─────────────────────────────────────────────────────────────────────

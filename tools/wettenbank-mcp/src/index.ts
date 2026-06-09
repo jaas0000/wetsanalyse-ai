@@ -24,6 +24,15 @@ function gekozenTransport(): string {
 const __filename = fileURLToPath(import.meta.url);
 if (process.argv[1] === __filename) {
   if (gekozenTransport() === "http") {
+    // Fail-closed: weiger te starten als de HTTP-service publiek bereikbaar is zonder
+    // token. Bewust open draaien (bv. achter een vertrouwd netwerk) kan met MCP_ALLOW_NO_AUTH=1.
+    if (!process.env.MCP_AUTH_TOKEN && process.env.MCP_ALLOW_NO_AUTH !== "1") {
+      console.error(
+        "Weigering te starten: MCP_AUTH_TOKEN ontbreekt in HTTP-modus. " +
+          "Zet een token, of MCP_ALLOW_NO_AUTH=1 om bewust zonder auth te draaien."
+      );
+      process.exit(1);
+    }
     // Dynamische import: het stdio-pad laadt de HTTP-laag zo nooit.
     const { startHttpServer } = await import("./http-server.js");
     startHttpServer({
@@ -42,6 +51,7 @@ export {
   domParser,
   sruRequest,
   parseRecords,
+  parseXmlDoc,
   dedupliceerOpBwbId,
   getElText,
   getAttr,

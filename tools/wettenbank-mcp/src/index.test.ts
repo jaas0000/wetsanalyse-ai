@@ -7,6 +7,7 @@ import {
   zoekTermInArtikelDom,
   extraheerDocMetadata,
   parseRecords,
+  parseXmlDoc,
   dedupliceerOpBwbId,
   haalWetstekstOp,
   sruRequest,
@@ -176,6 +177,29 @@ describe("parseZoekterm", () => {
     expect(pat?.flags).toContain("g");
     expect(pat?.flags).toContain("i");
   });
+
+  it("herkent operatoren case-insensitive: 'en'/'of' werken als 'EN'/'OF' (#6)", () => {
+    const en = parseZoekterm("uitstel en betaling");
+    expect("operator" in en && en.operator).toBe("EN");
+    expect("patronen" in en && en.patronen).toHaveLength(2);
+
+    const of = parseZoekterm("uitstel of afstel");
+    expect("operator" in of && of.operator).toBe("OF");
+    expect("patronen" in of && of.patronen).toHaveLength(2);
+  });
+
+  it("telt 'en'/'of' midden in een woord niet als operator (woordgrens) (#6)", () => {
+    const result = parseZoekterm("energie");
+    expect("operator" in result && result.operator).toBe("OF");
+    expect("patronen" in result && result.patronen).toHaveLength(1);
+    expect("patronen" in result && result.patronen[0].source).toBe("\\benergie\\b");
+  });
+
+  it("hergebruikt bouwTermPatroon zodat interne * niet stil verdwijnt (#6)", () => {
+    const result = parseZoekterm("ter*mijn");
+    // Identiek aan bouwTermPatroon: rand-sterren zijn wildcards, interne * wordt geëscaped.
+    expect("patronen" in result && result.patronen[0].source).toBe(bouwTermPatroon("ter*mijn"));
+  });
 });
 
 // ── stripXml ─────────────────────────────────────────────────────────────────
@@ -249,6 +273,24 @@ describe("parseRecords", () => {
     // "onbepaald" is de fallback voor undefined/null, niet voor lege string.
     // Dit test dat het veld aanwezig en een string is.
     expect(typeof r.geldigTot).toBe("string");
+  });
+});
+
+// ── parseXmlDoc (strikte XML-parse) ───────────────────────────────────────────
+
+describe("parseXmlDoc", () => {
+  it("parseert geldige XML en geeft het document terug", () => {
+    const doc = parseXmlDoc("<root><kind/></root>", "test");
+    expect(doc.documentElement).toBeDefined();
+    expect(doc.documentElement.tagName).toBe("root");
+  });
+
+  it("gooit een expliciete fout bij lege invoer i.p.v. stil leeg resultaat (#8)", () => {
+    expect(() => parseXmlDoc("", "SRU-service")).toThrow(/SRU-service/);
+  });
+
+  it("gooit een fout bij malformed XML (#8)", () => {
+    expect(() => parseXmlDoc("<root><onafgesloten>", "wetstekst-repository")).toThrow();
   });
 });
 
@@ -684,6 +726,16 @@ describe("ZoekInputSchema", () => {
   it("faalt bij ongeldige peildatum", () => {
     const result = ZoekInputSchema.safeParse({ titel: "Test", peildatum: "niet-een-datum" });
     expect(result.success).toBe(false);
+  });
+
+  it("faalt bij welgevormde maar onbestaande kalenderdatum (#11)", () => {
+    const result = ZoekInputSchema.safeParse({ titel: "Test", peildatum: "2024-13-45" });
+    expect(result.success).toBe(false);
+  });
+
+  it("accepteert een bestaande datum", () => {
+    const result = ZoekInputSchema.safeParse({ titel: "Test", peildatum: "2024-02-29" });
+    expect(result.success).toBe(true);
   });
 
   it("faalt bij maxResultaten buiten bereik", () => {

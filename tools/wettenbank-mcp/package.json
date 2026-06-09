@@ -1,6 +1,6 @@
 {
   "name": "wettenbank-mcp",
-  "version": "2.0.1",
+  "version": "2.1.0",
   "description": "MCP server voor wetten.overheid.nl",
   "type": "module",
   "main": "dist/index.js",
