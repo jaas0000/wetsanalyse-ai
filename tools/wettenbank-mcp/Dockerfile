@@ -20,9 +20,16 @@ RUN npm run build
 # ── Runtime-fase ──────────────────────────────────────────────────────────────
 FROM node:26-slim AS runtime
 
+# Build-herkomst, door CI meegegeven (docker-publish.yml). ARG geldt per stage, dus
+# hier opnieuw declareren; via ENV worden ze leesbaar voor de server (/health).
+ARG GIT_SHA=""
+ARG BUILD_TIME=""
+
 ENV NODE_ENV=production \
     MCP_TRANSPORT=http \
-    PORT=3000
+    PORT=3000 \
+    GIT_SHA=$GIT_SHA \
+    BUILD_TIME=$BUILD_TIME
 
 WORKDIR /app
 

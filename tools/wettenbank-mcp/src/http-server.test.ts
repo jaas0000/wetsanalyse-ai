@@ -44,10 +44,16 @@ describe("kiesClientIp (X-Forwarded-For)", () => {
 });
 
 describe("http-server", () => {
-  it("/health geeft 200 zonder auth", async () => {
+  it("/health geeft 200 zonder auth, met build-info", async () => {
     const res = await fetch(`${baseUrl}/health`);
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ status: "ok" });
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body).toMatchObject({ status: "ok" });
+    expect(typeof body.version).toBe("string");
+    expect(body.version).not.toBe("");
+    // Geen GIT_SHA in de testomgeving → fallback "dev".
+    expect(body.commit).toBe("dev");
+    expect(body.builtAt).toBeNull();
   });
 
   it("/mcp zonder bearer-token geeft 401", async () => {
