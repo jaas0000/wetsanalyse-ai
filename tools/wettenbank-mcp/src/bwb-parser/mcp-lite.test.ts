@@ -84,6 +84,40 @@ describe("MCP-Lite Transformation", () => {
     expect(node.tekst).toContain("| Value 1 | Value 2 |");
   });
 
+  it("blijft robuust bij niet-numerieke @cols / @morerows (geen NaN)", () => {
+    const kapotXml = `<?xml version="1.0" encoding="UTF-8"?>
+<toestand bwb-id="BWBR12345">
+  <wetgeving>
+    <wettekst>
+      <artikel>
+        <kop><nr>1</nr></kop>
+        <table>
+          <tgroup cols="abc">
+            <colspec colname="c1" colnum="x"/>
+            <colspec colname="c2"/>
+            <tbody>
+              <row>
+                <entry morerows="x">Cel A</entry>
+                <entry>Cel B</entry>
+              </row>
+            </tbody>
+          </tgroup>
+        </table>
+      </artikel>
+    </wettekst>
+  </wetgeving>
+</toestand>`;
+
+    const result = parseBwb(kapotXml, "BWBR12345", "Test Wet");
+    const node = result.mcpLite[0];
+
+    // @cols="abc" valt terug op colspecs.length (2); @colnum="x" en @morerows="x" geven
+    // geen NaN. Beide cellen renderen, niets is corrupt.
+    expect(node.tekst).not.toContain("NaN");
+    expect(node.tekst).toContain("Cel A");
+    expect(node.tekst).toContain("Cel B");
+  });
+
   it("handles tables with nested 'al' tags in entries", () => {
     const tableAlXml = `<?xml version="1.0" encoding="UTF-8"?>
 <toestand bwb-id="BWBR12345">

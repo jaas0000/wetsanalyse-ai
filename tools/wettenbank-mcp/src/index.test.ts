@@ -275,6 +275,14 @@ describe("parseRecords", () => {
     expect(lijst[1].bwbId).toBe("BBB");
   });
 
+  it("slaat een onvolledig record (zonder bwbId) over i.p.v. stil lege velden terug te geven", () => {
+    // Eén volledig record + één zonder identifier; alleen het volledige blijft over.
+    const xml = makeSruXml(makeRecord({ bwbId: "BWBR0000001" }) + makeRecord({ bwbId: "" }));
+    const lijst = parseRecords(xml);
+    expect(lijst).toHaveLength(1);
+    expect(lijst[0].bwbId).toBe("BWBR0000001");
+  });
+
   it("vult 'onbepaald' in bij ontbrekende geldigTot", () => {
     // makeRecord zet standaard geldigTot op "9999-12-31"; hier overschrijven we de XML
     const xml = makeSruXml(makeRecord({ geldigTot: "" }));
