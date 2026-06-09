@@ -257,7 +257,13 @@ def sectie_4(a3: dict, rondes2, rondes3) -> list[str]:
         "",
         "**Ruw materiaal — validatiepunten (activiteit 3):**",
         "",
-        a3.get("validatiepunten", TODO) or TODO,
+    ]
+    vp = a3.get("validatiepunten", TODO) or TODO
+    if isinstance(vp, list):
+        regels += [f"- {item}" for item in vp]
+    else:
+        regels.append(vp)
+    regels += [
         "",
     ]
     return regels

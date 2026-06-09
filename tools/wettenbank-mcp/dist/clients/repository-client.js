@@ -4,12 +4,16 @@
  */
 import { sruRequest, parseRecords, parseXmlDoc, getElText, getAttr, isVertrouwdeRepoUrl, } from "./sru-client.js";
 import { fetchMetRetry } from "./http.js";
+import { log } from "../logger.js";
 export const xmlCache = new Map();
 const CACHE_TTL = 1000 * 60 * 60; // 1 uur
 // Bovengrens op het aantal entries (elke entry bevat de volledige rauwe XML + geparsed
 // Document, dus potentieel MB's). Naast de TTL voorkomt dit onbegrensde groei binnen
 // één uur bij veel verschillende bwbId×datum-combinaties (LRU-evictie).
 const MAX_CACHE_ENTRIES = 50;
+// Bovengrens per entry: wetten groter dan 5 MB (bijv. Omgevingswet) worden niet gecached
+// om te voorkomen dat één grote wet een onevenredig groot deel van het geheugen inneemt.
+const MAX_XML_BYTES = 5 * 1024 * 1024;
 // Verwijder verlopen entries elk uur zodat de cache niet onbegrensd groeit.
 setInterval(() => {
     const nu = Date.now();
@@ -63,6 +67,13 @@ export async function haalWetstekstOp(bwbId, peildatum) {
             xmlCache.delete(oudste);
     }
     const result = { rawXml, doc, regeling: r };
+    if (rawXml.length > MAX_XML_BYTES) {
+        log("warn", "functioneel", "wetstekst te groot voor cache — wordt niet gecacht", {
+            bwbId,
+            bytes: rawXml.length,
+        });
+        return result;
+    }
     xmlCache.set(cacheKey, { ...result, timestamp: Date.now() });
     return result;
 }

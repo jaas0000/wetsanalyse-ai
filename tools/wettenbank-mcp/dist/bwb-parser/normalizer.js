@@ -9,6 +9,7 @@
  *
  * Invariant: de NORMALIZED-laag mag nooit informatie verliezen t.o.v. RAW.
  */
+import { log } from "../logger.js";
 // ── Helpers ───────────────────────────────────────────────────────────────────
 /**
  * Parseert een (optionele) string naar een geheel getal. Niet-numerieke of ontbrekende
@@ -42,6 +43,21 @@ export function extractPlainText(content) {
         .trim();
 }
 // ── Dispatcher ────────────────────────────────────────────────────────────────
+// Bekende types die terecht als container worden behandeld. Alleen types die hier
+// NIET in staan triggeren een waarschuwing — dit vangt nieuwe XML-tags op die
+// overheid.nl introduceert bij een wetswijziging zonder dat er data verloren gaat.
+const BEKENDE_CONTAINER_TYPES = new Set([
+    // Structurele containers (BWB-toestand/2016-1)
+    // Let op: normalizeType() vervangt alleen punten door underscores, geen koppeltekens.
+    "toestand", "wettekst", "wetgeving", "regeling", "regeling_tekst",
+    "circulaire", "circulaire-tekst",
+    "boek", "deel", "hoofdstuk", "titel", "afdeling", "paragraaf", "subparagraaf",
+    "bijlage", "divisie",
+    // Lid/inhoudscontainers
+    "kop", "lid", "tekst", "li",
+    // Parser-interne types
+    "leeg",
+]);
 /** Dispatch op node-type naar de juiste normalizer-functie. */
 export function normalizeNode(node) {
     switch (node.type) {
@@ -55,6 +71,11 @@ export function normalizeNode(node) {
         case "al":
             return normalizeLeaf(node);
         default:
+            if (!BEKENDE_CONTAINER_TYPES.has(node.type)) {
+                log("warn", "functioneel", "onbekend BWB-tag type — valt terug op container", {
+                    type: node.type,
+                });
+            }
             return normalizeContainer(node);
     }
 }

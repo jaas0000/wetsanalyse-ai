@@ -21,6 +21,8 @@ Het tussenresultaat-JSON volgt het schema in references/review-checkpoints.md.
 import argparse
 import io
 import json
+import os
+import signal as _signal
 import subprocess
 import sys
 import webbrowser
@@ -120,8 +122,8 @@ def _kill_port(port: int) -> None:
             for pid in set(result.stdout.split()):
                 if pid.strip() and pid.strip() != "0":
                     try:
-                        subprocess.run(["taskkill", "/F", "/PID", pid.strip()], timeout=5)
-                    except subprocess.SubprocessError:
+                        os.kill(int(pid.strip()), _signal.SIGTERM)
+                    except (ProcessLookupError, PermissionError, ValueError):
                         pass
         else:
             result = subprocess.run(
@@ -130,8 +132,8 @@ def _kill_port(port: int) -> None:
             )
             for pid in result.stdout.split():
                 try:
-                    subprocess.run(["kill", "-9", pid], timeout=5)
-                except subprocess.SubprocessError:
+                    os.kill(int(pid), _signal.SIGTERM)
+                except (ProcessLookupError, PermissionError, ValueError):
                     pass
     except (FileNotFoundError, subprocess.SubprocessError):
         pass
