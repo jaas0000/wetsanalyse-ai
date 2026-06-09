@@ -48,13 +48,34 @@ function zetSecurityHeaders(res: ServerResponse): void {
   res.setHeader("Cache-Control", "no-store");
 }
 
-/** Client-IP achter de proxy: eerste waarde van X-Forwarded-For, anders de socket. */
-function clientIp(req: IncomingMessage): string {
-  const xff = req.headers["x-forwarded-for"];
-  if (typeof xff === "string" && xff.length > 0) {
-    return xff.split(",")[0].trim();
+// Aantal vertrouwde proxy-hops dat zelf een X-Forwarded-For-waarde toevoegt (bv. Nginx
+// Proxy Manager = 1). De echte client is de hop díe onze vertrouwde proxy toevoegde, dus
+// de N-de waarde van rechts — niet de eerste van links (die kan de client zelf spoofen).
+const TRUSTED_PROXY_HOPS = Math.max(1, Number(process.env.MCP_TRUSTED_PROXY_HOPS ?? 1));
+
+/**
+ * Kies het client-IP uit een X-Forwarded-For-waarde. Neemt de waarde op positie
+ * `lengte - hops` (van rechts geteld), zodat een door de client zelf meegestuurde XFF de
+ * rate-limit-key en het audit-IP niet kan vervalsen. Valt terug op `socketIp` als XFF
+ * ontbreekt of te kort is voor het aantal vertrouwde hops. Pure functie (testbaar).
+ */
+export function kiesClientIp(
+  xff: string | string[] | undefined,
+  socketIp: string | undefined,
+  hops = TRUSTED_PROXY_HOPS
+): string {
+  const ruw = Array.isArray(xff) ? xff.join(",") : xff;
+  if (typeof ruw === "string" && ruw.length > 0) {
+    const lijst = ruw.split(",").map((h) => h.trim()).filter(Boolean);
+    const idx = lijst.length - hops;
+    if (idx >= 0 && lijst[idx]) return lijst[idx];
   }
-  return req.socket.remoteAddress ?? "onbekend";
+  return socketIp ?? "onbekend";
+}
+
+/** Client-IP achter de proxy; zie {@link kiesClientIp}. */
+function clientIp(req: IncomingMessage): string {
+  return kiesClientIp(req.headers["x-forwarded-for"], req.socket.remoteAddress);
 }
 
 /** Lees en JSON-parse de request-body; undefined bij een lege body. */
@@ -265,7 +286,9 @@ export function startHttpServer(opts: HttpServerOpties): HttpServer {
         fout: (err as Error).message,
       });
       if (!res.headersSent) {
-        stuurFout(res, 400, `Verwerkingsfout: ${(err as Error).message}`);
+        // Geen interne details (upstream-status, timeout-teksten) naar de client lekken;
+        // het volledige detail staat in de log-regel hierboven.
+        stuurFout(res, 400, "Verwerkingsfout bij het afhandelen van het verzoek");
       }
     }
   });

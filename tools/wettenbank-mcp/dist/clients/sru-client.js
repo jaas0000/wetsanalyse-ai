@@ -5,7 +5,23 @@
 import { DOMParser } from "@xmldom/xmldom";
 const SRU_BASE = "https://zoekservice.overheid.nl/sru/Search";
 export const REPO_BASE = "https://repository.officiele-overheidspublicaties.nl/bwb";
+const REPO_HOST = "repository.officiele-overheidspublicaties.nl";
 export const domParser = new DOMParser();
+/**
+ * Beveiliging (SSRF): de `repositoryUrl` komt uit de SRU-respons
+ * (`overheidbwb:locatie_toestand`) en is dus door de bron bepaald. We fetchen die
+ * URL later rechtstreeks, dus accepteren we alleen `https:` naar de bekende
+ * repository-host. Niet-vertrouwde waarden vallen terug op een zelf-geconstrueerde URL.
+ */
+export function isVertrouwdeRepoUrl(url) {
+    try {
+        const u = new URL(url);
+        return u.protocol === "https:" && u.hostname === REPO_HOST;
+    }
+    catch {
+        return false;
+    }
+}
 // ── Helpers ──────────────────────────────────────────────────────────────────
 export function stripXml(xml) {
     return xml
@@ -84,6 +100,10 @@ export function parseRecords(xml) {
         const bwbId = getElText(owmskern, "dcterms:identifier");
         const rgEls = bwbipm ? Array.from(bwbipm.getElementsByTagName("overheidbwb:rechtsgebied")) : [];
         const rechtsgebiedStr = rgEls.map((e) => e.textContent?.trim()).filter(Boolean).join(", ");
+        // SSRF-mitigatie: vertrouw de bron-URL alleen als hij naar de bekende repository wijst;
+        // anders een zelf-geconstrueerde URL gebruiken (vaste host, geen door de bron gestuurd doel).
+        const bronUrl = getElText(enrich, "overheidbwb:locatie_toestand");
+        const repositoryUrl = bronUrl && isVertrouwdeRepoUrl(bronUrl) ? bronUrl : `${REPO_BASE}/${bwbId}/`;
         return {
             bwbId,
             titel: getElText(owmskern, "dcterms:title"),
@@ -93,7 +113,7 @@ export function parseRecords(xml) {
             geldigVanaf: getElText(bwbipm, "overheidbwb:geldigheidsperiode_startdatum"),
             geldigTot: getElText(bwbipm, "overheidbwb:geldigheidsperiode_einddatum") || "onbepaald",
             gewijzigd: getElText(owmskern, "dcterms:modified"),
-            repositoryUrl: getElText(enrich, "overheidbwb:locatie_toestand") || `${REPO_BASE}/${bwbId}/`,
+            repositoryUrl,
         };
     });
 }

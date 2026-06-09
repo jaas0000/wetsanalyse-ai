@@ -177,7 +177,9 @@ afgestemd op BIO2 / NEN-EN-ISO/IEC 27002:2022. Zie `SECURITY.md` voor het volled
   JWKS, met de statische tokens als fallback. In HTTP-modus is de start fail-closed: zonder enige
   auth weigert `index.ts` te starten, tenzij `MCP_ALLOW_NO_AUTH=1`.
 - **Rate limiting** (`src/rate-limit.ts`): token-bucket per IP. `MCP_RATE_BURST` (default 60) en
-  `MCP_RATE_PER_MIN` (default 120); over de limiet → `429`.
+  `MCP_RATE_PER_MIN` (default 120); over de limiet → `429`. Het client-IP komt uit
+  `X-Forwarded-For` via de N-de waarde van rechts (`MCP_TRUSTED_PROXY_HOPS`, default 1), zodat een
+  zelf meegestuurde XFF de limiet niet omzeilt — de reverse-proxy (NPM) moet XFF dus **zetten**.
 - **Securityheaders**: `X-Content-Type-Options: nosniff`, `Referrer-Policy`, `Cache-Control: no-store`
   op elke respons. `/health` blijft auth-vrij en wordt niet gelogd.
 - **CI** (`.github/workflows/docker-publish.yml`): aparte `test`-job met `npm test` + `npm audit`
