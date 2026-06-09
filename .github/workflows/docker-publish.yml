@@ -98,7 +98,7 @@ jobs:
       # Scant de gepushte image op OS-/library-kwetsbaarheden. Rapporteert naar het
       # GitHub Security-tabblad (SARIF) en faalt bij CRITICAL.
       - name: Trivy image-scan (SARIF)
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@0.35.0
         with:
           image-ref: ${{ env.IMAGE }}@${{ steps.build.outputs.digest }}
           format: sarif
@@ -113,7 +113,7 @@ jobs:
           sarif_file: trivy-results.sarif
 
       - name: Trivy gate (faalt bij CRITICAL)
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@0.35.0
         with:
           image-ref: ${{ env.IMAGE }}@${{ steps.build.outputs.digest }}
           format: table
