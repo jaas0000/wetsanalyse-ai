@@ -82,8 +82,7 @@ kernstructuur die meerdere bestanden raakt:
   (uitsluitend voor geautomatiseerde evals).
 - **Het rapport wordt gegenereerd, niet overgetypt.** `scripts/render_rapport.py` rendert de
   deterministische delen (secties 0–3 en het reviewlog-skelet) brongetrouw uit de
-  gevalideerde `analyse.json`'s van de hoogste reviewronde, volgens
-  `assets/analyserapport-sjabloon.md`. Het script zet `_TODO_`-markeringen op de plekken die
+  gevalideerde `analyse.json`'s van de hoogste reviewronde. Het script zet `_TODO_`-markeringen op de plekken die
   synthese vragen — de **aandachtspunten voor multidisciplinaire validatie** (sectie 4: open
   normen, twijfel, aannames) en de prozasamenvatting in de **reviewlog** — die de skill
   daarna handmatig invult. Raak de gegenereerde inhoud verder niet aan; opnieuw renderen
