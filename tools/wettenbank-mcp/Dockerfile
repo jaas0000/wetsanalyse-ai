@@ -26,6 +26,12 @@ ENV NODE_ENV=production \
 
 WORKDIR /app
 
+# OS-pakketten patchen (BIO2 / ISO 27002:2022 §8.8). De base-image loopt soms achter
+# op Debian-security-updates; `apt-get upgrade` haalt o.a. de libgnutls30-fix binnen.
+RUN apt-get update \
+    && apt-get upgrade -y --no-install-recommends \
+    && rm -rf /var/lib/apt/lists/*
+
 # Alleen productie-dependencies in de runtime-image.
 COPY package*.json ./
 RUN npm ci --omit=dev && npm cache clean --force
