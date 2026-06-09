@@ -12,6 +12,7 @@ import {
   isVertrouwdeRepoUrl,
 } from "./sru-client.js";
 import type { Regeling } from "./sru-client.js";
+import { fetchMetRetry } from "./http.js";
 
 type XNode = any;
 type XElement = any;
@@ -101,19 +102,11 @@ export async function haalWetstekstOp(
     throw new Error(`Niet-vertrouwde wetstekst-URL geweigerd voor BWB-id: ${bwbId}.`);
   }
 
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 15_000);
-  let resp: Response;
-  try {
-    resp = await fetch(r.repositoryUrl, { signal: controller.signal });
-  } catch (err) {
-    if ((err as Error).name === "AbortError") {
-      throw new Error("Wetstekst-repository timeout na 15s");
-    }
-    throw err;
-  } finally {
-    clearTimeout(timeoutId);
-  }
+  const resp = await fetchMetRetry(
+    r.repositoryUrl,
+    {},
+    { timeoutMs: 15_000, bron: "Wetstekst-repository" }
+  );
   if (!resp.ok) throw new Error(`Wetstekst repository onbereikbaar: ${resp.status}`);
 
   const rawXml = await resp.text();

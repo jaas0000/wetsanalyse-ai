@@ -4,6 +4,7 @@
  */
 import { DOMParser } from "@xmldom/xmldom";
 import { log } from "../logger.js";
+import { fetchMetRetry } from "./http.js";
 const SRU_BASE = "https://zoekservice.overheid.nl/sru/Search";
 export const REPO_BASE = "https://repository.officiele-overheidspublicaties.nl/bwb";
 const REPO_HOST = "repository.officiele-overheidspublicaties.nl";
@@ -69,26 +70,10 @@ export async function sruRequest(query, maxRecords = 10) {
         query,
         maximumRecords: String(maxRecords),
     });
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-    try {
-        const res = await fetch(`${SRU_BASE}?${params}`, {
-            headers: { Accept: "application/xml" },
-            signal: controller.signal,
-        });
-        if (!res.ok)
-            throw new Error(`SRU HTTP ${res.status}`);
-        return res.text();
-    }
-    catch (err) {
-        if (err.name === "AbortError") {
-            throw new Error(`SRU-timeout na ${FETCH_TIMEOUT_MS / 1000}s`);
-        }
-        throw err;
-    }
-    finally {
-        clearTimeout(timeoutId);
-    }
+    const res = await fetchMetRetry(`${SRU_BASE}?${params}`, { headers: { Accept: "application/xml" } }, { timeoutMs: FETCH_TIMEOUT_MS, bron: "SRU" });
+    if (!res.ok)
+        throw new Error(`SRU HTTP ${res.status}`);
+    return res.text();
 }
 export function parseRecords(xml) {
     const doc = parseXmlDoc(xml, "SRU-service");

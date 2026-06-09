@@ -5,6 +5,7 @@
 
 import { DOMParser } from "@xmldom/xmldom";
 import { log } from "../logger.js";
+import { fetchMetRetry } from "./http.js";
 
 type XNode = any;
 
@@ -93,23 +94,13 @@ export async function sruRequest(query: string, maxRecords = 10): Promise<string
     query,
     maximumRecords: String(maxRecords),
   });
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-  try {
-    const res = await fetch(`${SRU_BASE}?${params}`, {
-      headers: { Accept: "application/xml" },
-      signal: controller.signal,
-    });
-    if (!res.ok) throw new Error(`SRU HTTP ${res.status}`);
-    return res.text();
-  } catch (err) {
-    if ((err as Error).name === "AbortError") {
-      throw new Error(`SRU-timeout na ${FETCH_TIMEOUT_MS / 1000}s`);
-    }
-    throw err;
-  } finally {
-    clearTimeout(timeoutId);
-  }
+  const res = await fetchMetRetry(
+    `${SRU_BASE}?${params}`,
+    { headers: { Accept: "application/xml" } },
+    { timeoutMs: FETCH_TIMEOUT_MS, bron: "SRU" }
+  );
+  if (!res.ok) throw new Error(`SRU HTTP ${res.status}`);
+  return res.text();
 }
 
 export function parseRecords(xml: string): Regeling[] {

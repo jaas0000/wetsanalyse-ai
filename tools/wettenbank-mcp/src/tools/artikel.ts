@@ -64,6 +64,11 @@ export async function handleArtikel(args: unknown): Promise<string> {
     formaat,
     citeertitel: wetNaam,
     versiedatum: meta.versiedatum || regeling.geldigVanaf,
+    // Geldigheidsmetadata van de toestand — voor traceerbaarheid: sinds/tot wanneer geldt
+    // deze versie en wanneer is ze laatst gewijzigd (relevant voor wetsanalyse).
+    geldigVanaf: regeling.geldigVanaf,
+    geldigTot: regeling.geldigTot,
+    gewijzigd: regeling.gewijzigd,
     bwbId,
     artikel,
     ...(lidnr && { lid: lidnr }),
