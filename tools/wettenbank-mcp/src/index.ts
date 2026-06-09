@@ -40,10 +40,20 @@ if (process.argv[1] === __filename) {
     }
     // Dynamische import: het stdio-pad laadt de HTTP-laag zo nooit.
     const { startHttpServer } = await import("./http-server.js");
-    startHttpServer({
+    const httpServer = startHttpServer({
       port: Number(process.env.PORT ?? 3000),
       clients,
     });
+    // Graceful shutdown: bij SIGTERM/SIGINT de server netjes sluiten (de close-listener
+    // ruimt cleanup-timer en rate-limiter op) zodat de container schoon afsluit.
+    const sluitAf = (signaal: string) => {
+      console.error(`Ontvangen ${signaal}: HTTP-server wordt afgesloten…`);
+      httpServer.close(() => process.exit(0));
+      // Vangnet: forceer exit als open verbindingen het sluiten ophouden.
+      setTimeout(() => process.exit(0), 10_000).unref();
+    };
+    process.once("SIGTERM", () => sluitAf("SIGTERM"));
+    process.once("SIGINT", () => sluitAf("SIGINT"));
   } else {
     const transport = new StdioServerTransport();
     await server.connect(transport);

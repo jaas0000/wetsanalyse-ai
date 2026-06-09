@@ -4,6 +4,7 @@
  */
 
 import { DOMParser } from "@xmldom/xmldom";
+import { log } from "../logger.js";
 
 type XNode = any;
 
@@ -115,7 +116,7 @@ export function parseRecords(xml: string): Regeling[] {
   const doc = parseXmlDoc(xml, "SRU-service");
   const records = Array.from(doc.getElementsByTagName("record")) as XNode[];
 
-  return records.map((rec) => {
+  const geparsed = records.map((rec) => {
     const gzd = rec.getElementsByTagName("gzd")[0];
     const owmskern = gzd?.getElementsByTagName("owmskern")[0];
     const bwbipm = gzd?.getElementsByTagName("bwbipm")[0];
@@ -143,6 +144,17 @@ export function parseRecords(xml: string): Regeling[] {
       repositoryUrl,
     };
   });
+
+  // Records zonder bwbId óf titel zijn onbruikbaar (bv. ontbrekend <gzd>): weglaten i.p.v.
+  // stil lege velden teruggeven, en het aantal overgeslagen records zichtbaar maken.
+  const volledig = geparsed.filter((r) => r.bwbId && r.titel);
+  if (volledig.length < geparsed.length) {
+    log("warn", "functioneel", "onvolledige SRU-records overgeslagen", {
+      overgeslagen: geparsed.length - volledig.length,
+      totaal: geparsed.length,
+    });
+  }
+  return volledig;
 }
 
 export function dedupliceerOpBwbId(lijst: Regeling[]): Regeling[] {

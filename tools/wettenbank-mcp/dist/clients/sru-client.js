@@ -3,6 +3,7 @@
  * Verantwoordelijk voor HTTP-requests en XML-parsing van SRU-responses.
  */
 import { DOMParser } from "@xmldom/xmldom";
+import { log } from "../logger.js";
 const SRU_BASE = "https://zoekservice.overheid.nl/sru/Search";
 export const REPO_BASE = "https://repository.officiele-overheidspublicaties.nl/bwb";
 const REPO_HOST = "repository.officiele-overheidspublicaties.nl";
@@ -92,7 +93,7 @@ export async function sruRequest(query, maxRecords = 10) {
 export function parseRecords(xml) {
     const doc = parseXmlDoc(xml, "SRU-service");
     const records = Array.from(doc.getElementsByTagName("record"));
-    return records.map((rec) => {
+    const geparsed = records.map((rec) => {
         const gzd = rec.getElementsByTagName("gzd")[0];
         const owmskern = gzd?.getElementsByTagName("owmskern")[0];
         const bwbipm = gzd?.getElementsByTagName("bwbipm")[0];
@@ -116,6 +117,16 @@ export function parseRecords(xml) {
             repositoryUrl,
         };
     });
+    // Records zonder bwbId óf titel zijn onbruikbaar (bv. ontbrekend <gzd>): weglaten i.p.v.
+    // stil lege velden teruggeven, en het aantal overgeslagen records zichtbaar maken.
+    const volledig = geparsed.filter((r) => r.bwbId && r.titel);
+    if (volledig.length < geparsed.length) {
+        log("warn", "functioneel", "onvolledige SRU-records overgeslagen", {
+            overgeslagen: geparsed.length - volledig.length,
+            totaal: geparsed.length,
+        });
+    }
+    return volledig;
 }
 export function dedupliceerOpBwbId(lijst) {
     const map = new Map();

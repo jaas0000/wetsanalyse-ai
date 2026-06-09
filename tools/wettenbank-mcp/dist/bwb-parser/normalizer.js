@@ -9,6 +9,18 @@
  *
  * Invariant: de NORMALIZED-laag mag nooit informatie verliezen t.o.v. RAW.
  */
+// ── Helpers ───────────────────────────────────────────────────────────────────
+/**
+ * Parseert een (optionele) string naar een geheel getal. Niet-numerieke of ontbrekende
+ * waarden geven de fallback terug i.p.v. `NaN` — `NaN` zou de tabel-rasterberekening
+ * (cols/colnum/rowspan) corrumperen.
+ */
+function parseIntOf(waarde, fallback) {
+    if (waarde === undefined)
+        return fallback;
+    const n = parseInt(waarde, 10);
+    return Number.isFinite(n) ? n : fallback;
+}
 // ── Tekst-extractie ───────────────────────────────────────────────────────────
 /**
  * Extraheert platte tekst uit een ContentItem[].
@@ -190,13 +202,11 @@ function normalizeTgroup(tgroup) {
         .filter((c) => c.type === "colspec")
         .map((cs, idx) => ({
         name: cs.metadata.colname ?? `col${idx}`,
-        colnum: cs.metadata.colnum ? parseInt(cs.metadata.colnum, 10) : undefined,
+        colnum: parseIntOf(cs.metadata.colnum, undefined),
         colwidth: cs.metadata.colwidth,
     }));
     const colNameToIdx = new Map(colspecs.map((cs, idx) => [cs.name, idx]));
-    const cols = tgroup.metadata.cols
-        ? parseInt(tgroup.metadata.cols, 10)
-        : colspecs.length || 1;
+    const cols = parseIntOf(tgroup.metadata.cols, colspecs.length || 1);
     const headNode = tgroup.children.find((c) => c.type === "thead");
     const bodyNode = tgroup.children.find((c) => c.type === "tbody");
     const footNode = tgroup.children.find((c) => c.type === "tfoot");
@@ -223,7 +233,7 @@ function normalizeEntry(entry, colNameToIdx) {
     const content = entry.content ?? [];
     const tekst = extractPlainText(content);
     // rowspan: @morerows + 1 (CALS-conventie: morerows = extra rijen na de eigen rij)
-    const morerows = entry.metadata.morerows ? parseInt(entry.metadata.morerows) : 0;
+    const morerows = parseIntOf(entry.metadata.morerows, 0);
     const rowspan = morerows + 1;
     // colspan: bereken uit @namest/@nameend via de colspec-index-map
     let colspan = 1;

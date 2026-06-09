@@ -28,6 +28,19 @@ import type {
   NormalizedLeaf,
 } from "./types.js";
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+/**
+ * Parseert een (optionele) string naar een geheel getal. Niet-numerieke of ontbrekende
+ * waarden geven de fallback terug i.p.v. `NaN` — `NaN` zou de tabel-rasterberekening
+ * (cols/colnum/rowspan) corrumperen.
+ */
+function parseIntOf<T>(waarde: string | undefined, fallback: T): number | T {
+  if (waarde === undefined) return fallback;
+  const n = parseInt(waarde, 10);
+  return Number.isFinite(n) ? n : fallback;
+}
+
 // ── Tekst-extractie ───────────────────────────────────────────────────────────
 
 /**
@@ -235,7 +248,7 @@ function normalizeTgroup(tgroup: BwbNode): NormalizedTableGroup {
     .filter((c) => c.type === "colspec")
     .map((cs, idx) => ({
       name: (cs.metadata.colname as string | undefined) ?? `col${idx}`,
-      colnum: cs.metadata.colnum ? parseInt(cs.metadata.colnum, 10) : undefined,
+      colnum: parseIntOf(cs.metadata.colnum, undefined),
       colwidth: cs.metadata.colwidth,
     }));
 
@@ -243,9 +256,7 @@ function normalizeTgroup(tgroup: BwbNode): NormalizedTableGroup {
     colspecs.map((cs, idx) => [cs.name, idx]),
   );
 
-  const cols = tgroup.metadata.cols
-    ? parseInt(tgroup.metadata.cols, 10)
-    : colspecs.length || 1;
+  const cols = parseIntOf(tgroup.metadata.cols, colspecs.length || 1);
 
   const headNode = tgroup.children.find((c) => c.type === "thead");
   const bodyNode = tgroup.children.find((c) => c.type === "tbody");
@@ -287,7 +298,7 @@ function normalizeEntry(
   const tekst = extractPlainText(content);
 
   // rowspan: @morerows + 1 (CALS-conventie: morerows = extra rijen na de eigen rij)
-  const morerows = entry.metadata.morerows ? parseInt(entry.metadata.morerows) : 0;
+  const morerows = parseIntOf(entry.metadata.morerows, 0);
   const rowspan = morerows + 1;
 
   // colspan: bereken uit @namest/@nameend via de colspec-index-map
