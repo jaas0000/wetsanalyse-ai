@@ -3,6 +3,7 @@
  * Haalt BWB-wetstekst XML op, beheert in-memory cache en extraheert doc-metadata.
  */
 import { sruRequest, parseRecords, parseXmlDoc, getElText, getAttr, isVertrouwdeRepoUrl, } from "./sru-client.js";
+import { fetchMetRetry } from "./http.js";
 export const xmlCache = new Map();
 const CACHE_TTL = 1000 * 60 * 60; // 1 uur
 // Bovengrens op het aantal entries (elke entry bevat de volledige rauwe XML + geparsed
@@ -50,21 +51,7 @@ export async function haalWetstekstOp(bwbId, peildatum) {
     if (!isVertrouwdeRepoUrl(r.repositoryUrl)) {
         throw new Error(`Niet-vertrouwde wetstekst-URL geweigerd voor BWB-id: ${bwbId}.`);
     }
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15_000);
-    let resp;
-    try {
-        resp = await fetch(r.repositoryUrl, { signal: controller.signal });
-    }
-    catch (err) {
-        if (err.name === "AbortError") {
-            throw new Error("Wetstekst-repository timeout na 15s");
-        }
-        throw err;
-    }
-    finally {
-        clearTimeout(timeoutId);
-    }
+    const resp = await fetchMetRetry(r.repositoryUrl, {}, { timeoutMs: 15_000, bron: "Wetstekst-repository" });
     if (!resp.ok)
         throw new Error(`Wetstekst repository onbereikbaar: ${resp.status}`);
     const rawXml = await resp.text();

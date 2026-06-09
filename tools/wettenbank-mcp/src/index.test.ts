@@ -14,6 +14,7 @@ import {
   domParser,
   xmlCache,
 } from "./index.js";
+import { fetchMetRetry } from "./clients/http.js";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -469,6 +470,63 @@ describe("sruRequest", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, text: () => Promise.resolve("<xml>ok</xml>") }));
     const result = await sruRequest("test");
     expect(result).toBe("<xml>ok</xml>");
+  });
+});
+
+// ── fetchMetRetry ─────────────────────────────────────────────────────────────
+
+describe("fetchMetRetry", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("herprobeert bij een transiënte 503 en slaagt daarna", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: false, status: 503 })
+      .mockResolvedValueOnce({ ok: true, status: 200 });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const res = await fetchMetRetry("https://x", {}, { baseDelayMs: 1 });
+    expect(res.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("herprobeert NIET bij een 404 (niet-transiënt)", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 404 });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const res = await fetchMetRetry("https://x", {}, { baseDelayMs: 1 });
+    expect(res.status).toBe(404);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("herprobeert bij een netwerkfout en slaagt daarna", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("ECONNRESET"))
+      .mockResolvedValueOnce({ ok: true, status: 200 });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const res = await fetchMetRetry("https://x", {}, { baseDelayMs: 1 });
+    expect(res.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("gooit na uitputting een bron-gelabelde fout door", async () => {
+    const netwerkfout = new Error("ECONNRESET");
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(netwerkfout));
+
+    await expect(
+      fetchMetRetry("https://x", {}, { pogingen: 2, baseDelayMs: 1, bron: "SRU" })
+    ).rejects.toThrow("ECONNRESET");
+  });
+
+  it("vertaalt een AbortError (timeout) naar een leesbare bron-timeout", async () => {
+    const abort = Object.assign(new Error("aborted"), { name: "AbortError" });
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(abort));
+
+    await expect(
+      fetchMetRetry("https://x", {}, { pogingen: 1, baseDelayMs: 1, bron: "SRU", timeoutMs: 5000 })
+    ).rejects.toThrow("SRU-timeout na 5s");
   });
 });
 
