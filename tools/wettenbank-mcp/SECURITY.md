@@ -2,7 +2,6 @@
 
 Operationele documentatie voor de gecontaineriseerde HTTP-deployment, afgestemd op
 **BIO2 / NEN-EN-ISO/IEC 27002:2022**, **AVG** en (waar van toepassing) **NIS2**.
-Achtergrond en fasering staan in [`ENTERPRISE-PLAN.md`](./ENTERPRISE-PLAN.md).
 
 > De stdio-modus (lokaal subproces op de machine van de gebruiker) heeft geen
 > netwerk-attackoppervlak en valt buiten deze documentatie.
