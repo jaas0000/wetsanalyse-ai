@@ -112,6 +112,39 @@ describe("http-server — per-client tokens", () => {
   });
 });
 
+describe("http-server — OIDC-only auth", () => {
+  let server: HttpServer;
+  let url: string;
+
+  beforeAll(async () => {
+    // Stub-verifier: accepteert uitsluitend 'Bearer good' → clientId 'alice'.
+    const oidc = {
+      verifieer: async (h?: string) => (h === "Bearer good" ? "alice" : null),
+    };
+    server = startHttpServer({ port: 0, clients: [], oidc });
+    await new Promise<void>((r) => server.once("listening", () => r()));
+    url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  });
+
+  afterAll(async () => {
+    await new Promise<void>((r) => server.close(() => r()));
+  });
+
+  it("weigert zonder token (401) ook al zijn er geen statische clients", async () => {
+    const res = await fetch(`${url}/mcp`, { method: "POST", body: "{}" });
+    expect(res.status).toBe(401);
+  });
+
+  it("accepteert een geldig OIDC-token (geen 401)", async () => {
+    const res = await fetch(`${url}/mcp`, {
+      method: "POST",
+      headers: { authorization: "Bearer good", "content-type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }),
+    });
+    expect(res.status).not.toBe(401);
+  });
+});
+
 describe("http-server — rate limiting", () => {
   let server: HttpServer;
   let url: string;

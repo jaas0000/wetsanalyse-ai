@@ -15,6 +15,12 @@ Achtergrond en fasering staan in [`ENTERPRISE-PLAN.md`](./ENTERPRISE-PLAN.md).
 | `PORT` | `3000` | Luisterpoort (HTTP-modus). |
 | `MCP_AUTH_TOKENS` | — | Per-client tokens: `"belastingdienst:abc, analist-jan:def"`. **Aanbevolen.** |
 | `MCP_AUTH_TOKEN` | — | Legacy enkelvoud → clientId `default`. Fallback. |
+| `MCP_AUTH_TOKENS_FILE` | — | Pad naar bestand met de tokenlijst (Docker secret / vault). Voorrang op inline. |
+| `MCP_AUTH_TOKEN_FILE` | — | Pad naar bestand met de legacy enkelvoudtoken. |
+| `OIDC_ISSUER` | — | Zet OIDC-auth aan (bijv. `https://login.example.nl/realms/x`). |
+| `OIDC_JWKS_URI` | `${issuer}/.well-known/jwks.json` | JWKS-endpoint voor signatuurvalidatie. |
+| `OIDC_AUDIENCE` | — | Verwachte `aud`-claim (aanbevolen). |
+| `OIDC_CLIENT_CLAIM` | `azp` | Claim waaruit `clientId` komt; valt terug op `sub`. |
 | `MCP_ALLOW_NO_AUTH` | — | `1` = bewust zonder auth starten (alleen achter vertrouwd netwerk). |
 | `MCP_RATE_BURST` | `60` | Max. burst (emmergrootte) per IP. |
 | `MCP_RATE_PER_MIN` | `120` | Aanvulsnelheid per IP per minuut. |
@@ -31,7 +37,15 @@ Per-client bearer-tokens, constant-tijd vergeleken (geen timing-oracle). Elke af
 eigen `clientId` die in de auditlog belandt, zodat aanroepen herleidbaar zijn. `/health` is
 bewust auth-vrij (healthcheck Portainer/Azure). TLS wordt door Nginx Proxy Manager getermineerd.
 
-**Eindbeeld (Fase 3):** OAuth2/OIDC tegen de IdP van de afnemer i.p.v. statische tokens.
+**OAuth2/OIDC (optioneel, dormant tenzij `OIDC_ISSUER` is gezet).** Een binnenkomende
+JWT-bearer wordt gevalideerd tegen de IdP: signatuur via JWKS, plus `iss`/`aud`/`exp`/`nbf`.
+De `clientId` komt uit `OIDC_CLIENT_CLAIM` (default `azp`, val terug op `sub`). De statische/
+file-tokens blijven werken als fallback, zodat migratie geleidelijk kan. Implementatie:
+`src/oidc.ts` (met de vetted `jose`-library); zie issue #16.
+
+**Secret-management.** Tokens kunnen uit een **bestand** komen (`*_FILE`-env) i.p.v. inline env —
+het standaardpatroon voor Docker secrets en vault-agents. Rotatie: vervang een `id:token`-paar
+(of het secret-bestand) en herdeploy; per-client intrekken raakt de andere clients niet. Zie issue #18.
 
 ## Logging
 
@@ -83,7 +97,9 @@ nodig; alert-regels (herhaalde 401's, 429-pieken) horen in het SIEM.
 
 ## Bekende restpunten (vervolg)
 
-- OAuth2/OIDC i.p.v. statische tokens (Fase 3, vereist IdP bij afnemer).
-- Externe pentest vóór productie (BIO/NIS2-aantoonbaarheid).
-- Secret-management naar een echte vault + gedocumenteerde rotatieprocedure.
+- **OAuth2/OIDC** — codepad aanwezig (`src/oidc.ts`); resteert: IdP-keuze + client-registratie
+  bij de afnemer en een integratietest tegen die IdP (issue #16).
+- **Secret-management** — file-based secrets ondersteund; resteert: keuze + inrichting van de
+  concrete vault/secret-store bij de afnemer (issue #18).
+- **Externe pentest** vóór productie (BIO/NIS2-aantoonbaarheid) — externe partij vereist (issue #17).
 - Optioneel: IP-allowlist op NPM voor bekende afnemers; `Origin`/DNS-rebinding-check op `/mcp`.

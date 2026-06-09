@@ -26,6 +26,7 @@ import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import { createServer } from "./server.js";
 import { authenticeer } from "./auth.js";
 import { maakRateLimiter, leesRateConfig } from "./rate-limit.js";
+import { maakOidcVerifier, oidcConfigUitEnv } from "./oidc.js";
 import { log } from "./logger.js";
 const MAX_BODY_BYTES = 1_000_000;
 // Sessies zonder activiteit worden na dit interval opgeruimd. Een client die wegvalt
@@ -88,7 +89,9 @@ export function startHttpServer(opts) {
     if (opts.token && !clients.some((c) => c.id === "default")) {
         clients.push({ id: "default", token: opts.token });
     }
-    const authVereist = clients.length > 0;
+    // OIDC: expliciet meegegeven, anders uit de omgeving (null als OIDC_ISSUER ontbreekt).
+    const oidc = opts.oidc !== undefined ? opts.oidc : maakOidcVerifier(oidcConfigUitEnv());
+    const authVereist = clients.length > 0 || oidc !== null;
     const rateLimiter = opts.rateLimiter ?? maakRateLimiter(leesRateConfig());
     // Eén transport per sessie; gekoppeld aan een verse Server-instantie.
     const transports = {};
@@ -134,15 +137,20 @@ export function startHttpServer(opts) {
             stuurFout(res, 429, "Te veel verzoeken");
             return;
         }
-        // Auth: per-client bearer-token. clientId belandt in de auditlog.
+        // Auth: per-client bearer-token (statisch, snel), met OIDC-JWT als fallback.
+        // clientId belandt in de auditlog.
         let clientId;
         if (authVereist) {
-            const result = authenticeer(req.headers["authorization"], clients);
+            const authHeader = req.headers["authorization"];
+            let result = authenticeer(authHeader, clients);
+            if (!result && oidc) {
+                result = await oidc.verifieer(authHeader);
+            }
             if (!result) {
                 log("warn", "security", "authenticatie geweigerd", {
                     requestId,
                     ip,
-                    reden: req.headers["authorization"] ? "onjuiste token" : "ontbrekende token",
+                    reden: authHeader ? "onjuiste token" : "ontbrekende token",
                 });
                 stuurFout(res, 401, "Ongeautoriseerd: ontbrekende of onjuiste bearer-token");
                 return;
@@ -234,7 +242,9 @@ export function startHttpServer(opts) {
     httpServer.listen(opts.port, "0.0.0.0", () => {
         log("info", "functioneel", "HTTP-server gestart", {
             poort: opts.port,
-            auth: authVereist ? `per-client (${clients.length})` : "geen",
+            auth: authVereist
+                ? `tokens=${clients.length}${oidc ? " + oidc" : ""}`
+                : "geen",
         });
     });
     return httpServer;
