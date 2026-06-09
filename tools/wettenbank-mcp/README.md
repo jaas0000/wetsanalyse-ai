@@ -56,38 +56,63 @@ wettenbank_zoekterm (includeerTekst=true) → zoeken + tekst in één call
 
 ```
 src/
-├── index.ts                    # Entry point — startup + re-exports (48r)
-├── server.ts                   # MCP Server — tool-definities en handlers (194r)
+├── index.ts                    # Entry point — transportkeuze (stdio/http) + startup + re-exports
+├── server.ts                   # MCP Server — tool-definities en dispatcher (singleton + createServer)
+│
+├── http-server.ts              # Streamable-HTTP-transport — sessies, /mcp, /health (HTTP-modus)
+├── auth.ts                     # Per-client bearer-tokens (leesClients, authenticeer)
+├── oidc.ts                     # Optionele OIDC/JWT-bearer-validatie (dormant tenzij OIDC_ISSUER)
+├── rate-limit.ts               # Token-bucket rate limiting per IP
+├── logger.ts                   # Gestructureerde JSON-logging naar stderr (functioneel/audit/security)
+├── build-info.ts               # Build-metadata (version/commit/builtAt) voor /health
 │
 ├── clients/
-│   ├── sru-client.ts           # SRU HTTP-client + XML-parsing (101r)
-│   └── repository-client.ts    # BWB repo fetch + in-memory cache (122r)
+│   ├── http.ts                 # Gedeelde fetch-helper: fetchMetRetry (timeout + retry/backoff)
+│   ├── sru-client.ts           # SRU HTTP-client + XML-parsing
+│   └── repository-client.ts    # BWB repo fetch + in-memory cache
 │
 ├── search/
-│   └── zoekterm-engine.ts      # Wildcard-regex + EN/OF-zoeklogica (136r)
+│   └── zoekterm-engine.ts      # Wildcard-regex + EN/OF-zoeklogica
 │
 ├── tools/
-│   ├── zoek.ts                 # wettenbank_zoek handler (30r)
-│   ├── structuur.ts            # wettenbank_structuur handler (116r)
-│   ├── artikel.ts              # wettenbank_artikel handler (78r)
-│   └── zoekterm.ts             # wettenbank_zoekterm handler (68r)
+│   ├── zoek.ts                 # wettenbank_zoek handler
+│   ├── structuur.ts            # wettenbank_structuur handler
+│   ├── artikel.ts              # wettenbank_artikel handler
+│   └── zoekterm.ts             # wettenbank_zoekterm handler
 │
 ├── shared/
-│   └── schemas.ts              # Zod input/output schemas — source of truth (149r)
+│   ├── schemas.ts              # Zod input/output schemas — source of truth
+│   └── utils.ts                # Gedeelde helpers (detecteerFormaat)
 │
 └── bwb-parser/
-    ├── index.ts                # Publieke API + parseBwb() pipeline (70r)
-    ├── types.ts                # TypeScript type-definities RAW/NORMALIZED/MCP-LITE (199r)
-    ├── parser.ts               # XML DOM → RAW BwbNode-boom (392r)
-    ├── normalizer.ts           # RAW → NORMALIZED structuur (344r)
-    └── mcp-lite.ts             # NORMALIZED → token-efficiënte Markdown-JSON (262r)
+    ├── index.ts                # Publieke API + parseBwb() pipeline
+    ├── types.ts                # TypeScript type-definities RAW/NORMALIZED/MCP-LITE
+    ├── parser.ts               # XML DOM → RAW BwbNode-boom
+    ├── normalizer.ts           # RAW → NORMALIZED structuur
+    └── mcp-lite.ts             # NORMALIZED → token-efficiënte Markdown-JSON
 ```
+
+> De top-level `http-server.ts`, `auth.ts`, `oidc.ts`, `rate-limit.ts`, `logger.ts` en
+> `build-info.ts` horen bij het **HTTP-transport**; het lokale stdio-pad raakt ze niet aan.
+> Zie [§8](#8-installatie-en-configuratie) en `SECURITY.md` voor de HTTP-deployment.
 
 ### Communicatiemodel
 
+De server kent **twee transports** (zelfde tool-logica eronder), gekozen in `index.ts` via
+`MCP_TRANSPORT` (env) of `--transport <modus>` (CLI-flag); default is `stdio`:
+
+- **stdio** (default) — de client start de server als subproces en wisselt JSON-RPC uit over
+  stdin/stdout. Gebruikt de singleton `server` uit `server.ts`.
+- **http** (`MCP_TRANSPORT=http`) — langlevende netwerkservice via Streamable HTTP
+  (`http-server.ts`, Node-stdlib): sessiebeheer op `/mcp`, `/health` (auth-vrij), bearer-auth,
+  rate limiting en gestructureerde logging. Bedoeld voor de gecontaineriseerde deployment
+  (zie [§8](#8-installatie-en-configuratie) en `SECURITY.md`).
+
+Het tool-dispatcherpad is in beide transports identiek:
+
 ```
 Claude Code (LLM)
-      │  tool call (JSON over stdin)
+      │  tool call (JSON-RPC over stdio of HTTP)
       ▼
   server.ts — MCP-protocol + dispatcher
       │
@@ -104,7 +129,7 @@ Claude Code (LLM)
                                       ├─► zoekterm-engine: EN/OF-zoeken
                                       └─► (optioneel) bwb-parser per gevonden artikel
 
-      ▲  tool result (JSON over stdout)
+      ▲  tool result (JSON-RPC over stdio of HTTP)
       │
 Claude Code (LLM)
 ```
@@ -388,11 +413,17 @@ Zoekt welke artikelen een begrip bevatten. Ondersteunt wildcards en booleaanse o
 
 ## 5  Modules en functies
 
+### `src/clients/http.ts`
+
+| Functie/export | Doel |
+|----------------|------|
+| `fetchMetRetry(url, init?, opts?)` | Gedeelde `fetch` met per-poging-timeout (`AbortController`, default 15s) en retry met exponentiële backoff + jitter; herprobeert **alleen** transiënte fouten (netwerk/timeout + HTTP 502/503/504). 2xx/4xx/500 gaan direct terug — de aanroeper bepaalt via `res.ok` wat een fout is. Gebruikt door `sru-client.ts` en `repository-client.ts`. |
+
 ### `src/clients/sru-client.ts`
 
 | Functie/export | Doel |
 |----------------|------|
-| `sruRequest(query, maxRecords?)` | HTTP GET naar SRU-zoekdienst; geeft raw XML terug |
+| `sruRequest(query, maxRecords?)` | HTTP GET naar SRU-zoekdienst (via `fetchMetRetry`); geeft raw XML terug |
 | `parseRecords(xml)` | Parsed SRU-XML naar `Regeling[]` |
 | `dedupliceerOpBwbId(lijst)` | Behoudt per BWB-id de meest recente versie (op `geldigVanaf`) |
 | `getElText(parent, tagName)` | Extraheert tekstinhoud van eerste child met gegeven tagnaam |
@@ -445,6 +476,26 @@ Zoekt welke artikelen een begrip bevatten. Ondersteunt wildcards en booleaanse o
 | `StructuurOutputSchema` | output | `{ formaat, bwbId, citeertitel, versiedatum, structuur }` |
 | `StructuurNodeSchema` | output | Recursief schema voor structuurnodes |
 | `FoutOutputSchema` | output | `{ fout: string }` — backwards-compatibel foutformaat |
+
+### `src/shared/utils.ts`
+
+| Functie/export | Doel |
+|----------------|------|
+| `detecteerFormaat(tekst)` | Bepaalt `"plain"` of `"markdown"` (tabellen, genummerde/letter-/streepjeslijsten); gedeeld door `wettenbank_artikel` en `wettenbank_zoekterm` |
+
+### HTTP-transport en enterprise-modules
+
+Deze modules zijn alleen actief in **HTTP-modus** (`MCP_TRANSPORT=http`). Het volledige
+overzicht van env-vars, logvelden, bewaartermijnen en hardening staat in **`SECURITY.md`**.
+
+| Module | Doel |
+|--------|------|
+| `http-server.ts` | Streamable-HTTP-transport: sessiebeheer per `mcp-session-id` met idle-opruiming, `/mcp` (POST/GET/DELETE), `/health` (auth-vrij, geeft build-info), 1 MB body-cap, securityheaders |
+| `auth.ts` | Per-client bearer-tokens (`leesClients`, `authenticeer`); constant-tijd vergelijking; tokens uit env (`MCP_AUTH_TOKENS`/`MCP_AUTH_TOKEN`) of bestand (`*_FILE`) |
+| `oidc.ts` | Optionele OIDC/JWT-bearer-validatie via JWKS (`jose`); dormant tenzij `OIDC_ISSUER` is gezet; statische tokens blijven fallback |
+| `rate-limit.ts` | Token-bucket per IP (`MCP_RATE_BURST`/`MCP_RATE_PER_MIN`); client-IP via XFF met `MCP_TRUSTED_PROXY_HOPS` |
+| `logger.ts` | Gestructureerde JSON-logging naar stderr; categorieën `functioneel`/`audit`/`security`; tokens en rauwe zoektermen worden nooit gelogd |
+| `build-info.ts` | Build-metadata (`version`, `commit`, `builtAt`) voor de `/health`-respons |
 
 ---
 
@@ -531,7 +582,10 @@ npm run build    # TypeScript compileren → dist/index.js
 
 > **Let op:** BWB-id `BWBR0004800` is de *Leidraad invordering 1990* (verlopen per 2005-07-12) — niet gebruiken.
 
-### Configuratie Claude Code CLI
+De server kent twee draaiwijzen: **lokaal (stdio)** als subproces, of **remote (HTTP)** als
+gedeelde gecontaineriseerde service. Kies de configuratie die past.
+
+#### A. Lokaal — stdio (Claude Code CLI)
 
 In `.claude/settings.json` (project) of `~/.claude/settings.json` (globaal):
 
@@ -540,13 +594,15 @@ In `.claude/settings.json` (project) of `~/.claude/settings.json` (globaal):
   "mcpServers": {
     "wettenbank": {
       "command": "node",
-      "args": ["/absoluut/pad/naar/wettenbank-mcp/dist/index.js"]
+      "args": ["tools/wettenbank-mcp/dist/index.js"]
     }
   }
 }
 ```
 
-### Configuratie Claude Desktop
+> Projectrelatief pad de voorkeur boven een absoluut pad, zodat de map portabel blijft.
+
+#### B. Lokaal — stdio (Claude Desktop)
 
 In `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS):
 
@@ -561,7 +617,40 @@ In `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS):
 }
 ```
 
+#### C. Remote — HTTP (gedeelde server)
+
+Verwijs naar een draaiende HTTP-instantie; de bearer-token komt via env-expansie zodat hij
+**niet** in de repo belandt:
+
+```json
+{
+  "mcpServers": {
+    "wettenbank": {
+      "type": "http",
+      "url": "https://wettenbank-mcp.ipalm.nl/mcp",
+      "headers": { "Authorization": "Bearer ${WETTENBANK_TOKEN}" }
+    }
+  }
+}
+```
+
 > Na het aanpassen van de configuratie moet Claude Code / Claude Desktop opnieuw worden gestart.
+
+### Remote deployment (Docker)
+
+Voor de gedeelde HTTP-service:
+
+- **`Dockerfile`** — multi-stage, non-root, `HEALTHCHECK` op `/health`, default
+  `MCP_TRANSPORT=http`. Build-context = deze map: `docker build -t wettenbank-mcp tools/wettenbank-mcp`.
+- **`docker-compose.yml`** — Portainer-stack achter Nginx Proxy Manager: géén host-poort, de
+  container hangt op het gedeelde NPM-netwerk (`PROXY_NETWORK`); NPM proxyt
+  `wettenbank-mcp.ipalm.nl` → `wettenbank-mcp:3000` met TLS. `MCP_AUTH_TOKENS` als stack-env.
+- **CI** (`.github/workflows/docker-publish.yml`) — bouwt en pusht
+  `ghcr.io/<owner>/wettenbank-mcp`; lokaal hoeft geen Docker-engine aanwezig te zijn.
+
+In HTTP-modus is de start **fail-closed**: zonder geconfigureerde auth weigert `index.ts` te
+starten, tenzij `MCP_ALLOW_NO_AUTH=1`. De volledige lijst env-vars (auth, OIDC, rate limiting,
+logging) en de hardening staan in **`SECURITY.md`**.
 
 ---
 
@@ -579,7 +668,13 @@ In `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS):
 
 ### Testdekking
 
-Unit tests staan in `src/index.test.ts` (via `src/index.ts` re-exports) en `src/bwb-parser/mcp-lite.test.ts`.
+Unit tests (Vitest) staan verspreid over acht bestanden:
+
+- `src/index.test.ts` — de tool-/parser-/zoeklogica via de `src/index.ts` re-exports
+- `src/bwb-parser/mcp-lite.test.ts` — de mcp-lite-rendering
+- HTTP-/enterprise-modules: `src/auth.test.ts`, `src/oidc.test.ts`,
+  `src/rate-limit.test.ts`, `src/logger.test.ts`, `src/http-server.test.ts`,
+  `src/build-info.test.ts`
 
 **Testsuites:**
 
@@ -599,6 +694,12 @@ Unit tests staan in `src/index.test.ts` (via `src/index.ts` re-exports) en `src/
 | `ArtikelInputSchema` | Verplichte velden; `null`-lid; lege artikel-string |
 | `extraheerDocMetadata` | `citeertitel` + `versiedatum` uit `<toestand>`; lege strings als ontbreekt |
 | `mcp-lite` (apart) | Artikel-rendering; lijsten; tabellen; inline links; sectie-paden |
+| `auth` (apart) | Per-client token-parsing; constant-tijd vergelijking; file-based tokens; legacy fallback |
+| `oidc` (apart) | OIDC-config uit env; JWT-validatie; clientId-claim; fallback op statische tokens |
+| `rate-limit` (apart) | Token-bucket per IP; burst/aanvulsnelheid; XFF-keuze via trusted-proxy-hops |
+| `logger` (apart) | JSON-logregels; categorieën; redactie van tokens en rauwe zoektermen |
+| `http-server` (apart) | Sessiebeheer; `/health` (auth-vrij); auth-weigering; body-cap; securityheaders |
+| `build-info` (apart) | Build-metadata (`version`/`commit`/`builtAt`) voor `/health` |
 
 ### Bekende beperkingen
 

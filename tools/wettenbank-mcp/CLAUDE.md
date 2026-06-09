@@ -23,9 +23,16 @@ This is a **Model Context Protocol (MCP) server** that gives Claude Desktop acce
 
 ```
 src/
-├── index.ts                 # Entry point — startup + backward-compat re-exports
-├── server.ts                # MCP Server — tool definitions + dispatcher
+├── index.ts                 # Entry point — transportkeuze (stdio/http) + startup + re-exports
+├── server.ts                # MCP Server — tool definitions + dispatcher (singleton + createServer)
+├── http-server.ts           # Streamable-HTTP-transport — sessies, /mcp, /health (HTTP-modus)
+├── auth.ts                  # Per-client bearer-tokens (leesClients, authenticeer)
+├── oidc.ts                  # Optionele OIDC/JWT-bearer-validatie (dormant tenzij OIDC_ISSUER)
+├── rate-limit.ts            # Token-bucket rate limiting per IP
+├── logger.ts                # Gestructureerde JSON-logging naar stderr (functioneel/audit/security)
+├── build-info.ts            # Build-metadata (version/commit/builtAt) voor /health
 ├── clients/
+│   ├── http.ts              # Gedeelde fetch-helper: fetchMetRetry (timeout + retry/backoff)
 │   ├── sru-client.ts        # SRU HTTP client + XML parse (sruRequest, parseRecords, etc.)
 │   └── repository-client.ts # BWB repo fetch + xmlCache + extraheerDocMetadata
 ├── search/
@@ -40,6 +47,10 @@ src/
 │   └── utils.ts             # Gedeelde helpers (detecteerFormaat)
 └── bwb-parser/              # XML → structured data pipeline (see below)
 ```
+
+De top-level `http-server.ts`, `auth.ts`, `oidc.ts`, `rate-limit.ts`, `logger.ts` en
+`build-info.ts` horen bij het **HTTP-transport** (zie *Communication* en *Logging &
+beveiliging* verderop); het stdio-pad raakt ze niet aan.
 
 ### Tools
 
@@ -71,9 +82,18 @@ Uses `@xmldom/xmldom` (`DOMParser`) throughout. Mixed-content elements (`<al>`, 
 
 `xmlCache` in `repository-client.ts` (exported `Map<string, CacheEntry>`, 1-hour TTL) caches raw XML + parsed `Document` per BWB-id + date combination. Verlopen entries worden elk uur verwijderd via een `setInterval(...).unref()`; daarnaast geldt een **LRU-cap** (`MAX_CACHE_ENTRIES`) die de oudste entry evicteert vóór een nieuwe wordt toegevoegd, zodat de cache ook binnen één uur niet onbegrensd groeit (elke entry kan MB's XML+DOM bevatten).
 
-### HTTP timeouts
+### HTTP-client (timeouts & retry)
 
-Beide HTTP clients (`sruRequest` in `sru-client.ts` en `haalWetstekstOp` in `repository-client.ts`) gebruiken een `AbortController` met 15 seconden timeout. Na afloop wordt de timer altijd gecleard via `finally { clearTimeout(timeoutId) }`; een `AbortError` wordt hervertaald naar een duidelijke `"…timeout na 15s"`-melding. Malformed/lege XML-responses gaan via `parseXmlDoc()` en geven een expliciete fout (geen stil leeg resultaat).
+Beide upstream-clients (`sruRequest` in `sru-client.ts` en `haalWetstekstOp` in
+`repository-client.ts`) fetchen via de **gedeelde** `fetchMetRetry` in `clients/http.ts`.
+De bronnen van overheid.nl zijn berucht traag/wisselvallig, dus per poging geldt een
+`AbortController`-timeout (default 15s, gecleard in `finally`) en wordt **alleen bij
+transiënte fouten** herprobeerd: netwerk-/timeout-fouten en de gatewaystatussen
+**502/503/504**, met exponentiële backoff + jitter (default 3 pogingen). Niet-transiënte
+antwoorden (2xx, maar ook 4xx en 500) gaan direct terug; de aanroeper bepaalt zelf via
+`res.ok` wat een fout is, zodat de bestaande foutmeldingen (`"SRU HTTP <status>"`,
+`"…timeout na 15s"`) behouden blijven. Malformed/lege XML-responses gaan via
+`parseXmlDoc()` en geven een expliciete fout (geen stil leeg resultaat).
 
 ### Data flow
 
