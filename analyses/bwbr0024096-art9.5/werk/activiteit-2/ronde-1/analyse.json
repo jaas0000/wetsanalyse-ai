@@ -33,21 +33,21 @@
     {
       "id": "m3",
       "formulering": "één maand",
-      "klasse": "Variabele(waarde)",
+      "klasse": "Variabele en variabelewaarde",
       "vindplaats": "alinea 1",
-      "toelichting": "Eén van de twee mogelijke waarden van de variabele 'betalingstermijn'. De betalingstermijn varieert per aanslag (type, grondslag) en neemt één van twee wettelijk toegestane waarden aan. Alternatief: Parameter(waarde) omdat de termijnduren wettelijk zijn vastgesteld. Ik kies Variabele(waarde) omdat de tekst twee mogelijke waarden naast elkaar stelt die per geval gelden: de variabele 'betalingstermijn' krijgt per aanslag de waarde 'één maand' of 'zes weken'. Zie ook twijfelpunt bij m4."
+      "toelichting": "Eén van de twee mogelijke waarden van de variabele 'betalingstermijn'. De betalingstermijn varieert per aanslag (type, grondslag) en neemt één van twee wettelijk toegestane waarden aan. Alternatief: Parameter(waarde) omdat de termijnduren wettelijk zijn vastgesteld. Ik kies Variabele en variabelewaarde omdat de tekst twee mogelijke waarden naast elkaar stelt die per geval gelden: de variabele 'betalingstermijn' krijgt per aanslag de waarde 'één maand' of 'zes weken'. Zie ook twijfelpunt bij m4."
     },
     {
       "id": "m4",
       "formulering": "zes weken",
-      "klasse": "Variabele(waarde)",
+      "klasse": "Variabele en variabelewaarde",
       "vindplaats": "alinea 1",
       "toelichting": "Tweede mogelijke waarde van de variabele 'betalingstermijn'. Zelfde redenering als m3. Twijfelpunt: als de termijnduren (1 maand, 6 weken) voor alle aanslagen van een bepaald type altijd gelijk zijn, zijn het Parameterwaarden. Voor de analyse van dit artikel is het onderscheid niet beslissend; de vervaldatumberekening is in beide gevallen een rekenregel met de termijnduur als invoer."
     },
     {
       "id": "m5",
       "formulering": "de dagtekening van een aanslagbiljet",
-      "klasse": "Variabele(waarde)",
+      "klasse": "Variabele en variabelewaarde",
       "vindplaats": "alinea 1",
       "toelichting": "De dagtekening is de primaire invoervariabele voor alle rekenregels in dit artikel. De waarde varieert per aanslagbiljet (vgl. art. 9.4 LI2008: de dagtekening wordt zodanig bepaald dat de belastingschuldige het biljet enige dagen vóór die dag ontvangt). Niet als Tijdsaanduiding geclassificeerd: het is een variabele die een datum aanneemt, niet een concrete datum of tijdvak. De concrete voorbeelddata (31 oktober etc.) zijn wel Tijdsaanduidingen (m6 e.v.)."
     },
@@ -138,7 +138,7 @@
     {
       "id": "m18",
       "formulering": "schrikkeljaar",
-      "klasse": "Variabele(waarde)",
+      "klasse": "Variabele en variabelewaarde",
       "vindplaats": "alinea 2",
       "toelichting": "Booleaanse variabele: een kalenderjaar is wel of geen schrikkeljaar. Bepaalt welke berekening bij dagtekening 28 februari geldt. Kan ook als Voorwaarde worden gezien (het is de conditie in m17), maar als zelfstandig begrip is het een variabele. De bepaling 'het jaartal aangeeft dat het een schrikkeljaar is' suggereert dat uit het jaartal (deelbaar door 4, met uitzonderingen) wordt afgeleid of sprake is van een schrikkeljaar — dit is een impliciete rekenregel die niet in het artikel staat."
     },

@@ -99,12 +99,12 @@ samenloop van klassen).
 | **Rechtsfeit** | Handeling, gebeurtenis of tijdsverloop dat een rechtsbetrekking creëert, wijzigt of beëindigt. | Actieve werkwoordsvorm + zn: 'indienen van een bezwaarschrift', 'toekennen van een subsidie' |
 | **Voorwaarde** | Conditie waaraan voldaan moet zijn voor een rechtsgevolg. *Welke eis wordt gesteld?* | Voorwaardelijke bijzin: 'indien', 'als', 'mits', 'tenzij', 'voor zover', 'met uitzondering van' |
 | **Afleidingsregel** | Regel die nieuwe feiten/waarden afleidt (beslis-, reken- of specialisatieregel). *Hoe wordt iets berekend/bepaald?* | 'verminderd met', 'vermeerderd met', 'bedraagt', 'wordt gesteld op', 'het gezamenlijke bedrag van' |
-| **Variabele(waarde)** | Kenmerk dat per geval een andere waarde kan hebben (+ die waarde). | Getal, datum, tekst, enumeratie (limitatieve opsomming) of booleaanse waarde (ja/nee) |
-| **Parameter(waarde)** | Vaste waarde, gelijk voor allen over een periode (+ die waarde). 'Constante.' | Tarief, percentage, (drempel)bedrag, vrijstelling met vaste waarde over een periode |
+| **Variabele en variabelewaarde** | Kenmerk dat per geval een andere waarde kan hebben (+ die waarde). | Getal, datum, tekst, enumeratie (limitatieve opsomming) of booleaanse waarde (ja/nee) |
+| **Parameter en parameterwaarde** | Vaste waarde, gelijk voor allen over een periode (+ die waarde). 'Constante.' | Tarief, percentage, (drempel)bedrag, vrijstelling met vaste waarde over een periode |
 | **Operator** | Bewerking, vergelijking of logische verbinding. | Reken: 'som van', 'vermeerderd met'; vergelijk: 'groter dan', 'gelijk aan'; logisch: 'en', 'of', 'niet', 'ten minste' |
 | **Tijdsaanduiding** | Tijdstip of tijdvak (geldigheid, peildatum, termijn). | Concrete datum, 'kalenderjaar', 'maand', 'week'. *Meest specifieke klasse: wint van variabele/parameter.* |
 | **Plaatsaanduiding** | Plaats/gebied dat het toepassingsbereik bepaalt. | 'Nederland', 'de gemeente Amsterdam', 'een lidstaat van de EU'. *Wint ook van variabele/parameter.* |
-| **Delegatiebevoegdheid / -invulling** | Bevoegdheid/opdracht om nadere regels te stellen (+ de regeling die dat invult). | 'Bij (of krachtens) algemene maatregel van bestuur/ministeriële regeling worden regels gesteld' (verplicht); 'kunnen regels worden gesteld' (facultatief) |
+| **Delegatiebevoegdheid en delegatie-invulling** | Bevoegdheid/opdracht om nadere regels te stellen (+ de regeling die dat invult). | 'Bij (of krachtens) algemene maatregel van bestuur/ministeriële regeling worden regels gesteld' (verplicht); 'kunnen regels worden gesteld' (facultatief) |
 | **Brondefinitie** | Begripsomschrijving die expliciet in de wet staat en een term eenduidig betekent. | Definitieartikel vooraan de wet ('In deze wet wordt verstaan onder…') |
 
 Vuistregels bij het classificeren:

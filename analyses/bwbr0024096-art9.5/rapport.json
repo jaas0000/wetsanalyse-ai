@@ -33,21 +33,21 @@
     {
       "id": "m3",
       "formulering": "één maand",
-      "klasse": "Variabele(waarde)",
+      "klasse": "Variabele en variabelewaarde",
       "vindplaats": "alinea 1",
-      "toelichting": "Eén van de twee mogelijke waarden van de variabele 'betalingstermijn'. De betalingstermijn varieert per aanslag (type, grondslag) en neemt één van twee wettelijk toegestane waarden aan. Alternatief: Parameter(waarde) omdat de termijnduren wettelijk zijn vastgesteld. Ik kies Variabele(waarde) omdat de tekst twee mogelijke waarden naast elkaar stelt die per geval gelden: de variabele 'betalingstermijn' krijgt per aanslag de waarde 'één maand' of 'zes weken'. Zie ook twijfelpunt bij m4."
+      "toelichting": "Eén van de twee mogelijke waarden van de variabele 'betalingstermijn'. De betalingstermijn varieert per aanslag (type, grondslag) en neemt één van twee wettelijk toegestane waarden aan. Alternatief: Parameter(waarde) omdat de termijnduren wettelijk zijn vastgesteld. Ik kies Variabele en variabelewaarde omdat de tekst twee mogelijke waarden naast elkaar stelt die per geval gelden: de variabele 'betalingstermijn' krijgt per aanslag de waarde 'één maand' of 'zes weken'. Zie ook twijfelpunt bij m4."
     },
     {
       "id": "m4",
       "formulering": "zes weken",
-      "klasse": "Variabele(waarde)",
+      "klasse": "Variabele en variabelewaarde",
       "vindplaats": "alinea 1",
       "toelichting": "Tweede mogelijke waarde van de variabele 'betalingstermijn'. Zelfde redenering als m3. Twijfelpunt: als de termijnduren (1 maand, 6 weken) voor alle aanslagen van een bepaald type altijd gelijk zijn, zijn het Parameterwaarden. Voor de analyse van dit artikel is het onderscheid niet beslissend; de vervaldatumberekening is in beide gevallen een rekenregel met de termijnduur als invoer."
     },
     {
       "id": "m5",
       "formulering": "de dagtekening van een aanslagbiljet",
-      "klasse": "Variabele(waarde)",
+      "klasse": "Variabele en variabelewaarde",
       "vindplaats": "alinea 1",
       "toelichting": "De dagtekening is de primaire invoervariabele voor alle rekenregels in dit artikel. De waarde varieert per aanslagbiljet (vgl. art. 9.4 LI2008: de dagtekening wordt zodanig bepaald dat de belastingschuldige het biljet enige dagen vóór die dag ontvangt). Niet als Tijdsaanduiding geclassificeerd: het is een variabele die een datum aanneemt, niet een concrete datum of tijdvak. De concrete voorbeelddata (31 oktober etc.) zijn wel Tijdsaanduidingen (m6 e.v.)."
     },
@@ -138,7 +138,7 @@
     {
       "id": "m18",
       "formulering": "schrikkeljaar",
-      "klasse": "Variabele(waarde)",
+      "klasse": "Variabele en variabelewaarde",
       "vindplaats": "alinea 2",
       "toelichting": "Booleaanse variabele: een kalenderjaar is wel of geen schrikkeljaar. Bepaalt welke berekening bij dagtekening 28 februari geldt. Kan ook als Voorwaarde worden gezien (het is de conditie in m17), maar als zelfstandig begrip is het een variabele. De bepaling 'het jaartal aangeeft dat het een schrikkeljaar is' suggereert dat uit het jaartal (deelbaar door 4, met uitzonderingen) wordt afgeleid of sprake is van een schrikkeljaar — dit is een impliciete rekenregel die niet in het artikel staat."
     },
@@ -236,7 +236,7 @@
     {
       "id": "b2",
       "naam": "Dagtekening",
-      "klasse": "Variabele(waarde)",
+      "klasse": "Variabele en variabelewaarde",
       "definitie": "De op het aanslagbiljet vermelde datum die geldt als startpunt voor de berekening van de betalingstermijn. Normaliter zodanig bepaald dat de belastingschuldige het biljet enige dagen vóór die datum ontvangt (art. 9.4 LI2008). [Deels brondefinitie: art. 9.4 LI2008 beschrijft de vaststelling van de dagtekening; het begrip zelf wordt niet gedefinieerd.]",
       "voorbeeld": "Een aanslagbiljet met dagtekening 28 februari 2025.",
       "kenmerken_relaties": [
@@ -262,7 +262,7 @@
     {
       "id": "b3",
       "naam": "Betalingstermijn",
-      "klasse": "Variabele(waarde)",
+      "klasse": "Variabele en variabelewaarde",
       "definitie": "De termijn, gesteld op één maand of zes weken, waarbinnen de op de aanslag verschuldigde belasting moet worden betaald. De termijn loopt vanaf de dagtekening van het aanslagbiljet tot de vervaldatum. [Deels brondefinitie: art. 9 IW1990 stelt de betalingstermijnen vast; art. 9.5 LI2008 geeft de berekeningswijze van de einddatum.]",
       "voorbeeld": "Een aanslag inkomstenbelasting met een betalingstermijn van zes weken.",
       "kenmerken_relaties": [
@@ -279,12 +279,12 @@
       ],
       "vindplaats": "art. 9.5 LI2008, alinea 1; art. 9 IW1990",
       "bronreferentie": "jci1.3:c:BWBR0024096&artikel=9.5",
-      "interpretatie_twijfel": "Variabele(waarde) of Parameter(waarde)? De termijnduren zijn wettelijk vastgesteld (art. 9 IW1990), maar welke termijn per type aanslag geldt, varieert. Ik heb gekozen voor Variabele(waarde) omdat de tekst twee mogelijke waarden naast elkaar stelt die per aanslag gelden. Valideer met een belastingjurist of informatiespecialist of voor een specifiek aanslag-type altijd dezelfde termijn geldt (dan is het per type een Parameter)."
+      "interpretatie_twijfel": "Variabele en variabelewaarde of Parameter(waarde)? De termijnduren zijn wettelijk vastgesteld (art. 9 IW1990), maar welke termijn per type aanslag geldt, varieert. Ik heb gekozen voor Variabele en variabelewaarde omdat de tekst twee mogelijke waarden naast elkaar stelt die per aanslag gelden. Valideer met een belastingjurist of informatiespecialist of voor een specifiek aanslag-type altijd dezelfde termijn geldt (dan is het per type een Parameter)."
     },
     {
       "id": "b4",
       "naam": "Vervaldatum betalingstermijn",
-      "klasse": "Variabele(waarde)",
+      "klasse": "Variabele en variabelewaarde",
       "definitie": "De kalenderdag waarop de betalingstermijn afloopt: de uiterste datum waarop de belasting moet zijn betaald. Wordt berekend vanuit de dagtekening van het aanslagbiljet en de duur van de betalingstermijn, volgens de rekenregels van art. 9.5 LI2008. [Werkdefinitie — interpretatie: de LI2008 gebruikt 'vervalt op' maar definieert 'vervaldatum' niet expliciet.]",
       "voorbeeld": "Bij dagtekening 15 maart en een betalingstermijn van één maand: vervaldatum 15 april.",
       "kenmerken_relaties": [
@@ -316,7 +316,7 @@
     {
       "id": "b5",
       "naam": "Schrikkeljaar",
-      "klasse": "Variabele(waarde)",
+      "klasse": "Variabele en variabelewaarde",
       "definitie": "Een kalenderjaar van 366 dagen, waarbij de maand februari 29 dagen telt in plaats van 28. Relevant voor art. 9.5 bij een dagtekening van 28 februari: in een schrikkeljaar is 28 februari niet de laatste dag van de maand, waardoor een andere vervaldatum geldt. [Werkdefinitie — interpretatie: het begrip wordt niet gedefinieerd in LI2008 of IW1990; de betekenis is algemeen bekend.]",
       "voorbeeld": "Het jaar 2024 is een schrikkeljaar (deelbaar door 4 en niet door 100, of door 400).",
       "kenmerken_relaties": [
