@@ -39,6 +39,12 @@ correctie geland is. Dit herhaalt tot de analist akkoord is zonder opmerkingen (
 veiligheidscap op het aantal rondes). Elke ronde wordt bewaard onder `werk/activiteit-N/ronde-M/`
 voor een volledig auditspoor.
 
+Vóór elke reviewronde draait een mechanische **pre-check** (`validate_analyse.py`) die de
+tussenresultaten valideert — geldige JAS-klassen, stabiele id's, letterlijke citaten — en
+blokkeert bij fouten. Voltooide rondes zijn bovendien **immutabel**: een write-guard-hook
+(`.claude/settings.json`) voorkomt dat een bestaande `analyse.json` of `feedback.json` wordt
+overschreven, zodat het auditspoor betrouwbaar blijft.
+
 ## Aan de slag
 
 De wettenbank-MCP is standaard een **remote HTTP-server** (`.mcp.json` → `https://wettenbank-mcp.ipalm.nl/mcp`).
