@@ -64,8 +64,9 @@ dat past bij de traceerbaarheidseis van het project.
 De velden `type`, `pad`, `analysefocus`, `reikwijdte` en `geraadpleegde` voeden sectie 0
 (Bron en afbakening) van het eindrapport. `pad` en `type` komen uit `wettenbank_artikel` /
 `wettenbank_structuur`; `analysefocus`/`reikwijdte`/`geraadpleegde` leg je vast uit de
-opdracht en je afbakening. Ze zijn optioneel: ontbreken ze, dan zet de rapportgenerator
-(`scripts/render_rapport.py`) een `_TODO_`-markering die je handmatig invult.
+opdracht en je afbakening. Ze zijn optioneel: ontbreken ze, dan geeft `build_rapport_json.py`
+ze als lege string door aan `rapport.json`, waarna je ze in de HTML-viewer (de §4-velden van
+`rapport_server.py`) bijstelt.
 
 ## Schema — `analyse.json` (activiteit 3)
 

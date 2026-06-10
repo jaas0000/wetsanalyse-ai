@@ -26,7 +26,8 @@ een reviewronde" hoort te ontstaan:
 - een JAS-klasse die niet in `references/jas-klassen-referentie.md` staat;
 - de skill die de reviewstop overslaat of zonder bevestiging doorloopt;
 - de MCP die niets (of een fout) teruggeeft;
-- `_TODO_`-synthese die bij opnieuw renderen verdwijnt;
+- de §4-vrije-tekstvelden (reviewlog-samenvattingen, aandachtspunten) die bij opnieuw
+  bouwen van `rapport.json` zonder de invul-flags leeglopen;
 
 … óf wanneer de lus zélf niet convergeert (dezelfde correctie landt na meerdere rondes
 niet, of markeringen verschuiven steeds).
@@ -69,8 +70,9 @@ Het actieoppervlak van deze skill:
 - **MCP-keten:** `wettenbank_zoek` → `wettenbank_structuur` → `wettenbank_artikel`
   (→ `wettenbank_zoekterm` voor brondefinities). De volgorde is geen toeval: zonder eerst de
   structuur klopt het artikelnummer of het pad vaak niet.
-- **CLI-scripts:** `scripts/review_server.py` (review-checkpoint) en
-  `scripts/render_rapport.py` (rapportgeneratie).
+- **CLI-scripts:** `scripts/review_server.py` (review-checkpoint),
+  `scripts/build_rapport_json.py` (combineert de gevalideerde `analyse.json`'s tot
+  `rapport.json`) en `scripts/rapport_server.py` (HTML-viewer + Markdown-export).
 
 Veelvoorkomende toolfouten:
 
@@ -78,8 +80,9 @@ Veelvoorkomende toolfouten:
   model verdenkt.
 - Verkeerde `bwbId` of jci-`bronreferentie`, of structuur niet eerst opgehaald → verkeerd
   of leeg artikel.
-- `render_rapport.py` verkeerd ingezet (zie ook Governance): opnieuw renderen overschrijft
-  handmatige `_TODO_`-invullingen.
+- `build_rapport_json.py` opnieuw gedraaid zónder de §4-flags
+  (`--reviewlog-act2/-act3/--aandachtspunten`): de vrije-tekstvelden in `rapport.json` lopen
+  dan leeg (zie ook Governance).
 
 ## 3. Loop — hoe bewoog de agent?
 
@@ -106,11 +109,13 @@ De begrenzing in deze skill:
 - **Human-in-the-loop als harde stop.** De skill gaat niet door zonder bevestiging van de
   analist. Loopt ze tóch door, controleer of `WETSANALYSE_NO_REVIEW=1` ten onrechte in de
   omgeving staat (die vlag is alleen voor geautomatiseerde evals bedoeld).
-- **Rapport gegenereerd, niet overgetypt.** `render_rapport.py` rendert de deterministische
-  secties brongetrouw; het model levert alleen synthese op de `_TODO_`-plekken. Dat begrenst
-  de blast radius — feiten verzinnen in secties 0-3 hoort architectonisch onmogelijk te
-  zijn. Verschijnen er tóch afwijkingen daar, of verdwijnt eerdere `_TODO_`-synthese, dan is
-  er buiten de generator om gewerkt.
+- **Rapport gegenereerd, niet overgetypt.** `build_rapport_json.py` combineert de
+  gevalideerde `analyse.json`'s van de hoogste reviewronde tot `rapport.json`; de
+  deterministische secties 0-3 komen brongetrouw uit die bestanden, het model levert alleen
+  synthese in de §4-vrije-tekstvelden (via de flags of de viewer). Dat begrenst de blast
+  radius — feiten verzinnen in secties 0-3 hoort architectonisch onmogelijk te zijn.
+  Verschijnen er tóch afwijkingen daar, of lopen de §4-velden leeg, dan is er buiten de
+  generator om gewerkt of zonder de invul-flags herbouwd.
 - **Brongetrouwheid = out-of-bounds.** Tekst verzinnen of een parafrase als citaat opvoeren
   is geen stijlkwestie maar een grensoverschrijding.
 - **Permissie-allowlist.** De krappe, machine-lokale allowlist begrenst wat zonder prompt
@@ -127,5 +132,5 @@ De begrenzing in deze skill:
 | Skill loopt door zonder review | Governance (`WETSANALYSE_NO_REVIEW` lekt) of Loop (stopconditie verkeerd gelezen) |
 | Eindeloze of te vroeg afgebroken rondes | Loop (stopconditie / 6-rondencap) |
 | Analyse wordt slechter over de rondes | Context (overload) of Loop (feedback landt niet) |
-| `_TODO_`-synthese verdwenen / afwijking in secties 0-3 | Governance/Tools (`render_rapport.py` opnieuw gedraaid of buiten de generator om gewerkt) |
+| §4-vrije tekst verdwenen / afwijking in secties 0-3 | Governance/Tools (`build_rapport_json.py` zonder §4-flags herbouwd of buiten de generator om gewerkt) |
 | Markeringen/begrippen verschuiven tussen rondes | Tools/Loop (instabiele id's) |

@@ -60,7 +60,8 @@ def build_html(input_data: dict, activiteit: str, ronde: int = 1,
     embedded = {"activiteit": activiteit, "analyse": input_data, "ronde": ronde}
     if vorige:
         embedded["vorige"] = vorige
-    data_json = json.dumps(embedded, ensure_ascii=False)
+    # Escape </script> zodat een veldwaarde de script-tag niet kan sluiten.
+    data_json = json.dumps(embedded, ensure_ascii=False).replace("</script>", "<\\/script>")
     return template.replace(
         "/*__EMBEDDED_DATA__*/",
         f"const EMBEDDED_DATA = {data_json};",
@@ -93,7 +94,10 @@ class ReviewHandler(BaseHTTPRequestHandler):
         if self.path != "/feedback":
             self._send(404, b"Not found", "text/plain; charset=utf-8")
             return
-        length = int(self.headers.get("Content-Length", 0))
+        try:
+            length = max(0, int(self.headers.get("Content-Length", 0)))
+        except (TypeError, ValueError):
+            length = 0
         raw = self.rfile.read(length) if length else b"{}"
         try:
             data = json.loads(raw.decode("utf-8"))

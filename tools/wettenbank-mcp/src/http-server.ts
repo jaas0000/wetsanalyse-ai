@@ -215,7 +215,11 @@ export function startHttpServer(opts: HttpServerOpties): HttpServer {
     }
 
     const sessionId = req.headers["mcp-session-id"] as string | undefined;
-    if (sessionId) lastSeen[sessionId] = Date.now();
+    // Alleen verversen voor een bekende sessie. Anders kan een client met een willekeurige
+    // mcp-session-id ongebonden lastSeen-entries laten groeien: de idle-cleanup itereert over
+    // `transports` en ruimt zulke verweesde entries nooit op. De init-tak zet lastSeen zelf
+    // in `onsessioninitialized`.
+    if (sessionId && transports[sessionId]) lastSeen[sessionId] = Date.now();
 
     const start = Date.now();
     try {

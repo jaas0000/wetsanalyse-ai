@@ -303,9 +303,13 @@ function renderRegels() {
 }
 
 function renderValidatie() {
-  if (!A.validatiepunten) return "";
+  const vp = Array.isArray(A.validatiepunten)
+    ? A.validatiepunten
+    : (A.validatiepunten ? [A.validatiepunten] : []);
+  if (!vp.length) return "";
   return `<div class="panel"><h2>Aandachtspunten voor validatie</h2>
-    <div style="white-space:pre-wrap">${esc(A.validatiepunten)}</div>${fb("validatiepunten")}</div>`;
+    <ul style="margin:0;padding-left:20px">${vp.map(v =>
+      `<li style="margin-bottom:6px;white-space:pre-wrap">${esc(v)}</li>`).join("")}</ul>${fb("validatiepunten")}</div>`;
 }
 
 function renderAlgemeen() {

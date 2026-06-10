@@ -76,7 +76,6 @@ export function zoekTermInArtikelDom(
     string,
     { count: number; leden: Set<string>; matchedPatterns: Set<number> }
   >();
-  let totaalTreffersTeller = 0;
 
   const articles: XElement[] = [
     ...Array.from(doc.getElementsByTagName("artikel")),
@@ -100,7 +99,6 @@ export function zoekTermInArtikelDom(
       if (matches) {
         const toAdd = Math.min(matches.length, 100 - entry.count);
         entry.count += toAdd;
-        totaalTreffersTeller += toAdd;
         entry.matchedPatterns.add(i);
         tellers.set(nr, entry);
       }

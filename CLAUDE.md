@@ -16,6 +16,8 @@ het Juridisch Analyseschema (JAS). Het project bestaat uit drie samenwerkende de
    `rapport.json` oplevert die via een HTML-viewer wordt gepresenteerd. Markdown is beschikbaar
    als afgeleid exportformaat. De skill *gebruikt* de MCP als bron.
 3. **`analyses/`** — output: per analyse een map met het eindrapport en de `werk/`-tussenbestanden.
+   De map heet naar de BWB-id in kleine letters: `<bwbid>-art<nr>[-lidN]` (bijv.
+   `bwbr0004770-art9-lid2`), gelijk aan de bestandsnaam die de rapportgenerator afleidt.
 
 De skill is geen vervanger van de analist: de kern is interpretatiekeuzes **expliciet** maken,
 inclusief twijfel en aannames. Brongetrouwheid is niet onderhandelbaar — werk alleen met
@@ -95,7 +97,8 @@ kernstructuur die meerdere bestanden raakt:
 
 Inhoudelijke regels die je moet kennen voordat je classificeert of begrippen opstelt:
 `references/jas-klassen-referentie.md` (de dertien JAS-klassen — verzin er geen), en
-`references/begrippen-en-afleidingsregels-opstellen.md`. Voorbeeld-output staat in `analyses/iw1990-art9-lid1/`.
+`references/begrippen-en-afleidingsregels-opstellen.md`. Voorbeeld-output (met `rapport.json`)
+staat in `analyses/bwbr0004770-art9-lid2/`.
 
 Komt een analyse onbetrouwbaar uit (verzonnen tekst, niet-bestaande klasse, overgeslagen
 review, niet-convergerende lus — géén gewone review-feedback), dan is

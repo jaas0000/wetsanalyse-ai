@@ -231,7 +231,10 @@ class RapportHandler(BaseHTTPRequestHandler):
             self._send(404, b"Not found", "text/plain; charset=utf-8")
             return
 
-        length = int(self.headers.get("Content-Length", 0))
+        try:
+            length = max(0, int(self.headers.get("Content-Length", 0)))
+        except (TypeError, ValueError):
+            length = 0
         raw = self.rfile.read(length) if length else b"{}"
         try:
             body = json.loads(raw.decode("utf-8"))

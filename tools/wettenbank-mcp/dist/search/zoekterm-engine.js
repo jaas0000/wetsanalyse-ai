@@ -42,7 +42,6 @@ export function zoekTermInArtikelDom(doc, invoer, maxResultaten = 10) {
         ? { patronen: [invoer], operator: "OF" }
         : invoer;
     const tellers = new Map();
-    let totaalTreffersTeller = 0;
     const articles = [
         ...Array.from(doc.getElementsByTagName("artikel")),
         ...Array.from(doc.getElementsByTagName("circulaire.divisie")),
@@ -63,7 +62,6 @@ export function zoekTermInArtikelDom(doc, invoer, maxResultaten = 10) {
             if (matches) {
                 const toAdd = Math.min(matches.length, 100 - entry.count);
                 entry.count += toAdd;
-                totaalTreffersTeller += toAdd;
                 entry.matchedPatterns.add(i);
                 tellers.set(nr, entry);
             }

@@ -5,7 +5,8 @@ description: >-
   Wetsanalyse (Ausems, Bulles & Lokin) en het Juridisch Analyseschema (JAS):
   activiteit 2 (wetsformuleringen markeren en classificeren in JAS-klassen) en
   activiteit 3 (begrippen en afleidingsregels vaststellen), met een traceerbaar
-  Markdown-analyserapport als resultaat. Gebruik deze skill zodra de gebruiker een
+  rapport.json-analyserapport (gepresenteerd via een HTML-viewer; Markdown als
+  export) als resultaat. Gebruik deze skill zodra de gebruiker een
   wetsartikel of regeling juridisch wil analyseren, structureren, ontleden of
   "wetsanalyse" wil doen — ook bij vragen als "classificeer dit artikel", "welke
   rechtssubjecten/rechtsbetrekkingen/voorwaarden zitten hierin", "maak begrippen en
@@ -31,7 +32,8 @@ zijn. Deze skill voert de analytische kern uit:
   *begrippen* maken (3a, met definitie, voorbeeld, kenmerken/relaties) en *afleidingsregels*
   vastleggen (3b: beslis-, reken- en specialisatieregels en de voorwaarden daarbij).
 
-Het resultaat is één traceerbaar Markdown-analyserapport.
+Het resultaat is één traceerbaar `rapport.json`-analyserapport, gepresenteerd via een
+HTML-viewer; Markdown is als export beschikbaar.
 
 Na activiteit 2 en na activiteit 3 pauzeert de skill voor een **review-checkpoint**: de
 analist valideert de tussenresultaten in een lokale reviewpagina en geeft per onderdeel of
@@ -128,6 +130,10 @@ een **iteratieve lus**: je verwerkt feedback en toont het herziene resultaat opn
 de analist akkoord is zonder opmerkingen. Zo kan de analist controleren of zijn correcties
 geland zijn. Lees `references/review-checkpoints.md` voor het datacontract; in het kort,
 met `N` = rondenummer (start op 1):
+
+Schrijf alle output van deze analyse in één analysemap onder `analyses/`. Noem die map naar
+de **BWB-id in kleine letters**: `<bwbid>-art<nr>[-lidN]`, bijv. `bwbr0004770-art9-lid2`.
+De `werk/`-paden hieronder zijn relatief aan die analysemap.
 
 1. Schrijf het tussenresultaat naar `werk/activiteit-2/ronde-{N}/analyse.json` (markeringen
    met **stabiele id's**, leden-tekst, samenhang) volgens het schema in de referentie.

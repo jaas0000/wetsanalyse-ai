@@ -95,6 +95,24 @@ describe("http-server", () => {
     expect(res.status).toBe(404);
   });
 
+  it("herhaalde onbekende sessie-ID's blijven 404 geven (geen verweesde lastSeen-entries)", async () => {
+    // Regressie: lastSeen werd vroeger gezet vóór de transports-check, zodat een client met
+    // willekeurige mcp-session-id's ongebonden entries kon laten groeien die de cleanup-lus
+    // (itereert over transports) nooit opruimt. Het pad hoort onveranderd 404 te geven.
+    for (let i = 0; i < 5; i++) {
+      const res = await fetch(`${baseUrl}/mcp`, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${TOKEN}`,
+          "content-type": "application/json",
+          "mcp-session-id": `onbekend-${i}-${Math.random()}`,
+        },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }),
+      });
+      expect(res.status).toBe(404);
+    }
+  });
+
   it("POST /mcp met verlopen sessie-ID en initialize start nieuwe sessie", async () => {
     const res = await fetch(`${baseUrl}/mcp`, {
       method: "POST",

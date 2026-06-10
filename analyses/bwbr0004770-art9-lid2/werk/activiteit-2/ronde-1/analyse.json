@@ -7,7 +7,7 @@
   "type": "wet",
   "pad": "Hoofdstuk II Invordering in eerste aanleg > Artikel 9",
   "analysefocus": "De afwijkende invorderbaarheidstermijnen voor de navorderingsaanslag, de conserverende navorderingsaanslag en de naheffingsaanslag (lid 2), in relatie tot de hoofdregel van lid 1.",
-  "reikwijdte": "Artikel 9, lid 2. De hoofdregel van lid 1 is als aparte analyse beschikbaar (iw1990-art9-lid1) en wordt hier als context gebruikt. De overige afwijkingen in lid 3–9 en 11, de uitsluiting van de Algemene termijnenwet (lid 10) en de schorsingsbepaling (lid 12) vallen buiten scope.",
+  "reikwijdte": "Artikel 9, lid 2. De hoofdregel van lid 1 is als aparte analyse beschikbaar (bwbr0004770-art9-lid1) en wordt hier als context gebruikt. De overige afwijkingen in lid 3–9 en 11, de uitsluiting van de Algemene termijnenwet (lid 10) en de schorsingsbepaling (lid 12) vallen buiten scope.",
   "geraadpleegde": "Art. 2, lid 1, onder m (brondefinitie belastingaanslag, omvat navorderingsaanslag, conserverende navorderingsaanslag en naheffingsaanslag als subtypes); art. 2, lid 2, onder c en d (uitgebreide belastingaanslagdefinitie en aanslagbiljet); art. 2, lid 1, onder k (belastingschuldige); art. 2, lid 1, onder i (ontvanger); art. 9, lid 1 (de hoofdregel waarvan lid 2 afwijkt). Afzonderlijke definities van navorderingsaanslag, conserverende navorderingsaanslag en naheffingsaanslag staan niet in de IW 1990 maar in de AWR (BWBR0002320) — niet geraadpleegd, zie validatiepunt.",
   "leden": [
     {
@@ -49,7 +49,7 @@
       "formulering": "invorderbaar",
       "klasse": "Rechtsbetrekking",
       "vindplaats": "lid 2",
-      "toelichting": "Drukt de invorderbaarheidsrechtsbetrekking uit voor navorderingsaanslag (m2) en conserverende navorderingsaanslag (m4): het rechtsgevolg dat de ontvanger mag invorderen en de belastingschuldige moet betalen. Eerste voorkomen van 'invorderbaar' in lid 2. Dezelfde rechtsbetrekking als geanalyseerd in lid 1 (iw1990-art9-lid1, m2); lid 2 stelt alleen het tijdstip anders. Twijfel/alternatief: 'invorderbaar' kan ook als booleaanse statuswaarde van de belastingaanslag worden gelezen (variabele), maar gekozen voor Rechtsbetrekking voor consistentie met de lid 1-analyse."
+      "toelichting": "Drukt de invorderbaarheidsrechtsbetrekking uit voor navorderingsaanslag (m2) en conserverende navorderingsaanslag (m4): het rechtsgevolg dat de ontvanger mag invorderen en de belastingschuldige moet betalen. Eerste voorkomen van 'invorderbaar' in lid 2. Dezelfde rechtsbetrekking als geanalyseerd in lid 1 (bwbr0004770-art9-lid1, m2); lid 2 stelt alleen het tijdstip anders. Twijfel/alternatief: 'invorderbaar' kan ook als booleaanse statuswaarde van de belastingaanslag worden gelezen (variabele), maar gekozen voor Rechtsbetrekking voor consistentie met de lid 1-analyse."
     },
     {
       "id": "m6",

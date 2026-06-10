@@ -7,7 +7,7 @@
   "type": "wet",
   "pad": "Hoofdstuk II Invordering in eerste aanleg > Artikel 9",
   "analysefocus": "De afwijkende invorderbaarheidstermijnen voor de navorderingsaanslag, de conserverende navorderingsaanslag en de naheffingsaanslag (lid 2), in relatie tot de hoofdregel van lid 1.",
-  "reikwijdte": "Artikel 9, lid 2. De hoofdregel van lid 1 is als aparte analyse beschikbaar (iw1990-art9-lid1) en wordt hier als context gebruikt. De overige afwijkingen in lid 3–9 en 11, de uitsluiting van de Algemene termijnenwet (lid 10) en de schorsingsbepaling (lid 12) vallen buiten scope.",
+  "reikwijdte": "Artikel 9, lid 2. De hoofdregel van lid 1 is als aparte analyse beschikbaar (bwbr0004770-art9-lid1) en wordt hier als context gebruikt. De overige afwijkingen in lid 3–9 en 11, de uitsluiting van de Algemene termijnenwet (lid 10) en de schorsingsbepaling (lid 12) vallen buiten scope.",
   "geraadpleegde": "Art. 2, lid 1, onder m (brondefinitie belastingaanslag, omvat navorderingsaanslag, conserverende navorderingsaanslag en naheffingsaanslag als subtypes); art. 2, lid 2, onder c en d (uitgebreide belastingaanslagdefinitie en aanslagbiljet); art. 2, lid 1, onder k (belastingschuldige); art. 2, lid 1, onder i (ontvanger); art. 9, lid 1 (de hoofdregel waarvan lid 2 afwijkt). Afzonderlijke definities van navorderingsaanslag, conserverende navorderingsaanslag en naheffingsaanslag staan niet in de IW 1990 maar in de AWR (BWBR0002320) — niet geraadpleegd, zie validatiepunt.",
   "leden": [
     {
@@ -49,7 +49,7 @@
       "formulering": "invorderbaar",
       "klasse": "Rechtsbetrekking",
       "vindplaats": "lid 2",
-      "toelichting": "Drukt de invorderbaarheidsrechtsbetrekking uit voor navorderingsaanslag (m2) en conserverende navorderingsaanslag (m4): het rechtsgevolg dat de ontvanger mag invorderen en de belastingschuldige moet betalen. Eerste voorkomen van 'invorderbaar' in lid 2. Dezelfde rechtsbetrekking als geanalyseerd in lid 1 (iw1990-art9-lid1, m2); lid 2 stelt alleen het tijdstip anders. Twijfel/alternatief: 'invorderbaar' kan ook als booleaanse statuswaarde van de belastingaanslag worden gelezen (variabele), maar gekozen voor Rechtsbetrekking voor consistentie met de lid 1-analyse."
+      "toelichting": "Drukt de invorderbaarheidsrechtsbetrekking uit voor navorderingsaanslag (m2) en conserverende navorderingsaanslag (m4): het rechtsgevolg dat de ontvanger mag invorderen en de belastingschuldige moet betalen. Eerste voorkomen van 'invorderbaar' in lid 2. Dezelfde rechtsbetrekking als geanalyseerd in lid 1 (bwbr0004770-art9-lid1, m2); lid 2 stelt alleen het tijdstip anders. Twijfel/alternatief: 'invorderbaar' kan ook als booleaanse statuswaarde van de belastingaanslag worden gelezen (variabele), maar gekozen voor Rechtsbetrekking voor consistentie met de lid 1-analyse."
     },
     {
       "id": "m6",
@@ -174,7 +174,7 @@
       "klasse": "Rechtssubject",
       "definitie": "Brondefinitie (art. 2, lid 1, onder k, IW 1990): degene te wiens naam de belastingaanslag is gesteld.",
       "voorbeeld": "De rechtspersoon op wiens naam de naheffingsaanslag loonbelasting staat.",
-      "kenmerken": "Plichthebbende in de rechtsbetrekking invorderbaarheid (b5): de belastingaanslag moet worden betaald zodra het invorderbaarheidsmoment (b9) is bereikt. Impliciet in lid 2; afgeleid uit brondefinitie en systematiek van hoofdstuk II. Zelfde begrip als in analyse iw1990-art9-lid1.",
+      "kenmerken": "Plichthebbende in de rechtsbetrekking invorderbaarheid (b5): de belastingaanslag moet worden betaald zodra het invorderbaarheidsmoment (b9) is bereikt. Impliciet in lid 2; afgeleid uit brondefinitie en systematiek van hoofdstuk II. Zelfde begrip als in analyse bwbr0004770-art9-lid1.",
       "vindplaats": "art. 9 lid 2 (impliciet via m2, m4, m12); brondefinitie art. 2 lid 1 onder k",
       "twijfel": ""
     },
@@ -182,7 +182,7 @@
       "id": "b5",
       "naam": "invorderbaarheid",
       "klasse": "Rechtsbetrekking",
-      "definitie": "[Interpretatie] De rechtstoestand waarin de ontvanger een belastingaanslag van de belastingschuldige mag invorderen en de belastingschuldige gehouden is te betalen. Zelfde concept als in analyse iw1990-art9-lid1; lid 2 bepaalt alleen het ingangstijdstip voor drie specifieke aanslagtypes.",
+      "definitie": "[Interpretatie] De rechtstoestand waarin de ontvanger een belastingaanslag van de belastingschuldige mag invorderen en de belastingschuldige gehouden is te betalen. Zelfde concept als in analyse bwbr0004770-art9-lid1; lid 2 bepaalt alleen het ingangstijdstip voor drie specifieke aanslagtypes.",
       "voorbeeld": "Veertien dagen na de dagtekening van een naheffingsaanslagbiljet kan de ontvanger tot (dwang)invordering overgaan als de belastingschuldige niet heeft betaald.",
       "kenmerken": "Rechthebbende: ontvanger (b6). Plichthebbende: belastingschuldige (b4). Rechtsobject: navorderingsaanslag (b1), conserverende navorderingsaanslag (b2) of naheffingsaanslag (b3). Het invorderbaarheidsmoment (b9) wordt afgeleid door r1 (één maand) of r2 (veertien dagen), afhankelijk van het aanslagtype.",
       "vindplaats": "art. 9 lid 2 (m5, m13)",
@@ -194,7 +194,7 @@
       "klasse": "Rechtssubject",
       "definitie": "Brondefinitie (art. 2, lid 1, onder i, IW 1990): de functionaris die als zodanig bij ministeriële regeling is aangewezen.",
       "voorbeeld": "De ontvanger van de Belastingdienst die de naheffingsaanslag invordert.",
-      "kenmerken": "Rechthebbende in de rechtsbetrekking invorderbaarheid (b5): mag invorderen zodra het invorderbaarheidsmoment (b9) is bereikt. Impliciet in lid 2; afgeleid uit systematiek van hoofdstuk II. Zelfde begrip als in analyse iw1990-art9-lid1.",
+      "kenmerken": "Rechthebbende in de rechtsbetrekking invorderbaarheid (b5): mag invorderen zodra het invorderbaarheidsmoment (b9) is bereikt. Impliciet in lid 2; afgeleid uit systematiek van hoofdstuk II. Zelfde begrip als in analyse bwbr0004770-art9-lid1.",
       "vindplaats": "art. 9 lid 2 (impliciet); brondefinitie art. 2 lid 1 onder i",
       "twijfel": ""
     },
@@ -204,7 +204,7 @@
       "klasse": "Rechtsobject",
       "definitie": "Brondefinitie (art. 2, lid 2, onder d, IW 1990): de kennisgeving van de beschikking of de uitspraak, bedoeld in onderdeel c.",
       "voorbeeld": "Het biljet waarmee de naheffingsaanslag BTW aan de belastingschuldige wordt bekendgemaakt.",
-      "kenmerken": "Draagt de dagtekening (b8) die als peilmoment dient voor alle invorderbaarheidstermijnen in lid 2. Dezelfde brondefinitie geldt voor alle drie de aanslagtypes. Zelfde begrip als in analyse iw1990-art9-lid1.",
+      "kenmerken": "Draagt de dagtekening (b8) die als peilmoment dient voor alle invorderbaarheidstermijnen in lid 2. Dezelfde brondefinitie geldt voor alle drie de aanslagtypes. Zelfde begrip als in analyse bwbr0004770-art9-lid1.",
       "vindplaats": "art. 9 lid 2 (m10); brondefinitie art. 2 lid 2 onder d",
       "twijfel": ""
     },
@@ -214,7 +214,7 @@
       "klasse": "Tijdsaanduiding",
       "definitie": "[Interpretatie] De op het aanslagbiljet vermelde datum, die als peilmoment dient voor de berekening van de invorderbaarheidstermijn. Niet afzonderlijk wettelijk gedefinieerd in de IW 1990.",
       "voorbeeld": "Bij dagtekening 1 juni 2026 op een naheffingsaanslagbiljet is het invorderbaarheidsmoment 15 juni 2026 (14 dagen later).",
-      "kenmerken": "Invoervariabele (per geval een andere datum) van rekenregels r1 en r2. Hoort bij het aanslagbiljet (b7). Zelfde concept als in analyse iw1990-art9-lid1.",
+      "kenmerken": "Invoervariabele (per geval een andere datum) van rekenregels r1 en r2. Hoort bij het aanslagbiljet (b7). Zelfde concept als in analyse bwbr0004770-art9-lid1.",
       "vindplaats": "art. 9 lid 2 (m9, m17)",
       "twijfel": "De verhouding tussen de dagtekening en het moment van daadwerkelijke bekendmaking/verzending is niet uit lid 2 af te leiden. Zie ook de twijfelnotitie in de lid 1-analyse."
     },
@@ -300,5 +300,5 @@
       ]
     }
   },
-  "aandachtspunten": "A. Interpretatiekeuzes (te bevestigen door de jurist)\n\n1. 'Invorderbaar' als Rechtsbetrekking (b5). De formulering 'invorderbaar' is geclassificeerd als Rechtsbetrekking (de afdwingbare recht-plichtverhouding tussen ontvanger en belastingschuldige), consistent met de lid 1-analyse. Alternatieve lezing: 'invorderbaar' als booleaanse statuswaarde (variabele) van de belastingaanslag. De keuze bepaalt hoe de uitvoering de status modelleert. Valideer: welke lezing past bij de uitvoeringsarchitectuur?\n\n2. Beslisregel r3 als integratieregel. De toepasselijkheidsregel (r3) is een afgeleide explicitering die lid 1 en lid 2 samenvoegt in één selectiestap. Deze regel staat niet letterlijk in de wet maar maakt de voorrangslogica operationeel. Valideer: wenst de uitvoering een aparte beslisregel 'welke termijnregel geldt?' naast de rekenregels r1 en r2?\n\nB. Ontbrekende brondefinities (AWR niet geraadpleegd)\n\n3. Navorderingsaanslag (b1), conserverende navorderingsaanslag (b2) en naheffingsaanslag (b3) zijn als subtypes opgenomen in de enumeratie van art. 2, lid 1, onder m, IW 1990, maar niet afzonderlijk gedefinieerd in de IW 1990. De werkdefinities in deze analyse zijn interpretaties op basis van AWR-context. Actie: raadpleeg de AWR (BWBR0002320) voor de gezaghebbende brondefinities en valideer de werkdefinities.\n\n4. Reikwijdte conserverende navorderingsaanslag (b2). Uit art. 2, lid 1, onder m, IW 1990 blijkt dat de conserverende navorderingsaanslag beperkt is tot de inkomstenbelasting en de schenk- en erfbelasting. Rekenregel r1 geldt voor dit aanslagtype dus alleen binnen die belastingsoorten. Valideer bij de AWR-raadpleging of deze beperking juist is geinterpreteerd.\n\nC. Rekenconventies (vragen voor de uitvoering)\n\n5. Kalendermaand-berekening in r1. De termijn 'een maand' is kalendermaandgebonden: de exacte einddatum varieert per startmaand (28-31 dagen). De wet regelt niet welke datum geldt bij een maandoverschrijding. Actie: stel de rekenconventie vast voor de uitvoering.\n\n6. Algemene termijnenwet niet van toepassing (art. 9, lid 10 - buiten scope). Zowel de een-maandstermijn (r1) als de veertien-dagentermijn (r2) worden niet verlengd bij afloop in het weekend of op een feestdag. Lid 10 is buiten scope; de consequenties voor r1 en r2 moeten in de uitvoeringslogica worden verwerkt.\n\nD. Buiten scope\n\n7. Onderscheid naheffingsaanslag vs. navorderingsaanslag (tijdvak- vs. tijdstipbelastingen) is AWR-context en niet te herleiden naar de IW 1990 zelf.\n\n8. Overige afwijkende termijnen (art. 9, lid 3-9 en lid 11) en de schorsingsbepaling (lid 12) zijn niet geanalyseerd. Voor een volledig beeld zijn aparte analyses van die leden nodig."
+  "aandachtspunten": "A. Interpretatiekeuzes (te bevestigen door de jurist)\n\n1. 'Invorderbaar' als Rechtsbetrekking (b5). De formulering 'invorderbaar' is geclassificeerd als Rechtsbetrekking (de afdwingbare recht-plichtverhouding tussen ontvanger en belastingschuldige), consistent met de lid 1-analyse. Alternatieve lezing: 'invorderbaar' als booleaanse statuswaarde (variabele) van de belastingaanslag. De keuze bepaalt hoe de uitvoering de status modelleert. Valideer: welke lezing past bij de uitvoeringsarchitectuur?\n\n2. Beslisregel r3 als integratieregel. De toepasselijkheidsregel (r3) is een afgeleide explicitering die lid 1 en lid 2 samenvoegt in één selectiestap. Deze regel staat niet letterlijk in de wet maar maakt de voorrangslogica operationeel. Valideer: wenst de uitvoering een aparte beslisregel 'welke termijnregel geldt?' naast de rekenregels r1 en r2?\n\nB. Ontbrekende brondefinities (AWR niet geraadpleegd)\n\n3. Navorderingsaanslag (b1), conserverende navorderingsaanslag (b2) en naheffingsaanslag (b3) zijn als subtypes opgenomen in de enumeratie van art. 2, lid 1, onder m, IW 1990, maar niet afzonderlijk gedefinieerd in de IW 1990. De werkdefinities in deze analyse zijn interpretaties op basis van AWR-context. Actie: raadpleeg de AWR (BWBR0002320) voor de gezaghebbende brondefinities en valideer de werkdefinities.\n\n4. Reikwijdte conserverende navorderingsaanslag (b2). Uit art. 2, lid 1, onder m, IW 1990 blijkt dat de conserverende navorderingsaanslag beperkt is tot de inkomstenbelasting en de schenk- en erfbelasting. Rekenregel r1 geldt voor dit aanslagtype dus alleen binnen die belastingsoorten. Valideer bij de AWR-raadpleging of deze beperking juist is geïnterpreteerd.\n\nC. Rekenconventies (vragen voor de uitvoering)\n\n5. Kalendermaand-berekening in r1. De termijn 'één maand' is kalendermaandgebonden: de exacte einddatum varieert per startmaand (28–31 dagen). De wet regelt niet welke datum geldt bij een maandoverschrijding. Actie: stel de rekenconventie vast voor de uitvoering.\n\n6. Algemene termijnenwet niet van toepassing (art. 9, lid 10 — buiten scope). Zowel de één-maandstermijn (r1) als de veertien-dagentermijn (r2) worden niet verlengd bij afloop in het weekend of op een feestdag. Lid 10 is buiten scope; de consequenties voor r1 en r2 moeten in de uitvoeringslogica worden verwerkt.\n\nD. Buiten scope\n\n7. Onderscheid naheffingsaanslag vs. navorderingsaanslag (tijdvak- vs. tijdstipbelastingen) is AWR-context en niet te herleiden naar de IW 1990 zelf.\n\n8. Overige afwijkende termijnen (art. 9, lid 3–9 en lid 11) en de schorsingsbepaling (lid 12) zijn niet geanalyseerd. Voor een volledig beeld zijn aparte analyses van die leden nodig."
 }

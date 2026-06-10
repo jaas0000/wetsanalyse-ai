@@ -41,7 +41,7 @@
       "klasse": "Rechtssubject",
       "definitie": "Brondefinitie (art. 2, lid 1, onder k, IW 1990): degene te wiens naam de belastingaanslag is gesteld.",
       "voorbeeld": "De rechtspersoon op wiens naam de naheffingsaanslag loonbelasting staat.",
-      "kenmerken": "Plichthebbende in de rechtsbetrekking invorderbaarheid (b5): de belastingaanslag moet worden betaald zodra het invorderbaarheidsmoment (b9) is bereikt. Impliciet in lid 2; afgeleid uit brondefinitie en systematiek van hoofdstuk II. Zelfde begrip als in analyse iw1990-art9-lid1.",
+      "kenmerken": "Plichthebbende in de rechtsbetrekking invorderbaarheid (b5): de belastingaanslag moet worden betaald zodra het invorderbaarheidsmoment (b9) is bereikt. Impliciet in lid 2; afgeleid uit brondefinitie en systematiek van hoofdstuk II. Zelfde begrip als in analyse bwbr0004770-art9-lid1.",
       "vindplaats": "art. 9 lid 2 (impliciet via m2, m4, m12); brondefinitie art. 2 lid 1 onder k",
       "twijfel": ""
     },
@@ -49,7 +49,7 @@
       "id": "b5",
       "naam": "invorderbaarheid",
       "klasse": "Rechtsbetrekking",
-      "definitie": "[Interpretatie] De rechtstoestand waarin de ontvanger een belastingaanslag van de belastingschuldige mag invorderen en de belastingschuldige gehouden is te betalen. Zelfde concept als in analyse iw1990-art9-lid1; lid 2 bepaalt alleen het ingangstijdstip voor drie specifieke aanslagtypes.",
+      "definitie": "[Interpretatie] De rechtstoestand waarin de ontvanger een belastingaanslag van de belastingschuldige mag invorderen en de belastingschuldige gehouden is te betalen. Zelfde concept als in analyse bwbr0004770-art9-lid1; lid 2 bepaalt alleen het ingangstijdstip voor drie specifieke aanslagtypes.",
       "voorbeeld": "Veertien dagen na de dagtekening van een naheffingsaanslagbiljet kan de ontvanger tot (dwang)invordering overgaan als de belastingschuldige niet heeft betaald.",
       "kenmerken": "Rechthebbende: ontvanger (b6). Plichthebbende: belastingschuldige (b4). Rechtsobject: navorderingsaanslag (b1), conserverende navorderingsaanslag (b2) of naheffingsaanslag (b3). Het invorderbaarheidsmoment (b9) wordt afgeleid door r1 (één maand) of r2 (veertien dagen), afhankelijk van het aanslagtype.",
       "vindplaats": "art. 9 lid 2 (m5, m13)",
@@ -61,7 +61,7 @@
       "klasse": "Rechtssubject",
       "definitie": "Brondefinitie (art. 2, lid 1, onder i, IW 1990): de functionaris die als zodanig bij ministeriële regeling is aangewezen.",
       "voorbeeld": "De ontvanger van de Belastingdienst die de naheffingsaanslag invordert.",
-      "kenmerken": "Rechthebbende in de rechtsbetrekking invorderbaarheid (b5): mag invorderen zodra het invorderbaarheidsmoment (b9) is bereikt. Impliciet in lid 2; afgeleid uit systematiek van hoofdstuk II. Zelfde begrip als in analyse iw1990-art9-lid1.",
+      "kenmerken": "Rechthebbende in de rechtsbetrekking invorderbaarheid (b5): mag invorderen zodra het invorderbaarheidsmoment (b9) is bereikt. Impliciet in lid 2; afgeleid uit systematiek van hoofdstuk II. Zelfde begrip als in analyse bwbr0004770-art9-lid1.",
       "vindplaats": "art. 9 lid 2 (impliciet); brondefinitie art. 2 lid 1 onder i",
       "twijfel": ""
     },
@@ -71,7 +71,7 @@
       "klasse": "Rechtsobject",
       "definitie": "Brondefinitie (art. 2, lid 2, onder d, IW 1990): de kennisgeving van de beschikking of de uitspraak, bedoeld in onderdeel c.",
       "voorbeeld": "Het biljet waarmee de naheffingsaanslag BTW aan de belastingschuldige wordt bekendgemaakt.",
-      "kenmerken": "Draagt de dagtekening (b8) die als peilmoment dient voor alle invorderbaarheidstermijnen in lid 2. Dezelfde brondefinitie geldt voor alle drie de aanslagtypes. Zelfde begrip als in analyse iw1990-art9-lid1.",
+      "kenmerken": "Draagt de dagtekening (b8) die als peilmoment dient voor alle invorderbaarheidstermijnen in lid 2. Dezelfde brondefinitie geldt voor alle drie de aanslagtypes. Zelfde begrip als in analyse bwbr0004770-art9-lid1.",
       "vindplaats": "art. 9 lid 2 (m10); brondefinitie art. 2 lid 2 onder d",
       "twijfel": ""
     },
@@ -81,7 +81,7 @@
       "klasse": "Tijdsaanduiding",
       "definitie": "[Interpretatie] De op het aanslagbiljet vermelde datum, die als peilmoment dient voor de berekening van de invorderbaarheidstermijn. Niet afzonderlijk wettelijk gedefinieerd in de IW 1990.",
       "voorbeeld": "Bij dagtekening 1 juni 2026 op een naheffingsaanslagbiljet is het invorderbaarheidsmoment 15 juni 2026 (14 dagen later).",
-      "kenmerken": "Invoervariabele (per geval een andere datum) van rekenregels r1 en r2. Hoort bij het aanslagbiljet (b7). Zelfde concept als in analyse iw1990-art9-lid1.",
+      "kenmerken": "Invoervariabele (per geval een andere datum) van rekenregels r1 en r2. Hoort bij het aanslagbiljet (b7). Zelfde concept als in analyse bwbr0004770-art9-lid1.",
       "vindplaats": "art. 9 lid 2 (m9, m17)",
       "twijfel": "De verhouding tussen de dagtekening en het moment van daadwerkelijke bekendmaking/verzending is niet uit lid 2 af te leiden. Zie ook de twijfelnotitie in de lid 1-analyse."
     },
