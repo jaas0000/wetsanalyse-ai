@@ -439,13 +439,22 @@ document.getElementById("btn-opslaan").addEventListener("click", async () => {
   }
 });
 
-// --- Markdown schrijven ------------------------------------------------------
+// --- Markdown schrijven (sla eerst op, dan genereer) -------------------------
 
 document.getElementById("btn-download").addEventListener("click", async () => {
   const st = document.getElementById("status");
-  st.textContent = "Markdown wordt geschreven...";
+  st.textContent = "Bezig...";
   st.className = "status";
   try {
+    // Sla eerst de huidige bewerkingen op zodat de MD up-to-date is.
+    const save = await fetch("/opslaan", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(collectVelden()),
+    });
+    if (!save.ok) throw new Error("Opslaan mislukt: HTTP " + save.status);
+    try { localStorage.removeItem(DRAFT_KEY); } catch (e) {}
+
     const r = await fetch("/schrijf-md", { method: "POST" });
     if (!r.ok) throw new Error("HTTP " + r.status);
     const data = await r.json();

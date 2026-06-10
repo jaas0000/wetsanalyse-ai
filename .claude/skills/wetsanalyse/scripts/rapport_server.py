@@ -121,24 +121,24 @@ def rapport_naar_md(d: dict) -> str:
         )
     regels += ["", "### 3b — Afleidingsregels", ""]
     for r in d.get("afleidingsregels", []):
-        regels += [
-            f"#### {r.get('naam', '')} — {r.get('type', '')}",
-            "",
-            f"- **Uitvoervariabele:** {r.get('uitvoervariabele', '')}",
-            f"- **Invoervariabelen:** {r.get('invoervariabelen', '')}",
-            f"- **Parameters:** {r.get('parameters', '')}",
-            f"- **Voorwaarden:** {r.get('voorwaarden', '')}",
-            "- **Formulering:**",
-            "  ```",
-        ]
+        regels += [f"#### {r.get('naam', '')} — {r.get('type', '')}", ""]
+        for lbl, key in [
+            ("Uitvoervariabele", "uitvoervariabele"),
+            ("Invoervariabelen", "invoervariabelen"),
+            ("Parameters", "parameters"),
+            ("Voorwaarden", "voorwaarden"),
+        ]:
+            if r.get(key):
+                regels.append(f"- **{lbl}:** {r[key]}")
+        regels += ["- **Formulering:**", "  ```"]
         for regel in str(r.get("formulering", "")).split("\n"):
             regels.append(f"  {regel}")
-        regels += [
-            "  ```",
-            f"- **Vindplaats / bron:** {r.get('vindplaats', '')}",
-            f"- **Twijfel/aanname:** {r.get('twijfel', '')}",
-            "",
-        ]
+        regels += ["  ```"]
+        if r.get("vindplaats"):
+            regels.append(f"- **Vindplaats / bron:** {r['vindplaats']}")
+        if r.get("twijfel"):
+            regels.append(f"- **Twijfel/aanname:** {r['twijfel']}")
+        regels.append("")
 
     # §4 Reviewlog + aandachtspunten
     rl = d.get("reviewlog", {})
@@ -176,7 +176,8 @@ def md_bestandsnaam(d: dict) -> str:
 
 def build_html(rapport_data: dict) -> str:
     template = TEMPLATE.read_text(encoding="utf-8")
-    data_json = json.dumps(rapport_data, ensure_ascii=False)
+    # Escape </script> zodat een veldwaarde de script-tag niet kan sluiten.
+    data_json = json.dumps(rapport_data, ensure_ascii=False).replace("</script>", "<\\/script>")
     return template.replace("/*__EMBEDDED_DATA__*/", f"const EMBEDDED_DATA = {data_json};")
 
 
@@ -333,10 +334,7 @@ def main():
         def _refresh_html(cls, data: dict):
             html_container[0] = build_html(data)
 
-    def make_handler(*a, **kw):
-        return Handler(*a, html=html_container[0], rapport_pad=args.input, **kw)
-
-    # Overschrijf html property per request zodat verversing zichtbaar is.
+    # Overschrijf html per request zodat verversing na /opslaan zichtbaar is.
     original_init = Handler.__init__
 
     def patched_init(self, *a, **kw):

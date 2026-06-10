@@ -278,7 +278,7 @@
   ],
   "reviewlog": {
     "activiteit2": {
-      "samenvatting": "Gewijzigd via opslaan test.",
+      "samenvatting": "1 ronde — de analist ging in ronde 1 meteen akkoord, zonder per-item- of algemene feedback. Geen wijzigingen doorgevoerd.",
       "rondes": [
         {
           "ronde": 1,
@@ -289,7 +289,7 @@
       ]
     },
     "activiteit3": {
-      "samenvatting": "",
+      "samenvatting": "1 ronde — de analist ging in ronde 1 meteen akkoord, zonder per-item- of algemene feedback. Geen wijzigingen doorgevoerd.",
       "rondes": [
         {
           "ronde": 1,
@@ -300,5 +300,5 @@
       ]
     }
   },
-  "aandachtspunten": ""
+  "aandachtspunten": "A. Interpretatiekeuzes (te bevestigen door de jurist)\n\n1. 'Invorderbaar' als Rechtsbetrekking (b5). De formulering 'invorderbaar' is geclassificeerd als Rechtsbetrekking (de afdwingbare recht-plichtverhouding tussen ontvanger en belastingschuldige), consistent met de lid 1-analyse. Alternatieve lezing: 'invorderbaar' als booleaanse statuswaarde (variabele) van de belastingaanslag. De keuze bepaalt hoe de uitvoering de status modelleert. Valideer: welke lezing past bij de uitvoeringsarchitectuur?\n\n2. Beslisregel r3 als integratieregel. De toepasselijkheidsregel (r3) is een afgeleide explicitering die lid 1 en lid 2 samenvoegt in één selectiestap. Deze regel staat niet letterlijk in de wet maar maakt de voorrangslogica operationeel. Valideer: wenst de uitvoering een aparte beslisregel 'welke termijnregel geldt?' naast de rekenregels r1 en r2?\n\nB. Ontbrekende brondefinities (AWR niet geraadpleegd)\n\n3. Navorderingsaanslag (b1), conserverende navorderingsaanslag (b2) en naheffingsaanslag (b3) zijn als subtypes opgenomen in de enumeratie van art. 2, lid 1, onder m, IW 1990, maar niet afzonderlijk gedefinieerd in de IW 1990. De werkdefinities in deze analyse zijn interpretaties op basis van AWR-context. Actie: raadpleeg de AWR (BWBR0002320) voor de gezaghebbende brondefinities en valideer de werkdefinities.\n\n4. Reikwijdte conserverende navorderingsaanslag (b2). Uit art. 2, lid 1, onder m, IW 1990 blijkt dat de conserverende navorderingsaanslag beperkt is tot de inkomstenbelasting en de schenk- en erfbelasting. Rekenregel r1 geldt voor dit aanslagtype dus alleen binnen die belastingsoorten. Valideer bij de AWR-raadpleging of deze beperking juist is geinterpreteerd.\n\nC. Rekenconventies (vragen voor de uitvoering)\n\n5. Kalendermaand-berekening in r1. De termijn 'een maand' is kalendermaandgebonden: de exacte einddatum varieert per startmaand (28-31 dagen). De wet regelt niet welke datum geldt bij een maandoverschrijding. Actie: stel de rekenconventie vast voor de uitvoering.\n\n6. Algemene termijnenwet niet van toepassing (art. 9, lid 10 - buiten scope). Zowel de een-maandstermijn (r1) als de veertien-dagentermijn (r2) worden niet verlengd bij afloop in het weekend of op een feestdag. Lid 10 is buiten scope; de consequenties voor r1 en r2 moeten in de uitvoeringslogica worden verwerkt.\n\nD. Buiten scope\n\n7. Onderscheid naheffingsaanslag vs. navorderingsaanslag (tijdvak- vs. tijdstipbelastingen) is AWR-context en niet te herleiden naar de IW 1990 zelf.\n\n8. Overige afwijkende termijnen (art. 9, lid 3-9 en lid 11) en de schorsingsbepaling (lid 12) zijn niet geanalyseerd. Voor een volledig beeld zijn aparte analyses van die leden nodig."
 }
