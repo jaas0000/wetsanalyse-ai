@@ -1,0 +1,45 @@
+# Retentie voor het GHCR-image ghcr.io/<owner>/wettenbank-mcp.
+# Bewaart structureel de 5 nieuwste builds (getagde versies) plus hun bijbehorende
+# untagged child-manifests (SBOM/provenance-attestaties); oudere builds en verweesde
+# untagged digests worden opgeruimd. dataaxiom/ghcr-cleanup-action snapt de multi-arch-/
+# attestatie-graaf, zodat een behouden image of z'n provenance niet breekt.
+#
+# Twee triggers:
+#   * workflow_run  — draait automatisch ná een geslaagde docker-publish (echte opruiming).
+#   * workflow_dispatch — handmatig; standaard dry-run (toont alleen wat zou worden verwijderd).
+#                          Zet de input `dry_run` op false om de eenmalige opschoning echt uit
+#                          te voeren.
+
+name: ghcr-cleanup
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Alleen tonen wat verwijderd zou worden (geen echte verwijdering)"
+        type: boolean
+        default: true
+  workflow_run:
+    workflows: ["docker-publish"]
+    branches: [master]
+    types: [completed]
+
+jobs:
+  cleanup:
+    # Bij workflow_run: alleen na een geslaagde build. Bij handmatig draaien: altijd.
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    steps:
+      - name: Oude image-versies opruimen (bewaar laatste 5 builds)
+        uses: dataaxiom/ghcr-cleanup-action@v1
+        with:
+          package: wettenbank-mcp
+          keep-n-tagged: 5        # bewaar de 5 nieuwste getagde builds
+          exclude-tags: latest    # latest nooit verwijderen (extra vangnet)
+          delete-untagged: true   # verweesde untagged digests opruimen
+          validate: true          # na afloop de integriteit van de behouden images checken
+          # Handmatig = dry-run (preview) tenzij expliciet uitgezet; automatisch = echt.
+          dry-run: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+          token: ${{ secrets.GITHUB_TOKEN }}

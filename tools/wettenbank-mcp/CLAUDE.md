@@ -205,6 +205,11 @@ afgestemd op BIO2 / NEN-EN-ISO/IEC 27002:2022. Zie `SECURITY.md` voor het volled
 - **CI** (`.github/workflows/docker-publish.yml`): aparte `test`-job met `npm test` + `npm audit`
   (faalt bij high/critical), Trivy image-scan (SARIF → Security-tab, faalt bij CRITICAL), en
   SBOM/provenance-attestatie bij de image. Dependabot in `.github/dependabot.yml`.
+- **GHCR-retentie** (`.github/workflows/ghcr-cleanup.yml`): bewaart structureel de **5 nieuwste
+  builds** (getagde versies) + hun attestatie-child-manifests; draait automatisch ná een
+  geslaagde `docker-publish` (`workflow_run`). Handmatig (`workflow_dispatch`) staat het standaard
+  in **dry-run** — zet input `dry_run=false` voor een echte opschoning. Verwijderen verloopt via
+  `dataaxiom/ghcr-cleanup-action` omdat die de multi-arch/attestatie-graaf respecteert.
 
 ## Deployment
 
