@@ -239,6 +239,7 @@ afgestemd op BIO2 / NEN-EN-ISO/IEC 27002:2022. Zie `SECURITY.md` voor het volled
 - `Dockerfile` (multi-stage, non-root, `HEALTHCHECK` op `/health`, default `MCP_TRANSPORT=http`). Build-context = deze map: `docker build -t wettenbank-mcp tools/wettenbank-mcp`.
 - `docker-compose.yml` — Portainer-stack achter Nginx Proxy Manager: géén host-poort, container op het gedeelde NPM-netwerk (`PROXY_NETWORK`), NPM proxyt `wettenbank-mcp.ipalm.nl` → `wettenbank-mcp:3000` met TLS. `MCP_AUTH_TOKEN` als stack-env.
 - `.github/workflows/docker-publish.yml` — bouwt en pusht `ghcr.io/<owner>/wettenbank-mcp` (CI is de build-route; lokaal hoeft geen Docker-engine aanwezig te zijn).
+- `HANDLEIDING-IMAGE.md` — beknopte stap-voor-stap voor **externe gebruikers** die alleen het publieke image willen draaien (placeholders i.p.v. deze deployment-namen). Verwijs hiernaar bij vragen "hoe draait iemand anders dit?".
 
 Client-config (`.mcp.json`), met de token via env-expansie zodat hij niet in de repo belandt:
 

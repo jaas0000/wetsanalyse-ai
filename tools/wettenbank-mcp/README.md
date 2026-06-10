@@ -652,6 +652,11 @@ In HTTP-modus is de start **fail-closed**: zonder geconfigureerde auth weigert `
 starten, tenzij `MCP_ALLOW_NO_AUTH=1`. De volledige lijst env-vars (auth, OIDC, rate limiting,
 logging) en de hardening staan in **`SECURITY.md`**.
 
+> **Wil je alleen het kant-en-klare image draaien** (zonder deze repo of build)? Het image
+> `ghcr.io/palmw01/wettenbank-mcp:latest` is publiek trekbaar en bevat geen tokens of
+> infra-namen. Zie **`HANDLEIDING-IMAGE.md`** voor een beknopte stap-voor-stap met
+> placeholders.
+
 ---
 
 ## 9  Ontwikkeling en testen

@@ -31,6 +31,8 @@ zijn **projectrelatieve paden**, zodat de map portabel is tussen machines/OS'en:
   draait als Portainer-stack achter Nginx Proxy Manager — zie `tools/wettenbank-mcp/CLAUDE.md`
   (Deployment). Het lokale **stdio**-alternatief (`command: "node"`,
   `args: ["tools/wettenbank-mcp/dist/index.js"]`) staat daar ook beschreven als fallback.
+  Wil iemand buiten dit project alleen het publieke image `ghcr.io/palmw01/wettenbank-mcp`
+  draaien, dan is `tools/wettenbank-mcp/HANDLEIDING-IMAGE.md` de beknopte instap.
 - `.claude/settings.local.json` → `enabledMcpjsonServers: ["wettenbank"]` plus een **machine-lokale**
   allowlist. Dit bestand is **gitignored** (`.gitignore`), dus het reist niet mee en is per definitie
   niet gedeeld: een andere machine/analist bouwt z'n eigen lijst gewoon opnieuw op via de
