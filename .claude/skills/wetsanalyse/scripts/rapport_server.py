@@ -202,22 +202,30 @@ class RapportHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path in ("/", "/index.html"):
             self._send(200, self._html.encode("utf-8"), "text/html; charset=utf-8")
-        elif self.path == "/download-md":
-            try:
-                data = json.loads(self._rapport_pad.read_text(encoding="utf-8"))
-            except (json.JSONDecodeError, OSError) as e:
-                self._send(500, f"Fout: {e}".encode("utf-8"), "text/plain; charset=utf-8")
-                return
-            md = rapport_naar_md(data)
-            naam = md_bestandsnaam(data)
-            body = md.encode("utf-8")
-            self._send(200, body, "text/markdown; charset=utf-8", {
-                "Content-Disposition": f'attachment; filename="{naam}"',
-            })
         else:
             self._send(404, b"Not found", "text/plain; charset=utf-8")
 
     def do_POST(self):
+        if self.path == "/schrijf-md":
+            try:
+                data = json.loads(self._rapport_pad.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, OSError) as e:
+                self._send(500, json.dumps({"ok": False, "error": str(e)}).encode("utf-8"),
+                           "application/json; charset=utf-8")
+                return
+            md = rapport_naar_md(data)
+            naam = md_bestandsnaam(data)
+            md_pad = self._rapport_pad.parent / naam
+            try:
+                md_pad.write_text(md, encoding="utf-8")
+            except OSError as e:
+                self._send(500, json.dumps({"ok": False, "error": str(e)}).encode("utf-8"),
+                           "application/json; charset=utf-8")
+                return
+            self._send(200, json.dumps({"ok": True, "pad": str(md_pad)}).encode("utf-8"),
+                       "application/json; charset=utf-8")
+            return
+
         if self.path != "/opslaan":
             self._send(404, b"Not found", "text/plain; charset=utf-8")
             return

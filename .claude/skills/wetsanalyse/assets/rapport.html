@@ -439,10 +439,23 @@ document.getElementById("btn-opslaan").addEventListener("click", async () => {
   }
 });
 
-// --- Download ----------------------------------------------------------------
+// --- Markdown schrijven ------------------------------------------------------
 
-document.getElementById("btn-download").addEventListener("click", () => {
-  window.location = "/download-md";
+document.getElementById("btn-download").addEventListener("click", async () => {
+  const st = document.getElementById("status");
+  st.textContent = "Markdown wordt geschreven...";
+  st.className = "status";
+  try {
+    const r = await fetch("/schrijf-md", { method: "POST" });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const data = await r.json();
+    if (!data.ok) throw new Error(data.error || "onbekende fout");
+    st.textContent = "Opgeslagen als: " + data.pad;
+    st.className = "status ok";
+  } catch (e) {
+    st.textContent = "Fout: " + e.message;
+    st.className = "status err";
+  }
 });
 
 render();
