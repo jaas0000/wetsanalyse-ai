@@ -138,6 +138,12 @@ De `werk/`-paden hieronder zijn relatief aan die analysemap.
 1. Schrijf het tussenresultaat naar `werk/activiteit-2/ronde-{N}/analyse.json` (markeringen
    met **stabiele id's**, leden-tekst, samenhang) volgens het schema in de referentie.
    Overschrijf eerdere rondes niet; houd id's gelijk aan de vorige ronde.
+1b. Voer de pre-check uit op de zojuist geschreven analyse.json:
+   `python "<skill>/scripts/validate_analyse.py" --input werk/activiteit-2/ronde-{N}/analyse.json --activiteit 2`
+   - Exit 2 (fouten): herstel de gemelde fouten vóórdat je de server start.
+     Bij `WETSANALYSE_NO_REVIEW=1`: log de fouten maar blokkeer niet — ga door.
+   - Exit 1 (waarschuwingen): ga door; toon de waarschuwingen als context bij de review.
+   - Exit 0: ga direct door.
 2. Start de review-server in de achtergrond. Ronde 1:
    `python "<skill>/scripts/review_server.py" --input werk/activiteit-2/ronde-1/analyse.json --activiteit 2 --feedback-out werk/activiteit-2/ronde-1/feedback.json --ronde 1`
    Ronde 2+: voeg `--ronde {N}` en `--vorige werk/activiteit-2/ronde-{N-1}` toe, zodat de
@@ -186,6 +192,12 @@ opmerkingen (zie `references/review-checkpoints.md`). Met `N` = rondenummer:
 
 1. Schrijf `werk/activiteit-3/ronde-{N}/analyse.json` (begrippen + afleidingsregels met
    **stabiele id's**, concept-validatiepunten). Overschrijf eerdere rondes niet.
+1b. Voer de pre-check uit:
+   `python "<skill>/scripts/validate_analyse.py" --input werk/activiteit-3/ronde-{N}/analyse.json --activiteit 3`
+   - Exit 2 (fouten): herstel vóórdat je de server start.
+     Bij `WETSANALYSE_NO_REVIEW=1`: log de fouten maar blokkeer niet — ga door.
+   - Exit 1 (waarschuwingen): ga door; toon als context bij de review.
+   - Exit 0: ga direct door.
 2. Start de server met `--input werk/activiteit-3/ronde-{N}/analyse.json --activiteit 3
    --feedback-out werk/activiteit-3/ronde-{N}/feedback.json --ronde {N}`; vanaf ronde 2 ook
    `--vorige werk/activiteit-3/ronde-{N-1}`.

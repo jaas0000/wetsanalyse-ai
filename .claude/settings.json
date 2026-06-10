@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \".claude/skills/wetsanalyse/scripts/write_guard.py\""
+          }
+        ]
+      }
+    ]
+  }
+}
