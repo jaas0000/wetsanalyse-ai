@@ -23,6 +23,12 @@ const CONTAINER_TYPES = new Set([
   "deel",
   "boek",
   "circulaire-tekst",
+  // Bijlagen en hun generieke onderverdelingen: de normalizer behandelt deze ook als
+  // container (zie BEKENDE_CONTAINER_TYPES). Zonder ze hier zouden ze als transparante
+  // wrapper worden behandeld — de bijlage-kop verdwijnt dan uit de inhoudsopgave en
+  // artikelen die er direct onder hangen gaan verloren.
+  "bijlage",
+  "divisie",
 ]);
 
 // Artikel-types (leaf-nodes in de structuur)
@@ -36,7 +42,7 @@ type ContainerLike = NormalizedNode & {
 /**
  * Traverseert de genormaliseerde boom en bouwt de structuurhiërarchie.
  */
-function bouwStructuurNodes(node: NormalizedNode): StructuurNode[] {
+export function bouwStructuurNodes(node: NormalizedNode): StructuurNode[] {
   if (ARTIKEL_TYPES.has(node.type)) return [];
   if (!("children" in node) || !node.children) return [];
 
