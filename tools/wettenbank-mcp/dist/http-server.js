@@ -110,15 +110,22 @@ export function startHttpServer(opts) {
     const oidc = opts.oidc !== undefined ? opts.oidc : maakOidcVerifier(oidcConfigUitEnv());
     const authVereist = clients.length > 0 || oidc !== null;
     const rateLimiter = opts.rateLimiter ?? maakRateLimiter(leesRateConfig());
+    const sessionIdleMs = opts.sessionIdleMs ?? SESSION_IDLE_MS;
     // Eén transport per sessie; gekoppeld aan een verse Server-instantie.
     const transports = {};
     // Laatste activiteit per sessie, voor idle-opruiming.
     const lastSeen = {};
+    // Aantal in-flight requests per sessie. Een langlevende SSE-stream (de standalone
+    // GET-stream, of een streaming respons) houdt `handleRequest` open en ververst `lastSeen`
+    // dus níét. transport.close() (SDK 1.29.0) sluit echter álle SSE-streams hard en vuurt
+    // onclose — een idle-reap zou een actieve stream dus midden in de verbinding afbreken.
+    // Daarom reapen we een sessie alleen als er geen request/stream meer open is.
+    const actief = {};
     // Periodiek verlaten sessies sluiten (clients die zonder DELETE wegvallen).
     const cleanup = setInterval(() => {
         const nu = Date.now();
         for (const sid of Object.keys(transports)) {
-            if (nu - (lastSeen[sid] ?? 0) > SESSION_IDLE_MS) {
+            if (!actief[sid] && nu - (lastSeen[sid] ?? 0) > sessionIdleMs) {
                 try {
                     transports[sid].close();
                 }
@@ -127,10 +134,11 @@ export function startHttpServer(opts) {
                 }
                 delete transports[sid];
                 delete lastSeen[sid];
+                delete actief[sid];
                 log("info", "functioneel", "sessie opgeruimd (idle)", { sessionId: sid });
             }
         }
-    }, Math.min(SESSION_IDLE_MS, 5 * 60 * 1000));
+    }, Math.min(sessionIdleMs, 5 * 60 * 1000));
     cleanup.unref();
     const httpServer = createHttpServer(async (req, res) => {
         const requestId = randomUUID();
@@ -221,6 +229,7 @@ export function startHttpServer(opts) {
                         if (transport.sessionId) {
                             delete transports[transport.sessionId];
                             delete lastSeen[transport.sessionId];
+                            delete actief[transport.sessionId];
                             log("info", "functioneel", "sessie gesloten", { sessionId: transport.sessionId });
                         }
                     };
@@ -256,7 +265,20 @@ export function startHttpServer(opts) {
                     stuurFout(res, 400, "Bad Request: ontbrekende of onbekende sessie-ID");
                     return;
                 }
-                await transports[sessionId].handleRequest(req, res);
+                // Markeer de sessie als actief zolang het request (mogelijk een langlevende
+                // SSE-stream) loopt, zodat de idle-cleanup hem niet midden in de stream reapt.
+                actief[sessionId] = (actief[sessionId] ?? 0) + 1;
+                try {
+                    await transports[sessionId].handleRequest(req, res);
+                }
+                finally {
+                    actief[sessionId] = (actief[sessionId] ?? 1) - 1;
+                    if (actief[sessionId] <= 0)
+                        delete actief[sessionId];
+                    // Verse idle-window na het sluiten van de stream (mits de sessie nog bestaat).
+                    if (transports[sessionId])
+                        lastSeen[sessionId] = Date.now();
+                }
                 return;
             }
             res.writeHead(405).end();

@@ -231,6 +231,89 @@ describe("http-server — OIDC-only auth", () => {
   });
 });
 
+describe("http-server — idle-cleanup ontziet actieve SSE-streams", () => {
+  let server: HttpServer;
+  let url: string;
+  const IDLE = 120; // ms — cleanup tikt elke min(IDLE, 5min) = 120ms
+
+  const initBody = JSON.stringify({
+    jsonrpc: "2.0",
+    id: 1,
+    method: "initialize",
+    params: {
+      protocolVersion: "2024-11-05",
+      capabilities: {},
+      clientInfo: { name: "test", version: "1" },
+    },
+  });
+
+  const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+  async function initSession(): Promise<string> {
+    const res = await fetch(`${url}/mcp`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${TOKEN}`,
+        "content-type": "application/json",
+        accept: "application/json, text/event-stream",
+      },
+      body: initBody,
+    });
+    const sid = res.headers.get("mcp-session-id");
+    if (!sid) throw new Error("geen sessie-ID na initialize");
+    return sid;
+  }
+
+  function postToolsList(sid: string) {
+    return fetch(`${url}/mcp`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${TOKEN}`,
+        "content-type": "application/json",
+        accept: "application/json, text/event-stream",
+        "mcp-session-id": sid,
+      },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/list" }),
+    });
+  }
+
+  beforeAll(async () => {
+    server = startHttpServer({ port: 0, token: TOKEN, sessionIdleMs: IDLE });
+    await new Promise<void>((r) => server.once("listening", () => r()));
+    url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  });
+
+  afterAll(async () => {
+    await new Promise<void>((r) => server.close(() => r()));
+  });
+
+  it("reapt een sessie zónder open stream na de idle-timeout (controle)", async () => {
+    const sid = await initSession();
+    await sleep(IDLE * 4); // ruim voorbij idle + meerdere cleanup-ticks
+    const res = await postToolsList(sid);
+    expect(res.status).toBe(404); // sessie is opgeruimd
+  });
+
+  it("ontziet een sessie met een open GET-SSE-stream", async () => {
+    const sid = await initSession();
+    const ac = new AbortController();
+    const sse = await fetch(`${url}/mcp`, {
+      method: "GET",
+      headers: { authorization: `Bearer ${TOKEN}`, "mcp-session-id": sid, accept: "text/event-stream" },
+      signal: ac.signal,
+    });
+    expect(sse.status).toBe(200);
+    try {
+      await sleep(IDLE * 4); // zonder de fix zou de sessie nu gereapt zijn
+      const res = await postToolsList(sid);
+      expect(res.status).not.toBe(404); // sessie leeft nog dankzij de actieve stream
+    } finally {
+      ac.abort();
+      await sse.body?.cancel().catch(() => {});
+    }
+  });
+});
+
 describe("http-server — rate limiting", () => {
   let server: HttpServer;
   let url: string;
