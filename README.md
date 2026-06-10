@@ -14,7 +14,7 @@ en aannames — zichtbaar maken in plaats van schijnzekerheid te produceren.
 | Onderdeel | Map | Wat het doet |
 |-----------|-----|--------------|
 | **wettenbank-MCP** | `tools/wettenbank-mcp/` | MCP-server (TypeScript) die actuele wettekst ophaalt via de publieke SRU-API van `overheid.nl`. De databron. |
-| **wetsanalyse-skill** | `.claude/skills/wetsanalyse/` | Voert de analyse uit (activiteit 2 + 3) en levert een traceerbaar Markdown-analyserapport op. Gebruikt de MCP als bron. |
+| **wetsanalyse-skill** | `.claude/skills/wetsanalyse/` | Voert de analyse uit (activiteit 2 + 3) en levert een `rapport.json` op die via een lokale HTML-viewer wordt getoond. Markdown is beschikbaar als export. Gebruikt de MCP als bron. |
 | **analyses** | `analyses/` | Output: per analyse een eindrapport plus `werk/`-tussenbestanden. |
 | **docs** | `docs/` | Methodische onderbouwing (handleiding, leidraad, JAS-kader). |
 
@@ -28,7 +28,8 @@ artikel + lid + bronreferentie — en doorloopt:
    van de dertien JAS-klassen geven (rechtssubject, rechtsbetrekking, voorwaarde, afleidingsregel, …).
 3. **Activiteit 3 — betekenis vaststellen**: begrippen (met definitie, voorbeeld, relaties) en
    afleidingsregels (beslis-, reken- en specialisatieregels) vastleggen.
-4. **Rapport** met reviewlog en aandachtspunten voor multidisciplinaire validatie.
+4. **Rapport** — `rapport.json` als primaire bron, gepresenteerd via een lokale HTML-viewer
+   (poort 3119) met bewerkbare §4-velden en een exportknop voor Markdown.
 
 Na activiteit 2 én na activiteit 3 is er een **iteratief human-in-the-loop review-checkpoint**:
 een lokale reviewpagina waarin de analist de tussenresultaten per onderdeel valideert en feedback
