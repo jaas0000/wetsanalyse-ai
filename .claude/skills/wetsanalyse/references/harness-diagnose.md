@@ -23,7 +23,7 @@ Pak harness-diagnose erbij bij **onbetrouwbaarheid of storing** — output die n
 een reviewronde" hoort te ontstaan:
 
 - verzonnen of geparafraseerde wettekst die als citaat wordt gepresenteerd;
-- een JAS-klasse die niet in `references/jas-klassen.md` staat;
+- een JAS-klasse die niet in `references/jas-klassen-referentie.md` staat;
 - de skill die de reviewstop overslaat of zonder bevestiging doorloopt;
 - de MCP die niets (of een fout) teruggeeft;
 - `_TODO_`-synthese die bij opnieuw renderen verdwijnt;
@@ -47,7 +47,7 @@ Waar dit in deze skill aan vastzit:
 - **Brongetrouwheid.** Werkt het model met de letterlijk opgehaalde wettekst, of met
   geheugen? Verzonnen tekst of een parafrase-als-citaat is bijna altijd een contextfout: de
   letterlijke tekst zat niet (goed) in beeld.
-- **`references/jas-klassen.md` als gesloten lijst.** Een niet-bestaande klasse betekent
+- **`references/jas-klassen-referentie.md` als gesloten lijst.** Een niet-bestaande klasse betekent
   meestal dat de dertien JAS-klassen niet (volledig) geraadpleegd waren.
 - **De splitsing `references/` versus `docs/`.** De `references/` zijn de operationele
   samenvatting; `docs/` de volledige onderbouwing. Mist een vuistregel, kijk of die in
@@ -121,7 +121,7 @@ De begrenzing in deze skill:
 | Symptoom | Verdachte hendel |
 | --- | --- |
 | Verzonnen wettekst / parafrase als citaat | Context (bron niet letterlijk) of Tools (verkeerde artikel-call) |
-| Onbestaande JAS-klasse | Context (`jas-klassen.md` niet geraadpleegd) |
+| Onbestaande JAS-klasse | Context (`jas-klassen-referentie.md` niet geraadpleegd) |
 | Brondefinitie gemist | Tools (`wettenbank_zoekterm`/definitieartikel niet opgehaald) |
 | Leeg of verkeerd artikel | Tools (verkeerde `bwbId`, structuur niet eerst opgehaald, MCP niet verbonden) |
 | Skill loopt door zonder review | Governance (`WETSANALYSE_NO_REVIEW` lekt) of Loop (stopconditie verkeerd gelezen) |

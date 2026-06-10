@@ -94,8 +94,8 @@ kernstructuur die meerdere bestanden raakt:
   deel meer uit van de normale skill-flow.
 
 Inhoudelijke regels die je moet kennen voordat je classificeert of begrippen opstelt:
-`references/jas-klassen.md` (de dertien JAS-klassen — verzin er geen), en
-`references/activiteit-3-vuistregels.md`. Voorbeeld-output staat in `analyses/iw1990-art9-lid1/`.
+`references/jas-klassen-referentie.md` (de dertien JAS-klassen — verzin er geen), en
+`references/begrippen-en-afleidingsregels-opstellen.md`. Voorbeeld-output staat in `analyses/iw1990-art9-lid1/`.
 
 Komt een analyse onbetrouwbaar uit (verzonnen tekst, niet-bestaande klasse, overgeslagen
 review, niet-convergerende lus — géén gewone review-feedback), dan is

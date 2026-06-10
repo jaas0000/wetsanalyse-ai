@@ -86,7 +86,7 @@ JAS-klasse toe (2b). Werk fijnmazig: een lid bevat vrijwel altijd meerdere marke
 
 Gebruik per klasse de **herkenningsvraag** als grammaticale ontleedvraag op de tekst. Dit
 is de compacte checklist; voor de volledige omschrijving, herkenningsvragen en
-uitdrukkingswijzen zie `references/jas-klassen.md` (raadpleeg bij twijfel of bij
+uitdrukkingswijzen zie `references/jas-klassen-referentie.md` (raadpleeg bij twijfel of bij
 samenloop van klassen).
 
 | Klasse | Kern | Herken aan |
@@ -154,7 +154,7 @@ rapport dat de reviews zijn overgeslagen.
 
 ## Stap 3 — Activiteit 3: begrippen en afleidingsregels
 
-Lees `references/activiteit-3-vuistregels.md` voordat je begrippen en regels opstelt; dat
+Lees `references/begrippen-en-afleidingsregels-opstellen.md` voordat je begrippen en regels opstelt; dat
 bevat de werkwijze en voorbeelden. In het kort:
 
 **3a Begrippen.** Maak per uniek, betekenisdragend element (vooral rechtssubjecten,
