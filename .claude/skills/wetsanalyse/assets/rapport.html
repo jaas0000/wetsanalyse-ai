@@ -273,7 +273,9 @@ function renderSectie2() {
 function renderSectie3() {
   const begrippen = D.begrippen || [];
   const regels = D.afleidingsregels || [];
-  const vp = D.validatiepunten || [];
+  const vp = Array.isArray(D.validatiepunten)
+    ? D.validatiepunten
+    : (D.validatiepunten ? [D.validatiepunten] : []);
 
   const bItems = begrippen.map(b => `
     <div class="item">

@@ -102,5 +102,12 @@
       "twijfel": "[Interpretatie] Deze beslisregel maakt de logische consequentie van lid 1 expliciet; lid 1 formuleert primair het tijdstip (rekenregel r1). Te valideren of de uitvoering een aparte ja/nee-status wenst naast het berekende moment."
     }
   ],
-  "validatiepunten": "1) Interpretatiekeuze m2/b3: 'invorderbaar' als rechtsbetrekking vs. booleaanse statuswaarde. 2) Impliciete rechtssubjecten (ontvanger b5, belastingschuldige b4) zijn afgeleid uit art. 2 en art. 8, niet uit lid 1 zelf — juridisch valideren. 3) De termijn van zes weken wordt niet verlengd door de Algemene termijnenwet (art. 9 lid 10); dit moet in de berekening worden verwerkt hoewel lid 10 buiten scope valt. 4) Begrip 'dagtekening' is niet wettelijk gedefinieerd — betekenis/verhouding tot verzending te valideren. 5) Beslisregel r2 is een afgeleide explicitering; bevestigen of die als zelfstandige regel gewenst is. 6) Reikwijdte: alleen de hoofdregel (lid 1) is geanalyseerd; de afwijkende termijnen (lid 2 t/m 9, 11) en de schorsingsbepaling (lid 12) vallen buiten scope en vergen eigen analyse."
+  "validatiepunten": [
+    "1) Interpretatiekeuze m2/b3: 'invorderbaar' als rechtsbetrekking vs. booleaanse statuswaarde.",
+    "2) Impliciete rechtssubjecten (ontvanger b5, belastingschuldige b4) zijn afgeleid uit art. 2 en art. 8, niet uit lid 1 zelf — juridisch valideren.",
+    "3) De termijn van zes weken wordt niet verlengd door de Algemene termijnenwet (art. 9 lid 10); dit moet in de berekening worden verwerkt hoewel lid 10 buiten scope valt.",
+    "4) Begrip 'dagtekening' is niet wettelijk gedefinieerd — betekenis/verhouding tot verzending te valideren.",
+    "5) Beslisregel r2 is een afgeleide explicitering; bevestigen of die als zelfstandige regel gewenst is.",
+    "6) Reikwijdte: alleen de hoofdregel (lid 1) is geanalyseerd; de afwijkende termijnen (lid 2 t/m 9, 11) en de schorsingsbepaling (lid 12) vallen buiten scope en vergen eigen analyse."
+  ]
 }

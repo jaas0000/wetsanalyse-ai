@@ -165,7 +165,9 @@ def rapport_naar_md(d: dict) -> str:
 
 def md_bestandsnaam(d: dict) -> str:
     bwb = re.sub(r"[^a-z0-9]", "", (d.get("bwbId") or "").lower())
-    art = re.sub(r"[^a-z0-9]", "", str(d.get("artikel") or "").lower())
+    # Punt in het artikelnummer behouden (bv. "9.5"), zodat de bestandsnaam het
+    # artikelnummer accuraat weergeeft en gelijkloopt met de analyse-mapnaam.
+    art = re.sub(r"[^a-z0-9.]", "", str(d.get("artikel") or "").lower())
     leden = d.get("leden", [])
     lid = f"-lid{leden[0]['lid']}" if len(leden) == 1 and leden[0].get("lid") else ""
     slug = f"{bwb}-art{art}{lid}" if bwb and art else "analyserapport"

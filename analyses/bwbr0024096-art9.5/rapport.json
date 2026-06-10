@@ -1,0 +1,568 @@
+{
+  "wet": "Leidraad Invordering 2008",
+  "bwbId": "BWBR0024096",
+  "artikel": "9.5",
+  "versiedatum": "2026-01-01",
+  "bronreferentie": "jci1.3:c:BWBR0024096&artikel=9.5",
+  "type": "beleidsregel",
+  "pad": "Artikel 1 Inleiding en toepassingsgebied > 9.5 Begrippen bij betalingstermijnen",
+  "analysefocus": "Berekening van de vervaldatum van de betalingstermijn voor aanslagen met een termijn van één maand of zes weken",
+  "reikwijdte": "Volledig artikel 9.5 (één ongenummerd lid met drie alinea's); art. 9.4 LI2008 (dagtekening) en art. 9 IW1990 (wettelijke basis betalingstermijnen) als context geraadpleegd",
+  "geraadpleegde": "Art. 9 LI2008 (overzichtsartikel betalingstermijnen), art. 9.4 LI2008 (dagtekening aanslagbiljet), art. 1.1 LI2008 (begripsbepalingen incl. definitie 'wet' = IW1990)",
+  "leden": [
+    {
+      "lid": "",
+      "tekst": "Als de betalingstermijn van een aanslag is gesteld op één maand of is gesteld op zes weken, dan houdt dat in dat als de dagtekening van een aanslagbiljet valt op 31 oktober, de betalingstermijn van één maand vervalt op 30 november en de betalingstermijn van zes weken vervalt op 12 december.\n\nAls de dagtekening 28 februari is, dan vervalt de betalingstermijn van een maand op 31 maart en de betalingstermijn van zes weken op 11 april, tenzij het jaartal aangeeft dat het een schrikkeljaar is, in welk geval de termijn vervalt op 28 maart dan wel 10 april.\n\nAls de dagtekening van het aanslagbiljet valt op een andere dag dan de laatste dag van de kalendermaand, vervalt de termijn een maand later (bij een betalingstermijn van een maand) op de dag die hetzelfde nummer heeft als dat van de dagtekening. Als de dagtekening bijvoorbeeld 15 maart is, vervalt de termijn dus op 15 april. Is de betalingstermijn zes weken en is de dagtekening 15 maart, vervalt de termijn op 26 april."
+    }
+  ],
+  "markeringen": [
+    {
+      "id": "m1",
+      "formulering": "Als de betalingstermijn van een aanslag is gesteld op één maand of is gesteld op zes weken",
+      "klasse": "Voorwaarde",
+      "vindplaats": "alinea 1",
+      "toelichting": "Toepassingsconditie van het gehele artikel: de berekeningsregels in 9.5 gelden alleen voor betalingstermijnen van één maand of zes weken. 'Of' fungeert hier als disjunctieve operator (m14). Rechtsbetrekking en rechtssubject (betalingsplicht belastingschuldige) liggen in art. 9 IW1990, niet in dit artikel."
+    },
+    {
+      "id": "m2",
+      "formulering": "aanslagbiljet",
+      "klasse": "Rechtsobject",
+      "vindplaats": "alinea 1",
+      "toelichting": "Het aanslagbiljet is het document waarop de betalingstermijn betrekking heeft en waarvan de dagtekening het startpunt van de termijn bepaalt. Het is het rechtsobject van de in IW1990 geregelde betalingsrechtsbetrekking. Alternatief: 'aanslag' (het besluit zelf) als rechtsobject; het biljet is de materialisatie ervan. Ik kies 'aanslagbiljet' omdat dit de term is die in 9.5 als ankerpunt functioneert."
+    },
+    {
+      "id": "m3",
+      "formulering": "één maand",
+      "klasse": "Variabele(waarde)",
+      "vindplaats": "alinea 1",
+      "toelichting": "Eén van de twee mogelijke waarden van de variabele 'betalingstermijn'. De betalingstermijn varieert per aanslag (type, grondslag) en neemt één van twee wettelijk toegestane waarden aan. Alternatief: Parameter(waarde) omdat de termijnduren wettelijk zijn vastgesteld. Ik kies Variabele(waarde) omdat de tekst twee mogelijke waarden naast elkaar stelt die per geval gelden: de variabele 'betalingstermijn' krijgt per aanslag de waarde 'één maand' of 'zes weken'. Zie ook twijfelpunt bij m4."
+    },
+    {
+      "id": "m4",
+      "formulering": "zes weken",
+      "klasse": "Variabele(waarde)",
+      "vindplaats": "alinea 1",
+      "toelichting": "Tweede mogelijke waarde van de variabele 'betalingstermijn'. Zelfde redenering als m3. Twijfelpunt: als de termijnduren (1 maand, 6 weken) voor alle aanslagen van een bepaald type altijd gelijk zijn, zijn het Parameterwaarden. Voor de analyse van dit artikel is het onderscheid niet beslissend; de vervaldatumberekening is in beide gevallen een rekenregel met de termijnduur als invoer."
+    },
+    {
+      "id": "m5",
+      "formulering": "de dagtekening van een aanslagbiljet",
+      "klasse": "Variabele(waarde)",
+      "vindplaats": "alinea 1",
+      "toelichting": "De dagtekening is de primaire invoervariabele voor alle rekenregels in dit artikel. De waarde varieert per aanslagbiljet (vgl. art. 9.4 LI2008: de dagtekening wordt zodanig bepaald dat de belastingschuldige het biljet enige dagen vóór die dag ontvangt). Niet als Tijdsaanduiding geclassificeerd: het is een variabele die een datum aanneemt, niet een concrete datum of tijdvak. De concrete voorbeelddata (31 oktober etc.) zijn wel Tijdsaanduidingen (m6 e.v.)."
+    },
+    {
+      "id": "m6",
+      "formulering": "als de dagtekening van een aanslagbiljet valt op 31 oktober",
+      "klasse": "Voorwaarde",
+      "vindplaats": "alinea 1",
+      "toelichting": "Voorbeeld-conditie die de berekening in alinea 1 illustreert. 31 oktober is de laatste dag van oktober — een geval waarbij de volgende maand (november) minder dagen heeft (30 i.p.v. 31). De tekst gebruikt dit als illustratie van de 'einde-maand'-regel (één maand later = laatste dag van de volgende maand als die maand minder dagen heeft). De conditie is impliciet: 'dagtekening = laatste dag van een maand met 31 dagen, waarbij de volgende maand 30 dagen heeft.'"
+    },
+    {
+      "id": "m7",
+      "formulering": "31 oktober",
+      "klasse": "Tijdsaanduiding",
+      "vindplaats": "alinea 1",
+      "toelichting": "Concrete kalenderdag als rekenvoorbeeld. Onderdeel van m6 (de conditie), maar afzonderlijk gemarkeerd als tijdsaanduiding."
+    },
+    {
+      "id": "m8",
+      "formulering": "de betalingstermijn van één maand vervalt op 30 november",
+      "klasse": "Afleidingsregel",
+      "vindplaats": "alinea 1",
+      "toelichting": "Rekenregel: vervaldatum (uitvoervariabele) = dagtekening 31 oktober + 1 maand = 30 november. Dit illustreert de regel dat bij een dagtekening op de laatste dag van een maand met 31 dagen, 'één maand later' de laatste dag is van de volgende maand (die 30 dagen heeft). De abstracte regel is niet letterlijk geformuleerd; ze wordt via voorbeeld gegeven. Dit is een aanname/interpretatie die validatie behoeft (zie aandachtspunten)."
+    },
+    {
+      "id": "m9",
+      "formulering": "de betalingstermijn van zes weken vervalt op 12 december",
+      "klasse": "Afleidingsregel",
+      "vindplaats": "alinea 1",
+      "toelichting": "Rekenregel: vervaldatum = dagtekening 31 oktober + 6 weken (= 42 kalenderdagen) = 12 december. Het is een aanname dat 'zes weken' = 42 kalenderdagen; dit wordt nergens expliciet zo gedefinieerd in dit artikel. Verificatie: 31 okt + 42 dagen = 31+42 = dag 304+42 = dag 346 = 12 december. Klopt."
+    },
+    {
+      "id": "m10",
+      "formulering": "30 november",
+      "klasse": "Tijdsaanduiding",
+      "vindplaats": "alinea 1",
+      "toelichting": "Berekende vervaldatum als rekenuitkomst in m8."
+    },
+    {
+      "id": "m11",
+      "formulering": "12 december",
+      "klasse": "Tijdsaanduiding",
+      "vindplaats": "alinea 1",
+      "toelichting": "Berekende vervaldatum als rekenuitkomst in m9."
+    },
+    {
+      "id": "m12",
+      "formulering": "Als de dagtekening 28 februari is",
+      "klasse": "Voorwaarde",
+      "vindplaats": "alinea 2",
+      "toelichting": "Speciale conditie: dagtekening = 28 februari. Dit is de bijzondere kalendergrenscase waarbij 'laatste dag van februari in een niet-schrikkeljaar' (dag 28) als startpunt geldt. De tekst behandelt 28 februari als de normale laatste dag van februari; voor schrikkeljaren geldt de uitzondering (m16)."
+    },
+    {
+      "id": "m13",
+      "formulering": "28 februari",
+      "klasse": "Tijdsaanduiding",
+      "vindplaats": "alinea 2",
+      "toelichting": "Concrete kalenderdag als conditie in m12."
+    },
+    {
+      "id": "m14",
+      "formulering": "vervalt de betalingstermijn van een maand op 31 maart en de betalingstermijn van zes weken op 11 april",
+      "klasse": "Afleidingsregel",
+      "vindplaats": "alinea 2",
+      "toelichting": "Rekenregel bij dagtekening 28 februari, niet-schrikkeljaar: 1 maand → 31 maart (laatste dag van maart); 6 weken (42 dagen) → 11 april. Verificatie: 28 feb + 42 = dag 59+42 = dag 101 = 11 april. Klopt."
+    },
+    {
+      "id": "m15",
+      "formulering": "31 maart",
+      "klasse": "Tijdsaanduiding",
+      "vindplaats": "alinea 2",
+      "toelichting": "Berekende vervaldatum (1 maand na 28 februari, niet-schrikkeljaar)."
+    },
+    {
+      "id": "m16",
+      "formulering": "11 april",
+      "klasse": "Tijdsaanduiding",
+      "vindplaats": "alinea 2",
+      "toelichting": "Berekende vervaldatum (6 weken na 28 februari, niet-schrikkeljaar)."
+    },
+    {
+      "id": "m17",
+      "formulering": "tenzij het jaartal aangeeft dat het een schrikkeljaar is",
+      "klasse": "Voorwaarde",
+      "vindplaats": "alinea 2",
+      "toelichting": "Uitzondering op de regel van m14: als het jaar een schrikkeljaar is, gelden andere vervaldatums. 'Tenzij' = negatieve voorwaarde (de uitzondering activeert de alternatieve afleidingsregel m18). Opmerking: bij een schrikkeljaar heeft februari 29 dagen; de dagtekening 28 februari is dan NIET meer de laatste dag van de maand. Dit maakt de voorwaarde van m12 ('de dagtekening is 28 februari') in een schrikkeljaar feitelijk een niet-laatste-dag-geval. De uitzondering is daarmee impliciet een aanpassing voor die situatie."
+    },
+    {
+      "id": "m18",
+      "formulering": "schrikkeljaar",
+      "klasse": "Variabele(waarde)",
+      "vindplaats": "alinea 2",
+      "toelichting": "Booleaanse variabele: een kalenderjaar is wel of geen schrikkeljaar. Bepaalt welke berekening bij dagtekening 28 februari geldt. Kan ook als Voorwaarde worden gezien (het is de conditie in m17), maar als zelfstandig begrip is het een variabele. De bepaling 'het jaartal aangeeft dat het een schrikkeljaar is' suggereert dat uit het jaartal (deelbaar door 4, met uitzonderingen) wordt afgeleid of sprake is van een schrikkeljaar — dit is een impliciete rekenregel die niet in het artikel staat."
+    },
+    {
+      "id": "m19",
+      "formulering": "in welk geval de termijn vervalt op 28 maart dan wel 10 april",
+      "klasse": "Afleidingsregel",
+      "vindplaats": "alinea 2",
+      "toelichting": "Alternatieve rekenregel bij dagtekening 28 februari EN schrikkeljaar: 1 maand → 28 maart; 6 weken → 10 april. Verificatie (schrikkeljaar: 2024): 28 feb 2024 + 29 dagen = 28 maart; 28 feb + 42 = dag 59+42 = dag 101 = 10 april. Klopt. 'Dan wel' = of (disjunctief: de twee uitkomsten gelden voor respectievelijk 1 maand en 6 weken)."
+    },
+    {
+      "id": "m20",
+      "formulering": "28 maart",
+      "klasse": "Tijdsaanduiding",
+      "vindplaats": "alinea 2",
+      "toelichting": "Berekende vervaldatum (1 maand na 28 februari in schrikkeljaar)."
+    },
+    {
+      "id": "m21",
+      "formulering": "10 april",
+      "klasse": "Tijdsaanduiding",
+      "vindplaats": "alinea 2",
+      "toelichting": "Berekende vervaldatum (6 weken na 28 februari in schrikkeljaar)."
+    },
+    {
+      "id": "m22",
+      "formulering": "Als de dagtekening van het aanslagbiljet valt op een andere dag dan de laatste dag van de kalendermaand",
+      "klasse": "Voorwaarde",
+      "vindplaats": "alinea 3",
+      "toelichting": "Algemene conditie: de dagtekening is NIET de laatste dag van de kalendermaand. Dit is de basisregel voor alle 'gewone' gevallen (de bijzondere gevallen — laatste dag, 28 februari — zijn in alinea's 1 en 2 behandeld). 'De laatste dag van de kalendermaand' is impliciet een variabele (verschilt per maand: 28, 29, 30 of 31)."
+    },
+    {
+      "id": "m23",
+      "formulering": "vervalt de termijn een maand later (bij een betalingstermijn van een maand) op de dag die hetzelfde nummer heeft als dat van de dagtekening",
+      "klasse": "Afleidingsregel",
+      "vindplaats": "alinea 3",
+      "toelichting": "De algemene rekenregel voor een betalingstermijn van één maand (niet bij maandeinde): vervaldatum = de dag in de volgende maand met hetzelfde dagnummer als de dagtekening. Dit is de enige expliciete abstracte formulering van de 'één maand'-regel in het artikel. Voorbeeld: dagtekening 15 maart → vervaldatum 15 april. Openstaand punt: de formulering dekt niet het geval waarbij de volgende maand minder dagen heeft dan het dagnummer (bijv. dagtekening 31 januari → geen dag 31 in februari). Alinea 1 geeft indirect een antwoord (31 okt → 30 nov), maar er is geen expliciete abstracte formulering voor dit geval."
+    },
+    {
+      "id": "m24",
+      "formulering": "de dag die hetzelfde nummer heeft als dat van de dagtekening",
+      "klasse": "Operator",
+      "vindplaats": "alinea 3",
+      "toelichting": "De bewerkingsbeschrijving van de één-maand-berekening: selecteer de dag in de volgende kalendermaand met hetzelfde dagnummer. Dit is de operationele definitie van 'één maand later' voor niet-maandeindegeval. Alternatief: Afleidingsregel (het is de kern van de berekening). Ik kies Operator omdat het de rekenoperatie beschrijft die onderdeel is van de grotere afleidingsregel m23."
+    },
+    {
+      "id": "m25",
+      "formulering": "15 maart",
+      "klasse": "Tijdsaanduiding",
+      "vindplaats": "alinea 3",
+      "toelichting": "Rekenvoorbeeld: dagtekening als invoerwaarde voor de illustratie van m23 en m26."
+    },
+    {
+      "id": "m26",
+      "formulering": "15 april",
+      "klasse": "Tijdsaanduiding",
+      "vindplaats": "alinea 3",
+      "toelichting": "Rekenuitkomst: vervaldatum 1 maand na 15 maart."
+    },
+    {
+      "id": "m27",
+      "formulering": "Is de betalingstermijn zes weken en is de dagtekening 15 maart, vervalt de termijn op 26 april",
+      "klasse": "Afleidingsregel",
+      "vindplaats": "alinea 3",
+      "toelichting": "Rekenregel voor zes-weken-termijn via voorbeeld: dagtekening 15 maart + 6 weken = 26 april. Verificatie: 15 maart + 42 dagen = dag 74 + 42 = dag 116 = 26 april. Klopt. Aanname: 'zes weken' = 42 kalenderdagen (kalenderweekdagen, geen werkdagen). Er is geen abstracte formulering van de zes-weken-regel in dit artikel — alleen dit voorbeeld. Dit is een open norm/lacune die validatie behoeft."
+    },
+    {
+      "id": "m28",
+      "formulering": "26 april",
+      "klasse": "Tijdsaanduiding",
+      "vindplaats": "alinea 3",
+      "toelichting": "Rekenuitkomst: vervaldatum 6 weken na 15 maart."
+    }
+  ],
+  "samenhang": "Artikel 9.5 LI2008 is een interpretatieve beleidsregel zonder zelfstandige rechtsbetrekking of rechtssubject — die liggen in art. 9 IW1990 (betalingsplicht belastingschuldige). Het artikel geeft uitsluitend afleidingsregels voor de vervaldatum van de betalingstermijn. De structuur is: één toepassingsconditie (m1: termijn is 1 maand of 6 weken) → twee invoervariabelen (m3/m4: duur van de termijn; m5: dagtekening van het aanslagbiljet) → meerdere rekenregels (m8, m9, m14, m19, m23, m27) die op basis van drie gevallen (alinea 1: voorbeeld einde-maand; alinea 2: 28 februari met en zonder schrikkeljaar; alinea 3: algemene regel niet-einde-maand) de vervaldatum berekenen. Het rechtsobject (aanslagbiljet, m2) is de drager van de dagtekening. Opvallend: de abstracte zes-weken-regel ontbreekt; alinea 3 geeft alleen een voorbeeld. Het niet-einde-maand/niet-29-dagenmaand-geval (bijv. 31 januari + 1 maand) is niet expliciet geregeld.",
+  "begrippen": [
+    {
+      "id": "b1",
+      "naam": "Aanslagbiljet",
+      "klasse": "Rechtsobject",
+      "definitie": "Het door de Belastingdienst opgemaakte biljet waarop de belastingaanslag is vermeld en dat de dagtekening draagt die het startpunt van de betalingstermijn bepaalt. [Werkdefinitie — interpretatie: de LI2008 en de IW1990 definiëren 'aanslagbiljet' niet afzonderlijk; de AWR gebruikt de term zonder expliciete definitie.]",
+      "voorbeeld": "Een aanslagbiljet inkomstenbelasting met dagtekening 15 maart 2026.",
+      "kenmerken_relaties": [
+        "kenmerk: draagt een dagtekening (begrip b2) die het startpunt van de betalingstermijn (begrip b3) bepaalt",
+        "relatie: rechtsobject van de betalingsplicht die in art. 9 IW1990 is geregeld",
+        "relatie: de betalingstermijn (b3) en de vervaldatum (b4) zijn hiervan afhankelijk"
+      ],
+      "markeringen": [
+        "m2"
+      ],
+      "vindplaats": "art. 9.5 LI2008, alinea 1",
+      "bronreferentie": "jci1.3:c:BWBR0024096&artikel=9.5",
+      "interpretatie_twijfel": "De term 'aanslagbiljet' wordt in LI2008 en IW1990 niet gedefinieerd. De AWR bepaalt in art. 9 dat de aanslag bij wege van aanslag wordt vastgesteld; het biljet is de papieren/digitale uiting. Dit begrip vergt validatie met een belastingjurist."
+    },
+    {
+      "id": "b2",
+      "naam": "Dagtekening",
+      "klasse": "Variabele(waarde)",
+      "definitie": "De op het aanslagbiljet vermelde datum die geldt als startpunt voor de berekening van de betalingstermijn. Normaliter zodanig bepaald dat de belastingschuldige het biljet enige dagen vóór die datum ontvangt (art. 9.4 LI2008). [Deels brondefinitie: art. 9.4 LI2008 beschrijft de vaststelling van de dagtekening; het begrip zelf wordt niet gedefinieerd.]",
+      "voorbeeld": "Een aanslagbiljet met dagtekening 28 februari 2025.",
+      "kenmerken_relaties": [
+        "kenmerk: is een kalenderdag (dag, maand, jaar)",
+        "kenmerk: kan vallen op de laatste dag van een kalendermaand (relevant voor de rekenregels)",
+        "kenmerk: bij schrikkeljaar kan 28 februari een niet-maandeinde zijn (anders dan in gewone jaren)",
+        "relatie: is invoervariabele van alle afleidingsregels in art. 9.5 (r1 t/m r4)",
+        "relatie: behoort bij aanslagbiljet (b1)"
+      ],
+      "markeringen": [
+        "m5",
+        "m6",
+        "m7",
+        "m12",
+        "m13",
+        "m22",
+        "m25"
+      ],
+      "vindplaats": "art. 9.5 LI2008, alle alinea's; art. 9.4 LI2008",
+      "bronreferentie": "jci1.3:c:BWBR0024096&artikel=9.5",
+      "interpretatie_twijfel": "De tekst onderscheidt impliciet drie categorieën dagtekeningen: (1) de laatste dag van een maand waarbij de volgende maand korter is (31 oktober als voorbeeld); (2) 28 februari; (3) alle andere dagen. De categorieën worden niet als zodanig benoemd. Of categorie 3 ook 'de laatste dag van een maand waarbij de volgende maand even lang of langer is' omvat, is niet uitgewerkt (bijv. 31 augustus → 30 september: impliciet volgt de laatste dag van de volgende maand, maar dit staat niet in de tekst)."
+    },
+    {
+      "id": "b3",
+      "naam": "Betalingstermijn",
+      "klasse": "Variabele(waarde)",
+      "definitie": "De termijn, gesteld op één maand of zes weken, waarbinnen de op de aanslag verschuldigde belasting moet worden betaald. De termijn loopt vanaf de dagtekening van het aanslagbiljet tot de vervaldatum. [Deels brondefinitie: art. 9 IW1990 stelt de betalingstermijnen vast; art. 9.5 LI2008 geeft de berekeningswijze van de einddatum.]",
+      "voorbeeld": "Een aanslag inkomstenbelasting met een betalingstermijn van zes weken.",
+      "kenmerken_relaties": [
+        "kenmerk: neemt één van twee waarden aan: één maand of zes weken",
+        "kenmerk: varieert per aanslag (het type aanslag bepaalt de toepasselijke termijnduur)",
+        "relatie: startpunt wordt bepaald door de dagtekening (b2)",
+        "relatie: eindpunt is de vervaldatum betalingstermijn (b4)",
+        "relatie: geldt voor het aanslagbiljet (b1)"
+      ],
+      "markeringen": [
+        "m1",
+        "m3",
+        "m4"
+      ],
+      "vindplaats": "art. 9.5 LI2008, alinea 1; art. 9 IW1990",
+      "bronreferentie": "jci1.3:c:BWBR0024096&artikel=9.5",
+      "interpretatie_twijfel": "Variabele(waarde) of Parameter(waarde)? De termijnduren zijn wettelijk vastgesteld (art. 9 IW1990), maar welke termijn per type aanslag geldt, varieert. Ik heb gekozen voor Variabele(waarde) omdat de tekst twee mogelijke waarden naast elkaar stelt die per aanslag gelden. Valideer met een belastingjurist of informatiespecialist of voor een specifiek aanslag-type altijd dezelfde termijn geldt (dan is het per type een Parameter)."
+    },
+    {
+      "id": "b4",
+      "naam": "Vervaldatum betalingstermijn",
+      "klasse": "Variabele(waarde)",
+      "definitie": "De kalenderdag waarop de betalingstermijn afloopt: de uiterste datum waarop de belasting moet zijn betaald. Wordt berekend vanuit de dagtekening van het aanslagbiljet en de duur van de betalingstermijn, volgens de rekenregels van art. 9.5 LI2008. [Werkdefinitie — interpretatie: de LI2008 gebruikt 'vervalt op' maar definieert 'vervaldatum' niet expliciet.]",
+      "voorbeeld": "Bij dagtekening 15 maart en een betalingstermijn van één maand: vervaldatum 15 april.",
+      "kenmerken_relaties": [
+        "kenmerk: is een kalenderdag (dag, maand, jaar)",
+        "kenmerk: is de uitvoervariabele van alle afleidingsregels r1 t/m r4",
+        "relatie: volgt uit dagtekening (b2) en betalingstermijn (b3) via de afleidingsregels",
+        "relatie: na overschrijding hiervan is sprake van een betalingsachterstand (zie art. 1.1.13 LI2008)"
+      ],
+      "markeringen": [
+        "m8",
+        "m9",
+        "m10",
+        "m11",
+        "m14",
+        "m15",
+        "m16",
+        "m19",
+        "m20",
+        "m21",
+        "m23",
+        "m26",
+        "m27",
+        "m28"
+      ],
+      "vindplaats": "art. 9.5 LI2008, alle alinea's",
+      "bronreferentie": "jci1.3:c:BWBR0024096&artikel=9.5",
+      "interpretatie_twijfel": "Geen formele definitie in de LI2008 of IW1990. De term 'vervaldatum' is gangbaar in de uitvoeringspraktijk maar moet worden gevalideerd op betekenis in het systeem van de Belastingdienst."
+    },
+    {
+      "id": "b5",
+      "naam": "Schrikkeljaar",
+      "klasse": "Variabele(waarde)",
+      "definitie": "Een kalenderjaar van 366 dagen, waarbij de maand februari 29 dagen telt in plaats van 28. Relevant voor art. 9.5 bij een dagtekening van 28 februari: in een schrikkeljaar is 28 februari niet de laatste dag van de maand, waardoor een andere vervaldatum geldt. [Werkdefinitie — interpretatie: het begrip wordt niet gedefinieerd in LI2008 of IW1990; de betekenis is algemeen bekend.]",
+      "voorbeeld": "Het jaar 2024 is een schrikkeljaar (deelbaar door 4 en niet door 100, of door 400).",
+      "kenmerken_relaties": [
+        "kenmerk: booleaanse variabele: een kalenderjaar is wel of geen schrikkeljaar",
+        "kenmerk: in een schrikkeljaar heeft februari 29 dagen",
+        "relatie: is subconditie bij de afleidingsregel voor dagtekening 28 februari (r3a/r3b)",
+        "kenmerk: of een jaar een schrikkeljaar is, volgt uit het jaartal via de gregoriaanse kalenderregel — deze rekenregel staat niet in art. 9.5"
+      ],
+      "markeringen": [
+        "m17",
+        "m18"
+      ],
+      "vindplaats": "art. 9.5 LI2008, alinea 2",
+      "bronreferentie": "jci1.3:c:BWBR0024096&artikel=9.5",
+      "interpretatie_twijfel": "Het artikel zegt 'het jaartal aangeeft dat het een schrikkeljaar is', maar definieert niet wanneer een jaar een schrikkeljaar is. De gregoriaanse kalenderregel (deelbaar door 4, behalve eeuwjaren die niet deelbaar zijn door 400) staat niet in de wet. Dit is een impliciete verwijzing naar algemeen geldende tijdrekening."
+    }
+  ],
+  "afleidingsregels": [
+    {
+      "id": "r1",
+      "naam": "Vervaldatum bij betalingstermijn één maand (niet-maandeinde)",
+      "type": "rekenregel",
+      "uitvoervariabele": "vervaldatum_betalingstermijn (b4)",
+      "invoervariabelen": [
+        "dagtekening (b2)"
+      ],
+      "parameters": [],
+      "voorwaarden": [
+        "betalingstermijn (b3) = één maand",
+        "EN dagtekening (b2) ≠ laatste dag van de kalendermaand"
+      ],
+      "formulering": "vervaldatum_betalingstermijn :=\n    dag in volgende kalendermaand\n    MET hetzelfde dagnummer als dagtekening\n\nVoorbeeld: dagtekening = 15 maart → vervaldatum = 15 april",
+      "markeringen": [
+        "m23",
+        "m24",
+        "m25",
+        "m26"
+      ],
+      "vindplaats": "art. 9.5 LI2008, alinea 3",
+      "bronreferentie": "jci1.3:c:BWBR0024096&artikel=9.5",
+      "interpretatie_twijfel": "De tekst formuleert de regel expliciet voor het niet-maandeinde-geval. Openstaand: wat geldt als de volgende maand geen dag met dat nummer heeft (bijv. dagtekening 31 augustus → geen 31 september)? De voorbeelden impliceren: neem de laatste dag van de volgende maand. Maar dit staat niet expliciet. Zie ook r2 (maandeinde-geval, alinea 1)."
+    },
+    {
+      "id": "r2",
+      "naam": "Vervaldatum bij betalingstermijn één maand (maandeinde-geval)",
+      "type": "rekenregel",
+      "uitvoervariabele": "vervaldatum_betalingstermijn (b4)",
+      "invoervariabelen": [
+        "dagtekening (b2)"
+      ],
+      "parameters": [],
+      "voorwaarden": [
+        "betalingstermijn (b3) = één maand",
+        "EN dagtekening (b2) = laatste dag van de kalendermaand",
+        "EN volgende kalendermaand heeft minder dagen dan de huidige"
+      ],
+      "formulering": "vervaldatum_betalingstermijn :=\n    laatste dag van de volgende kalendermaand\n\nVoorbeeld (art. 9.5 alinea 1): dagtekening = 31 oktober → vervaldatum = 30 november",
+      "markeringen": [
+        "m6",
+        "m7",
+        "m8",
+        "m10"
+      ],
+      "vindplaats": "art. 9.5 LI2008, alinea 1",
+      "bronreferentie": "jci1.3:c:BWBR0024096&artikel=9.5",
+      "interpretatie_twijfel": "De abstracte regel 'laatste dag van de volgende maand bij maandeinde-geval' staat NIET letterlijk in de tekst. Ze is afgeleid uit het voorbeeld (31 oktober → 30 november). Dit is een interpretatie die validatie vereist. De tekst geeft alleen dit ene voorbeeld voor het maandeinde-geval bij een termijn van één maand. Aanvullend openstaand: geldt deze regel ook als de huidige maand korter is dan de volgende (bijv. 28 februari in gewoon jaar + 1 maand = 31 maart, of 28 maart?)? Alinea 2 behandelt 28 februari apart, maar de abstracte regel voor andere maandeinde-situaties is onduidelijk."
+    },
+    {
+      "id": "r3a",
+      "naam": "Vervaldatum bij betalingstermijn één maand, dagtekening 28 februari (niet-schrikkeljaar)",
+      "type": "rekenregel",
+      "uitvoervariabele": "vervaldatum_betalingstermijn (b4)",
+      "invoervariabelen": [
+        "dagtekening (b2)",
+        "schrikkeljaar (b5)"
+      ],
+      "parameters": [],
+      "voorwaarden": [
+        "betalingstermijn (b3) = één maand",
+        "EN dagtekening (b2) = 28 februari",
+        "EN schrikkeljaar (b5) = nee"
+      ],
+      "formulering": "vervaldatum_betalingstermijn :=\n    31 maart\n\nVoorbeeld (art. 9.5 alinea 2): dagtekening = 28 februari → vervaldatum = 31 maart",
+      "markeringen": [
+        "m12",
+        "m13",
+        "m14",
+        "m15"
+      ],
+      "vindplaats": "art. 9.5 LI2008, alinea 2",
+      "bronreferentie": "jci1.3:c:BWBR0024096&artikel=9.5",
+      "interpretatie_twijfel": "De uitkomst 31 maart staat letterlijk in de tekst. De interpretatie is dat 28 februari in een niet-schrikkeljaar de laatste dag van februari is, en 'één maand later' dan de laatste dag van maart (31 maart) is. Dit sluit aan op de logica van r2 (maandeinde-geval), maar de tekst formuleert het als een aparte speciale regel."
+    },
+    {
+      "id": "r3b",
+      "naam": "Vervaldatum bij betalingstermijn één maand, dagtekening 28 februari (schrikkeljaar)",
+      "type": "rekenregel",
+      "uitvoervariabele": "vervaldatum_betalingstermijn (b4)",
+      "invoervariabelen": [
+        "dagtekening (b2)",
+        "schrikkeljaar (b5)"
+      ],
+      "parameters": [],
+      "voorwaarden": [
+        "betalingstermijn (b3) = één maand",
+        "EN dagtekening (b2) = 28 februari",
+        "EN schrikkeljaar (b5) = ja"
+      ],
+      "formulering": "vervaldatum_betalingstermijn :=\n    28 maart\n\nVoorbeeld (art. 9.5 alinea 2): dagtekening = 28 februari (schrikkeljaar) → vervaldatum = 28 maart",
+      "markeringen": [
+        "m17",
+        "m18",
+        "m19",
+        "m20"
+      ],
+      "vindplaats": "art. 9.5 LI2008, alinea 2",
+      "bronreferentie": "jci1.3:c:BWBR0024096&artikel=9.5",
+      "interpretatie_twijfel": "In een schrikkeljaar heeft februari 29 dagen, dus 28 februari is NIET de laatste dag van de maand. Eén maand later op dezelfde dag (dagnummer 28) is dan 28 maart — dit past in de algemene regel van r1 (niet-maandeinde). De speciale regel voor schrikkeljaar in de tekst is daarmee consistent met r1, maar het artikel vermeldt hem toch expliciet als uitzondering op r3a. Dit duidt op een bewuste keuze om de bijzondere situatie te expliciteren ter voorkoming van vergissingen in de uitvoering."
+    },
+    {
+      "id": "r4a",
+      "naam": "Vervaldatum bij betalingstermijn zes weken, dagtekening 28 februari (niet-schrikkeljaar)",
+      "type": "rekenregel",
+      "uitvoervariabele": "vervaldatum_betalingstermijn (b4)",
+      "invoervariabelen": [
+        "dagtekening (b2)",
+        "schrikkeljaar (b5)"
+      ],
+      "parameters": [
+        {
+          "naam": "termijnduur_weken",
+          "waarde": 6,
+          "eenheid": "weken",
+          "als_dagen": 42
+        }
+      ],
+      "voorwaarden": [
+        "betalingstermijn (b3) = zes weken",
+        "EN dagtekening (b2) = 28 februari",
+        "EN schrikkeljaar (b5) = nee"
+      ],
+      "formulering": "vervaldatum_betalingstermijn :=\n    dagtekening + 42 kalenderdagen\n\nUitkomst: 28 februari (niet-schrikkeljaar) + 42 = 11 april\n[Verificatie: dag 59 + 42 = dag 101 = 11 april ✓]",
+      "markeringen": [
+        "m14",
+        "m16"
+      ],
+      "vindplaats": "art. 9.5 LI2008, alinea 2",
+      "bronreferentie": "jci1.3:c:BWBR0024096&artikel=9.5",
+      "interpretatie_twijfel": "AANNAME: 'zes weken' = 42 kalenderdagen. Dit staat nergens expliciet in art. 9.5 of elders in de LI2008 of IW1990. De aanname is gebaseerd op de voorbeelden (31 okt + 42 = 12 dec ✓; 28 feb + 42 = 11 apr ✓; 15 mrt + 42 = 26 apr ✓). Validatie vereist: is 'zes weken' altijd 42 kalenderdagen, of worden weekdagen/werkdagen bedoeld?"
+    },
+    {
+      "id": "r4b",
+      "naam": "Vervaldatum bij betalingstermijn zes weken, dagtekening 28 februari (schrikkeljaar)",
+      "type": "rekenregel",
+      "uitvoervariabele": "vervaldatum_betalingstermijn (b4)",
+      "invoervariabelen": [
+        "dagtekening (b2)",
+        "schrikkeljaar (b5)"
+      ],
+      "parameters": [
+        {
+          "naam": "termijnduur_weken",
+          "waarde": 6,
+          "eenheid": "weken",
+          "als_dagen": 42
+        }
+      ],
+      "voorwaarden": [
+        "betalingstermijn (b3) = zes weken",
+        "EN dagtekening (b2) = 28 februari",
+        "EN schrikkeljaar (b5) = ja"
+      ],
+      "formulering": "vervaldatum_betalingstermijn :=\n    dagtekening + 42 kalenderdagen\n\nUitkomst: 28 februari (schrikkeljaar 2024: dag 59) + 42 = dag 101 = 10 april\n[Verificatie: 2024 is schrikkeljaar; dag 59 = 28 feb; dag 101 = 10 april ✓]",
+      "markeringen": [
+        "m17",
+        "m18",
+        "m19",
+        "m21"
+      ],
+      "vindplaats": "art. 9.5 LI2008, alinea 2",
+      "bronreferentie": "jci1.3:c:BWBR0024096&artikel=9.5",
+      "interpretatie_twijfel": "Zelfde aanname als r4a: 'zes weken' = 42 kalenderdagen. Het schrikkeljaar maakt voor de zes-weken-berekening geen verschil in methode (altijd +42), alleen in de uitkomst (dag 59 schrikkeljaar vs. dag 59 niet-schrikkeljaar is dezelfde datum 28 februari; maar het totale aantal dagen in het jaar verschilt). Valideer of de term 'zes weken' afwijkend wordt uitgelegd bij een dagtekening nabij de jaargrens."
+    },
+    {
+      "id": "r5",
+      "naam": "Vervaldatum bij betalingstermijn zes weken (algemene regel)",
+      "type": "rekenregel",
+      "uitvoervariabele": "vervaldatum_betalingstermijn (b4)",
+      "invoervariabelen": [
+        "dagtekening (b2)"
+      ],
+      "parameters": [
+        {
+          "naam": "termijnduur_weken",
+          "waarde": 6,
+          "eenheid": "weken",
+          "als_dagen": 42
+        }
+      ],
+      "voorwaarden": [
+        "betalingstermijn (b3) = zes weken",
+        "EN dagtekening (b2) ≠ 28 februari (gevallen r4a/r4b)"
+      ],
+      "formulering": "vervaldatum_betalingstermijn :=\n    dagtekening + 42 kalenderdagen\n\nVoorbeelden:\n  dagtekening = 31 oktober → vervaldatum = 12 december (31 okt + 42 = dag 304+42 = dag 346 = 12 dec ✓)\n  dagtekening = 15 maart   → vervaldatum = 26 april    (dag 74+42 = dag 116 = 26 apr ✓)",
+      "markeringen": [
+        "m9",
+        "m11",
+        "m27",
+        "m28"
+      ],
+      "vindplaats": "art. 9.5 LI2008, alinea 1 en alinea 3",
+      "bronreferentie": "jci1.3:c:BWBR0024096&artikel=9.5",
+      "interpretatie_twijfel": "AANNAME: 'zes weken' = 42 kalenderdagen. De tekst geeft geen abstracte formulering van de zes-weken-regel — alleen voorbeelden in alinea's 1 en 3. De abstracte regel 'dagtekening + 42 kalenderdagen' is een interpretatie die uit de voorbeelden is afgeleid en validatie behoeft. Bij de zes-weken-berekening speelt het maandeinde-probleem NIET (anders dan bij 'één maand'): 42 dagen tellen is altijd exact, ongeacht de maandlengte."
+    }
+  ],
+  "validatiepunten": [
+    "AANNAME in r2, r5, r4a, r4b: 'zes weken' = 42 kalenderdagen — staat nergens expliciet in de tekst; alle voorbeelden zijn consistent met deze interpretatie maar directe bevestiging ontbreekt.",
+    "LACUNE: abstracte regel voor het maandeinde-geval bij één maand (bijv. dagtekening 31 augustus + 1 maand = 30 september) ontbreekt; alleen het 31-oktober-voorbeeld staat er. De implicatie is 'laatste dag van de volgende maand', maar dit is een interpretatie.",
+    "LACUNE: het geval dagtekening = laatste dag van een maand waarbij de volgende maand even lang of langer is (bijv. 30 november + 1 maand = 30 december) is niet behandeld — r1 (zelfde dagnummer) lijkt van toepassing, maar dit staat niet expliciet.",
+    "TWIJFELPUNT: b3 (betalingstermijn) als Variabele vs. Parameter — zie toelichting bij b3. Dit heeft consequenties voor implementatie.",
+    "IMPLICIETE REKENREGEL: de gregoriaanse schrikkeljaar-formule (deelbaar door 4, met eeuwjaaruitzondering) staat niet in art. 9.5; de tekst verwijst er impliciet naar.",
+    "CONSISTENTIE-OPMERKING: r3b (28 feb schrikkeljaar, 1 maand → 28 maart) is feitelijk een toepassing van de algemene r1-regel (niet-maandeinde), maar de tekst presenteert het als uitzondering op r3a. Dit is consistent maar kan in implementatie tot onduidelijkheid leiden over welke regel prioriteit heeft."
+  ],
+  "reviewlog": {
+    "activiteit2": {
+      "samenvatting": "1 ronde — de analist ging in ronde 1 meteen akkoord, zonder per-item- of algemene feedback. Geen wijzigingen doorgevoerd.",
+      "rondes": [
+        {
+          "ronde": 1,
+          "items": {},
+          "algemeen": "",
+          "status": "akkoord"
+        }
+      ]
+    },
+    "activiteit3": {
+      "samenvatting": "1 ronde — de analist ging in ronde 1 meteen akkoord, zonder per-item- of algemene feedback. Geen wijzigingen doorgevoerd.",
+      "rondes": [
+        {
+          "ronde": 1,
+          "items": {},
+          "algemeen": "",
+          "status": "akkoord"
+        }
+      ]
+    }
+  },
+  "aandachtspunten": "A. Interpretatiekeuzes\n\n1. 'Zes weken' = 42 kalenderdagen. De tekst definieert dit niet; alle voorbeelden zijn consistent, maar een expliciet anker ontbreekt. Valideer of de LI2008 elders of in beleidsstukken hierover uitsluitsel geeft. Weekenden en feestdagen tellen mee.\n\n2. Maandeinde-regel (r2). De abstracte regel — 'vervaldatum = laatste dag van de volgende maand als de dagtekening de laatste dag van de huidige maand is' — staat niet als zodanig in de tekst; ze is af te leiden uit twee voorbeelden (31 okt → 30 nov; 28 feb niet-schrikkeljaar → 31 mrt). Vastgelegd als interpretatie; vraagt juridische bevestiging.\n\n3. Prioriteit r3a versus r3b. De tekst presenteert r3b als uitzondering op r3a, maar structureel is r3a het uitzonderingsgeval (maandeinde-regel) en r3b de basisregel (r1). Leg de implementatievolgorde expliciet vast: check schrikkeljaar vóór maandeinde-check, of neem r3a/r3b als expliciete gevallen vóór de algemene r1/r2.\n\n4. 'Betalingstermijn' als Variabele versus Parameter. Beide zijn verdedigbaar (zie m3/m4 en b3). De keuze bepaalt hoe het begrip in een regelspecificatie wordt geclassificeerd. Vraag informatieanalist en jurist om afstemming.\n\nB. Open normen en lacunes\n\n5. Abstracte zes-weken-regel ontbreekt. Alinea 3 geeft alleen een voorbeeld (15 maart → 26 april); er is geen expliciete, abstracte formulering voor het algemene geval.\n\n6. Maandeinde-geval niet volledig gedekt. Het geval waarbij de volgende maand even lang of langer is dan de huidige (bijv. dagtekening 30 november + 1 maand = 30 december) is niet behandeld. Dezelfde lacune geldt voor bijv. 31 januari + 1 maand (geen dag 31 in februari). Uit de combinatie van r1 en r2 volgt een gedragsregel, maar de tekst formuleert die niet.\n\n7. Gregoriaanse schrikkeljaarformule impliciet. De tekst verwijst naar 'het jaartal aangeeft dat het een schrikkeljaar is' zonder de formule te geven (deelbaar door 4, met eeuwjaaruitzondering voor niet-deelbaar-door-400-jaren). Voor implementatie moet dit extern worden vastgelegd.\n\nC. Openstaande delegaties\n\nGeen. Art. 9.5 LI2008 is zelf een beleidsregel (uitwerking van art. 9 IW1990); het artikel delegeert geen nadere regelgevingsbevoegdheid.\n\nD. Aannames\n\n8. 'Zes weken' = 42 kalenderdagen (zie boven).\n\n9. De maandeinde-regel geldt ook wanneer de volgende maand langer is dan de huidige (bevestigd door r3a, maar niet als abstracte regel geformuleerd).\n\n10. De gregoriaanse schrikkeljaarformule wordt als bekend en correct verondersteld.\n\nE. Buiten scope\n\n11. De rechtsbetrekking (betalingsplicht) en het rechtssubject (belastingschuldige) liggen in art. 9 IW1990; niet geanalyseerd.\n\n12. De vaststelling van de dagtekening (art. 9.4 LI2008) is als context geraadpleegd maar niet meegenomen in de activiteit-2-analyse.\n\n13. De vraag welke aanslagen een betalingstermijn van 1 maand versus 6 weken krijgen (grondslag: art. 9 IW1990 en de belastingsoortspecifieke wetgeving) valt buiten scope."
+}

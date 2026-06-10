@@ -82,7 +82,6 @@ Artikel 9.5 LI2008 is een interpretatieve beleidsregel zonder zelfstandige recht
 
 - **Uitvoervariabele:** vervaldatum_betalingstermijn (b4)
 - **Invoervariabelen:** ['dagtekening (b2)']
-- **Parameters:** []
 - **Voorwaarden:** ['betalingstermijn (b3) = één maand', 'EN dagtekening (b2) ≠ laatste dag van de kalendermaand']
 - **Formulering:**
   ```
@@ -93,13 +92,11 @@ Artikel 9.5 LI2008 is een interpretatieve beleidsregel zonder zelfstandige recht
   Voorbeeld: dagtekening = 15 maart → vervaldatum = 15 april
   ```
 - **Vindplaats / bron:** art. 9.5 LI2008, alinea 3
-- **Twijfel/aanname:** De tekst formuleert de regel expliciet voor het niet-maandeinde-geval. Openstaand: wat geldt als de volgende maand geen dag met dat nummer heeft (bijv. dagtekening 31 augustus → geen 31 september)? De voorbeelden impliceren: neem de laatste dag van de volgende maand. Maar dit staat niet expliciet — zie r2.
 
 #### Vervaldatum bij betalingstermijn één maand (maandeinde-geval) — rekenregel
 
 - **Uitvoervariabele:** vervaldatum_betalingstermijn (b4)
 - **Invoervariabelen:** ['dagtekening (b2)']
-- **Parameters:** []
 - **Voorwaarden:** ['betalingstermijn (b3) = één maand', 'EN dagtekening (b2) = laatste dag van de kalendermaand', 'EN volgende kalendermaand heeft minder dagen dan de huidige']
 - **Formulering:**
   ```
@@ -109,13 +106,11 @@ Artikel 9.5 LI2008 is een interpretatieve beleidsregel zonder zelfstandige recht
   Voorbeeld (art. 9.5 alinea 1): dagtekening = 31 oktober → vervaldatum = 30 november
   ```
 - **Vindplaats / bron:** art. 9.5 LI2008, alinea 1
-- **Twijfel/aanname:** De abstracte maandeinde-regel is niet als algemene regel geformuleerd; ze is af te leiden uit twee voorbeelden (alinea 1: 31 oktober → 30 november; alinea 2: 28 februari niet-schrikkeljaar → 31 maart). Openstaand: geldt r2 ook wanneer de volgende maand even lang of langer is dan de huidige, buiten de speciale 28-februari-case (bijv. dagtekening 30 november + 1 maand = 30 december)? De tekst behandelt dat geval niet; r1 lijkt dan van toepassing.
 
 #### Vervaldatum bij betalingstermijn één maand, dagtekening 28 februari (niet-schrikkeljaar) — rekenregel
 
 - **Uitvoervariabele:** vervaldatum_betalingstermijn (b4)
 - **Invoervariabelen:** ['dagtekening (b2)', 'schrikkeljaar (b5)']
-- **Parameters:** []
 - **Voorwaarden:** ['betalingstermijn (b3) = één maand', 'EN dagtekening (b2) = 28 februari', 'EN schrikkeljaar (b5) = nee']
 - **Formulering:**
   ```
@@ -125,13 +120,11 @@ Artikel 9.5 LI2008 is een interpretatieve beleidsregel zonder zelfstandige recht
   Voorbeeld (art. 9.5 alinea 2): dagtekening = 28 februari → vervaldatum = 31 maart
   ```
 - **Vindplaats / bron:** art. 9.5 LI2008, alinea 2
-- **Twijfel/aanname:** In een niet-schrikkeljaar is 28 februari de laatste dag van de maand; r3a is daarmee feitelijk een toepassing van de maandeinde-regel (r2): laatste dag huidige maand + 1 maand = laatste dag volgende maand (31 maart). De tekst presenteert dit als apart voorbeeld zonder de abstracte maandeinde-regel te expliciteren. De uitkomst (31 maart = laatste dag van maart) bevestigt r2 ook voor het geval waarbij de volgende maand langer is dan de huidige.
 
 #### Vervaldatum bij betalingstermijn één maand, dagtekening 28 februari (schrikkeljaar) — rekenregel
 
 - **Uitvoervariabele:** vervaldatum_betalingstermijn (b4)
 - **Invoervariabelen:** ['dagtekening (b2)', 'schrikkeljaar (b5)']
-- **Parameters:** []
 - **Voorwaarden:** ['betalingstermijn (b3) = één maand', 'EN dagtekening (b2) = 28 februari', 'EN schrikkeljaar (b5) = ja']
 - **Formulering:**
   ```
@@ -141,7 +134,6 @@ Artikel 9.5 LI2008 is een interpretatieve beleidsregel zonder zelfstandige recht
   Voorbeeld (art. 9.5 alinea 2): dagtekening = 28 februari (schrikkeljaar) → vervaldatum = 28 maart
   ```
 - **Vindplaats / bron:** art. 9.5 LI2008, alinea 2
-- **Twijfel/aanname:** In een schrikkeljaar heeft februari 29 dagen; 28 februari is dan niet de laatste dag van de maand. R3b is daarmee structureel een toepassing van de algemene r1-regel (zelfde dagnummer in de volgende maand: dag 28 → 28 maart), niet van de maandeinde-uitzondering. De tekst presenteert r3b als uitzondering op r3a, maar de onderliggende logica is omgekeerd: r3a is het bijzondere geval (maandeinde), r3b het gewone geval (r1). Dit kan bij implementatie tot verwarring leiden over de prioriteitsvolgorde.
 
 #### Vervaldatum bij betalingstermijn zes weken, dagtekening 28 februari (niet-schrikkeljaar) — rekenregel
 
@@ -158,7 +150,6 @@ Artikel 9.5 LI2008 is een interpretatieve beleidsregel zonder zelfstandige recht
   [Verificatie: dag 59 + 42 = dag 101 = 11 april ✓]
   ```
 - **Vindplaats / bron:** art. 9.5 LI2008, alinea 2
-- **Twijfel/aanname:** De zes-weken-berekening kent geen maandeinde-variatie; de formule is altijd dagtekening + 42 dagen. De aanname dat 'zes weken' = 42 kalenderdagen is ook hier impliciet (zie r5). Geen bijzonder twijfelpunt specifiek voor dit geval.
 
 #### Vervaldatum bij betalingstermijn zes weken, dagtekening 28 februari (schrikkeljaar) — rekenregel
 
@@ -175,7 +166,6 @@ Artikel 9.5 LI2008 is een interpretatieve beleidsregel zonder zelfstandige recht
   [Verificatie: 2024 is schrikkeljaar; dag 59 = 28 feb; dag 101 = 10 april ✓]
   ```
 - **Vindplaats / bron:** art. 9.5 LI2008, alinea 2
-- **Twijfel/aanname:** In een schrikkeljaar is dag 59 = 28 februari; dag 59 + 42 = dag 101 = 10 april. De aanname 'zes weken = 42 kalenderdagen' geldt ongewijzigd in schrikkeljaren — de telwijze wijzigt niet door de extra schrikkeldag (29 februari valt vóór de ingangsdatum van de termijn en telt dus niet mee als die dagtekening 28 februari is).
 
 #### Vervaldatum bij betalingstermijn zes weken (algemene regel) — rekenregel
 
@@ -193,7 +183,6 @@ Artikel 9.5 LI2008 is een interpretatieve beleidsregel zonder zelfstandige recht
     dagtekening = 15 maart   → vervaldatum = 26 april    (dag 74+42 = dag 116 = 26 apr ✓)
   ```
 - **Vindplaats / bron:** art. 9.5 LI2008, alinea 1 en alinea 3
-- **Twijfel/aanname:** De tekst geeft geen abstracte formulering van de zes-weken-regel; alleen twee voorbeelden (31 oktober → 12 december; 15 maart → 26 april). De aanname dat 'zes weken' altijd 42 kalenderdagen is, zonder enige maandeinde-correctie, is consistent met alle voorbeelden maar nergens expliciet bevestigd. Geen weekdagen: de telling is in kalenderdagen. Of weekenden of feestdagen ooit een rol spelen wordt niet behandeld.
 
 ## 4. Reviewlog en aandachtspunten voor validatie
 
@@ -204,32 +193,41 @@ Artikel 9.5 LI2008 is een interpretatieve beleidsregel zonder zelfstandige recht
 
 ### Aandachtspunten voor multidisciplinaire validatie
 
-#### Interpretatiekeuzes
+A. Interpretatiekeuzes
 
-1. **'Zes weken' = 42 kalenderdagen.** De tekst definieert dit niet; alle voorbeelden zijn consistent, maar een expliciet anker ontbreekt. Valideer of de LI2008 elders of in beleidsstukken hierover uitsluitsel geeft. Weekenden en feestdagen tellen mee.
-2. **Maandeinde-regel (r2).** De abstracte regel — 'vervaldatum = laatste dag van de volgende maand als de dagtekening de laatste dag van de huidige maand is' — staat niet als zodanig in de tekst; ze is af te leiden uit twee voorbeelden (31 okt → 30 nov; 28 feb niet-schrikkeljaar → 31 mrt). Vastgelegd als interpretatie; vraagt juridische bevestiging.
-3. **Prioriteit r3a versus r3b.** De tekst presenteert r3b als uitzondering op r3a, maar structureel is r3a het uitzonderingsgeval (maandeinde-regel) en r3b de basisregel (r1). Leg de implementatievolgorde expliciet vast: check schrikkeljaar vóór maandeinde-check, of neem r3a/r3b als expliciete gevallen vóór de algemene r1/r2.
-4. **'Betalingstermijn' als Variabele versus Parameter.** Beide zijn verdedigbaar (zie m3/m4 en b3). De keuze bepaalt hoe het begrip in een regelspecificatie wordt geclassificeerd. Vraag informatieanalist en jurist om afstemming.
+1. 'Zes weken' = 42 kalenderdagen. De tekst definieert dit niet; alle voorbeelden zijn consistent, maar een expliciet anker ontbreekt. Valideer of de LI2008 elders of in beleidsstukken hierover uitsluitsel geeft. Weekenden en feestdagen tellen mee.
 
-#### Open normen en lacunes
+2. Maandeinde-regel (r2). De abstracte regel — 'vervaldatum = laatste dag van de volgende maand als de dagtekening de laatste dag van de huidige maand is' — staat niet als zodanig in de tekst; ze is af te leiden uit twee voorbeelden (31 okt → 30 nov; 28 feb niet-schrikkeljaar → 31 mrt). Vastgelegd als interpretatie; vraagt juridische bevestiging.
 
-1. **Abstracte zes-weken-regel ontbreekt.** Alinea 3 geeft alleen een voorbeeld (15 maart → 26 april); er is geen expliciete, abstracte formulering voor het algemene geval.
-2. **Maandeinde-geval niet volledig gedekt.** Het geval waarbij de volgende maand even lang of langer is dan de huidige (bijv. dagtekening 30 november + 1 maand = 30 december) is niet behandeld. Dezelfde lacune geldt voor bijv. 31 januari + 1 maand (geen dag 31 in februari). Uit de combinatie van r1 en r2 volgt een gedragsregel, maar de tekst formuleert die niet.
-3. **Gregoriaanse schrikkeljaarformule impliciet.** De tekst verwijst naar 'het jaartal aangeeft dat het een schrikkeljaar is' zonder de formule te geven (deelbaar door 4, met eeuwjaaruitzondering voor niet-deelbaar-door-400-jaren). Voor implementatie moet dit extern worden vastgelegd.
+3. Prioriteit r3a versus r3b. De tekst presenteert r3b als uitzondering op r3a, maar structureel is r3a het uitzonderingsgeval (maandeinde-regel) en r3b de basisregel (r1). Leg de implementatievolgorde expliciet vast: check schrikkeljaar vóór maandeinde-check, of neem r3a/r3b als expliciete gevallen vóór de algemene r1/r2.
 
-#### Openstaande delegaties
+4. 'Betalingstermijn' als Variabele versus Parameter. Beide zijn verdedigbaar (zie m3/m4 en b3). De keuze bepaalt hoe het begrip in een regelspecificatie wordt geclassificeerd. Vraag informatieanalist en jurist om afstemming.
+
+B. Open normen en lacunes
+
+5. Abstracte zes-weken-regel ontbreekt. Alinea 3 geeft alleen een voorbeeld (15 maart → 26 april); er is geen expliciete, abstracte formulering voor het algemene geval.
+
+6. Maandeinde-geval niet volledig gedekt. Het geval waarbij de volgende maand even lang of langer is dan de huidige (bijv. dagtekening 30 november + 1 maand = 30 december) is niet behandeld. Dezelfde lacune geldt voor bijv. 31 januari + 1 maand (geen dag 31 in februari). Uit de combinatie van r1 en r2 volgt een gedragsregel, maar de tekst formuleert die niet.
+
+7. Gregoriaanse schrikkeljaarformule impliciet. De tekst verwijst naar 'het jaartal aangeeft dat het een schrikkeljaar is' zonder de formule te geven (deelbaar door 4, met eeuwjaaruitzondering voor niet-deelbaar-door-400-jaren). Voor implementatie moet dit extern worden vastgelegd.
+
+C. Openstaande delegaties
 
 Geen. Art. 9.5 LI2008 is zelf een beleidsregel (uitwerking van art. 9 IW1990); het artikel delegeert geen nadere regelgevingsbevoegdheid.
 
-#### Aannames
+D. Aannames
 
-1. 'Zes weken' = 42 kalenderdagen (zie boven).
-2. De maandeinde-regel geldt ook wanneer de volgende maand langer is dan de huidige (bevestigd door r3a, maar niet als abstracte regel geformuleerd).
-3. De gregoriaanse schrikkeljaarformule wordt als bekend en correct verondersteld.
+8. 'Zes weken' = 42 kalenderdagen (zie boven).
 
-#### Buiten scope
+9. De maandeinde-regel geldt ook wanneer de volgende maand langer is dan de huidige (bevestigd door r3a, maar niet als abstracte regel geformuleerd).
 
-- De rechtsbetrekking (betalingsplicht) en het rechtssubject (belastingschuldige) liggen in art. 9 IW1990; niet geanalyseerd.
-- De vaststelling van de dagtekening (art. 9.4 LI2008) is als context geraadpleegd maar niet meegenomen in de activiteit-2-analyse.
-- De vraag welke aanslagen een betalingstermijn van 1 maand versus 6 weken krijgen (grondslag: art. 9 IW1990 en de belastingsoortspecifieke wetgeving) valt buiten scope.
+10. De gregoriaanse schrikkeljaarformule wordt als bekend en correct verondersteld.
+
+E. Buiten scope
+
+11. De rechtsbetrekking (betalingsplicht) en het rechtssubject (belastingschuldige) liggen in art. 9 IW1990; niet geanalyseerd.
+
+12. De vaststelling van de dagtekening (art. 9.4 LI2008) is als context geraadpleegd maar niet meegenomen in de activiteit-2-analyse.
+
+13. De vraag welke aanslagen een betalingstermijn van 1 maand versus 6 weken krijgen (grondslag: art. 9 IW1990 en de belastingsoortspecifieke wetgeving) valt buiten scope.
 

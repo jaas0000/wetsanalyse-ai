@@ -85,49 +85,32 @@ De bepaling koppelt aan het rechtsobject 'belastingaanslag' (m1) het rechtsgevol
 
 ### Reviewlog
 
-- **Activiteit 2:** 2 ronde(s). In ronde 1 signaleerde de analist dat de afleidingsregel ontbrak. Naar aanleiding daarvan is in ronde 2 markering **m7** ("invorderbaar zes weken na de dagtekening van het aanslagbiljet", klasse Afleidingsregel) toegevoegd en zijn de toelichtingen bij m3, m4 en m5 aangescherpt als bouwstenen van die afleidingsregel; de samenhangtekst is hierop bijgewerkt. In ronde 2 ging de analist akkoord zonder verdere opmerkingen.
+- **Activiteit 2:** 2 rondes. In ronde 1 signaleerde de analist dat de afleidingsregel ontbrak. Naar aanleiding daarvan is in ronde 2 markering m7 ('invorderbaar zes weken na de dagtekening van het aanslagbiljet', klasse Afleidingsregel) toegevoegd en zijn de toelichtingen bij m3, m4 en m5 aangescherpt als bouwstenen van die afleidingsregel; de samenhangtekst is hierop bijgewerkt. In ronde 2 ging de analist akkoord zonder verdere opmerkingen.
 - **Activiteit 3:** 1 ronde — de analist ging in ronde 1 meteen akkoord, zonder per-item- of algemene feedback. Geen wijzigingen doorgevoerd.
 
 ### Aandachtspunten voor multidisciplinaire validatie
 
-**Interpretatiekeuzes (vragen om juridische validatie):**
+A. Interpretatiekeuzes (vragen om juridische validatie)
 
-- **Aard van "invorderbaar" (m2 / begrip b3).** Geclassificeerd als *Rechtsbetrekking*
-  (recht van de ontvanger om in te vorderen tegenover de betalingsplicht van de
-  belastingschuldige). Alternatieve lezing: een booleaanse *variabele(waarde)* — de status
-  invorderbaar ja/nee van de belastingaanslag. De keuze bepaalt of er een zelfstandige
-  rechtsbetrekking wordt gemodelleerd of slechts een statuskenmerk.
-- **Beslisregel r2 (`is_invorderbaar`).** Dit is een afgeleide explicitering van de logische
-  consequentie van lid 1; de wettekst formuleert primair een tijdstip (rekenregel r1). Te
-  bevestigen of de uitvoering naast het berekende invorderbaarheidsmoment een aparte
-  ja/nee-status wenst.
+1. Aard van 'invorderbaar' (m2 / begrip b3). Geclassificeerd als Rechtsbetrekking (recht van de ontvanger om in te vorderen tegenover de betalingsplicht van de belastingschuldige). Alternatieve lezing: een booleaanse variabele(waarde) — de status invorderbaar ja/nee van de belastingaanslag. De keuze bepaalt of er een zelfstandige rechtsbetrekking wordt gemodelleerd of slechts een statuskenmerk.
 
-**Impliciete elementen (afgeleid, niet letterlijk in lid 1):**
+2. Beslisregel r2 (is_invorderbaar). Dit is een afgeleide explicitering van de logische consequentie van lid 1; de wettekst formuleert primair een tijdstip (rekenregel r1). Te bevestigen of de uitvoering naast het berekende invorderbaarheidsmoment een aparte ja/nee-status wenst.
 
-- De **rechtssubjecten** ontvanger (b5, rechthebbende) en belastingschuldige (b4,
-  plichthebbende) staan niet in lid 1 zelf; ze zijn afgeleid uit de brondefinities in art. 2
-  en uit de systematiek van hoofdstuk II (art. 8). Juridisch te bevestigen.
+B. Impliciete elementen (afgeleid, niet letterlijk in lid 1)
 
-**Aannames / niet-gedefinieerde begrippen:**
+3. De rechtssubjecten ontvanger (b5, rechthebbende) en belastingschuldige (b4, plichthebbende) staan niet in lid 1 zelf; ze zijn afgeleid uit de brondefinities in art. 2 en uit de systematiek van hoofdstuk II (art. 8). Juridisch te bevestigen.
 
-- **"Dagtekening"** (b6) is niet apart gedefinieerd in de Invorderingswet 1990. De betekenis
-  en de verhouding tot de daadwerkelijke verzending/uitreiking (art. 8 lid 1) volgen niet uit
-  lid 1 en vragen om bevestiging — dit is bepalend voor het startpunt van de termijn.
+C. Aannames / niet-gedefinieerde begrippen
 
-**Samenloop met andere bepalingen (raakt de berekening, formeel buiten scope):**
+4. 'Dagtekening' (b6) is niet apart gedefinieerd in de Invorderingswet 1990. De betekenis en de verhouding tot de daadwerkelijke verzending/uitreiking (art. 8 lid 1) volgen niet uit lid 1 en vragen om bevestiging — dit is bepalend voor het startpunt van de termijn.
 
-- **Algemene termijnenwet niet van toepassing (art. 9 lid 10).** De termijn van zes weken
-  wordt niet verlengd wanneer hij eindigt in een weekend of op een feestdag. De
-  uitvoering/rekenregel r1 moet hiermee rekening houden, ook al valt lid 10 buiten de scope
-  van deze analyse.
-- **Geen schorsing door bezwaar/beroep (art. 9 lid 12).** De betalingsverplichting wordt niet
-  geschorst door indiening van een bezwaar- of beroepschrift; relevant voor de duiding van de
-  rechtsbetrekking invorderbaarheid (b3).
+D. Samenloop met andere bepalingen (raakt de berekening, formeel buiten scope)
 
-**Buiten scope (vergen eigen analyse):**
+5. Algemene termijnenwet niet van toepassing (art. 9 lid 10). De termijn van zes weken wordt niet verlengd wanneer hij eindigt in een weekend of op een feestdag. De uitvoering/rekenregel r1 moet hiermee rekening houden, ook al valt lid 10 buiten de scope van deze analyse.
 
-- Alleen de **hoofdregel (lid 1)** is geanalyseerd. De afwijkende invorderbaarheidstermijnen
-  voor specifieke aanslagsoorten (lid 2 t/m 9 en 11) en de schorsingsbepaling (lid 12) zijn
-  niet uitgewerkt en vereisen een eigen analyse; rekenregel r1 geldt uitdrukkelijk "voor
-  zover" geen van die afwijkingen van toepassing is.
+6. Geen schorsing door bezwaar/beroep (art. 9 lid 12). De betalingsverplichting wordt niet geschorst door indiening van een bezwaar- of beroepschrift; relevant voor de duiding van de rechtsbetrekking invorderbaarheid (b3).
+
+E. Buiten scope (vergen eigen analyse)
+
+7. Alleen de hoofdregel (lid 1) is geanalyseerd. De afwijkende invorderbaarheidstermijnen voor specifieke aanslagsoorten (lid 2 t/m 9 en 11) en de schorsingsbepaling (lid 12) zijn niet uitgewerkt en vereisen een eigen analyse; rekenregel r1 geldt uitdrukkelijk 'voor zover' geen van die afwijkingen van toepassing is.
 
