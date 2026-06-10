@@ -226,8 +226,18 @@ export function startHttpServer(opts: HttpServerOpties): HttpServer {
         if (sessionId && transports[sessionId]) {
           // Bestaande sessie.
           transport = transports[sessionId];
-        } else if (!sessionId && isInitializeRequest(body)) {
-          // Nieuwe sessie: maak transport + verse Server-instantie met audit-context.
+        } else if (isInitializeRequest(body)) {
+          // Nieuwe sessie: ook accepteren als client een verlopen sessie-ID meestuurt
+          // (bv. na server-restart). De verouderde ID wordt genegeerd; de nieuwe sessie
+          // krijgt een eigen ID via sessionIdGenerator.
+          if (sessionId) {
+            log("info", "functioneel", "verlopen sessie-ID genegeerd bij herinitialisatie", {
+              requestId,
+              verlopen_sessionId: sessionId,
+              clientId,
+              ip,
+            });
+          }
           transport = new StreamableHTTPServerTransport({
             sessionIdGenerator: () => randomUUID(),
             onsessioninitialized: (sid) => {
@@ -253,6 +263,10 @@ export function startHttpServer(opts: HttpServerOpties): HttpServer {
             clientId,
             getSessionId: () => transport.sessionId,
           }).connect(transport);
+        } else if (sessionId) {
+          // Sessie-ID opgegeven maar niet (meer) bekend — per MCP-spec HTTP 404.
+          stuurFout(res, 404, "Not Found: sessie niet gevonden of verlopen");
+          return;
         } else {
           stuurFout(res, 400, "Bad Request: geen geldige sessie-ID");
           return;

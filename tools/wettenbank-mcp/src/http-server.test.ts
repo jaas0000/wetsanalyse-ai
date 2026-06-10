@@ -82,6 +82,45 @@ describe("http-server", () => {
     expect(res.status).toBe(400);
   });
 
+  it("POST /mcp met verlopen sessie-ID en zonder initialize geeft 404", async () => {
+    const res = await fetch(`${baseUrl}/mcp`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${TOKEN}`,
+        "content-type": "application/json",
+        "mcp-session-id": "verlopen-sessie-id-12345",
+      },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }),
+    });
+    expect(res.status).toBe(404);
+  });
+
+  it("POST /mcp met verlopen sessie-ID en initialize start nieuwe sessie", async () => {
+    const res = await fetch(`${baseUrl}/mcp`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${TOKEN}`,
+        "content-type": "application/json",
+        accept: "application/json, text/event-stream",
+        "mcp-session-id": "verlopen-sessie-id-67890",
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {
+          protocolVersion: "2024-11-05",
+          capabilities: {},
+          clientInfo: { name: "test", version: "1" },
+        },
+      }),
+    });
+    expect(res.status).toBe(200);
+    const nieuweSessieId = res.headers.get("mcp-session-id");
+    expect(nieuweSessieId).toBeTruthy();
+    expect(nieuweSessieId).not.toBe("verlopen-sessie-id-67890");
+  });
+
   it("GET /mcp zonder sessie geeft 400", async () => {
     const res = await fetch(`${baseUrl}/mcp`, {
       headers: { authorization: `Bearer ${TOKEN}` },
