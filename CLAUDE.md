@@ -13,7 +13,8 @@ het Juridisch Analyseschema (JAS). Het project bestaat uit drie samenwerkende de
    `CLAUDE.md` — lees die bij werk *in* de MCP.
 2. **`.claude/skills/wetsanalyse/`** — de inhoudelijke skill die de analyse uitvoert (activiteit 2:
    markeren + classificeren in JAS-klassen; activiteit 3: begrippen + afleidingsregels) en een
-   Markdown-analyserapport oplevert. De skill *gebruikt* de MCP als bron.
+   `rapport.json` oplevert die via een HTML-viewer wordt gepresenteerd. Markdown is beschikbaar
+   als afgeleid exportformaat. De skill *gebruikt* de MCP als bron.
 3. **`analyses/`** — output: per analyse een map met het eindrapport en de `werk/`-tussenbestanden.
 
 De skill is geen vervanger van de analist: de kern is interpretatiekeuzes **expliciet** maken,
@@ -36,9 +37,9 @@ zijn **projectrelatieve paden**, zodat de map portabel is tussen machines/OS'en:
 - `.claude/settings.local.json` → `enabledMcpjsonServers: ["wettenbank"]` plus een **machine-lokale**
   allowlist. Dit bestand is **gitignored** (`.gitignore`), dus het reist niet mee en is per definitie
   niet gedeeld: een andere machine/analist bouwt z'n eigen lijst gewoon opnieuw op via de
-  permissieprompts. De allowlist is bewust krap en portabel gehouden — de `review_server.py`-grant
-  gebruikt een wildcard (`Bash(python *review_server.py *)`) i.p.v. een absoluut pad — zodat er in
-  de praktijk geen absolute paden meer in staan om te patchen.
+  permissieprompts. De allowlist is bewust krap en portabel gehouden — de grants voor
+  `review_server.py` en `rapport_server.py` gebruiken wildcards i.p.v. absolute paden — zodat
+  er in de praktijk geen absolute paden meer in staan om te patchen.
 
 Let op bij hernoemen/verplaatsen van de projectmap: een padmismatch leidt hooguit tot een extra
 permissieprompt (geen stille breuk). Draai daarna `claude mcp list` → verwacht `✓ Connected`.
@@ -82,17 +83,19 @@ kernstructuur die meerdere bestanden raakt:
   `references/review-checkpoints.md`.
 - De review-stops worden alleen overgeslagen als `WETSANALYSE_NO_REVIEW=1` in de omgeving staat
   (uitsluitend voor geautomatiseerde evals).
-- **Het rapport wordt gegenereerd, niet overgetypt.** `scripts/render_rapport.py` rendert de
-  deterministische delen (secties 0–3 en het reviewlog-skelet) brongetrouw uit de
-  gevalideerde `analyse.json`'s van de hoogste reviewronde. Het script zet `_TODO_`-markeringen op de plekken die
-  synthese vragen — de **aandachtspunten voor multidisciplinaire validatie** (sectie 4: open
-  normen, twijfel, aannames) en de prozasamenvatting in de **reviewlog** — die de skill
-  daarna handmatig invult. Raak de gegenereerde inhoud verder niet aan; opnieuw renderen
-  overschrijft die `_TODO_`-invullingen.
+- **Het rapport wordt gegenereerd, niet overgetypt.** `scripts/build_rapport_json.py`
+  combineert de gevalideerde `analyse.json`'s van de hoogste reviewronde tot één
+  `rapport.json` — de primaire bron. De skill vult de vrije tekstvelden (reviewlog-
+  samenvattingen, aandachtspunten voor multidisciplinaire validatie) via de flags van
+  hetzelfde script in. Daarna start de skill `scripts/rapport_server.py` (lokale HTML-viewer
+  op poort 3119), waarna de analist de §4-velden desgewenst bijstelt en via de knop
+  "Markdown schrijven" een `.md`-exportbestand naast de `rapport.json` laat wegschrijven.
+  `scripts/render_rapport.py` blijft beschikbaar als standalone MD-generator maar maakt geen
+  deel meer uit van de normale skill-flow.
 
 Inhoudelijke regels die je moet kennen voordat je classificeert of begrippen opstelt:
-`references/jas-klassen.md` (de dertien JAS-klassen — verzin er geen), en
-`references/activiteit-3-vuistregels.md`. Voorbeeld-output staat in `analyses/iw1990-art9-lid1/`.
+`references/jas-klassen-referentie.md` (de dertien JAS-klassen — verzin er geen), en
+`references/begrippen-en-afleidingsregels-opstellen.md`. Voorbeeld-output staat in `analyses/iw1990-art9-lid1/`.
 
 Komt een analyse onbetrouwbaar uit (verzonnen tekst, niet-bestaande klasse, overgeslagen
 review, niet-convergerende lus — géén gewone review-feedback), dan is
