@@ -194,36 +194,62 @@ schrijven, lus overslaan).
 
 ## Stap 4 — Rapport opstellen
 
-Type het rapport **niet** zelf over. De secties 0–3 en het reviewlog-skelet zijn een
-mechanische transformatie van de gevalideerde `analyse.json`'s; laat die genereren door de
-rapportgenerator. Dat scheelt tokens en garandeert dat de wettekst, markeringen, begrippen
-en regels brongetrouw met de laatste reviewronde overeenkomen.
+Het rapport bestaat uit een `rapport.json` (primaire bron) die via een lokale HTML-viewer
+wordt getoond. De Markdown-versie is beschikbaar als downloadknop in die viewer. Volg
+onderstaande stappen precies; type niets over uit de analyse.json's.
+
+**Stap 4a — Bouw rapport.json (zonder vrije tekstvelden)**
 
 ```bash
-python "<skill>/scripts/render_rapport.py" \
+python "<skill>/scripts/build_rapport_json.py" \
   --werk <werkmap> \
-  --out  <analysemap>/analyserapport-<slug>.md
+  --out  <analysemap>/rapport.json
 ```
 
-De generator kiest per activiteit automatisch de hoogste ronde, rendert secties 0–3, en
-vult het reviewlog op basis van de `feedback.json`'s. Hij zet `_TODO_` op de plekken die
-synthese of metadata vragen. **Werk daarna alléén die `_TODO_`'s bij** (de generator meldt
-hoeveel er zijn); raak de gegenereerde inhoud verder niet aan. Het gaat om:
+Het script kiest per activiteit automatisch de hoogste ronde en combineert act-2 en act-3
+tot één `rapport.json`. De drie vrije tekstvelden (reviewlog act. 2, reviewlog act. 3,
+aandachtspunten) zijn nog leeg; het script meldt hoeveel er ontbreken.
 
-- **Sectie 0-metadata** — `type`, `pad`, `analysefocus`, `reikwijdte`, `geraadpleegde`. Vul
-  deze bij voorkeur al vóór de review in het act-2-`analyse.json` in (zie het schema in
-  `references/review-checkpoints.md`); dan rendert de generator ze direct en blijft alleen
-  sectie 4 over.
-- **Sectie 4 — aandachtspunten voor multidisciplinaire validatie.** Vervang het `_TODO_`-blok
-  door de gestructureerde aandachtspunten (interpretatiekeuzes, open normen, openstaande
-  delegaties, aannames, buiten scope), op basis van de twijfelvelden in de tabellen en het
-  ruwe `validatiepunten`-materiaal dat de generator eronder zette. Verwijder daarna het
-  ruw-materiaal-blok. Dit is geen bijzaak — het is wat de analyse bruikbaar en eerlijk maakt
-  als hulpmiddel.
-- **Reviewlog** — als er meer dan één ronde was, vat het `_TODO_` per activiteit samen wat
-  op grond van de feedback is gewijzigd (het ruwe materiaal per ronde staat eronder).
+**Stap 4b — Genereer de vrije tekstvelden**
 
-Was een review overgeslagen via `WETSANALYSE_NO_REVIEW=1`, noteer dat dan in de reviewlog.
+Schrijf op basis van de feedback.json's en de validatiepunten in act-3:
+
+1. **Reviewlog activiteit 2** — wat is per ronde gewijzigd op grond van de feedback?
+   Bij 1 ronde direct akkoord: `"1 ronde — direct akkoord, geen wijzigingen."`.
+   Was de review overgeslagen via `WETSANALYSE_NO_REVIEW=1`: noteer dat expliciet.
+2. **Reviewlog activiteit 3** — idem voor activiteit 3.
+3. **Aandachtspunten voor multidisciplinaire validatie** — gestructureerde synthese
+   van de interpretatiekeuzes, open normen, openstaande delegaties, aannames en wat
+   buiten scope valt. Gebruik de `validatiepunten`-array uit act-3 en de `twijfel`-velden
+   in de markeringen, begrippen en afleidingsregels als bronmateriaal. Dit is geen bijzaak
+   — het is wat de analyse bruikbaar en eerlijk maakt als hulpmiddel.
+
+**Stap 4c — Voeg de vrije tekstvelden in**
+
+```bash
+python "<skill>/scripts/build_rapport_json.py" \
+  --werk <werkmap> \
+  --out  <analysemap>/rapport.json \
+  --reviewlog-act2  "<tekst uit stap 4b>" \
+  --reviewlog-act3  "<tekst uit stap 4b>" \
+  --aandachtspunten "<tekst uit stap 4b>"
+```
+
+**Stap 4d — Start de rapport-viewer**
+
+```bash
+python "<skill>/scripts/rapport_server.py" \
+  --input <analysemap>/rapport.json
+```
+
+Voeg `--no-browser` toe als `WETSANALYSE_NO_REVIEW=1` in de omgeving staat.
+
+Geef de analist de URL (`http://localhost:3119`) en **pauzeer**: vraag de analist het
+rapport te bekijken, eventueel de §4-velden bij te stellen en op **Opslaan** te klikken,
+en de Markdown te downloaden via **Download Markdown**. Ga niet zelf door tot de analist
+bevestigt. De analist stopt de server zelf via Ctrl+C in de terminal.
+
+Na bevestiging van de analist is het rapport gereed.
 
 ## Kwaliteitscheck voordat je oplevert
 
