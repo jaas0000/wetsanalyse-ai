@@ -36,6 +36,10 @@ zijn **projectrelatieve paden**, zodat de map portabel is tussen machines/OS'en:
   `args: ["tools/wettenbank-mcp/dist/index.js"]`) staat daar ook beschreven als fallback.
   Wil iemand buiten dit project alleen het publieke image `ghcr.io/palmw01/wettenbank-mcp`
   draaien, dan is `tools/wettenbank-mcp/HANDLEIDING-IMAGE.md` de beknopte instap.
+- `.claude/settings.json` → **gedeeld en gecommit**: bevat een `PreToolUse`-hook die
+  `scripts/write_guard.py` aanroept bij elke Write/Edit-tool. De guard blokkeert schrijven
+  naar `analyses/*/werk/**/feedback.json` (uitsluitend de review-server schrijft dat) en het
+  overschrijven van een bestaande `analyse.json` in `werk/` (voltooide rondes zijn immutabel).
 - `.claude/settings.local.json` → `enabledMcpjsonServers: ["wettenbank"]` plus een **machine-lokale**
   allowlist. Dit bestand is **gitignored** (`.gitignore`), dus het reist niet mee en is per definitie
   niet gedeeld: een andere machine/analist bouwt z'n eigen lijst gewoon opnieuw op via de
@@ -76,13 +80,14 @@ kernstructuur die meerdere bestanden raakt:
   `wettenbank_artikel` (en `wettenbank_zoekterm` voor brondefinities in definitieartikelen).
 - **Activiteit 2 → checkpoint → Activiteit 3 → checkpoint → rapport.** Na elke activiteit
   is er een **iteratief human-in-the-loop review**: de skill schrijft
-  `werk/activiteit-{2,3}/ronde-{N}/analyse.json`, start `scripts/review_server.py` (lokale
-  webpagina op poort 3118, alleen stdlib; vanaf ronde 2 met `--ronde N --vorige <ronde-N-1>`),
-  pauzeert, en verwerkt daarna `werk/activiteit-{2,3}/ronde-{N}/feedback.json`. Is er feedback,
-  dan schrijft de skill een volgende ronde en herhaalt — tot de analist akkoord is zonder
-  opmerkingen (veiligheidscap: max. 6 rondes). De skill gaat **niet** zelf door zonder
-  bevestiging van de analist. De datacontracten en de lus staan in
-  `references/review-checkpoints.md`.
+  `werk/activiteit-{2,3}/ronde-{N}/analyse.json`, draait eerst `scripts/validate_analyse.py`
+  als mechanische pre-check (ongeldige JAS-klassen, ontbrekende id's e.d.; exit 2 blokkeert
+  tot correctie), start daarna `scripts/review_server.py` (lokale webpagina op poort 3118,
+  alleen stdlib; vanaf ronde 2 met `--ronde N --vorige <ronde-N-1>`), pauzeert, en verwerkt
+  daarna `werk/activiteit-{2,3}/ronde-{N}/feedback.json`. Is er feedback, dan schrijft de
+  skill een volgende ronde en herhaalt — tot de analist akkoord is zonder opmerkingen
+  (veiligheidscap: max. 6 rondes). De skill gaat **niet** zelf door zonder bevestiging van
+  de analist. De datacontracten en de lus staan in `references/review-checkpoints.md`.
 - De review-stops worden alleen overgeslagen als `WETSANALYSE_NO_REVIEW=1` in de omgeving staat
   (uitsluitend voor geautomatiseerde evals).
 - **Het rapport wordt gegenereerd, niet overgetypt.** `scripts/build_rapport_json.py`
