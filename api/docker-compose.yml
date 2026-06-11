@@ -8,10 +8,13 @@
 # Forward Hostname `wetsanalyse-api`, Forward Port `3000`, SSL (Let's Encrypt) aan.
 #
 # Stack-omgeving (in Portainer, of door CI via stack-update meegegeven):
-#   WETSANALYSE_API_TOKENS — per-client tokens als `id:token`-lijst (komma-gescheiden).
-#   WETTENBANK_TOKEN        — bearer voor de interne MCP.
-#   LLM_PROVIDER/LLM_MODEL/LLM_API_BASE/LLM_API_KEY — de LLM-adapter (Azure eerst).
+#   LLM_PROVIDER/LLM_MODEL/LLM_API_BASE/LLM_API_VERSION — niet-geheime LLM-config.
 #   PROXY_NETWORK           — naam van het bestaande NPM-netwerk (default homeinfra_internal).
+#
+# Secrets (LLM_API_KEY, WETTENBANK_TOKEN, WETSANALYSE_API_TOKENS) leven als bestanden op de
+# host in /opt/secrets/wetsanalyse-api/ en worden via *_FILE-variabelen doorgegeven.
+# Zie api/CLAUDE.md §"Secrets op de host" voor de eenmalige provisioning-stappen.
+# De waarden staan hierdoor nooit als plain env var in de container of in de Portainer-UI.
 
 services:
   wetsanalyse-api:
@@ -21,17 +24,19 @@ services:
     expose:
       - "3000"
     environment:
-      WETSANALYSE_API_TOKENS: ${WETSANALYSE_API_TOKENS:?zet WETSANALYSE_API_TOKENS (id:token,...) in de stack-omgeving}
+      WETSANALYSE_API_TOKENS_FILE: /run/secrets/api_tokens
       WETSANALYSE_AUTH_REQUIRED: "1"
       WETTENBANK_MCP_URL: "http://wettenbank-mcp:3000/mcp"
-      WETTENBANK_TOKEN: ${WETTENBANK_TOKEN:-}
+      WETTENBANK_TOKEN_FILE: /run/secrets/wettenbank_token
       LLM_PROVIDER: ${LLM_PROVIDER:-azure_ai}
       LLM_MODEL: ${LLM_MODEL:?zet LLM_MODEL in de stack-omgeving}
       LLM_API_BASE: ${LLM_API_BASE:-}
-      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_API_KEY_FILE: /run/secrets/llm_api_key
       LLM_API_VERSION: ${LLM_API_VERSION:-}
       LLM_OUTPUT_STRATEGY: ${LLM_OUTPUT_STRATEGY:-prompt_and_parse}
     volumes:
+      # Secrets als bestanden op de host (read-only); waarden nooit als plain env var.
+      - /opt/secrets/wetsanalyse-api:/run/secrets:ro
       # Persistente, met de lokale skill deelbare artefactenmap.
       - wetsanalyse_analyses:/app/analyses
     networks:

@@ -51,10 +51,25 @@ Config via env — zie `.env.example`. **Geen vrije model-string vanuit de clien
 ## Deployment
 
 Docker-image + Portainer-stack achter NPM, net als de MCP (`docker-compose.yml`). Single uvicorn-worker
-(concurrency leunt op per-job locks + filesystem-state). LLM-key + tokens als Docker-secrets (`*_FILE`).
+(concurrency leunt op per-job locks + filesystem-state). LLM-key + tokens als bestanden op de host
+(`*_FILE`-patroon) — nooit als plain env var in de container of Portainer-UI.
 Build vanaf de **projectroot**: `docker build -f api/Dockerfile -t wetsanalyse-api .` (de image heeft de
 skill-`references/scripts` nodig). `POST /analyses` is async (202 + polling) — nooit synchroon achter
 NPM's ~60s timeout.
+
+### Secrets op de host (eenmalig, vóór de eerste stack-start)
+
+```bash
+sudo mkdir -p /opt/secrets/wetsanalyse-api
+sudo chmod 700 /opt/secrets/wetsanalyse-api
+echo -n "<llm-api-key>"      | sudo tee /opt/secrets/wetsanalyse-api/llm_api_key      > /dev/null
+echo -n "<wettenbank-token>" | sudo tee /opt/secrets/wetsanalyse-api/wettenbank_token > /dev/null
+echo -n "id1:tok1,id2:tok2"  | sudo tee /opt/secrets/wetsanalyse-api/api_tokens       > /dev/null
+sudo chmod 600 /opt/secrets/wetsanalyse-api/*
+```
+
+Rotatie: pas het betreffende bestand aan en herstart (`docker restart wetsanalyse-api`).
+CI stuurt geen geheime waarden naar Portainer — alleen niet-geheime config (`LLM_MODEL`, `LLM_PROVIDER`, e.d.).
 
 ## Roadmap (nog niet gebouwd)
 

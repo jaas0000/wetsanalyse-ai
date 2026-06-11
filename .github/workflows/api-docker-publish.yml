@@ -57,10 +57,7 @@ jobs:
       PORTAINER_STACK_ID: ${{ vars.PORTAINER_API_STACK_ID }}
       PORTAINER_ENDPOINT_ID: "1"
       PROXY_NETWORK: "homeinfra_internal"
-      # Stack-omgeving (secrets + repo-variables).
-      WETSANALYSE_API_TOKENS: ${{ secrets.WETSANALYSE_API_TOKENS }}
-      WETTENBANK_TOKEN: ${{ secrets.WETTENBANK_TOKEN }}
-      LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+      # Niet-geheime stack-variabelen (secrets leven on-host als bestanden; zie api/CLAUDE.md).
       LLM_PROVIDER: ${{ vars.LLM_PROVIDER }}
       LLM_MODEL: ${{ vars.LLM_MODEL }}
       LLM_API_BASE: ${{ vars.LLM_API_BASE }}
@@ -141,11 +138,7 @@ jobs:
           HEALTH_URL: https://wetsanalyse-api.ipalm.nl/health
         run: |
           set -euo pipefail
-          # Fail-fast: deze env-vars zijn met `:?` verplicht in de compose; leeg = container crasht.
-          if [ -z "${WETSANALYSE_API_TOKENS:-}" ]; then
-            echo "::error::WETSANALYSE_API_TOKENS is leeg — zet de GitHub-secret (id:token,...). Redeploy overgeslagen."
-            exit 1
-          fi
+          # Secrets (LLM_API_KEY, tokens) leven on-host als bestanden; CI stuurt ze niet mee.
           if [ -z "${LLM_MODEL:-}" ]; then
             echo "::error::LLM_MODEL is leeg — zet de repo-variabele vars.LLM_MODEL. Redeploy overgeslagen."
             exit 1
@@ -153,21 +146,15 @@ jobs:
           payload=$(jq -n \
             --rawfile compose api/docker-compose.yml \
             --arg net "$PROXY_NETWORK" \
-            --arg api_tok "$WETSANALYSE_API_TOKENS" \
-            --arg wb_tok "${WETTENBANK_TOKEN:-}" \
             --arg prov "${LLM_PROVIDER:-azure_ai}" \
             --arg model "$LLM_MODEL" \
             --arg base "${LLM_API_BASE:-}" \
-            --arg key "${LLM_API_KEY:-}" \
             --arg ver "${LLM_API_VERSION:-}" \
             '{stackFileContent:$compose,
               env:[{name:"PROXY_NETWORK",value:$net},
-                   {name:"WETSANALYSE_API_TOKENS",value:$api_tok},
-                   {name:"WETTENBANK_TOKEN",value:$wb_tok},
                    {name:"LLM_PROVIDER",value:$prov},
                    {name:"LLM_MODEL",value:$model},
                    {name:"LLM_API_BASE",value:$base},
-                   {name:"LLM_API_KEY",value:$key},
                    {name:"LLM_API_VERSION",value:$ver}],
               pullImage:true, prune:false}')
           # De synchrone stack-update kan langer duren dan de client-timeout; een curl-fout
