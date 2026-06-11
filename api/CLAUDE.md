@@ -111,13 +111,19 @@ NPM's ~60s timeout.
 
 ### Secrets op de host (eenmalig, vóór de eerste stack-start)
 
+Het pad is configureerbaar via `SECRETS_DIR` in de stack-omgeving (default `/opt/secrets/wetsanalyse-api`).
+Op een Synology NAS gebruik je `/volume1/docker/secrets/wetsanalyse-api`.
+
 ```bash
-sudo mkdir -p /opt/secrets/wetsanalyse-api
-sudo chmod 700 /opt/secrets/wetsanalyse-api
-echo -n "<llm-api-key>"      | sudo tee /opt/secrets/wetsanalyse-api/llm_api_key      > /dev/null
-echo -n "<wettenbank-token>" | sudo tee /opt/secrets/wetsanalyse-api/wettenbank_token > /dev/null
-echo -n "id1:tok1,id2:tok2"  | sudo tee /opt/secrets/wetsanalyse-api/api_tokens       > /dev/null
-sudo chmod 600 /opt/secrets/wetsanalyse-api/*
+# Pas het pad aan naar jouw host (Synology: /volume1/docker/secrets/wetsanalyse-api)
+SECRETS_DIR=/opt/secrets/wetsanalyse-api
+
+sudo mkdir -p "$SECRETS_DIR"
+sudo chmod 700 "$SECRETS_DIR"
+echo -n "<llm-api-key>"      | sudo tee "$SECRETS_DIR/llm_api_key"      > /dev/null
+echo -n "<wettenbank-token>" | sudo tee "$SECRETS_DIR/wettenbank_token"  > /dev/null
+echo -n "id1:tok1,id2:tok2"  | sudo tee "$SECRETS_DIR/api_tokens"        > /dev/null
+sudo chmod 600 "$SECRETS_DIR"/*
 ```
 
 Rotatie: pas het betreffende bestand aan en herstart (`docker restart wetsanalyse-api`).

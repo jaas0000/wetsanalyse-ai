@@ -10,9 +10,11 @@
 # Stack-omgeving (in Portainer, of door CI via stack-update meegegeven):
 #   LLM_PROVIDER/LLM_MODEL/LLM_API_BASE/LLM_API_VERSION — niet-geheime LLM-config.
 #   PROXY_NETWORK           — naam van het bestaande NPM-netwerk (default homeinfra_internal).
+#   SECRETS_DIR             — host-pad naar de secrets-map (default /opt/secrets/wetsanalyse-api;
+#                             op Synology: /volume1/docker/secrets/wetsanalyse-api).
 #
 # Secrets (LLM_API_KEY, WETTENBANK_TOKEN, WETSANALYSE_API_TOKENS) leven als bestanden op de
-# host in /opt/secrets/wetsanalyse-api/ en worden via *_FILE-variabelen doorgegeven.
+# host in SECRETS_DIR en worden via *_FILE-variabelen doorgegeven.
 # Zie api/CLAUDE.md §"Secrets op de host" voor de eenmalige provisioning-stappen.
 # De waarden staan hierdoor nooit als plain env var in de container of in de Portainer-UI.
 
@@ -36,7 +38,7 @@ services:
       LLM_OUTPUT_STRATEGY: ${LLM_OUTPUT_STRATEGY:-prompt_and_parse}
     volumes:
       # Secrets als bestanden op de host (read-only); waarden nooit als plain env var.
-      - /opt/secrets/wetsanalyse-api:/run/secrets:ro
+      - ${SECRETS_DIR:-/opt/secrets/wetsanalyse-api}:/run/secrets:ro
       # Persistente, met de lokale skill deelbare artefactenmap.
       - wetsanalyse_analyses:/app/analyses
     networks:
