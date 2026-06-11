@@ -157,19 +157,27 @@ jobs:
             '{stackFileContent:$compose,
               env:[{name:"MCP_AUTH_TOKENS",value:$tok},{name:"PROXY_NETWORK",value:$net}],
               pullImage:true, prune:false}')
-          # De synchrone stack-update kan langer duren dan de gateway-timeout. Een 502/504
-          # betekent niet dat de update mislukte; de health-check hieronder bepaalt succes.
-          code=$(curl -sS -X PUT --max-time 180 \
+          # De synchrone stack-update kan langer duren dan de client-timeout; een curl-fout
+          # (timeout) of 5xx betekent NIET dat de deploy mislukte — Portainer draait async door.
+          # Daarom faalt alleen 4xx (config/auth) hier hard; de rest gaat door naar de health-check
+          # hieronder, die bepalend is. (Voorheen verdubbelde `|| echo "000"` de status tot
+          # "000000", waardoor een geslaagde-maar-trage deploy ten onrechte rood werd gevlagd.)
+          rc=0
+          code=$(curl -sS -X PUT --max-time 300 \
             "$PORTAINER_URL/api/stacks/$PORTAINER_STACK_ID?endpointId=$PORTAINER_ENDPOINT_ID" \
             -H "X-API-Key: $PORTAINER_API_KEY" \
             -H "Content-Type: application/json" \
-            -d "$payload" -o /tmp/portainer-resp.json -w "%{http_code}" || echo "000")
-          echo "redeploy HTTP $code"
-          case "$code" in
-            2*) echo "Stack-update geaccepteerd." ;;
-            502|503|504|000) echo "::warning::Gateway-timeout ($code) — update draait async door; verifieer via health." ;;
-            *) echo "::error::Stack-update faalde (HTTP $code)"; cat /tmp/portainer-resp.json || true; exit 1 ;;
-          esac
+            -d "$payload" -o /tmp/portainer-resp.json -w "%{http_code}") || rc=$?
+          echo "redeploy: curl_rc=$rc http=$code"
+          if [ "$rc" -ne 0 ]; then
+            echo "::warning::curl-fout (rc=$rc, bv. timeout) — update draait mogelijk async door; health-check is bepalend."
+          else
+            case "$code" in
+              2*) echo "Stack-update geaccepteerd." ;;
+              4*) echo "::error::Stack-update geweigerd (HTTP $code — config/auth)"; cat /tmp/portainer-resp.json || true; exit 1 ;;
+              *)  echo "::warning::HTTP $code — update draait mogelijk async door; health-check is bepalend." ;;
+            esac
+          fi
           # Bevestig dat de nieuwe container daadwerkelijk gezond opstart (max ~5 min).
           echo "Health-verificatie op $HEALTH_URL ..."
           for i in $(seq 1 20); do
