@@ -4,6 +4,9 @@ node_modules/
 # Python
 __pycache__/
 *.pyc
+.venv/
+api/.venv/
+.pytest_cache/
 
 # Logs
 *.log
