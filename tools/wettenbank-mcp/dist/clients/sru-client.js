@@ -4,8 +4,9 @@
  */
 import { DOMParser } from "@xmldom/xmldom";
 import { log } from "../logger.js";
+import { UpstreamError } from "../shared/fouten.js";
 import { fetchMetRetry } from "./http.js";
-const SRU_BASE = "https://zoekservice.overheid.nl/sru/Search";
+export const SRU_BASE = "https://zoekservice.overheid.nl/sru/Search";
 export const REPO_BASE = "https://repository.officiele-overheidspublicaties.nl/bwb";
 const REPO_HOST = "repository.officiele-overheidspublicaties.nl";
 export const domParser = new DOMParser();
@@ -72,8 +73,38 @@ export async function sruRequest(query, maxRecords = 10) {
     });
     const res = await fetchMetRetry(`${SRU_BASE}?${params}`, { headers: { Accept: "application/xml" } }, { timeoutMs: FETCH_TIMEOUT_MS, bron: "SRU" });
     if (!res.ok)
-        throw new Error(`SRU HTTP ${res.status}`);
+        throw new UpstreamError(`SRU HTTP ${res.status}`, {
+            bron: "SRU",
+            url: SRU_BASE,
+            httpStatus: res.status,
+        });
     return res.text();
+}
+/**
+ * Snelle bereikbaarheidscheck van de upstream-hosts voor `/ready`. Elke HTTP-respons
+ * (ook 3xx/4xx) telt als bereikbaar; alleen een netwerk-/TLS-fout betekent "down".
+ * Korte timeout, géén retry — dit is een readiness-probe, geen tool-call.
+ */
+async function bereikbaar(url, timeoutMs) {
+    const controller = new AbortController();
+    const t = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+        await fetch(url, { method: "HEAD", signal: controller.signal });
+        return true;
+    }
+    catch {
+        return false;
+    }
+    finally {
+        clearTimeout(t);
+    }
+}
+export async function upstreamStatus(timeoutMs = 3000) {
+    const [sru, repository] = await Promise.all([
+        bereikbaar(`${SRU_BASE}?operation=explain&version=2.0`, timeoutMs),
+        bereikbaar(`${REPO_BASE}/`, timeoutMs),
+    ]);
+    return { sru, repository };
 }
 export function parseRecords(xml) {
     const doc = parseXmlDoc(xml, "SRU-service");

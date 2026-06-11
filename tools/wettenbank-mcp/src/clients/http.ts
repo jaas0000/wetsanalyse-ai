@@ -9,6 +9,8 @@
  * zelf via `res.ok` wat een fout is, zodat de bestaande foutmeldingen behouden blijven.
  */
 
+import { UpstreamError } from "../shared/fouten.js";
+
 const RETRYABLE_STATUS = new Set([502, 503, 504]);
 
 export interface FetchRetryOpts {
@@ -45,6 +47,7 @@ export async function fetchMetRetry(
   const bron = opts.bron ?? "upstream";
 
   let laatsteFout: unknown;
+  let laatsteStatus: number | undefined;
   for (let poging = 1; poging <= pogingen; poging++) {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
@@ -52,15 +55,23 @@ export async function fetchMetRetry(
       const res = await fetch(url, { ...init, signal: controller.signal });
       // Transiënte gateway-status: herprobeer tenzij dit de laatste poging was.
       if (RETRYABLE_STATUS.has(res.status) && poging < pogingen) {
+        laatsteStatus = res.status;
         laatsteFout = new Error(`${bron} HTTP ${res.status}`);
       } else {
         return res;
       }
     } catch (err) {
-      // AbortError (timeout) en netwerkfouten zijn transiënt → herproberen.
+      // AbortError (timeout) en netwerkfouten zijn transiënt → herproberen. De echte
+      // oorzaak (undici `.cause`) bewaren we via `cause` voor diagnose verderop.
       laatsteFout =
         (err as Error).name === "AbortError"
-          ? new Error(`${bron}-timeout na ${timeoutMs / 1000}s`)
+          ? new UpstreamError(`${bron}-timeout na ${timeoutMs / 1000}s`, {
+              bron,
+              url,
+              code: "ETIMEDOUT",
+              klasse: "transient",
+              cause: err,
+            })
           : err;
       if (poging >= pogingen) break;
     } finally {
@@ -70,7 +81,12 @@ export async function fetchMetRetry(
     const wacht = baseDelayMs * 2 ** (poging - 1) + Math.floor(Math.random() * baseDelayMs);
     await slaap(wacht);
   }
-  throw laatsteFout instanceof Error
-    ? laatsteFout
-    : new Error(`${bron}-verzoek mislukt na ${pogingen} pogingen`);
+  // Verpak tot een UpstreamError met bron/host/cause — de `.message` blijft gelijk
+  // (backward-compat met bestaande consumers en tests).
+  if (laatsteFout instanceof UpstreamError) throw laatsteFout;
+  const bericht =
+    laatsteFout instanceof Error
+      ? laatsteFout.message
+      : `${bron}-verzoek mislukt na ${pogingen} pogingen`;
+  throw new UpstreamError(bericht, { bron, url, httpStatus: laatsteStatus, cause: laatsteFout });
 }

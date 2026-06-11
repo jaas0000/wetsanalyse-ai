@@ -46,7 +46,10 @@ export const ZoekInputSchema = z
     .refine((d) => d.titel || d.rechtsgebied || d.ministerie || d.regelingsoort, "Geef minimaal één zoekcriterium op (titel, rechtsgebied, ministerie of regelingsoort).");
 export const ZoektermInputSchema = z.object({
     bwbId: bwbIdSchema,
-    zoekterm: z.string().min(1, "zoekterm mag niet leeg zijn"),
+    zoekterm: z
+        .string()
+        .min(1, "zoekterm mag niet leeg zijn")
+        .max(200, "zoekterm mag maximaal 200 tekens zijn"),
     peildatum: peildatumSchema,
     maxResultaten: z.number().int().min(1).max(50).default(10),
     includeerTekst: z.boolean().default(false),
@@ -131,7 +134,10 @@ export const StructuurOutputSchema = z.object({
     versiedatum: z.string(),
     structuur: z.array(StructuurNodeSchema),
 });
-// Foutformat — behouden voor backwards-compatibiliteit met bestaande consumers
+// Foutformat — `fout` blijft de stabiele, backward-compatibele sleutel; `foutCode` en
+// `klasse` zijn optionele diagnose-velden (transient|permanent|client|onbekend).
 export const FoutOutputSchema = z.object({
     fout: z.string(),
+    foutCode: z.string().optional(),
+    klasse: z.enum(["transient", "permanent", "client", "onbekend"]).optional(),
 });

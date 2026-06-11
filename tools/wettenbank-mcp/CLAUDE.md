@@ -175,7 +175,7 @@ Two public schemas from `repository.officiele-overheidspublicaties.nl` are the s
 **Communication:** twee transports, gekozen in `dist/index.js` op basis van `MCP_TRANSPORT` (env) of `--transport <modus>` (CLI-flag); default is `stdio`.
 
 - **stdio** (default) — de client start de server als subproces en wisselt JSON uit over stdin/stdout via `StdioServerTransport`. Gebruikt de singleton `server` uit `server.ts`.
-- **http** (`MCP_TRANSPORT=http`) — langlevende netwerkservice via `StreamableHTTPServerTransport` op `0.0.0.0:${PORT:-3000}`, endpoint `/mcp`. Code in `http-server.ts` (Node-stdlib `http`, geen extra dependency): sessiebeheer per `mcp-session-id` met **idle-opruiming** van verlaten sessies (`MCP_SESSION_IDLE_MS`, default 30 min) — sessies met een **open SSE-stream of lopend request worden ontzien** (een per-sessie in-flight teller), omdat `transport.close()` álle streams hard afbreekt; een verse `createServer()`-instantie per sessie, `/health` (200, geen auth; geeft `status` + build-info `version`/`commit`/`builtAt` uit `build-info.ts`) en bearer-auth via `MCP_AUTH_TOKEN` (constant-tijd vergelijking). In HTTP-modus is de start **fail-closed**: zonder `MCP_AUTH_TOKEN` weigert `index.ts` te starten, tenzij `MCP_ALLOW_NO_AUTH=1`. Bedoeld voor de gecontaineriseerde deployment.
+- **http** (`MCP_TRANSPORT=http`) — langlevende netwerkservice via `StreamableHTTPServerTransport` op `0.0.0.0:${PORT:-3000}`, endpoint `/mcp`. Code in `http-server.ts` (Node-stdlib `http`, geen extra dependency): sessiebeheer per `mcp-session-id` met **idle-opruiming** van verlaten sessies (`MCP_SESSION_IDLE_MS`, default 30 min) — sessies met een **open SSE-stream of lopend request worden ontzien** (een per-sessie in-flight teller), omdat `transport.close()` álle streams hard afbreekt; een verse `createServer()`-instantie per sessie, `/health` (200, geen auth; geeft `status` + build-info `version`/`commit`/`builtAt` uit `build-info.ts`), `/ready` (readiness: pingt de upstream-hosts kort, ~15s gecachet; 503 als SRU of repository onbereikbaar is — i.t.t. `/health` dat puur liveness is) en bearer-auth via `MCP_AUTH_TOKEN` (constant-tijd vergelijking). In HTTP-modus is de start **fail-closed**: zonder `MCP_AUTH_TOKEN` weigert `index.ts` te starten, tenzij `MCP_ALLOW_NO_AUTH=1`. Bedoeld voor de gecontaineriseerde deployment.
 
 Entry point is `dist/index.js` (re-exports + startup); de serverlogica zit in `dist/server.js`, het HTTP-transport in `dist/http-server.js`.
 
@@ -189,7 +189,13 @@ afgestemd op BIO2 / NEN-EN-ISO/IEC 27002:2022. Zie `SECURITY.md` voor het volled
   (geen eigen logbestanden; de runtime/SIEM vangt stderr op). Categorieën `functioneel` |
   `audit` | `security`. `server.ts` logt per tool-aanroep een **audit**-regel met `clientId`,
   `sessionId`, tool en BWB-id/artikel. **Tokens en rauwe zoektermen worden nooit gelogd**
-  (AVG-dataminimalisatie); zet `LOG_ZOEKTERMEN=1` alleen voor debug. `LOG_LEVEL` stelt de drempel in.
+  (AVG-dataminimalisatie); zet `LOG_ZOEKTERMEN=1` alleen voor debug. `LOG_LEVEL` (`debug|info|warn|error`,
+  default `info`) stelt de drempel in. **Foutdiagnose:** een gefaalde tool-call logt naast `fout`
+  ook `fout_code` (de onderliggende undici/TLS-`code`, bv. `UNABLE_TO_VERIFY_LEAF_SIGNATURE`),
+  `fout_klasse` (`transient|permanent|client|onbekend`), `bron` en `upstream_host`/`upstream_status`
+  (host zonder query — geen zoekterm-lek). **Permanente** fouten (TLS/4xx) loggen op `error`, de rest
+  op `warn`, zodat SIEM-alerting op `error` zinvol is. Het foutmodel staat in `src/shared/fouten.ts`
+  (`UpstreamError` + `foutDetails`).
 - **Auth** (`src/auth.ts`): **per-client bearer-tokens** via `MCP_AUTH_TOKENS="id:token,id2:token2"`
   (constant-tijd vergeleken), met de legacy `MCP_AUTH_TOKEN` als fallback (clientId `default`).
   Tokens mogen ook uit een bestand komen (`MCP_AUTH_TOKENS_FILE`, voor Docker secrets/vault).

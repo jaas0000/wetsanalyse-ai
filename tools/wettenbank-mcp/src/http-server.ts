@@ -35,8 +35,23 @@ import { maakRateLimiter, leesRateConfig, type RateLimiter } from "./rate-limit.
 import { maakOidcVerifier, oidcConfigUitEnv, type OidcVerifier } from "./oidc.js";
 import { buildInfo } from "./build-info.js";
 import { log } from "./logger.js";
+import { upstreamStatus } from "./clients/sru-client.js";
 
 const MAX_BODY_BYTES = 1_000_000;
+
+// Readiness: bereikbaarheid van de upstream-bronnen, kort gecachet zodat /ready geen
+// upstream-storm veroorzaakt. /health blijft pure liveness (los hiervan).
+const READY_CACHE_MS = 15_000;
+let readyCache: { ts: number; sru: boolean; repository: boolean } | undefined;
+
+async function leesReadiness(): Promise<{ sru: boolean; repository: boolean }> {
+  if (readyCache && Date.now() - readyCache.ts < READY_CACHE_MS) {
+    return { sru: readyCache.sru, repository: readyCache.repository };
+  }
+  const status = await upstreamStatus();
+  readyCache = { ts: Date.now(), ...status };
+  return status;
+}
 
 // Sessies zonder activiteit worden na dit interval opgeruimd. Een client die wegvalt
 // zonder DELETE laat zijn transport anders permanent in het geheugen achter.
@@ -187,6 +202,17 @@ export function startHttpServer(opts: HttpServerOpties): HttpServer {
     if (req.method === "GET" && url.pathname === "/health") {
       res.writeHead(200, { "content-type": "application/json" });
       res.end(JSON.stringify({ status: "ok", ...buildInfo }));
+      return;
+    }
+
+    // Readiness — weerspiegelt of de upstream-bronnen bereikbaar zijn (504 bij niet-bereikbaar),
+    // i.t.t. /health (liveness). Auth-vrij; alleen op debug gelogd.
+    if (req.method === "GET" && url.pathname === "/ready") {
+      const upstream = await leesReadiness();
+      const ready = upstream.sru && upstream.repository;
+      log("debug", "functioneel", "readiness-check", { ready, ...upstream });
+      res.writeHead(ready ? 200 : 503, { "content-type": "application/json" });
+      res.end(JSON.stringify({ ready, upstream }));
       return;
     }
 

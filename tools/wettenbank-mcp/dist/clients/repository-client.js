@@ -4,6 +4,7 @@
  */
 import { sruRequest, parseRecords, parseXmlDoc, getElText, getAttr, isVertrouwdeRepoUrl, } from "./sru-client.js";
 import { fetchMetRetry } from "./http.js";
+import { UpstreamError } from "../shared/fouten.js";
 import { log } from "../logger.js";
 export const xmlCache = new Map();
 const CACHE_TTL = 1000 * 60 * 60; // 1 uur
@@ -57,7 +58,11 @@ export async function haalWetstekstOp(bwbId, peildatum) {
     }
     const resp = await fetchMetRetry(r.repositoryUrl, {}, { timeoutMs: 15_000, bron: "Wetstekst-repository" });
     if (!resp.ok)
-        throw new Error(`Wetstekst repository onbereikbaar: ${resp.status}`);
+        throw new UpstreamError(`Wetstekst repository onbereikbaar: ${resp.status}`, {
+            bron: "Wetstekst-repository",
+            url: r.repositoryUrl,
+            httpStatus: resp.status,
+        });
     const rawXml = await resp.text();
     const doc = parseXmlDoc(rawXml, "wetstekst-repository");
     // LRU-cap: gooi de oudste entry weg vóór we de nieuwe toevoegen.

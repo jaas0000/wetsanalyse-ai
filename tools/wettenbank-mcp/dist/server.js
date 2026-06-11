@@ -18,6 +18,10 @@ import { handleStructuur } from "./tools/structuur.js";
 import { handleArtikel } from "./tools/artikel.js";
 import { handleZoekterm } from "./tools/zoekterm.js";
 import { log, veiligeToolVelden } from "./logger.js";
+import { foutDetails, logNiveauVoor, metDeadline } from "./shared/fouten.js";
+// Totale deadline per tool-call (begrenst o.a. de Promise.all in zoekterm); de
+// per-fetch-timeouts in clients/http.ts blijven daarnaast bestaan.
+const TOOL_TIMEOUT_MS = Number(process.env.WETTENBANK_TOOL_TIMEOUT_MS ?? 30_000);
 // ── Server-factory ──────────────────────────────────────────────────────────
 // createServer() bouwt een verse, volledig geconfigureerde Server. De stdio-modus
 // gebruikt één singleton (export `server` onderaan); de HTTP-modus maakt per sessie
@@ -156,18 +160,18 @@ export function createServer(ctx = {}) {
             ...veiligeToolVelden(args),
         };
         try {
-            let text;
+            let werk;
             if (name === "wettenbank_zoek") {
-                text = await handleZoek(args);
+                werk = handleZoek(args);
             }
             else if (name === "wettenbank_structuur") {
-                text = await handleStructuur(args);
+                werk = handleStructuur(args);
             }
             else if (name === "wettenbank_artikel") {
-                text = await handleArtikel(args);
+                werk = handleArtikel(args);
             }
             else if (name === "wettenbank_zoekterm") {
-                text = await handleZoekterm(args);
+                werk = handleZoekterm(args);
             }
             else {
                 log("warn", "audit", "onbekende tool aangeroepen", {
@@ -179,6 +183,7 @@ export function createServer(ctx = {}) {
                     isError: true,
                 };
             }
+            const text = await metDeadline(werk, TOOL_TIMEOUT_MS, name);
             log("info", "audit", "tool aangeroepen", {
                 ...auditBasis,
                 uitkomst: "ok",
@@ -187,15 +192,26 @@ export function createServer(ctx = {}) {
             return { content: [{ type: "text", text }] };
         }
         catch (err) {
-            log("warn", "audit", "tool gefaald", {
+            // Gestructureerde, classificeerbare foutlog: oorzaak (cause-code), bron, host en
+            // HTTP-status worden zichtbaar; permanente fouten (TLS/4xx) loggen op `error`.
+            const d = foutDetails(err);
+            log(logNiveauVoor(d.klasse), "audit", "tool gefaald", {
                 ...auditBasis,
                 uitkomst: "fout",
-                fout: err.message,
+                fout: d.bericht,
+                fout_code: d.code,
+                fout_klasse: d.klasse,
+                bron: d.bron,
+                upstream_host: d.host,
+                upstream_status: d.httpStatus,
                 duur_ms: Date.now() - start,
             });
             return {
                 content: [
-                    { type: "text", text: JSON.stringify({ fout: err.message }) },
+                    {
+                        type: "text",
+                        text: JSON.stringify({ fout: d.bericht, foutCode: d.code, klasse: d.klasse }),
+                    },
                 ],
                 isError: true,
             };

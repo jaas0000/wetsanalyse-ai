@@ -13,6 +13,7 @@ import {
 } from "./sru-client.js";
 import type { Regeling } from "./sru-client.js";
 import { fetchMetRetry } from "./http.js";
+import { UpstreamError } from "../shared/fouten.js";
 import { log } from "../logger.js";
 
 type XNode = any;
@@ -111,7 +112,12 @@ export async function haalWetstekstOp(
     {},
     { timeoutMs: 15_000, bron: "Wetstekst-repository" }
   );
-  if (!resp.ok) throw new Error(`Wetstekst repository onbereikbaar: ${resp.status}`);
+  if (!resp.ok)
+    throw new UpstreamError(`Wetstekst repository onbereikbaar: ${resp.status}`, {
+      bron: "Wetstekst-repository",
+      url: r.repositoryUrl,
+      httpStatus: resp.status,
+    });
 
   const rawXml = await resp.text();
   const doc = parseXmlDoc(rawXml, "wetstekst-repository");

@@ -9,6 +9,8 @@ import { fileURLToPath } from "url";
 import { server, StdioServerTransport } from "./server.js";
 import { leesClients } from "./auth.js";
 import { oidcConfigUitEnv } from "./oidc.js";
+import { log } from "./logger.js";
+import { foutDetails } from "./shared/fouten.js";
 // ── Startup ───────────────────────────────────────────────────────────────────
 // Transport-keuze: stdio (default, lokaal subproces) of http (langlevende service).
 // Stuur via env MCP_TRANSPORT=http of CLI-flag `--transport http`.
@@ -21,6 +23,18 @@ function gekozenTransport() {
 }
 const __filename = fileURLToPath(import.meta.url);
 if (process.argv[1] === __filename) {
+    // Globale vangnetten: een onverwachte fout of niet-afgevangen rejection moet
+    // gestructureerd gelogd worden (niet stil verdwijnen). Bij een uncaughtException is de
+    // processtaat onbetrouwbaar → afsluiten zodat de orchestrator een verse start doet.
+    process.on("unhandledRejection", (reason) => {
+        const d = foutDetails(reason);
+        log("error", "functioneel", "unhandled rejection", { fout: d.bericht, fout_code: d.code });
+    });
+    process.on("uncaughtException", (err) => {
+        const d = foutDetails(err);
+        log("error", "functioneel", "uncaught exception", { fout: d.bericht, fout_code: d.code });
+        process.exit(1);
+    });
     if (gekozenTransport() === "http") {
         const clients = leesClients();
         const oidcAan = oidcConfigUitEnv() !== null;
