@@ -16,3 +16,10 @@ api/.venv/
 
 # Machine-specifieke Claude Code config met secrets (tokens, paden)
 .claude/settings.local.json
+
+# Secrets en runtime-data van de API (.env.example blijft wél gecommit als template)
+.env
+.env.local
+api/secrets/
+api/_data/
+api/spike_act2.json
