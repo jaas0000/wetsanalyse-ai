@@ -34,19 +34,71 @@ met de lokale skill (zelfde artefacten op disk).
 - `feedback.json` alleen via de API en alleen in een `wacht-op-review-*`-state (anders 409).
 - Brongetrouwe velden (`leden`, `bronreferentie`, `versiedatum`, `pad`) komen **uit de MCP**, niet uit het LLM.
 
-## Commando's
+## Lokaal draaien
+
+### 1. Secrets aanmaken (eenmalig)
+
+Maak `api/secrets/` aan (gitignored) en vul de drie bestanden:
+
+```powershell
+# Vanuit de projectroot:
+mkdir api\secrets
+[IO.File]::WriteAllText("$PWD\api\secrets\llm_api_key",      "<azure-ai-foundry-key>")
+[IO.File]::WriteAllText("$PWD\api\secrets\wettenbank_token",  "<wettenbank-token>")   # = WETTENBANK_TOKEN uit env
+[IO.File]::WriteAllText("$PWD\api\secrets\api_tokens",        "lokaal:<zelfgekozen-token>")
+```
+
+Genereer een willekeurig token: `[Convert]::ToBase64String((1..32 | ForEach-Object { Get-Random -Maximum 256 }))`
+
+### 2. `.env` aanmaken
+
+Kopieer `.env.example` naar `.env` en vul in. Minimale Azure AI Foundry-config:
+
+```
+LLM_PROVIDER=azure_ai
+LLM_MODEL=claude-sonnet-4-6
+LLM_API_BASE=https://<resource-naam>.services.ai.azure.com   # geen /models achteraan
+LLM_API_KEY_FILE=secrets/llm_api_key
+WETTENBANK_TOKEN_FILE=secrets/wettenbank_token
+WETSANALYSE_API_TOKENS_FILE=secrets/api_tokens
+```
+
+### 3. Server starten
 
 ```bash
 cd api
-uv sync --extra dev            # test/dev-deps
-uv run pytest -q               # testsuite (fakes voor LLM + MCP; geen netwerk)
-uv run uvicorn app.main:app --reload --port 3000   # lokaal; Swagger op /docs
-# Fase 0-spike tegen de echte MCP + Azure (vereist env + de llm-extra):
-uv run --extra llm python scripts/spike_fase0.py BWBR0004770 9 1
+uv sync --extra llm --extra dev
+uv run --env-file .env uvicorn app.main:app --reload --port 3000
 ```
 
-Config via env — zie `.env.example`. **Geen vrije model-string vanuit de client**: kies een
-`model_profile`; het feitelijk gebruikte model wordt per ronde in `job.json` vastgelegd (audit).
+`uv run` laadt `.env` **niet** automatisch — de `--env-file .env` vlag is verplicht.
+Swagger: `http://localhost:3000/docs` · health: `http://localhost:3000/health` · ready: `http://localhost:3000/ready`
+
+### 4. Testen
+
+```bash
+uv run pytest -q               # unit-tests (fakes; geen netwerk)
+# Fase 0-spike tegen echte MCP + Azure:
+uv run --env-file .env --extra llm python scripts/spike_fase0.py BWBR0004770 9 1
+```
+
+**Geen vrije model-string vanuit de client**: kies een `model_profile`; het feitelijk gebruikte model
+wordt per ronde in `job.json` vastgelegd (audit).
+
+### Lokaal met Docker
+
+Maak `api/docker-compose.override.yml` aan (gitignored) om de secrets-mount naar `./secrets` te
+verwijzen in plaats van het productiepad `/opt/secrets/wetsanalyse-api`:
+
+```yaml
+services:
+  wetsanalyse-api:
+    volumes:
+      - ./secrets:/run/secrets:ro
+      - wetsanalyse_analyses:/app/analyses
+```
+
+Daarna: `docker compose up --build` vanuit `api/`.
 
 ## Deployment
 
