@@ -1,4 +1,4 @@
-# Retentie voor het GHCR-image ghcr.io/<owner>/wettenbank-mcp.
+# Retentie voor de GHCR-images ghcr.io/<owner>/wettenbank-mcp en .../wetsanalyse-api.
 # Bewaart structureel de 5 nieuwste builds (getagde versies) plus hun bijbehorende
 # untagged child-manifests (SBOM/provenance-attestaties); oudere builds en verweesde
 # untagged digests worden opgeruimd. dataaxiom/ghcr-cleanup-action snapt de multi-arch-/
@@ -20,7 +20,7 @@ on:
         type: boolean
         default: true
   workflow_run:
-    workflows: ["docker-publish"]
+    workflows: ["docker-publish", "api-docker-publish"]
     branches: [master]
     types: [completed]
 
@@ -32,7 +32,7 @@ jobs:
     permissions:
       packages: write
     steps:
-      - name: Oude image-versies opruimen (bewaar laatste 5 builds)
+      - name: MCP-image opruimen (bewaar laatste 5 builds)
         uses: dataaxiom/ghcr-cleanup-action@v1
         with:
           package: wettenbank-mcp
@@ -41,5 +41,16 @@ jobs:
           delete-untagged: true   # verweesde untagged digests opruimen
           validate: true          # na afloop de integriteit van de behouden images checken
           # Handmatig = dry-run (preview) tenzij expliciet uitgezet; automatisch = echt.
+          dry-run: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: API-image opruimen (bewaar laatste 5 builds)
+        uses: dataaxiom/ghcr-cleanup-action@v1
+        with:
+          package: wetsanalyse-api
+          keep-n-tagged: 5
+          exclude-tags: latest
+          delete-untagged: true
+          validate: true
           dry-run: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
           token: ${{ secrets.GITHUB_TOKEN }}
