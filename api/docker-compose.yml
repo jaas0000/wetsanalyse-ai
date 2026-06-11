@@ -1,0 +1,50 @@
+# Portainer-stack achter Nginx Proxy Manager — spiegelt het MCP-deploymentpatroon.
+# De API praat intern met de MCP (geen publieke egress) en serveert geen host-poort (expose).
+services:
+  wetsanalyse-api:
+    build:
+      context: ..
+      dockerfile: api/Dockerfile
+    image: wetsanalyse-api:latest
+    restart: unless-stopped
+    expose:
+      - "3000"
+    environment:
+      # Auth: per-client tokens "id:token,id2:token2" (fail-closed; gebruik *_FILE in productie).
+      WETSANALYSE_API_TOKENS_FILE: /run/secrets/wetsanalyse_api_tokens
+      # MCP intern bereikbaar binnen het proxy-netwerk (geen publieke URL).
+      WETTENBANK_MCP_URL: "http://wettenbank-mcp:3000/mcp"
+      WETTENBANK_TOKEN_FILE: /run/secrets/wettenbank_token
+      # LLM-adapter (Azure eerst — endpointtype bepaalt provider-prefix; zie Fase 0).
+      LLM_PROVIDER: "azure_ai"
+      LLM_MODEL: "${LLM_MODEL}"
+      LLM_API_BASE: "${LLM_API_BASE}"
+      LLM_API_KEY_FILE: /run/secrets/llm_api_key
+      LLM_OUTPUT_STRATEGY: "prompt_and_parse"
+    secrets:
+      - wetsanalyse_api_tokens
+      - wettenbank_token
+      - llm_api_key
+    volumes:
+      # Persistente, met de lokale skill deelbare artefactenmap.
+      - ./_data/analyses:/app/analyses
+    networks:
+      - proxy
+    healthcheck:
+      # Liveness — mag niet falen op trage MCP/LLM.
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:3000/health').status==200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+secrets:
+  wetsanalyse_api_tokens:
+    file: ./secrets/wetsanalyse_api_tokens
+  wettenbank_token:
+    file: ./secrets/wettenbank_token
+  llm_api_key:
+    file: ./secrets/llm_api_key
+
+networks:
+  proxy:
+    external: true
