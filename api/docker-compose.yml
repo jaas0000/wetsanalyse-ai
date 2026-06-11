@@ -1,50 +1,56 @@
-# Portainer-stack achter Nginx Proxy Manager — spiegelt het MCP-deploymentpatroon.
-# De API praat intern met de MCP (geen publieke egress) en serveert geen host-poort (expose).
+# Portainer-stack voor de Wetsanalyse API, achter Nginx Proxy Manager — spiegelt de MCP-stack.
+#
+# De image komt van GHCR (zie .github/workflows/api-docker-publish.yml).
+# De container publiceert GÉÉN host-poort: NPM bereikt 'm via het gedeelde Docker-netwerk op
+# hostnaam `wetsanalyse-api`, poort 3000. De API praat intern met de MCP op `wettenbank-mcp:3000`.
+#
+# In NPM → Proxy Hosts → Add: Domain `wetsanalyse-api.ipalm.nl`, Scheme `http`,
+# Forward Hostname `wetsanalyse-api`, Forward Port `3000`, SSL (Let's Encrypt) aan.
+#
+# Stack-omgeving (in Portainer, of door CI via stack-update meegegeven):
+#   WETSANALYSE_API_TOKENS — per-client tokens als `id:token`-lijst (komma-gescheiden).
+#   WETTENBANK_TOKEN        — bearer voor de interne MCP.
+#   LLM_PROVIDER/LLM_MODEL/LLM_API_BASE/LLM_API_KEY — de LLM-adapter (Azure eerst).
+#   PROXY_NETWORK           — naam van het bestaande NPM-netwerk (default homeinfra_internal).
+
 services:
   wetsanalyse-api:
-    build:
-      context: ..
-      dockerfile: api/Dockerfile
-    image: wetsanalyse-api:latest
+    image: ghcr.io/palmw01/wetsanalyse-api:latest
+    container_name: wetsanalyse-api
     restart: unless-stopped
     expose:
       - "3000"
     environment:
-      # Auth: per-client tokens "id:token,id2:token2" (fail-closed; gebruik *_FILE in productie).
-      WETSANALYSE_API_TOKENS_FILE: /run/secrets/wetsanalyse_api_tokens
-      # MCP intern bereikbaar binnen het proxy-netwerk (geen publieke URL).
+      WETSANALYSE_API_TOKENS: ${WETSANALYSE_API_TOKENS:?zet WETSANALYSE_API_TOKENS (id:token,...) in de stack-omgeving}
+      WETSANALYSE_AUTH_REQUIRED: "1"
       WETTENBANK_MCP_URL: "http://wettenbank-mcp:3000/mcp"
-      WETTENBANK_TOKEN_FILE: /run/secrets/wettenbank_token
-      # LLM-adapter (Azure eerst — endpointtype bepaalt provider-prefix; zie Fase 0).
-      LLM_PROVIDER: "azure_ai"
-      LLM_MODEL: "${LLM_MODEL}"
-      LLM_API_BASE: "${LLM_API_BASE}"
-      LLM_API_KEY_FILE: /run/secrets/llm_api_key
-      LLM_OUTPUT_STRATEGY: "prompt_and_parse"
-    secrets:
-      - wetsanalyse_api_tokens
-      - wettenbank_token
-      - llm_api_key
+      WETTENBANK_TOKEN: ${WETTENBANK_TOKEN:-}
+      LLM_PROVIDER: ${LLM_PROVIDER:-azure_ai}
+      LLM_MODEL: ${LLM_MODEL:?zet LLM_MODEL in de stack-omgeving}
+      LLM_API_BASE: ${LLM_API_BASE:-}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_API_VERSION: ${LLM_API_VERSION:-}
+      LLM_OUTPUT_STRATEGY: ${LLM_OUTPUT_STRATEGY:-prompt_and_parse}
     volumes:
       # Persistente, met de lokale skill deelbare artefactenmap.
-      - ./_data/analyses:/app/analyses
+      - wetsanalyse_analyses:/app/analyses
     networks:
       - proxy
     healthcheck:
-      # Liveness — mag niet falen op trage MCP/LLM.
-      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:3000/health').status==200 else 1)"]
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:3000/health').status==200 else 1)"
       interval: 30s
       timeout: 5s
       retries: 3
-
-secrets:
-  wetsanalyse_api_tokens:
-    file: ./secrets/wetsanalyse_api_tokens
-  wettenbank_token:
-    file: ./secrets/wettenbank_token
-  llm_api_key:
-    file: ./secrets/llm_api_key
+      start_period: 10s
 
 networks:
   proxy:
     external: true
+    name: ${PROXY_NETWORK:-homeinfra_internal}
+
+volumes:
+  wetsanalyse_analyses:

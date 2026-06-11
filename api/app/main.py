@@ -48,7 +48,8 @@ app.include_router(analyses.router)
 @app.get("/health", tags=["meta"])
 async def health():
     """Liveness — geen auth, mag niet falen op trage MCP/LLM."""
-    return {"status": "ok", "version": __version__}
+    s = get_settings()
+    return {"status": "ok", "version": __version__, "git_sha": s.git_sha, "build_time": s.build_time}
 
 
 @app.get("/ready", tags=["meta"])

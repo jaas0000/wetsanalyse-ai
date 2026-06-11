@@ -77,6 +77,10 @@ class Settings:
         }
         self.default_model_profile = os.environ.get("LLM_DEFAULT_PROFILE", "azure-sonnet")
 
+        # --- Build-herkomst (door CI meegegeven; zichtbaar op /health) ---
+        self.git_sha = os.environ.get("GIT_SHA", "")
+        self.build_time = os.environ.get("BUILD_TIME", "")
+
         # --- Engine ---
         self.max_rondes = int(os.environ.get("WETSANALYSE_MAX_RONDES", "6"))
         self.max_autocorrectie = int(os.environ.get("WETSANALYSE_MAX_AUTOCORRECTIE", "1"))
