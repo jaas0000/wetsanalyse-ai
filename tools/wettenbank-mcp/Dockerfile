@@ -29,7 +29,8 @@ ENV NODE_ENV=production \
     MCP_TRANSPORT=http \
     PORT=3000 \
     GIT_SHA=$GIT_SHA \
-    BUILD_TIME=$BUILD_TIME
+    BUILD_TIME=$BUILD_TIME \
+    NODE_EXTRA_CA_CERTS=/app/certs/certsign-web-ca-chain.pem
 
 WORKDIR /app
 
@@ -45,6 +46,11 @@ RUN npm ci --omit=dev && npm cache clean --force
 
 # Gecompileerde JS uit de build-fase.
 COPY --from=builder /app/dist ./dist
+
+# Ontbrekend tussencertificaat voor repository.officiele-overheidspublicaties.nl
+# (incomplete upstream-keten → "fetch failed"). Via NODE_EXTRA_CA_CERTS (zie ENV) maakt
+# Node de keten compleet, zonder TLS-verificatie uit te zetten. Zie certs/-bestand.
+COPY certs ./certs
 
 # Draai als de non-root `node`-gebruiker uit de base image.
 USER node
