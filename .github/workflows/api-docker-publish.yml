@@ -1,0 +1,190 @@
+# Bouwt de Wetsanalyse API-image en pusht naar GitHub Container Registry (GHCR).
+# Draait bij wijzigingen in de API-map (of de gebakken skill-references/scripts) op master en
+# bij versietags (v*). Portainer pullt vervolgens ghcr.io/<owner>/wetsanalyse-api:latest.
+# Spiegelt .github/workflows/docker-publish.yml (de MCP) qua opzet en securitypoort.
+
+name: api-docker-publish
+
+on:
+  push:
+    branches: [master]
+    tags: ["v*"]
+    paths:
+      - "api/**"
+      # API-documentatie (*.md) triggert géén build/deploy.
+      - "!api/**/*.md"
+      # De skill-references/scripts worden in de image gebakken → wél rebuilden (incl. .md).
+      - ".claude/skills/wetsanalyse/references/**"
+      - ".claude/skills/wetsanalyse/scripts/**"
+      - ".github/workflows/api-docker-publish.yml"
+  workflow_dispatch:
+
+env:
+  IMAGE: ghcr.io/${{ github.repository_owner }}/wetsanalyse-api
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  # ── Kwaliteits- en kwetsbaarhedenpoort (BIO2 / ISO 27002:2022 §8.8) ──────────
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: api
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - run: uv sync --extra dev
+      - run: uv run pytest -q
+      - name: pip-audit (faalt bij bekende kwetsbaarheden)
+        run: uv run --with pip-audit pip-audit
+
+  build-and-push:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      security-events: write
+    env:
+      # CI → Portainer stack-redeploy. Inactief tot de secrets/vars bestaan.
+      PORTAINER_URL: ${{ secrets.PORTAINER_URL }}
+      PORTAINER_API_KEY: ${{ secrets.PORTAINER_API_KEY }}
+      PORTAINER_STACK_ID: ${{ vars.PORTAINER_API_STACK_ID }}
+      PORTAINER_ENDPOINT_ID: "1"
+      PROXY_NETWORK: "homeinfra_internal"
+      # Niet-geheime stack-variabelen (secrets leven on-host als bestanden; zie api/CLAUDE.md).
+      LLM_PROVIDER: ${{ vars.LLM_PROVIDER }}
+      LLM_MODEL: ${{ vars.LLM_MODEL }}
+      LLM_API_BASE: ${{ vars.LLM_API_BASE }}
+      LLM_API_VERSION: ${{ vars.LLM_API_VERSION }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in bij GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Metadata (tags + labels)
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=ref,event=tag
+            type=sha,format=short
+
+      - name: Buildtijd bepalen
+        id: buildtime
+        run: echo "ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+
+      - name: Build en push
+        id: build
+        uses: docker/build-push-action@v7
+        with:
+          # Context = projectroot: de image bakt de skill-references/scripts mee.
+          context: .
+          file: api/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            GIT_SHA=${{ github.sha }}
+            BUILD_TIME=${{ steps.buildtime.outputs.ts }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          sbom: true
+          provenance: mode=max
+
+      # ── Image-scan (BIO2 / ISO 27002:2022 §8.8) ───────────────────────────────
+      - name: Trivy image-scan (SARIF)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ env.IMAGE }}@${{ steps.build.outputs.digest }}
+          format: sarif
+          output: trivy-results.sarif
+          ignore-unfixed: true
+          vuln-type: os,library
+
+      - name: Upload Trivy-resultaten naar Security-tab
+        if: always()
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: trivy-results.sarif
+
+      - name: Trivy gate (faalt bij CRITICAL)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ env.IMAGE }}@${{ steps.build.outputs.digest }}
+          format: table
+          ignore-unfixed: true
+          severity: CRITICAL
+          exit-code: "1"
+
+      - name: Portainer redeploy via stack-update (pull :latest)
+        if: ${{ github.ref == 'refs/heads/master' && env.PORTAINER_API_KEY != '' && env.PORTAINER_STACK_ID != '' }}
+        env:
+          HEALTH_URL: https://wetsanalyse-api.ipalm.nl/health
+        run: |
+          set -euo pipefail
+          # Secrets (LLM_API_KEY, tokens) leven on-host als bestanden; CI stuurt ze niet mee.
+          if [ -z "${LLM_MODEL:-}" ]; then
+            echo "::error::LLM_MODEL is leeg — zet de repo-variabele vars.LLM_MODEL. Redeploy overgeslagen."
+            exit 1
+          fi
+          payload=$(jq -n \
+            --rawfile compose api/docker-compose.yml \
+            --arg net "$PROXY_NETWORK" \
+            --arg prov "${LLM_PROVIDER:-azure_ai}" \
+            --arg model "$LLM_MODEL" \
+            --arg base "${LLM_API_BASE:-}" \
+            --arg ver "${LLM_API_VERSION:-}" \
+            '{stackFileContent:$compose,
+              env:[{name:"PROXY_NETWORK",value:$net},
+                   {name:"LLM_PROVIDER",value:$prov},
+                   {name:"LLM_MODEL",value:$model},
+                   {name:"LLM_API_BASE",value:$base},
+                   {name:"LLM_API_VERSION",value:$ver}],
+              pullImage:true, prune:false}')
+          # De synchrone stack-update kan langer duren dan de client-timeout; een curl-fout
+          # (timeout) of 5xx betekent NIET dat de deploy mislukte — Portainer draait async door.
+          # Daarom faalt alleen 4xx (config/auth) hier hard; de rest gaat door naar de health-check
+          # hieronder, die bepalend is. (Zonder dit verdubbelde `|| echo "000"` de status tot
+          # "000000", waardoor een geslaagde-maar-trage deploy ten onrechte rood werd gevlagd.)
+          rc=0
+          code=$(curl -sS -X PUT --max-time 300 \
+            "$PORTAINER_URL/api/stacks/$PORTAINER_STACK_ID?endpointId=$PORTAINER_ENDPOINT_ID" \
+            -H "X-API-Key: $PORTAINER_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d "$payload" -o /tmp/portainer-resp.json -w "%{http_code}") || rc=$?
+          echo "redeploy: curl_rc=$rc http=$code"
+          if [ "$rc" -ne 0 ]; then
+            echo "::warning::curl-fout (rc=$rc, bv. timeout) — update draait mogelijk async door; health-check is bepalend."
+          else
+            case "$code" in
+              2*) echo "Stack-update geaccepteerd." ;;
+              4*) echo "::error::Stack-update geweigerd (HTTP $code — config/auth)"; cat /tmp/portainer-resp.json || true; exit 1 ;;
+              *)  echo "::warning::HTTP $code — update draait mogelijk async door; health-check is bepalend." ;;
+            esac
+          fi
+          echo "Health-verificatie op $HEALTH_URL ..."
+          for i in $(seq 1 20); do
+            if curl -fsS --max-time 10 "$HEALTH_URL" -o /dev/null; then
+              echo "Service gezond na redeploy (poging $i)."
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "::error::Service niet gezond na redeploy. Controleer de containerlogs in Portainer."
+          exit 1
