@@ -8,9 +8,12 @@ from __future__ import annotations
 
 import hmac
 
-from fastapi import Header, HTTPException, status
+from fastapi import Depends, HTTPException, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from .config import Settings, get_settings
+
+_bearer = HTTPBearer(auto_error=False)
 
 
 def authenticate(authorization: str | None, settings: Settings) -> str:
@@ -45,6 +48,7 @@ def authenticate(authorization: str | None, settings: Settings) -> str:
     )
 
 
-def require_client(authorization: str | None = Header(default=None)) -> str:
+def require_client(credentials: HTTPAuthorizationCredentials | None = Depends(_bearer)) -> str:
     """FastAPI-dependency: geeft de client_id of werpt 401."""
+    authorization = f"Bearer {credentials.credentials}" if credentials else None
     return authenticate(authorization, get_settings())
