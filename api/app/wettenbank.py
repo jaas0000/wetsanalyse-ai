@@ -17,6 +17,15 @@ class WettenbankError(RuntimeError):
     """Ophalen mislukte of leverde niets — de job moet stoppen, niet doorgaan."""
 
 
+def _diepste_fout(e: BaseException) -> BaseException:
+    """Loop door een (anyio-)ExceptionGroup naar de eigenlijke onderliggende fout."""
+    excs = getattr(e, "exceptions", None)
+    while excs:
+        e = excs[0]
+        excs = getattr(e, "exceptions", None)
+    return e
+
+
 class WettenbankClient:
     def __init__(self, settings: Settings) -> None:
         self.url = settings.mcp_url
@@ -31,7 +40,10 @@ class WettenbankClient:
         except WettenbankError:
             raise
         except Exception as e:  # noqa: BLE001 — alle transportfouten → WettenbankError
-            raise WettenbankError(f"MCP-fout op {tool}: {e}") from e
+            inner = _diepste_fout(e)
+            if isinstance(inner, WettenbankError):
+                raise inner from e
+            raise WettenbankError(f"MCP-fout op {tool}: {inner}") from e
 
     async def _call(self, tool: str, args: dict) -> dict:
         # Lazy import: de mcp-client is alleen nodig bij echt ophalen, niet in elke testopzet.
@@ -43,7 +55,9 @@ class WettenbankClient:
             async with ClientSession(read, write) as session:
                 await session.initialize()
                 result = await session.call_tool(tool, args)
-                return self._parse(tool, result)
+        # Parse ná het sluiten van de sessie: zo wordt een WettenbankError niet in de
+        # anyio-TaskGroup verpakt en propageert de nette melding (bv. "fetch failed").
+        return self._parse(tool, result)
 
     @staticmethod
     def _parse(tool: str, result) -> dict:
