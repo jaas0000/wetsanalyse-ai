@@ -40,7 +40,7 @@ services:
       # Secrets als bestanden op de host (read-only); waarden nooit als plain env var.
       - ${SECRETS_DIR:-/opt/secrets/wetsanalyse-api}:/run/secrets:ro
       # Persistente, met de lokale skill deelbare artefactenmap.
-      - wetsanalyse_analyses:/app/analyses
+      - ${ANALYSES_DIR:-/volume1/docker/wetsanalyse/analyses}:/app/analyses
     networks:
       - proxy
     healthcheck:
@@ -58,6 +58,3 @@ networks:
   proxy:
     external: true
     name: ${PROXY_NETWORK:-homeinfra_internal}
-
-volumes:
-  wetsanalyse_analyses:

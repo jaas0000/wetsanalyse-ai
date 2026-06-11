@@ -63,6 +63,7 @@ jobs:
       LLM_API_BASE: ${{ vars.LLM_API_BASE }}
       LLM_API_VERSION: ${{ vars.LLM_API_VERSION }}
       SECRETS_DIR: ${{ vars.SECRETS_DIR }}
+      ANALYSES_DIR: ${{ vars.ANALYSES_DIR }}
     steps:
       - uses: actions/checkout@v6
 
@@ -152,13 +153,15 @@ jobs:
             --arg base "${LLM_API_BASE:-}" \
             --arg ver "${LLM_API_VERSION:-}" \
             --arg secrets_dir "${SECRETS_DIR:-/volume1/docker/secrets/wetsanalyse-api}" \
+            --arg analyses_dir "${ANALYSES_DIR:-/volume1/docker/wetsanalyse/analyses}" \
             '{stackFileContent:$compose,
               env:[{name:"PROXY_NETWORK",value:$net},
                    {name:"LLM_PROVIDER",value:$prov},
                    {name:"LLM_MODEL",value:$model},
                    {name:"LLM_API_BASE",value:$base},
                    {name:"LLM_API_VERSION",value:$ver},
-                   {name:"SECRETS_DIR",value:$secrets_dir}],
+                   {name:"SECRETS_DIR",value:$secrets_dir},
+                   {name:"ANALYSES_DIR",value:$analyses_dir}],
               pullImage:true, prune:false}')
           # De synchrone stack-update kan langer duren dan de client-timeout; een curl-fout
           # (timeout) of 5xx betekent NIET dat de deploy mislukte — Portainer draait async door.
