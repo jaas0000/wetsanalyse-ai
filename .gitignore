@@ -21,5 +21,6 @@ api/.venv/
 .env
 .env.local
 api/secrets/
+api/docker-compose.override.yml
 api/_data/
 api/spike_act2.json
