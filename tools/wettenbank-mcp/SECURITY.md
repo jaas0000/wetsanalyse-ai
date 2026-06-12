@@ -17,12 +17,16 @@ Operationele documentatie voor de gecontaineriseerde HTTP-deployment, afgestemd 
 | `MCP_AUTH_TOKENS_FILE` | — | Pad naar bestand met de tokenlijst (Docker secret / vault). Voorrang op inline. |
 | `MCP_AUTH_TOKEN_FILE` | — | Pad naar bestand met de legacy enkelvoudtoken. |
 | `OIDC_ISSUER` | — | Zet OIDC-auth aan (bijv. `https://login.example.nl/realms/x`). |
-| `OIDC_JWKS_URI` | `${issuer}/.well-known/jwks.json` | JWKS-endpoint voor signatuurvalidatie. |
-| `OIDC_AUDIENCE` | — | Verwachte `aud`-claim (aanbevolen). |
+| `OIDC_AUDIENCE` | — | Verwachte `aud`-claim. **Verplicht** zodra `OIDC_ISSUER` is gezet: zonder audience-controle accepteert de service ook tokens die de IdP voor een ándere service uitgaf (token-confusion); de server weigert dan te starten. |
+| `OIDC_JWKS_URI` | via discovery | Expliciet JWKS-endpoint (override). Zonder deze wordt het endpoint via OIDC-discovery bepaald: `${issuer}/.well-known/openid-configuration` → `jwks_uri`. |
 | `OIDC_CLIENT_CLAIM` | `azp` | Claim waaruit `clientId` komt; valt terug op `sub`. |
-| `MCP_ALLOW_NO_AUTH` | — | `1` = bewust zonder auth starten (alleen achter vertrouwd netwerk). |
-| `MCP_RATE_BURST` | `60` | Max. burst (emmergrootte) per IP. |
+| `MCP_ALLOW_NO_AUTH` | — | `1` = bewust zonder auth starten (alleen achter vertrouwd netwerk). `startHttpServer` is zelf óók fail-closed (`allowNoAuth`-optie). |
+| `MCP_ALLOWED_HOSTS` | — | Kommagescheiden allowlist voor de `Host`-header op `/mcp` (DNS-rebinding-bescherming); vreemde Host → 403. Leeg = check uit. Aanbevolen: het publieke domein + de interne containernaam. |
+| `MCP_RATE_BURST` | `60` | Max. burst (emmergrootte) per IP. IPv6 wordt per **/64-prefix** gebucket (per-adres limiteren is binnen een /64 gratis te omzeilen); het aantal emmers heeft een hard plafond met LRU-evictie. |
 | `MCP_RATE_PER_MIN` | `120` | Aanvulsnelheid per IP per minuut. |
+| `MCP_RATE_CLIENT_BURST` | `120` | Max. burst per geauthenticeerde `clientId` (tweede limiter, ná auth — één afnemer achter een gedeeld proxy-IP kan de bron anders alsnog overbelasten). |
+| `MCP_RATE_CLIENT_PER_MIN` | `300` | Aanvulsnelheid per `clientId` per minuut. |
+| `WETTENBANK_CACHE_MAX_BYTES` | `67108864` | Totaalbudget (bytes rauwe XML) van de wetstekst-cache; LRU-evictie. |
 | `MCP_TRUSTED_PROXY_HOPS` | `1` | Aantal vertrouwde reverse-proxies dat zelf een `X-Forwarded-For`-waarde toevoegt (NPM = 1). Bepaalt welk XFF-element als client-IP geldt. |
 | `MCP_SESSION_IDLE_MS` | `1800000` | Idle-sessie-opruiming (30 min). |
 | `LOG_LEVEL` | `info` | `debug` \| `info` \| `warn` \| `error`. |
@@ -35,9 +39,14 @@ Tokens horen in een secret-store (Portainer stack-env → bij voorkeur een vault
 
 Per-client bearer-tokens, constant-tijd vergeleken (geen timing-oracle). Elke afnemer heeft een
 eigen `clientId` die in de auditlog belandt, zodat aanroepen herleidbaar zijn. `/health` is
-bewust auth-vrij (healthcheck Portainer/Azure) en geeft naast `status` alleen niet-gevoelige
-build-info terug (`version`, `commit`, `builtAt`) — geen tokens of secrets. TLS wordt door
-Nginx Proxy Manager getermineerd.
+bewust auth-vrij (healthcheck Portainer/Azure) en geeft dan alleen `{"status":"ok"}` terug;
+de build-info (`version`, `commit`, `builtAt`) gaat **alleen** mee bij een geldige statische
+bearer-token — een volledige git-SHA op het publieke domein is fingerprint-informatie.
+`/ready` valt, net als `/mcp`, onder de per-IP-rate-limiter (het triggert upstream-checks).
+Sessies zijn **gebonden aan de client** die ze initialiseerde: een geldig token van client B
+met een (gelekt) sessie-ID van client A krijgt dezelfde 404 als een onbekende sessie, zodat
+sessie-overname én vervuiling van de auditlog (acties van B op naam van A) zijn uitgesloten.
+TLS wordt door Nginx Proxy Manager getermineerd.
 
 **OAuth2/OIDC (optioneel, dormant tenzij `OIDC_ISSUER` is gezet).** Een binnenkomende
 JWT-bearer wordt gevalideerd tegen de IdP: signatuur via JWKS, plus `iss`/`aud`/`exp`/`nbf`.
@@ -46,8 +55,18 @@ file-tokens blijven werken als fallback, zodat migratie geleidelijk kan. Impleme
 `src/oidc.ts` (met de vetted `jose`-library).
 
 **Secret-management.** Tokens kunnen uit een **bestand** komen (`*_FILE`-env) i.p.v. inline env —
-het standaardpatroon voor Docker secrets en vault-agents. Rotatie: vervang een `id:token`-paar
-(of het secret-bestand) en herdeploy; per-client intrekken raakt de andere clients niet.
+het standaardpatroon voor Docker secrets en vault-agents. Een stack-env is zichtbaar in de
+Portainer-UI/API en `docker inspect`; geef daarom de voorkeur aan een gemount tokens-bestand
+(zie `docker-compose.yml`, `MCP_AUTH_TOKENS_FILE`). Een token zónder `id:`-prefix logt een
+`security`-waarschuwing: dat is meestal een typfout die anders stilzwijgend een anonieme,
+werkende token zou opleveren.
+
+**Tokenrotatieprocedure (per client, zonder onderbreking van de rest):**
+1. Genereer een nieuwe token (`openssl rand -base64 32`).
+2. Voeg het nieuwe paar toe naast het oude: `klant:OUD, klant-nieuw:NIEUW` (of werk het
+   tokens-bestand bij) en herdeploy — beide tokens werken nu.
+3. Laat de afnemer overschakelen (controleer in de auditlog dat `klant-nieuw` verschijnt).
+4. Verwijder het oude paar en herdeploy. Intrekken van één client = alleen zijn paar weghalen.
 
 ## Invoer- en uitvoerhardening
 
@@ -111,12 +130,19 @@ nodig; alert-regels (herhaalde 401's, 429-pieken) horen in het SIEM.
 ## CI-borging (ISO 27002 §8.8 kwetsbaarhedenbeheer)
 
 `.github/workflows/docker-publish.yml`:
-- `test`-job (draait op node 26): `npm test` + `npm audit --audit-level=moderate` (faalt bij moderate of hoger).
+- `test`-job (draait op node 26): `npm test`, een **dist-staleness-check** (gecommitte `dist/`
+  moet overeenkomen met `src/`) en `npm audit --audit-level=moderate` (faalt bij moderate of hoger).
 - Trivy image-scan: SARIF → GitHub Security-tab; aparte gate faalt bij `CRITICAL`.
 - SBOM + provenance als attestatie bij de gepushte image.
-- Deploy (Portainer stack-update) **verifieert `/health`** na de redeploy en faalt zichtbaar als de
-  container niet gezond opkomt; tolereert een gateway-timeout (502/504) op de API-call zelf.
+- Deploy (Portainer stack-update) gebeurt **op digest** (`WETTENBANK_IMAGE=ghcr.io/...@sha256:...`):
+  exact de gebouwde, gescande en geattesteerde image draait — niet "wat `:latest` toevallig is".
+  De deploy **verifieert `/health`** na de redeploy en faalt zichtbaar als de container niet
+  gezond opkomt; tolereert een gateway-timeout (502/504) op de API-call zelf.
+- **Wekelijkse rebuild** (`schedule`): verse base-image-layers en apt-security-patches, ook
+  zonder codewijziging.
 - `.github/dependabot.yml`: wekelijkse update-PR's (npm, docker, github-actions).
+- Runtime-hardening in `docker-compose.yml`: `read_only` root-fs (met `tmpfs` voor `/tmp`),
+  `cap_drop: ALL`, `no-new-privileges`, geheugen- en pids-limieten.
 
 ## Bekende restpunten (vervolg)
 
@@ -128,4 +154,12 @@ Het codewerk is afgerond; de resterende punten vergen keuzes/acties bij de afnem
   van de concrete vault/secret-store en een gedocumenteerde rotatieprocedure.
 - **Externe pentest** vóór productie (BIO/NIS2-aantoonbaarheid) — vereist een externe partij;
   voorlopig geparkeerd.
-- Optioneel: IP-allowlist op NPM voor bekende afnemers; `Origin`/DNS-rebinding-check op `/mcp`.
+- **Dedicated proxynetwerk** — op het gedeelde `homeinfra_internal` kan elke andere container de
+  service plaintext op `:3000` bereiken (auth blijft staan, maar tokens reizen daar onversleuteld).
+  Aanbevolen: een netwerk met alléén NPM en deze container.
+- **Supply-chain-pinning** — GitHub Actions zijn op major-tag gepind (Dependabot houdt ze bij) en
+  de base-image op `node:26-slim`; pinning op commit-SHA respectievelijk image-digest is strikter
+  maar vergt geverifieerde hashes en is hier (geen registry-toegang vanuit de werkomgeving) als
+  vervolgactie geparkeerd.
+- Optioneel: IP-allowlist op NPM voor bekende afnemers. De `Host`-check op `/mcp`
+  (`MCP_ALLOWED_HOSTS`) staat default uit — aanzetten in de stack-omgeving wordt aanbevolen.

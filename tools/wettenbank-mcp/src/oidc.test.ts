@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import { generateKeyPair, SignJWT, type CryptoKey } from "jose";
-import { oidcConfigUitEnv, maakOidcVerifier, type OidcConfig } from "./oidc.js";
+import { oidcConfigUitEnv, maakOidcVerifier, ontdekJwksUri, type OidcConfig } from "./oidc.js";
 
 const ISSUER = "https://idp.example.nl/";
 const AUDIENCE = "wettenbank-mcp";
@@ -37,9 +37,18 @@ describe("oidc — config", () => {
     expect(oidcConfigUitEnv({} as NodeJS.ProcessEnv)).toBeNull();
   });
 
-  it("leidt jwksUri af uit de issuer", () => {
-    const cfg = oidcConfigUitEnv({ OIDC_ISSUER: "https://idp.example.nl" } as NodeJS.ProcessEnv);
-    expect(cfg?.jwksUri).toBe("https://idp.example.nl/.well-known/jwks.json");
+  it("weigert te starten met OIDC_ISSUER zonder OIDC_AUDIENCE (token-confusion)", () => {
+    expect(() =>
+      oidcConfigUitEnv({ OIDC_ISSUER: "https://idp.example.nl" } as NodeJS.ProcessEnv)
+    ).toThrow(/OIDC_AUDIENCE is verplicht/);
+  });
+
+  it("laat jwksUri leeg zonder OIDC_JWKS_URI (→ discovery) en defaultt clientClaim", () => {
+    const cfg = oidcConfigUitEnv({
+      OIDC_ISSUER: "https://idp.example.nl",
+      OIDC_AUDIENCE: AUDIENCE,
+    } as NodeJS.ProcessEnv);
+    expect(cfg?.jwksUri).toBeUndefined();
     expect(cfg?.clientClaim).toBe("azp");
   });
 
@@ -102,5 +111,28 @@ describe("oidc — verifier", () => {
     expect(await maak().verifieer(undefined)).toBeNull();
     expect(await maak().verifieer("Basic abc")).toBeNull();
     expect(await maak().verifieer("Bearer ")).toBeNull();
+  });
+});
+
+describe("oidc — discovery", () => {
+  const maakRespons = (body: unknown, ok = true, status = 200): Response =>
+    ({ ok, status, json: async () => body } as unknown as Response);
+
+  it("vindt jwks_uri via /.well-known/openid-configuration", async () => {
+    const aanroepen: string[] = [];
+    const fetchMock = (async (url: string) => {
+      aanroepen.push(url);
+      return maakRespons({ jwks_uri: "https://idp.example.nl/protocol/openid-connect/certs" });
+    }) as never;
+    const uri = await ontdekJwksUri("https://idp.example.nl", fetchMock);
+    expect(aanroepen).toEqual(["https://idp.example.nl/.well-known/openid-configuration"]);
+    expect(uri).toBe("https://idp.example.nl/protocol/openid-connect/certs");
+  });
+
+  it("faalt expliciet bij een HTTP-fout of ontbrekende jwks_uri", async () => {
+    const fout = (async () => maakRespons({}, false, 503)) as never;
+    await expect(ontdekJwksUri("https://idp.example.nl", fout)).rejects.toThrow(/HTTP 503/);
+    const leeg = (async () => maakRespons({ geen: "jwks" })) as never;
+    await expect(ontdekJwksUri("https://idp.example.nl", leeg)).rejects.toThrow(/geen jwks_uri/);
   });
 });

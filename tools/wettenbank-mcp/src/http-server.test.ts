@@ -1,7 +1,12 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import type { AddressInfo } from "node:net";
 import type { Server as HttpServer } from "node:http";
-import { startHttpServer, kiesClientIp } from "./http-server.js";
+import {
+  startHttpServer,
+  kiesClientIp,
+  hostZonderPoort,
+  leesAllowedHosts,
+} from "./http-server.js";
 import { maakRateLimiter } from "./rate-limit.js";
 
 const TOKEN = "test-token-123";
@@ -44,8 +49,17 @@ describe("kiesClientIp (X-Forwarded-For)", () => {
 });
 
 describe("http-server", () => {
-  it("/health geeft 200 zonder auth, met build-info", async () => {
+  it("/health geeft 200 zonder auth, maar zónder build-info (geen publieke SHA)", async () => {
     const res = await fetch(`${baseUrl}/health`);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body).toEqual({ status: "ok" });
+  });
+
+  it("/health geeft build-info wél met een geldige token", async () => {
+    const res = await fetch(`${baseUrl}/health`, {
+      headers: { authorization: `Bearer ${TOKEN}` },
+    });
     expect(res.status).toBe(200);
     const body = (await res.json()) as Record<string, unknown>;
     expect(body).toMatchObject({ status: "ok" });
@@ -340,5 +354,211 @@ describe("http-server — rate limiting", () => {
       statussen.push(res.status);
     }
     expect(statussen[2]).toBe(429); // derde request over de limiet
+  });
+});
+
+// ── Nieuwe security-gedragingen ───────────────────────────────────────────────
+
+async function initSessie(url: string, token: string): Promise<string | null> {
+  const res = await fetch(`${url}/mcp`, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${token}`,
+      "content-type": "application/json",
+      accept: "application/json, text/event-stream",
+    },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "initialize",
+      params: {
+        protocolVersion: "2024-11-05",
+        capabilities: {},
+        clientInfo: { name: "test", version: "0.0.0" },
+      },
+    }),
+  });
+  const sid = res.headers.get("mcp-session-id");
+  await res.body?.cancel().catch(() => {});
+  return sid;
+}
+
+describe("http-server — sessie gebonden aan client", () => {
+  let server: HttpServer;
+  let url: string;
+
+  beforeAll(async () => {
+    server = startHttpServer({
+      port: 0,
+      clients: [
+        { id: "client-a", token: "tok-a" },
+        { id: "client-b", token: "tok-b" },
+      ],
+    });
+    await new Promise<void>((r) => server.once("listening", () => r()));
+    url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  });
+
+  afterAll(async () => {
+    await new Promise<void>((r) => server.close(() => r()));
+  });
+
+  it("weigert een sessie-ID van een andere client (404, als onbekend)", async () => {
+    const sid = await initSessie(url, "tok-a");
+    expect(sid).toBeTruthy();
+
+    const alsB = await fetch(`${url}/mcp`, {
+      method: "POST",
+      headers: {
+        authorization: "Bearer tok-b",
+        "content-type": "application/json",
+        "mcp-session-id": sid!,
+      },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/list" }),
+    });
+    expect(alsB.status).toBe(404);
+
+    // De rechtmatige eigenaar kan de sessie wél blijven gebruiken.
+    const alsA = await fetch(`${url}/mcp`, {
+      method: "POST",
+      headers: {
+        authorization: "Bearer tok-a",
+        "content-type": "application/json",
+        accept: "application/json, text/event-stream",
+        "mcp-session-id": sid!,
+      },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 3, method: "tools/list" }),
+    });
+    expect(alsA.status).not.toBe(404);
+    await alsA.body?.cancel().catch(() => {});
+  });
+});
+
+describe("http-server — Host-validatie (DNS-rebinding)", () => {
+  let server: HttpServer;
+  let url: string;
+
+  beforeAll(async () => {
+    server = startHttpServer({
+      port: 0,
+      token: TOKEN,
+      allowedHosts: ["127.0.0.1"],
+    });
+    await new Promise<void>((r) => server.once("listening", () => r()));
+    url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  });
+
+  afterAll(async () => {
+    await new Promise<void>((r) => server.close(() => r()));
+  });
+
+  it("accepteert de geconfigureerde host en weigert een vreemde Host-header", async () => {
+    const goed = await fetch(`${url}/mcp`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${TOKEN}`, "content-type": "application/json" },
+      body: "{}",
+    });
+    expect(goed.status).not.toBe(403);
+
+    // fetch (undici) staat geen handmatige Host-header toe; gebruik node:http.
+    const { request } = await import("node:http");
+    const status = await new Promise<number>((resolve, reject) => {
+      const r = request(
+        `${url}/mcp`,
+        {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${TOKEN}`,
+            "content-type": "application/json",
+            host: "rebind.aanvaller.example",
+          },
+        },
+        (res) => {
+          res.resume();
+          resolve(res.statusCode ?? 0);
+        }
+      );
+      r.on("error", reject);
+      r.end("{}");
+    });
+    expect(status).toBe(403);
+  });
+
+  it("hostZonderPoort strips poort en IPv6-blokhaken", () => {
+    expect(hostZonderPoort("example.nl:3000")).toBe("example.nl");
+    expect(hostZonderPoort("example.nl")).toBe("example.nl");
+    expect(hostZonderPoort("[::1]:3000")).toBe("::1");
+    expect(hostZonderPoort(undefined)).toBe("");
+  });
+
+  it("leesAllowedHosts parseert en normaliseert MCP_ALLOWED_HOSTS", () => {
+    expect(
+      leesAllowedHosts({ MCP_ALLOWED_HOSTS: "Wettenbank-MCP.ipalm.nl, intern " } as NodeJS.ProcessEnv)
+    ).toEqual(["wettenbank-mcp.ipalm.nl", "intern"]);
+    expect(leesAllowedHosts({} as NodeJS.ProcessEnv)).toEqual([]);
+  });
+});
+
+describe("http-server — per-client rate limiting", () => {
+  let server: HttpServer;
+  let url: string;
+
+  beforeAll(async () => {
+    server = startHttpServer({
+      port: 0,
+      token: "t",
+      rateLimiter: maakRateLimiter({ capaciteit: 100, perSeconde: 0 }),
+      clientRateLimiter: maakRateLimiter({ capaciteit: 2, perSeconde: 0 }),
+    });
+    await new Promise<void>((r) => server.once("listening", () => r()));
+    url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  });
+
+  afterAll(async () => {
+    await new Promise<void>((r) => server.close(() => r()));
+  });
+
+  it("begrenst per geauthenticeerde clientId, los van het IP", async () => {
+    const doe = () =>
+      fetch(`${url}/mcp`, {
+        method: "POST",
+        headers: { authorization: "Bearer t", "content-type": "application/json" },
+        body: "{}",
+      });
+    expect((await doe()).status).not.toBe(429);
+    expect((await doe()).status).not.toBe(429);
+    expect((await doe()).status).toBe(429);
+  });
+});
+
+describe("http-server — fail-closed zonder auth", () => {
+  it("weigert te starten zonder tokens/OIDC tenzij allowNoAuth", async () => {
+    expect(() => startHttpServer({ port: 0 })).toThrow(/geen enkele authenticatie/);
+
+    const open = startHttpServer({ port: 0, allowNoAuth: true });
+    await new Promise<void>((r) => open.once("listening", () => r()));
+    await new Promise<void>((r) => open.close(() => r()));
+  });
+});
+
+describe("http-server — body-cap in bytes", () => {
+  it("weigert een multibyte-payload die in karakters onder maar in bytes boven de cap zit", async () => {
+    // 550.000 × 'é' = 550k karakters maar ~1,1 MB UTF-8: een karakter-telling zou dit
+    // doorlaten, de byte-telling hoort te weigeren.
+    const body = `"${"é".repeat(550_000)}"`;
+    let status = 0;
+    try {
+      const res = await fetch(`${baseUrl}/mcp`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${TOKEN}`, "content-type": "application/json" },
+        body,
+      });
+      status = res.status;
+    } catch {
+      // req.destroy() kan de verbinding verbreken vóór de 400 geschreven is.
+      status = -1;
+    }
+    expect(status).not.toBe(200);
+    expect([400, -1]).toContain(status);
   });
 });

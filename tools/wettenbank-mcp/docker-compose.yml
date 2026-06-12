@@ -9,18 +9,35 @@
 # Per-client bearer-tokens regelen de authenticatie; TLS regelt NPM.
 #
 # Stack-omgeving (in Portainer):
-#   MCP_AUTH_TOKENS — per-client tokens als `id:token`-lijst (komma-gescheiden), bijv.
-#                     `belastingdienst:sterk-geheim, analist-jan:ander-geheim`.
-#                     Clients sturen hun token als `Authorization: Bearer <token>`.
-#                     Elke client krijgt een eigen `clientId` in de auditlog en is los
-#                     intrekbaar/roteerbaar. (Legacy enkelvoud MCP_AUTH_TOKEN werkt nog
-#                     als fallback, maar wordt afgeraden.)
-#   PROXY_NETWORK   — naam van het bestaande NPM-netwerk; hier `homeinfra_internal`
-#                     (het `internal`-netwerk van de homeinfra-stack waar NPM op zit).
+#   WETTENBANK_IMAGE  — volledige image-referentie. CI zet hier de digest-referentie
+#                       (ghcr.io/...@sha256:...) van precies de gebouwde, gescande en
+#                       geattesteerde image; default is :latest voor handmatige deploys.
+#   MCP_AUTH_TOKENS   — per-client tokens als `id:token`-lijst (komma-gescheiden), bijv.
+#                       `belastingdienst:sterk-geheim, analist-jan:ander-geheim`.
+#                       Clients sturen hun token als `Authorization: Bearer <token>`.
+#                       Elke client krijgt een eigen `clientId` in de auditlog en is los
+#                       intrekbaar/roteerbaar. (Legacy enkelvoud MCP_AUTH_TOKEN werkt nog
+#                       als fallback, maar wordt afgeraden.)
+#                       LET OP: een stack-env is zichtbaar in de Portainer-UI/API en
+#                       `docker inspect`. Veiliger is een gemount bestand via
+#                       MCP_AUTH_TOKENS_FILE (zie hieronder en SECURITY.md, tokenrotatie).
+#   MCP_AUTH_TOKENS_FILE — pad ín de container naar een tokens-bestand (zelfde formaat).
+#                       Heeft voorrang op MCP_AUTH_TOKENS. Mount het bestand zelf, bv.:
+#                         volumes: ["/opt/secrets/wettenbank-tokens:/run/secrets/mcp_auth_tokens:ro"]
+#                         MCP_AUTH_TOKENS_FILE: /run/secrets/mcp_auth_tokens
+#   MCP_ALLOWED_HOSTS — kommagescheiden allowlist voor de Host-header op /mcp
+#                       (DNS-rebinding-bescherming). Aanbevolen:
+#                       `wettenbank-mcp.ipalm.nl,wettenbank-mcp`. Leeg = check uit.
+#   PROXY_NETWORK     — naam van het bestaande NPM-netwerk; hier `homeinfra_internal`
+#                       (het `internal`-netwerk van de homeinfra-stack waar NPM op zit).
+#                       Aanbeveling: gebruik een dedicated netwerk met alléén NPM en deze
+#                       container — op een gedeeld netwerk kan elke andere container de
+#                       service plaintext op :3000 bereiken (auth blijft staan, maar
+#                       tokens reizen daar onversleuteld).
 
 services:
   wettenbank-mcp:
-    image: ghcr.io/palmw01/wettenbank-mcp:latest
+    image: ${WETTENBANK_IMAGE:-ghcr.io/palmw01/wettenbank-mcp:latest}
     container_name: wettenbank-mcp
     restart: unless-stopped
     expose:
@@ -28,9 +45,23 @@ services:
     environment:
       MCP_TRANSPORT: http
       PORT: "3000"
-      MCP_AUTH_TOKENS: ${MCP_AUTH_TOKENS:?zet MCP_AUTH_TOKENS (id:token,...) in de stack-omgeving}
+      MCP_AUTH_TOKENS: ${MCP_AUTH_TOKENS:-}
+      MCP_AUTH_TOKENS_FILE: ${MCP_AUTH_TOKENS_FILE:-}
+      MCP_ALLOWED_HOSTS: ${MCP_ALLOWED_HOSTS:-}
     networks:
       - proxy
+    # Runtime-hardening: de Node-app heeft geen schrijfbaar root-fs, capabilities of
+    # privilege-escalatie nodig; geheugen-/proceslimieten begrenzen een ontspoorde
+    # parse van een zeer grote wet (cache-budget: WETTENBANK_CACHE_MAX_BYTES).
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 1g
+    pids_limit: 256
     healthcheck:
       test:
         - CMD

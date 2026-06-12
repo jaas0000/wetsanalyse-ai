@@ -16,6 +16,11 @@ on:
       - "!tools/wettenbank-mcp/**/*.md"
       - "!tools/wettenbank-mcp/*.md"
       - ".github/workflows/docker-publish.yml"
+  # Wekelijkse rebuild: verse base-image-layers en apt-security-patches, ook zonder
+  # codewijziging (de Dockerfile draait `apt-get upgrade` — versheid hangt aan de
+  # rebuild-cadans). Maandagochtend, vóór werktijd.
+  schedule:
+    - cron: "17 5 * * 1"
   workflow_dispatch:
 
 env:
@@ -45,6 +50,13 @@ jobs:
           cache-dependency-path: tools/wettenbank-mcp/package-lock.json
       - run: npm ci
       - run: npm test
+      - name: dist/ actueel? (gecommitte build mag niet driften van src/)
+        run: |
+          npm run build
+          git diff --exit-code -- dist || {
+            echo "::error::dist/ wijkt af van src/ — draai 'npm run build' en commit dist/ mee."
+            exit 1
+          }
       - name: npm audit (faalt bij moderate of hoger)
         run: npm audit --omit=dev --audit-level=moderate
 
@@ -138,10 +150,14 @@ jobs:
           severity: CRITICAL
           exit-code: "1"
 
-      - name: Portainer redeploy via stack-update (pull :latest)
+      - name: Portainer redeploy via stack-update (op digest)
         if: ${{ github.ref == 'refs/heads/master' && env.PORTAINER_API_KEY != '' }}
         env:
           HEALTH_URL: https://wettenbank-mcp.ipalm.nl/health
+          # Deploy exact de zojuist gebouwde, gescande en geattesteerde image — niet
+          # "wat :latest op dat moment toevallig is". Een gecompromitteerd registry-token
+          # kan zo niet ongemerkt een andere image laten draaien.
+          IMAGE_DIGEST_REF: ${{ env.IMAGE }}@${{ steps.build.outputs.digest }}
         run: |
           set -euo pipefail
           # Fail-fast: deploy geen stack zonder token. Een lege MCP_AUTH_TOKENS zou de
@@ -154,8 +170,10 @@ jobs:
             --rawfile compose tools/wettenbank-mcp/docker-compose.yml \
             --arg tok "$MCP_AUTH_TOKENS" \
             --arg net "$PROXY_NETWORK" \
+            --arg img "$IMAGE_DIGEST_REF" \
             '{stackFileContent:$compose,
-              env:[{name:"MCP_AUTH_TOKENS",value:$tok},{name:"PROXY_NETWORK",value:$net}],
+              env:[{name:"MCP_AUTH_TOKENS",value:$tok},{name:"PROXY_NETWORK",value:$net},
+                   {name:"WETTENBANK_IMAGE",value:$img}],
               pullImage:true, prune:false}')
           # De synchrone stack-update kan langer duren dan de client-timeout; een curl-fout
           # (timeout) of 5xx betekent NIET dat de deploy mislukte — Portainer draait async door.
