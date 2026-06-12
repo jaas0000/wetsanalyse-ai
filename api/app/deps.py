@@ -8,6 +8,7 @@ import logging
 from functools import lru_cache
 
 from .config import get_settings
+from .jobstore import JobStore
 from .mongo_store import MongoStore
 from .wettenbank import WettenbankClient
 
@@ -34,7 +35,7 @@ def schedule(coro) -> None:
 
 
 @lru_cache
-def get_store() -> MongoStore:
+def get_store() -> JobStore:
     return MongoStore(get_settings())
 
 

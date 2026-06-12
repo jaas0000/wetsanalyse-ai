@@ -97,6 +97,59 @@ async def test_bwbid_verplicht(engine):
         await engine.create_job(StartRequest(artikel="1"), "test")
 
 
+async def test_max_active_jobs_quota(settings, store):
+    """Een client kan niet meer dan max_active_jobs lopende analyses tegelijk starten."""
+    from app.ratelimit import QuotaExceeded
+
+    settings.max_active_jobs = 2
+    eng = WetsanalyseEngine(settings, store, FakeLLM(), FakeWettenbank())
+    await eng.create_job(StartRequest(bwbId="BWBR1", artikel="1"), "klant")
+    await eng.create_job(StartRequest(bwbId="BWBR1", artikel="2"), "klant")
+    with pytest.raises(QuotaExceeded):
+        await eng.create_job(StartRequest(bwbId="BWBR1", artikel="3"), "klant")
+    # Een andere client wordt niet geraakt.
+    await eng.create_job(StartRequest(bwbId="BWBR1", artikel="1"), "andere-klant")
+
+
+async def test_token_budget_stopt_job(settings, store):
+    """Overschrijdt een analyse het token-budget, dan stopt de job met FoutKlasse.quota."""
+    from dataclasses import replace
+
+    from app.llm.base import LLMResult
+
+    class TokenHungryLLM(FakeLLM):
+        async def complete(self, system, user, schema=None) -> LLMResult:
+            res = await super().complete(system, user, schema)
+            return replace(res, tokens_out=1000)
+
+    settings.llm_token_budget = 500
+    eng = WetsanalyseEngine(settings, store, TokenHungryLLM(), FakeWettenbank())
+    job = await eng.create_job(_start_req(review=False), "test")
+    await eng.run_initial(job.id)
+
+    job = await store.load_job(job.id)
+    assert job.state == JobState.fout
+    assert job.error.klasse.value == "quota"
+
+
+async def test_autocorrectie_negeert_zachte_schemafouten(settings, store, monkeypatch):
+    """Zachte schemafouten mogen geen (dure) hergeneratie triggeren — alleen brongetrouwheid wel."""
+    import app.engine.orchestrator as orch
+
+    settings.max_autocorrectie = 2
+    monkeypatch.setattr(orch, "brongetrouwheid_check", lambda d, a: [])
+    monkeypatch.setattr(orch, "schema_check", lambda d, a: (["zachte schemafout"], []))
+
+    llm = FakeLLM()
+    eng = WetsanalyseEngine(settings, store, llm, FakeWettenbank())
+    job = await eng.create_job(_start_req(review=False), "test")
+    await eng.run_initial(job.id)
+
+    # Eén call voor act2 + één voor act3; geen extra hergeneratie ondanks de zachte fout.
+    assert llm.calls == 2
+    assert (await store.load_job(job.id)).state == JobState.klaar
+
+
 async def test_transiente_mcp_fout_wordt_geretryed(settings, store):
     """Een transiënte MCP-fout op de eerste poging mag de job niet terminaal laten falen."""
     settings.transient_max_retries = 2
@@ -144,7 +197,7 @@ async def test_create_job_retryt_bij_duplicate(engine, store, monkeypatch):
 async def test_create_job_uitputting_werpt_idconflict(engine, store, monkeypatch):
     from pymongo.errors import DuplicateKeyError
 
-    from app.mongo_store import IdConflict
+    from app.jobstore import IdConflict
 
     async def altijd_duplicate(job):
         raise DuplicateKeyError("E11000 duplicate key")

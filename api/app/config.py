@@ -78,7 +78,9 @@ class Settings:
         self.default_model_profile = os.environ.get("LLM_DEFAULT_PROFILE", "azure-sonnet")
 
         # --- MongoDB ---
-        self.mongodb_url = os.environ.get("MONGODB_URL", "mongodb://localhost:27017")
+        # Connection string via secret (MONGODB_URL_FILE) zodat ingebedde credentials niet als
+        # plain env in de container/Portainer-UI staan; valt terug op MONGODB_URL voor lokaal.
+        self.mongodb_url = _read_secret("MONGODB_URL") or "mongodb://localhost:27017"
         self.mongodb_db = os.environ.get("MONGODB_DB", "wetsanalyse")
 
         # --- CORS ---
@@ -95,6 +97,16 @@ class Settings:
         # Bounded retry op transiënte LLM/MCP-fouten (429/5xx/timeout) vóór terminale `fout`.
         self.transient_max_retries = int(os.environ.get("WETSANALYSE_TRANSIENT_MAX_RETRIES", "2"))
         self.transient_backoff_s = float(os.environ.get("WETSANALYSE_TRANSIENT_BACKOFF", "0.5"))
+
+        # --- Misbruik-/kostenbeheersing (0 = uit) ---
+        # Per-client request-rate op de muterende endpoints.
+        self.rate_limit_max = int(os.environ.get("WETSANALYSE_RATE_LIMIT_MAX", "30"))
+        self.rate_limit_window_s = float(os.environ.get("WETSANALYSE_RATE_LIMIT_WINDOW", "60"))
+        # Max gelijktijdig lopende (niet-terminale) analyses per client.
+        self.max_active_jobs = int(os.environ.get("WETSANALYSE_MAX_ACTIVE_JOBS", "5"))
+        # Token-budget per analyse; bij overschrijding stopt de job (FoutKlasse.quota).
+        self.llm_token_budget = int(os.environ.get("WETSANALYSE_LLM_TOKEN_BUDGET", "0"))
+
         self.analyses_dir = Path(
             os.environ.get("WETSANALYSE_ANALYSES_DIR", str(ANALYSES_DIR))
         )

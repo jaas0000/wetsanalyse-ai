@@ -16,9 +16,14 @@ from __future__ import annotations
 import logging
 
 from ..config import Settings
-from ..contracts import FoutKlasse, Job, JobFout, JobState, RondeProvenance, REVIEW_STATES, StartRequest
+from ..contracts import (
+    FoutKlasse, Job, JobFout, JobState, RondeProvenance,
+    REVIEW_STATES, TERMINAL_STATES, StartRequest,
+)
 from ..llm.base import LLMClient, LLMError
-from ..mongo_store import IdConflict, MongoStore, lock_for
+from ..concurrency import lock_for
+from ..jobstore import IdConflict, JobStore
+from ..ratelimit import QuotaExceeded
 from ..rapport import bouw_rapport_async
 from ..validation import brongetrouwheid_check, schema_check
 from ..wettenbank import WettenbankClient, WettenbankError, map_artikel_naar_analyse_basis
@@ -31,7 +36,7 @@ BASIS_KEYS = ("wet", "bwbId", "artikel", "versiedatum", "bronreferentie", "pad",
 
 
 class WetsanalyseEngine:
-    def __init__(self, settings: Settings, store: MongoStore, llm: LLMClient, wb: WettenbankClient) -> None:
+    def __init__(self, settings: Settings, store: JobStore, llm: LLMClient, wb: WettenbankClient) -> None:
         self.s = settings
         self.store = store
         self.llm = llm
@@ -47,6 +52,7 @@ class WetsanalyseEngine:
         if not req.bwbId:
             raise ValueError("bwbId is verplicht in v1 (wet-only resolutie is roadmap).")
         self.s.resolve_profile(req.model_profile)
+        await self._check_active_quota(client_id)
         naam = req.naam or f"Art. {req.artikel}{f' lid {req.lid}' if req.lid else ''}"
         # Begrensde retry: twee gelijktijdige identieke POSTs kunnen dezelfde vrije slug zien;
         # de unique index laat er één winnen, de ander leidt een nieuwe slug af.
@@ -77,6 +83,7 @@ class WetsanalyseEngine:
         if not req.bwbId:
             raise ValueError("bwbId is verplicht in v1 (wet-only resolutie is roadmap).")
         self.s.resolve_profile(req.model_profile)
+        await self._check_active_quota(client_id)
         # Begrensde retry tegen de gelijktijdige-aanmaak-race (zie create_project). insert_job
         # maakt altijd een nieuw document, zodat de tweede POST geen bestaand project overschrijft.
         for _ in range(5):
@@ -180,6 +187,15 @@ class WetsanalyseEngine:
     # --- generatie van één ronde (incl. auto-correctie) -------------------
 
     async def _genereer(self, job, activiteit, ronde, basis, vorige, feedback, act2=None) -> None:
+        if self.s.llm_token_budget > 0:
+            gebruikt = sum(p.tokens_in + p.tokens_out for p in job.provenance)
+            if gebruikt >= self.s.llm_token_budget:
+                await self._fail(
+                    job, f"act{activiteit}", FoutKlasse.quota,
+                    f"LLM-tokenbudget ({self.s.llm_token_budget}) overschreden na {gebruikt} tokens.",
+                )
+                return
+
         async def maak():
             if feedback is not None:
                 return await steps.herzie(self.llm, activiteit, basis, ronde, vorige, feedback)
@@ -189,9 +205,10 @@ class WetsanalyseEngine:
 
         analyse, prov = await self._met_retry(maak)
         pogingen = 0
-        while pogingen < self.s.max_autocorrectie:
-            if not brongetrouwheid_check(analyse, activiteit) and not schema_check(analyse, activiteit)[0]:
-                break
+        # Auto-correctie regenereert UITSLUITEND op harde brongetrouwheid-schendingen. Zachte
+        # schema-fouten blokkeren per ontwerp niet en mogen geen (dure) hergeneratie triggeren;
+        # ze reizen als waarschuwing mee naar het checkpoint.
+        while pogingen < self.s.max_autocorrectie and brongetrouwheid_check(analyse, activiteit):
             pogingen += 1
             analyse, prov = await self._met_retry(maak)
 
@@ -253,6 +270,17 @@ class WetsanalyseEngine:
         return "\n".join(f"- {p}" for p in punten) if punten else ""
 
     # --- helpers ----------------------------------------------------------
+
+    async def _check_active_quota(self, client_id: str) -> None:
+        """Weiger een nieuwe analyse als de client al te veel lopende (niet-terminale) heeft."""
+        if self.s.max_active_jobs <= 0:
+            return
+        jobs = await self.store.list_jobs(client_id)
+        actief = sum(1 for j in jobs if j.state not in TERMINAL_STATES)
+        if actief >= self.s.max_active_jobs:
+            raise QuotaExceeded(
+                f"Te veel lopende analyses (max {self.s.max_active_jobs}); wacht tot er één klaar is."
+            )
 
     async def _met_retry(self, maak):
         """Bounded retry op transiënte LLM/MCP-fouten met de geconfigureerde knoppen."""

@@ -1,15 +1,18 @@
-"""Project-endpoints — CRUD + SSE voor real-time state-updates.
+"""De kanonieke analyse-resource (gemount onder /v1/projects) — CRUD + SSE state-updates.
 
-POST /projects  — maak project aan en start analyse (202)
-GET  /projects  — lijst alle projecten (beknopt)
-GET  /projects/{id}  — volledig project-object
-DELETE /projects/{id}  — verwijder (alleen terminal state, anders 409)
-POST /projects/{id}/feedback  — review-feedback
-POST /projects/{id}/retry  — herstart vanuit fout
-GET  /projects/{id}/rapport  — rapport JSON
-GET  /projects/{id}/rapport.md  — rapport Markdown
-GET  /projects/{id}/ronde/{act}/{n}  — analyse-JSON van één ronde
-GET  /projects/{id}/events  — SSE state-updates (max 10 min)
+Eén URL-conventie voor sub-resources (`/ronde/{act}/{n}`). Vervangt de eerdere losse
+/analyses-router (geconsolideerd: één resource, geen dubbele oppervlakte).
+
+POST   /v1/projects                     — maak project aan en start analyse (202 + Location)
+GET    /v1/projects?limit=&offset=      — lijst eigen projecten (beknopt, gepagineerd)
+GET    /v1/projects/{id}                — volledig project-object
+DELETE /v1/projects/{id}                — verwijder (alleen terminal state, anders 409)
+POST   /v1/projects/{id}/feedback       — review-feedback
+POST   /v1/projects/{id}/retry          — herstart vanuit fout
+GET    /v1/projects/{id}/rapport        — rapport JSON
+GET    /v1/projects/{id}/rapport.md     — rapport Markdown
+GET    /v1/projects/{id}/ronde/{act}/{n} — analyse-JSON van één ronde
+GET    /v1/projects/{id}/events         — SSE state-updates (max 10 min)
 """
 
 from __future__ import annotations
@@ -17,18 +20,22 @@ from __future__ import annotations
 import asyncio
 import json
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from fastapi.responses import PlainTextResponse, StreamingResponse
 
 from ..auth import require_client
-from ..contracts import Feedback, JobState, REVIEW_STATES, TERMINAL_STATES, StartRequest
+from ..contracts import (
+    CreateAccepted, Feedback, FeedbackAccepted, Job, JobState, JobSummary,
+    Rapport, REVIEW_STATES, TERMINAL_STATES, StartRequest,
+)
 from ..deps import get_engine, get_store, schedule
-from ..mongo_store import IdConflict
+from ..jobstore import IdConflict, JobStore
+from ..ratelimit import QuotaExceeded, rate_limited_client
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
 
-async def _project_or_404(store, project_id: str, client_id: str):
+async def _project_or_404(store: JobStore, project_id: str, client_id: str):
     """Laadt het project en dwingt eigenaarschap af. 404 (niet 403) bij mismatch, zodat
     het bestaan van andermans projecten niet lekt."""
     p = await store.load_project(project_id)
@@ -37,39 +44,44 @@ async def _project_or_404(store, project_id: str, client_id: str):
     return p
 
 
-@router.post("", status_code=status.HTTP_202_ACCEPTED)
-async def maak_project(req: StartRequest, client_id: str = Depends(require_client)):
+@router.post("", status_code=status.HTTP_202_ACCEPTED, response_model=CreateAccepted)
+async def maak_project(
+    req: StartRequest, response: Response, client_id: str = Depends(rate_limited_client)
+):
     try:
         engine = get_engine()
     except RuntimeError as e:
         raise HTTPException(status_code=503, detail=f"Engine niet beschikbaar: {e}")
     try:
         project = await engine.create_project(req, client_id)
+    except QuotaExceeded as e:
+        raise HTTPException(status_code=429, detail=str(e))
     except IdConflict as e:
         raise HTTPException(status_code=409, detail=str(e))
     except (ValueError, KeyError) as e:
         raise HTTPException(status_code=400, detail=str(e))
     schedule(engine.run_initial(project.slug))
-    return {"id": project.slug, "naam": project.naam, "state": project.state}
+    response.headers["Location"] = f"/v1/projects/{project.slug}"
+    return CreateAccepted(id=project.slug, naam=project.naam, state=project.state)
 
 
-@router.get("")
-async def lijst_projecten(client_id: str = Depends(require_client)):
-    projects = await get_store().list_projects(client_id)
+@router.get("", response_model=list[JobSummary])
+async def lijst_projecten(
+    client_id: str = Depends(require_client),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+):
+    projects = await get_store().list_projects(client_id, limit=limit, offset=offset)
     return [
-        {
-            "id": p.slug,
-            "naam": p.naam,
-            "state": p.state,
-            "bwbId": p.bwbId,
-            "artikel": p.artikel,
-            "updated": p.updated.isoformat(),
-        }
+        JobSummary(
+            id=p.slug, naam=p.naam, state=p.state,
+            bwbId=p.bwbId, artikel=p.artikel, updated=p.updated.isoformat(),
+        )
         for p in projects
     ]
 
 
-@router.get("/{project_id}")
+@router.get("/{project_id}", response_model=Job)
 async def project_detail(project_id: str, client_id: str = Depends(require_client)):
     p = await _project_or_404(get_store(), project_id, client_id)
     return p.to_job()
@@ -87,8 +99,8 @@ async def verwijder_project(project_id: str, client_id: str = Depends(require_cl
     await store.delete_project(project_id)
 
 
-@router.post("/{project_id}/feedback", status_code=status.HTTP_202_ACCEPTED)
-async def geef_feedback(project_id: str, feedback: Feedback, client_id: str = Depends(require_client)):
+@router.post("/{project_id}/feedback", status_code=status.HTTP_202_ACCEPTED, response_model=FeedbackAccepted)
+async def geef_feedback(project_id: str, feedback: Feedback, client_id: str = Depends(rate_limited_client)):
     store = get_store()
     p = await _project_or_404(store, project_id, client_id)
     job = p.to_job()
@@ -98,20 +110,21 @@ async def geef_feedback(project_id: str, feedback: Feedback, client_id: str = De
     if feedback.activiteit != verwacht:
         raise HTTPException(status_code=400, detail=f"Feedback voor activiteit {verwacht} verwacht")
     schedule(get_engine().apply_feedback(project_id, feedback))
-    return {"id": project_id, "state": job.state, "ronde": job.current_ronde}
+    # State/ronde zijn de pre-transitie-waarden; de overgang draait async.
+    return FeedbackAccepted(id=project_id, state=job.state, ronde=job.current_ronde)
 
 
-@router.post("/{project_id}/retry", status_code=status.HTTP_202_ACCEPTED)
-async def retry_project(project_id: str, client_id: str = Depends(require_client)):
+@router.post("/{project_id}/retry", status_code=status.HTTP_202_ACCEPTED, response_model=CreateAccepted)
+async def retry_project(project_id: str, client_id: str = Depends(rate_limited_client)):
     store = get_store()
     p = await _project_or_404(store, project_id, client_id)
     if p.state != JobState.fout:
         raise HTTPException(status_code=409, detail=f"Retry alleen vanuit fout; nu: {p.state}")
     schedule(get_engine().retry(project_id))
-    return {"id": project_id, "state": "queued"}
+    return CreateAccepted(id=project_id, naam=p.naam, state=JobState.queued)
 
 
-@router.get("/{project_id}/rapport")
+@router.get("/{project_id}/rapport", response_model=Rapport)
 async def project_rapport(project_id: str, client_id: str = Depends(require_client)):
     store = get_store()
     await _project_or_404(store, project_id, client_id)
@@ -147,7 +160,7 @@ async def project_ronde(
 
 
 @router.get("/{project_id}/events")
-async def project_events(project_id: str, client_id: str = Depends(require_client)):
+async def project_events(project_id: str, request: Request, client_id: str = Depends(require_client)):
     """SSE — stuurt state-updates totdat het project klaar of in fout is (max 10 minuten)."""
     store = get_store()
     await _project_or_404(store, project_id, client_id)
@@ -155,6 +168,8 @@ async def project_events(project_id: str, client_id: str = Depends(require_clien
     async def stream():
         seen = None
         for _ in range(120):
+            if await request.is_disconnected():
+                return  # client weg → stop met pollen i.p.v. 10 min doorgaan
             p = await store.load_project(project_id)
             if p is None:
                 yield "event: error\ndata: project niet gevonden\n\n"

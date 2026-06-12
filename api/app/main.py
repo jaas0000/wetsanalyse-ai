@@ -15,7 +15,7 @@ from . import __version__
 from .config import get_settings
 from .deps import get_engine, get_store
 from .project import Project
-from .routers import analyses, projects
+from .routers import projects
 
 logger = logging.getLogger(__name__)
 
@@ -49,8 +49,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(analyses.router)
-app.include_router(projects.router)
+# Eén kanonieke resource onder een versie-prefix (/v1/projects). De eerdere losse
+# /analyses-router is geconsolideerd; clients migreren naar /v1/projects.
+app.include_router(projects.router, prefix="/v1")
 
 
 @app.get("/health", tags=["meta"])
@@ -64,9 +65,10 @@ async def health():
 async def ready():
     """Readiness — configuratie aanwezig? (geen netwerk-call om health niet te koppelen)."""
     s = get_settings()
+    # Alleen booleans — geen interne URL's/hostnamen lekken aan een ongeauthenticeerd endpoint.
     return {
         "auth_geconfigureerd": bool(s.client_tokens) or not s.auth_required,
-        "mcp_url": s.mcp_url,
+        "mcp_geconfigureerd": bool(s.mcp_url),
         "llm_model_gezet": bool(s.llm_model),
-        "mongodb_url": s.mongodb_url,
+        "mongodb_geconfigureerd": bool(s.mongodb_url),
     }

@@ -9,15 +9,19 @@ bron; deze service is een parallelle harness over dezelfde references/scripts).
 
 De **orchestrator bezit de review-lus en de state**; het **LLM doet per stap één begrensde taak**
 ("geef JSON conform schema"). **Stap 1 (ophalen) is deterministisch via de MCP** — geen LLM-tool-
-calling. De `analyses/<id>/werk/.../ronde-N/`-mappenstructuur ís de jobstore en blijft interoperabel
-met de lokale skill (zelfde artefacten op disk).
+calling. De **jobstore is MongoDB**: één `Project`-document per analyse met alle artefacten
+embedded (rondes, feedback, rapport). De API schrijft *niet* naar de `analyses/<id>/werk/`-disk; de
+disk-interoperabiliteit met de lokale skill staat op de roadmap, niet in de huidige flow.
 
 ## Architectuur (app/)
 
 - `config.py` — env-config + projectpaden (PROJECT_ROOT = repo-root).
 - `contracts.py` — Pydantic-modellen (1-op-1 met `references/review-checkpoints.md`) + `Job`/state machine.
 - `auth.py` — per-client bearer-tokens (erft het MCP-patroon; fail-closed; constant-tijd).
-- `store.py` — filesystem-jobstore: atomair schrijven, **analyse.json-immutabiliteit**, per-job lock.
+- `jobstore.py` — `JobStore`-Protocol (opslag-abstractie) + `IdConflict`. `mongo_store.py` —
+  de Beanie/MongoDB-implementatie: gerichte `$set`-writes, **ronde-immutabiliteit**, client-scoping.
+- `project.py` — het Beanie `Project`-document (state + embedded rondes/feedback/rapport).
+- `concurrency.py` — per-job `asyncio.Lock` (single-worker/replica-aanname).
 - `wettenbank.py` — MCP-client; lege/fout-respons → `WettenbankError` (nooit doorgaan met lege context).
 - `validation.py` — **zacht** (skill-`check_activiteit_2/3`, schema) vs **hard** (brongetrouwheid: citaat
   letterlijk in leden-tekst na normalisatie, `vindplaats`/`bronreferentie` verplicht).
@@ -25,13 +29,14 @@ met de lokale skill (zelfde artefacten op disk).
 - `engine/` — `prompts.py` (references verbatim + canonieke JAS-lijst uit validation), `steps.py`
   (LLM-stap + merge met brongetrouwe MCP-basis), `orchestrator.py` (state machine, auto-correctie,
   6-rondencap, startup-reconciliatie, retry).
-- `routers/analyses.py` + `main.py` — endpoints, `/health` (liveness), `/ready`.
+- `routers/analyses.py` + `routers/projects.py` + `main.py` — endpoints (client-gescopet),
+  `/health` (liveness), `/ready`.
 
 ## Garanties (niet aan tornen)
 
 - HARD brongetrouwheid faalt → job naar `fout`, **ook in `review:false`**. Nooit stil `klaar`.
 - Auto-correctie is **geen ronde**: her-genereren binnen één ronde vóór het wegschrijven.
-- `feedback.json` alleen via de API en alleen in een `wacht-op-review-*`-state (anders 409).
+- Feedback alleen via de API en alleen in een `wacht-op-review-*`-state (anders 409).
 - Brongetrouwe velden (`leden`, `bronreferentie`, `versiedatum`, `pad`) komen **uit de MCP**, niet uit het LLM.
 
 ## Lokaal draaien
@@ -109,7 +114,7 @@ heen — zet dus geen `--workers >1` of `deploy.replicas >1`. Schalen kan pas me
 (Mongo state-CAS) of een echte job-queue (roadmap). LLM-key + tokens als bestanden op de host
 (`*_FILE`-patroon) — nooit als plain env var in de container of Portainer-UI.
 Build vanaf de **projectroot**: `docker build -f api/Dockerfile -t wetsanalyse-api .` (de image heeft de
-skill-`references/scripts` nodig). `POST /analyses` is async (202 + polling) — nooit synchroon achter
+skill-`references/scripts` nodig). `POST /v1/projects` is async (202 + polling) — nooit synchroon achter
 NPM's ~60s timeout.
 
 ### Secrets op de host (eenmalig, vóór de eerste stack-start)
@@ -126,13 +131,42 @@ sudo chmod 700 "$SECRETS_DIR"
 echo -n "<llm-api-key>"      | sudo tee "$SECRETS_DIR/llm_api_key"      > /dev/null
 echo -n "<wettenbank-token>" | sudo tee "$SECRETS_DIR/wettenbank_token"  > /dev/null
 echo -n "id1:tok1,id2:tok2"  | sudo tee "$SECRETS_DIR/api_tokens"        > /dev/null
+
+# MongoDB-authenticatie: root-credentials + de connection string die de API gebruikt.
+MONGO_USER=wetsanalyse
+MONGO_PASS="$(openssl rand -base64 24)"
+echo -n "$MONGO_USER" | sudo tee "$SECRETS_DIR/mongo_root_username" > /dev/null
+echo -n "$MONGO_PASS" | sudo tee "$SECRETS_DIR/mongo_root_password" > /dev/null
+echo -n "mongodb://$MONGO_USER:$MONGO_PASS@mongo:27017/?authSource=admin" \
+    | sudo tee "$SECRETS_DIR/mongodb_url" > /dev/null
 sudo chmod 600 "$SECRETS_DIR"/*
 ```
 
-Rotatie: pas het betreffende bestand aan en herstart (`docker restart wetsanalyse-api`).
+**Bestaande (auth-loze) Mongo-volume migreren.** De mongo-image maakt de root-user alleen aan bij
+een *lege* `/data/db`. Heeft het `wetsanalyse_mongo`-volume al data (bestaande analyses), doe dan
+één keer handmatig vóór je de nieuwe compose uitrolt:
+
+```bash
+# Tegen de nog-draaiende auth-loze mongo:
+docker exec -it wetsanalyse-mongo mongo admin --eval \
+  "db.createUser({user:'wetsanalyse', pwd:'<zelfde-pass-als-secret>', roles:[{role:'root',db:'admin'}]})"
+# Daarna de stack met de nieuwe compose (auth aan) opnieuw uitrollen.
+```
+(Of accepteer dataverlies en verwijder het volume voor een schone init.)
+
+Rotatie: pas het betreffende bestand aan en herstart (`docker restart wetsanalyse-api`); voor het
+Mongo-wachtwoord ook de user in Mongo bijwerken.
 CI stuurt geen geheime waarden naar Portainer — alleen niet-geheime config (`LLM_MODEL`, `LLM_PROVIDER`, e.d.).
+
+## Misbruik-/kostenbeheersing
+
+In-process en per proces (past bij de single-worker/replica-aanname). Knoppen via env (0 = uit):
+`WETSANALYSE_RATE_LIMIT_MAX`/`_WINDOW` (per-client request-rate op de muterende endpoints → 429),
+`WETSANALYSE_MAX_ACTIVE_JOBS` (max gelijktijdig lopende analyses per client → 429),
+`WETSANALYSE_LLM_TOKEN_BUDGET` (token-plafond per analyse → job naar `fout`, `FoutKlasse.quota`).
+Multi-tenant isolatie is afgedwongen: elke analyse is client-gescopet (404 op andermans id).
 
 ## Roadmap (nog niet gebouwd)
 
-SSE `/events`; webapp + MS Teams-clients; wet-only resolutie (nu is `bwbId` verplicht); echte job-queue;
-per-analyse-autorisatie/OIDC; rate-limiting + budgetcap.
+Webapp + MS Teams-clients; wet-only resolutie (nu is `bwbId` verplicht); echte job-queue;
+OIDC; gedeelde lock (Mongo state-CAS) voor horizontaal schalen.

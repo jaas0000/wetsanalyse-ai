@@ -13,10 +13,12 @@
 #   SECRETS_DIR             — host-pad naar de secrets-map (default /opt/secrets/wetsanalyse-api;
 #                             op Synology: /volume1/docker/secrets/wetsanalyse-api).
 #
-# Secrets (LLM_API_KEY, WETTENBANK_TOKEN, WETSANALYSE_API_TOKENS) leven als bestanden op de
-# host in SECRETS_DIR en worden via *_FILE-variabelen doorgegeven.
-# Zie api/CLAUDE.md §"Secrets op de host" voor de eenmalige provisioning-stappen.
-# De waarden staan hierdoor nooit als plain env var in de container of in de Portainer-UI.
+# Secrets leven als bestanden op de host in SECRETS_DIR en worden via *_FILE-variabelen
+# doorgegeven (nooit als plain env var in de container of Portainer-UI):
+#   llm_api_key, wettenbank_token, api_tokens, mongodb_url,
+#   mongo_root_username, mongo_root_password.
+# Zie api/CLAUDE.md §"Secrets op de host" voor provisioning + de migratie van een BESTAANDE
+# (nog auth-loze) Mongo-volume — auth aanzetten op bestaande data vereist handmatige stappen.
 
 # LET OP: draai exact ÉÉN replica van wetsanalyse-api. Het concurrency-model serialiseert
 # state-transities met een in-process per-job asyncio-lock; die dekt geen tweede container.
@@ -39,7 +41,7 @@ services:
       LLM_API_KEY_FILE: /run/secrets/llm_api_key
       LLM_API_VERSION: ${LLM_API_VERSION:-}
       LLM_OUTPUT_STRATEGY: ${LLM_OUTPUT_STRATEGY:-prompt_and_parse}
-      MONGODB_URL: mongodb://mongo:27017
+      MONGODB_URL_FILE: /run/secrets/mongodb_url
       MONGODB_DB: wetsanalyse
     volumes:
       - ${SECRETS_DIR:-/opt/secrets/wetsanalyse-api}:/run/secrets:ro
@@ -63,8 +65,14 @@ services:
     image: mongo:4.4
     container_name: wetsanalyse-mongo
     restart: unless-stopped
+    # Authenticatie aan: de root-credentials komen uit secret-bestanden (niet als plain env).
+    # De API verbindt met dezelfde credentials via MONGODB_URL (secret).
+    environment:
+      MONGO_INITDB_ROOT_USERNAME_FILE: /run/secrets/mongo_root_username
+      MONGO_INITDB_ROOT_PASSWORD_FILE: /run/secrets/mongo_root_password
     volumes:
       - wetsanalyse_mongo:/data/db
+      - ${SECRETS_DIR:-/opt/secrets/wetsanalyse-api}:/run/secrets:ro
     networks:
       - proxy
     healthcheck:

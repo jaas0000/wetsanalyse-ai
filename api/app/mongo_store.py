@@ -1,13 +1,11 @@
-"""Async MongoDB-jobstore via Beanie.
+"""Async MongoDB-jobstore via Beanie — de concrete JobStore-implementatie (zie jobstore.py).
 
-Implementeert dezelfde interface als Store (filesystem), maar alle methoden zijn async.
 Kritisch: save_job overschrijft uitsluitend state-machine velden — nooit rondes/rapport/naam/omschrijving.
 """
 
 from __future__ import annotations
 
-import asyncio
-
+from .concurrency import discard_lock
 from .config import Settings
 from .contracts import Analyse2, Analyse3, Feedback, Job
 from .project import Project, RondeData, _utcnow
@@ -17,16 +15,6 @@ _STATE_FIELDS = frozenset({
     "error", "provenance", "bwbId", "artikel", "lid", "review",
     "model_profile", "analysefocus", "client_id",
 })
-
-_locks: dict[str, asyncio.Lock] = {}
-
-
-def lock_for(job_id: str) -> asyncio.Lock:
-    return _locks.setdefault(job_id, asyncio.Lock())
-
-
-class IdConflict(Exception):
-    """Kon na meerdere pogingen geen vrije slug reserveren — gelijktijdige identieke aanmaak."""
 
 
 class MongoStore:
@@ -155,13 +143,19 @@ class MongoStore:
     async def load_project(self, job_id: str) -> Project | None:
         return await Project.find_one({"slug": job_id})
 
-    async def list_projects(self, client_id: str | None = None) -> list[Project]:
+    async def list_projects(
+        self, client_id: str | None = None, *, limit: int | None = None, offset: int = 0
+    ) -> list[Project]:
         query = {} if client_id is None else {"client_id": client_id}
-        return await Project.find(query).sort([("updated", -1)]).to_list()
+        q = Project.find(query).sort([("updated", -1)]).skip(offset)
+        if limit is not None:
+            q = q.limit(limit)
+        return await q.to_list()
 
     async def delete_project(self, job_id: str) -> bool:
         p = await Project.find_one({"slug": job_id})
         if p is None:
             return False
         await p.delete()
+        discard_lock(job_id)  # voorkom onbegrensde groei van de lock-registry
         return True

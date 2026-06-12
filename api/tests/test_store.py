@@ -35,6 +35,20 @@ async def test_feedback_roundtrip(store):
     assert result.items == {"m1": "fout"}
 
 
+async def test_mongostore_voldoet_aan_jobstore(store):
+    from app.jobstore import JobStore
+    assert isinstance(store, JobStore)
+
+
+def test_rate_limiter_sliding_window():
+    from app import ratelimit
+
+    ratelimit.reset()
+    assert all(ratelimit._allow("k", 3, 60) for _ in range(3))
+    assert not ratelimit._allow("k", 3, 60)   # 4e in venster geweigerd
+    assert ratelimit._allow("andere-key", 3, 60)  # per client gescheiden
+
+
 async def test_save_job_overschrijft_geen_artefacten(store):
     """save_job mag uitsluitend state-velden raken — nooit eerder geschreven rondes/rapport."""
     await store.save_job(Job(id="j3", bwbId="X", artikel="1", state=JobState.queued))

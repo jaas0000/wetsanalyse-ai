@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 def _now() -> str:
@@ -93,7 +93,18 @@ class Feedback(BaseModel):
     status: Literal["akkoord", "wijzigingen"]
     activiteit: Literal["2", "3"]
     items: dict[str, str] = Field(default_factory=dict)
-    algemeen: str = ""
+    algemeen: str = Field(default="", max_length=5000)
+
+    @field_validator("items")
+    @classmethod
+    def _begrens_items(cls, v: dict[str, str]) -> dict[str, str]:
+        # Voorkom ongebonden payloads (opslag-/prompt-kosten): cap aantal en lengte per item.
+        if len(v) > 200:
+            raise ValueError("te veel feedback-items (max 200)")
+        for tekst in v.values():
+            if len(tekst) > 2000:
+                raise ValueError("feedback-item is te lang (max 2000 tekens)")
+        return v
 
     def is_akkoord_zonder_opmerkingen(self) -> bool:
         return self.status == "akkoord" and not self.items and not self.algemeen.strip()
@@ -102,15 +113,15 @@ class Feedback(BaseModel):
 # --- API-requests -------------------------------------------------------------
 
 class StartRequest(BaseModel):
-    bwbId: str | None = None
-    wet: str | None = None
-    artikel: str
-    lid: str | None = None
-    naam: str = ""
-    omschrijving: str = ""
-    analysefocus: str | None = None
+    bwbId: str | None = Field(default=None, max_length=64)
+    wet: str | None = Field(default=None, max_length=256)
+    artikel: str = Field(max_length=32)
+    lid: str | None = Field(default=None, max_length=16)
+    naam: str = Field(default="", max_length=200)
+    omschrijving: str = Field(default="", max_length=2000)
+    analysefocus: str | None = Field(default=None, max_length=2000)
     review: bool = True
-    model_profile: str | None = None
+    model_profile: str | None = Field(default=None, max_length=64)
 
 
 # --- Job-state ----------------------------------------------------------------
@@ -136,6 +147,7 @@ class FoutKlasse(str, Enum):
     llm = "llm"
     validatie = "validatie"
     intern = "intern"
+    quota = "quota"
 
 
 class JobFout(BaseModel):
@@ -183,3 +195,51 @@ class Job(BaseModel):
 
     def touch(self) -> None:
         self.updated = _now()
+
+
+# --- API-responses (getypeerde contracten → ingevulde OpenAPI/Swagger) --------
+
+class CreateAccepted(BaseModel):
+    id: str
+    naam: str = ""
+    state: JobState
+
+
+class JobSummary(BaseModel):
+    id: str
+    naam: str = ""
+    state: JobState
+    bwbId: str = ""
+    artikel: str = ""
+    updated: str = ""
+
+
+class FeedbackAccepted(BaseModel):
+    id: str
+    state: JobState
+    ronde: int
+
+
+class Rapport(BaseModel):
+    """Het analyserapport — de primaire bron, gepresenteerd via de HTML-viewer/Markdown."""
+
+    model_config = {"extra": "allow"}
+
+    wet: str = ""
+    bwbId: str = ""
+    artikel: str = ""
+    versiedatum: str = ""
+    bronreferentie: str = ""
+    type: str = ""
+    pad: str = ""
+    analysefocus: str = ""
+    reikwijdte: str = ""
+    geraadpleegde: str = ""
+    leden: list = Field(default_factory=list)
+    markeringen: list = Field(default_factory=list)
+    samenhang: str = ""
+    begrippen: list = Field(default_factory=list)
+    afleidingsregels: list = Field(default_factory=list)
+    validatiepunten: list = Field(default_factory=list)
+    reviewlog: dict = Field(default_factory=dict)
+    aandachtspunten: str = ""

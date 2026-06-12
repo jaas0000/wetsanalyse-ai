@@ -18,8 +18,10 @@ async def client(monkeypatch):
 
     from app.config import get_settings
     from app.deps import get_store
+    from app import ratelimit
     get_settings.cache_clear()
     get_store.cache_clear()
+    ratelimit.reset()  # globale rate-limit-staat niet laten lekken tussen tests
 
     mock_mongo = mongomock_motor.AsyncMongoMockClient()
     await init_beanie(database=mock_mongo["test"], document_models=[Project])
@@ -62,47 +64,55 @@ async def test_ready_en_openapi(client):
 
 
 async def test_lijst_en_status(client):
-    ids = {j["id"] for j in (await client.get("/analyses")).json()}
+    ids = {j["id"] for j in (await client.get("/v1/projects")).json()}
     assert {"bwbr1-art1", "klaar-art1"} <= ids
-    assert (await client.get("/analyses/bwbr1-art1")).json()["state"] == "queued"
-    assert (await client.get("/analyses/bestaat-niet")).status_code == 404
+    assert (await client.get("/v1/projects/bwbr1-art1")).json()["state"] == "queued"
+    assert (await client.get("/v1/projects/bestaat-niet")).status_code == 404
+
+
+async def test_paginatie(client):
+    """limit/offset begrenzen de lijst."""
+    r = await client.get("/v1/projects", params={"limit": 1})
+    assert r.status_code == 200 and len(r.json()) == 1
 
 
 async def test_rapport_serve(client):
-    r = await client.get("/analyses/klaar-art1/rapport")
+    r = await client.get("/v1/projects/klaar-art1/rapport")
     assert r.status_code == 200 and r.json()["wet"] == "Testwet"
-    md = await client.get("/analyses/klaar-art1/rapport.md")
+    md = await client.get("/v1/projects/klaar-art1/rapport.md")
     assert md.status_code == 200 and "# Wetsanalyse" in md.text
 
 
 async def test_feedback_buiten_review_409(client):
-    r = await client.post("/analyses/bwbr1-art1/feedback", json={"status": "akkoord", "activiteit": "2"})
+    r = await client.post("/v1/projects/bwbr1-art1/feedback", json={"status": "akkoord", "activiteit": "2"})
     assert r.status_code == 409
 
 
 async def test_rapport_nog_niet_gereed_409(client):
-    assert (await client.get("/analyses/bwbr1-art1/rapport")).status_code == 409
+    assert (await client.get("/v1/projects/bwbr1-art1/rapport")).status_code == 409
+
+
+async def test_input_limiet_422(client):
+    """Te lange vrije tekst wordt door Pydantic geweigerd (422), vóór de engine wordt geraakt."""
+    r = await client.post(
+        "/v1/projects", json={"artikel": "1", "bwbId": "BWBR1", "analysefocus": "x" * 3000}
+    )
+    assert r.status_code == 422
 
 
 async def test_tenant_isolatie(client):
     """Een project van een andere client is onzichtbaar: 404 op alle by-id-routes en
-    niet aanwezig in de lijst-endpoints."""
-    # Niet in de lijsten.
-    analyse_ids = {j["id"] for j in (await client.get("/analyses")).json()}
-    project_ids = {p["id"] for p in (await client.get("/projects")).json()}
-    assert "andermans-art1" not in analyse_ids
-    assert "andermans-art1" not in project_ids
-    assert {"bwbr1-art1", "klaar-art1"} <= analyse_ids
+    niet aanwezig in de lijst."""
+    ids = {p["id"] for p in (await client.get("/v1/projects")).json()}
+    assert "andermans-art1" not in ids
+    assert {"bwbr1-art1", "klaar-art1"} <= ids
 
     # 404 (niet 403) op de by-id-routes — bestaan mag niet lekken.
     for path in (
-        "/analyses/andermans-art1",
-        "/analyses/andermans-art1/rapport",
-        "/analyses/andermans-art1/act/2/ronde/1",
-        "/projects/andermans-art1",
-        "/projects/andermans-art1/rapport",
-        "/projects/andermans-art1/ronde/2/1",
+        "/v1/projects/andermans-art1",
+        "/v1/projects/andermans-art1/rapport",
+        "/v1/projects/andermans-art1/ronde/2/1",
     ):
         assert (await client.get(path)).status_code == 404, path
-    assert (await client.post("/analyses/andermans-art1/retry")).status_code == 404
-    assert (await client.delete("/projects/andermans-art1")).status_code == 404
+    assert (await client.post("/v1/projects/andermans-art1/retry")).status_code == 404
+    assert (await client.delete("/v1/projects/andermans-art1")).status_code == 404
