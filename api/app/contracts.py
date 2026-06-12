@@ -22,6 +22,7 @@ def _now() -> str:
 class Lid(BaseModel):
     lid: str
     tekst: str = ""
+    bronreferentie: str = ""
 
 
 class Markering(BaseModel):

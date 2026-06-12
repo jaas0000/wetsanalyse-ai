@@ -65,12 +65,12 @@ class WettenbankClient:
         teksten = [getattr(b, "text", "") for b in blocks if getattr(b, "type", "") == "text"]
         if not teksten:
             raise WettenbankError(f"MCP gaf geen tekst terug voor {tool}")
+        if getattr(result, "isError", False):
+            raise WettenbankError(f"MCP-fout voor {tool}: {teksten[0]}")
         try:
             data = json.loads(teksten[0])
         except json.JSONDecodeError as e:
             raise WettenbankError(f"MCP-respons voor {tool} is geen JSON: {e}") from e
-        if isinstance(data, dict) and "fout" in data:
-            raise WettenbankError(f"MCP-fout voor {tool}: {data['fout']}")
         return data
 
     # --- convenience ------------------------------------------------------
@@ -97,7 +97,11 @@ def map_artikel_naar_analyse_basis(artikel_data: dict) -> dict:
     Deze velden komen UIT de MCP en mogen niet door het LLM verzonnen worden.
     """
     leden = [
-        {"lid": str(l.get("lid", "")), "tekst": l.get("tekst", "")}
+        {
+            "lid": str(l.get("lid", "")),
+            "tekst": l.get("tekst", ""),
+            **({"bronreferentie": l["bronreferentie"]} if l.get("bronreferentie") else {}),
+        }
         for l in (artikel_data.get("leden") or [])
     ]
     return {

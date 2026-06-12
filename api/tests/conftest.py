@@ -24,7 +24,7 @@ ARTIKEL_DATA = {
     "artikel": "1",
     "pad": "Hoofdstuk 1 > Artikel 1",
     "bronreferentie": "jci1.3:c:BWBR9999999&artikel=1",
-    "leden": [{"lid": "1", "tekst": "De belastingplichtige dient aangifte te doen."}],
+    "leden": [{"lid": "1", "tekst": "De belastingplichtige dient aangifte te doen.", "bronreferentie": "jci1.3:c:BWBR9999999&artikel=1&lid=1&g=2026-01-01"}],
 }
 
 
