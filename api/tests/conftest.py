@@ -79,6 +79,7 @@ def settings(tmp_path) -> Settings:
     s.analyses_dir.mkdir(parents=True, exist_ok=True)
     s.max_autocorrectie = 0
     s.max_rondes = 6
+    s.transient_max_retries = 0  # geen backoff-slaap in tests
     return s
 
 

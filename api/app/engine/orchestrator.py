@@ -5,19 +5,27 @@ Driehoek van garanties:
   - ZACHTE schema-fouten blokkeren niet; ze gaan als waarschuwing mee naar het checkpoint
     (review:true) of worden gelogd (review:false).
   - Auto-correctie is GEEN ronde: her-genereren binnen één ronde, vóór het wegschrijven.
-Single-worker + per-job lock serialiseert state-transities.
+De jobstore is MongoDB (gedeeld), maar state-transities worden geserialiseerd met een
+in-process per-job asyncio-lock. Die lock werkt alleen binnen één proces, dus de dienst
+vereist EXACT één worker én één replica (zie Dockerfile). Horizontaal schalen kan pas met
+een gedeelde lock (Mongo state-CAS) of een echte job-queue — beide staan op de roadmap.
 """
 
 from __future__ import annotations
 
+import logging
+
 from ..config import Settings
 from ..contracts import FoutKlasse, Job, JobFout, JobState, RondeProvenance, REVIEW_STATES, StartRequest
 from ..llm.base import LLMClient, LLMError
-from ..mongo_store import MongoStore, lock_for
+from ..mongo_store import IdConflict, MongoStore, lock_for
 from ..rapport import bouw_rapport_async
 from ..validation import brongetrouwheid_check, schema_check
 from ..wettenbank import WettenbankClient, WettenbankError, map_artikel_naar_analyse_basis
 from . import prompts, steps
+from .retry import met_retry
+
+logger = logging.getLogger(__name__)
 
 BASIS_KEYS = ("wet", "bwbId", "artikel", "versiedatum", "bronreferentie", "pad", "leden")
 
@@ -33,45 +41,63 @@ class WetsanalyseEngine:
 
     async def create_project(self, req: StartRequest, client_id: str):
         """Maak een Project-document aan zonder de analyse te starten."""
+        from pymongo.errors import DuplicateKeyError
+
         from ..project import Project as ProjectDoc
         if not req.bwbId:
             raise ValueError("bwbId is verplicht in v1 (wet-only resolutie is roadmap).")
         self.s.resolve_profile(req.model_profile)
-        slug = await self.store.afgeleid_id(req.bwbId, req.artikel, req.lid)
         naam = req.naam or f"Art. {req.artikel}{f' lid {req.lid}' if req.lid else ''}"
-        project = ProjectDoc(
-            slug=slug,
-            naam=naam,
-            omschrijving=req.omschrijving,
-            bwbId=req.bwbId,
-            artikel=req.artikel,
-            lid=req.lid,
-            review=req.review,
-            model_profile=req.model_profile or self.s.default_model_profile,
-            analysefocus=req.analysefocus or "",
-            client_id=client_id,
-        )
-        await project.insert()
-        return project
+        # Begrensde retry: twee gelijktijdige identieke POSTs kunnen dezelfde vrije slug zien;
+        # de unique index laat er één winnen, de ander leidt een nieuwe slug af.
+        for _ in range(5):
+            slug = await self.store.afgeleid_id(req.bwbId, req.artikel, req.lid)
+            project = ProjectDoc(
+                slug=slug,
+                naam=naam,
+                omschrijving=req.omschrijving,
+                bwbId=req.bwbId,
+                artikel=req.artikel,
+                lid=req.lid,
+                review=req.review,
+                model_profile=req.model_profile or self.s.default_model_profile,
+                analysefocus=req.analysefocus or "",
+                client_id=client_id,
+            )
+            try:
+                await project.insert()
+                return project
+            except DuplicateKeyError:
+                continue
+        raise IdConflict("Kon geen uniek project-id reserveren; probeer opnieuw.")
 
     async def create_job(self, req: StartRequest, client_id: str) -> Job:
+        from pymongo.errors import DuplicateKeyError
+
         if not req.bwbId:
             raise ValueError("bwbId is verplicht in v1 (wet-only resolutie is roadmap).")
         self.s.resolve_profile(req.model_profile)
-        job_id = await self.store.afgeleid_id(req.bwbId, req.artikel, req.lid)
-        job = Job(
-            id=job_id,
-            state=JobState.queued,
-            bwbId=req.bwbId,
-            artikel=req.artikel,
-            lid=req.lid,
-            review=req.review,
-            model_profile=req.model_profile or self.s.default_model_profile,
-            analysefocus=req.analysefocus or "",
-            client_id=client_id,
-        )
-        await self.store.save_job(job)
-        return job
+        # Begrensde retry tegen de gelijktijdige-aanmaak-race (zie create_project). insert_job
+        # maakt altijd een nieuw document, zodat de tweede POST geen bestaand project overschrijft.
+        for _ in range(5):
+            job_id = await self.store.afgeleid_id(req.bwbId, req.artikel, req.lid)
+            job = Job(
+                id=job_id,
+                state=JobState.queued,
+                bwbId=req.bwbId,
+                artikel=req.artikel,
+                lid=req.lid,
+                review=req.review,
+                model_profile=req.model_profile or self.s.default_model_profile,
+                analysefocus=req.analysefocus or "",
+                client_id=client_id,
+            )
+            try:
+                await self.store.insert_job(job)
+                return job
+            except DuplicateKeyError:
+                continue
+        raise IdConflict("Kon geen uniek analyse-id reserveren; probeer opnieuw.")
 
     async def run_initial(self, job_id: str) -> None:
         async with lock_for(job_id):
@@ -98,15 +124,18 @@ class WetsanalyseEngine:
             r2 = await self.store.hoogste_ronde(job.id, "2")
             r3 = await self.store.hoogste_ronde(job.id, "3")
             job.error = None
-            if r3 > 0:
-                job.state, job.current_activiteit, job.current_ronde = JobState.wacht_review_act3, "3", r3
+            try:
+                if r3 > 0:
+                    job.state, job.current_activiteit, job.current_ronde = JobState.wacht_review_act3, "3", r3
+                elif r2 > 0:
+                    job.state, job.current_activiteit, job.current_ronde = JobState.wacht_review_act2, "2", r2
+                else:
+                    job.state = JobState.queued
                 await self.store.save_job(job)
-            elif r2 > 0:
-                job.state, job.current_activiteit, job.current_ronde = JobState.wacht_review_act2, "2", r2
-                await self.store.save_job(job)
-            else:
-                job.state = JobState.queued
-                await self.store.save_job(job)
+            except Exception:  # noqa: BLE001 — laat de job in `fout` i.p.v. stil hangen
+                logger.exception("Retry van job %s kon de state niet herstellen", job_id)
+                return
+            if job.state == JobState.queued:
                 await self._guard(job, "act2", self._fase_start(job))
 
     async def reconcile_startup(self) -> None:
@@ -120,7 +149,7 @@ class WetsanalyseEngine:
     async def _fase_start(self, job: Job) -> None:
         job.state = JobState.act2_runt
         await self.store.save_job(job)
-        artikel_data = await self.wb.artikel(job.bwbId, job.artikel, job.lid)
+        artikel_data = await self._met_retry(lambda: self.wb.artikel(job.bwbId, job.artikel, job.lid))
         basis = map_artikel_naar_analyse_basis(artikel_data)
         await self._genereer(job, "2", 1, basis, vorige=None, feedback=None)
 
@@ -158,13 +187,13 @@ class WetsanalyseEngine:
                 return await steps.genereer_act2(self.llm, basis, ronde, job.analysefocus or None)
             return await steps.genereer_act3(self.llm, basis, ronde, act2)
 
-        analyse, prov = await maak()
+        analyse, prov = await self._met_retry(maak)
         pogingen = 0
         while pogingen < self.s.max_autocorrectie:
             if not brongetrouwheid_check(analyse, activiteit) and not schema_check(analyse, activiteit)[0]:
                 break
             pogingen += 1
-            analyse, prov = await maak()
+            analyse, prov = await self._met_retry(maak)
 
         schendingen = brongetrouwheid_check(analyse, activiteit)
         fouten, waarschuwingen = schema_check(analyse, activiteit)
@@ -225,6 +254,14 @@ class WetsanalyseEngine:
 
     # --- helpers ----------------------------------------------------------
 
+    async def _met_retry(self, maak):
+        """Bounded retry op transiënte LLM/MCP-fouten met de geconfigureerde knoppen."""
+        return await met_retry(
+            maak,
+            max_retries=self.s.transient_max_retries,
+            backoff=self.s.transient_backoff_s,
+        )
+
     async def _basis(self, job: Job) -> dict:
         a2 = await self.store.lees_analyse(job.id, "2", 1) or {}
         return {k: a2.get(k) for k in BASIS_KEYS}
@@ -239,8 +276,11 @@ class WetsanalyseEngine:
         try:
             await coro
         except WettenbankError as e:
+            logger.warning("Job %s faalt op %s (MCP): %s", job.id, stap, e)
             await self._fail(job, stap, FoutKlasse.mcp, str(e))
         except LLMError as e:
+            logger.warning("Job %s faalt op %s (LLM): %s", job.id, stap, e)
             await self._fail(job, stap, FoutKlasse.llm, str(e))
         except Exception as e:  # noqa: BLE001
+            logger.exception("Job %s faalt op %s (intern)", job.id, stap)
             await self._fail(job, stap, FoutKlasse.intern, f"{type(e).__name__}: {e}")

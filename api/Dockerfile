@@ -28,5 +28,8 @@ EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:3000/health').status==200 else 1)"
 
-# Single worker: het concurrency-model leunt op per-job asyncio-locks + filesystem-state.
+# EXACT één worker: het concurrency-model serialiseert state-transities met per-job
+# asyncio-locks (in-process). De jobstore is gedeeld (MongoDB), maar die lock werkt alleen
+# binnen één proces — meerdere workers/replica's zouden de serialisatie doorbreken. Schaal
+# pas op na een gedeelde lock (Mongo state-CAS) of een echte job-queue (zie roadmap).
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "3000", "--workers", "1"]

@@ -92,6 +92,9 @@ class Settings:
         # --- Engine ---
         self.max_rondes = int(os.environ.get("WETSANALYSE_MAX_RONDES", "6"))
         self.max_autocorrectie = int(os.environ.get("WETSANALYSE_MAX_AUTOCORRECTIE", "1"))
+        # Bounded retry op transiënte LLM/MCP-fouten (429/5xx/timeout) vóór terminale `fout`.
+        self.transient_max_retries = int(os.environ.get("WETSANALYSE_TRANSIENT_MAX_RETRIES", "2"))
+        self.transient_backoff_s = float(os.environ.get("WETSANALYSE_TRANSIENT_BACKOFF", "0.5"))
         self.analyses_dir = Path(
             os.environ.get("WETSANALYSE_ANALYSES_DIR", str(ANALYSES_DIR))
         )

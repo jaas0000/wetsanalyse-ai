@@ -18,6 +18,9 @@
 # Zie api/CLAUDE.md §"Secrets op de host" voor de eenmalige provisioning-stappen.
 # De waarden staan hierdoor nooit als plain env var in de container of in de Portainer-UI.
 
+# LET OP: draai exact ÉÉN replica van wetsanalyse-api. Het concurrency-model serialiseert
+# state-transities met een in-process per-job asyncio-lock; die dekt geen tweede container.
+# Zet dus geen `deploy.replicas > 1` (en de image draait al met --workers 1).
 services:
   wetsanalyse-api:
     image: ghcr.io/palmw01/wetsanalyse-api:latest

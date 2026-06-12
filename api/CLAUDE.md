@@ -102,8 +102,11 @@ Daarna: `docker compose up --build` vanuit `api/`.
 
 ## Deployment
 
-Docker-image + Portainer-stack achter NPM, net als de MCP (`docker-compose.yml`). Single uvicorn-worker
-(concurrency leunt op per-job locks + filesystem-state). LLM-key + tokens als bestanden op de host
+Docker-image + Portainer-stack achter NPM, net als de MCP (`docker-compose.yml`). **Exact één
+uvicorn-worker én één replica**: state-transities worden geserialiseerd met een in-process per-job
+asyncio-lock. De jobstore is MongoDB (gedeeld), maar die lock werkt niet over processen/containers
+heen — zet dus geen `--workers >1` of `deploy.replicas >1`. Schalen kan pas met een gedeelde lock
+(Mongo state-CAS) of een echte job-queue (roadmap). LLM-key + tokens als bestanden op de host
 (`*_FILE`-patroon) — nooit als plain env var in de container of Portainer-UI.
 Build vanaf de **projectroot**: `docker build -f api/Dockerfile -t wetsanalyse-api .` (de image heeft de
 skill-`references/scripts` nodig). `POST /analyses` is async (202 + polling) — nooit synchroon achter

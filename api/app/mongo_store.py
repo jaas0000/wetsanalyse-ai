@@ -10,7 +10,7 @@ import asyncio
 
 from .config import Settings
 from .contracts import Analyse2, Analyse3, Feedback, Job
-from .project import Project, RondeData
+from .project import Project, RondeData, _utcnow
 
 _STATE_FIELDS = frozenset({
     "state", "current_activiteit", "current_ronde", "waarschuwingen",
@@ -23,6 +23,10 @@ _locks: dict[str, asyncio.Lock] = {}
 
 def lock_for(job_id: str) -> asyncio.Lock:
     return _locks.setdefault(job_id, asyncio.Lock())
+
+
+class IdConflict(Exception):
+    """Kon na meerdere pogingen geen vrije slug reserveren — gelijktijdige identieke aanmaak."""
 
 
 class MongoStore:
@@ -47,19 +51,33 @@ class MongoStore:
         project = await Project.find_one({"slug": job.id})
         if project is None:
             project = Project(slug=job.id)
+            for field in _STATE_FIELDS:
+                setattr(project, field, getattr(job, field, None))
+            project.touch()
             await project.insert()
+            return
+        # Gericht $set: uitsluitend state-machine-velden. Schrijft nooit rondes/rapport/naam/
+        # omschrijving, zodat een (mogelijk verouderde) job-snapshot die artefacten niet kan wissen.
+        updates = {field: getattr(job, field, None) for field in _STATE_FIELDS}
+        updates["updated"] = _utcnow()
+        await project.set(updates)
+
+    async def insert_job(self, job: Job) -> None:
+        """Maak altijd een nieuw project-document aan (nooit bijwerken). Werpt
+        DuplicateKeyError als de slug al bestaat — de aanroeper handelt de race af."""
+        project = Project(slug=job.id)
         for field in _STATE_FIELDS:
-            val = getattr(job, field, None)
-            setattr(project, field, val)
+            setattr(project, field, getattr(job, field, None))
         project.touch()
-        await project.save()
+        await project.insert()
 
     async def load_job(self, job_id: str) -> Job | None:
         p = await Project.find_one({"slug": job_id})
         return p.to_job() if p else None
 
-    async def list_jobs(self) -> list[Job]:
-        projects = await Project.find_all().to_list()
+    async def list_jobs(self, client_id: str | None = None) -> list[Job]:
+        query = {} if client_id is None else {"client_id": client_id}
+        projects = await Project.find(query).to_list()
         return [p.to_job() for p in projects]
 
     # --- analyse (immutabel per ronde) ---
@@ -72,13 +90,14 @@ class MongoStore:
 
     async def schrijf_analyse(self, job_id: str, activiteit: str, ronde: int, data: dict) -> None:
         p = await Project.find_one({"slug": job_id})
-        act = p.rondes.setdefault(activiteit, {})
+        if p is None:
+            raise KeyError(f"Onbekend project: {job_id}")
         key = str(ronde)
-        if key in act and act[key].analyse:
+        bestaand = (p.rondes.get(activiteit) or {}).get(key)
+        if bestaand is not None and bestaand.analyse:
             raise PermissionError(f"Ronde {ronde} act{activiteit} is immutabel.")
-        act[key] = RondeData(analyse=data)
-        p.touch()
-        await p.save()
+        # Gericht $set op het subpad — raakt alleen deze ronde, niet de rest van het document.
+        await p.set({f"rondes.{activiteit}.{key}": RondeData(analyse=data), "updated": _utcnow()})
 
     async def lees_analyse(self, job_id: str, activiteit: str, ronde: int) -> dict | None:
         p = await Project.find_one({"slug": job_id})
@@ -101,13 +120,16 @@ class MongoStore:
 
     async def schrijf_feedback(self, job_id: str, activiteit: str, ronde: int, fb: Feedback) -> None:
         p = await Project.find_one({"slug": job_id})
-        act = p.rondes.setdefault(activiteit, {})
+        if p is None:
+            raise KeyError(f"Onbekend project: {job_id}")
         key = str(ronde)
-        if key not in act:
-            act[key] = RondeData(analyse={})
-        act[key].feedback = fb.model_dump()
-        p.touch()
-        await p.save()
+        bestaand = (p.rondes.get(activiteit) or {}).get(key)
+        if bestaand is None:
+            # Ronde bestaat nog niet: maak hem met lege analyse + de feedback.
+            waarde = RondeData(analyse={}, feedback=fb.model_dump())
+            await p.set({f"rondes.{activiteit}.{key}": waarde, "updated": _utcnow()})
+        else:
+            await p.set({f"rondes.{activiteit}.{key}.feedback": fb.model_dump(), "updated": _utcnow()})
 
     async def lees_feedback(self, job_id: str, activiteit: str, ronde: int) -> Feedback | None:
         p = await Project.find_one({"slug": job_id})
@@ -122,9 +144,7 @@ class MongoStore:
         p = await Project.find_one({"slug": job_id})
         if p is None:
             return
-        p.rapport = rapport
-        p.touch()
-        await p.save()
+        await p.set({"rapport": rapport, "updated": _utcnow()})
 
     async def lees_rapport(self, job_id: str) -> dict | None:
         p = await Project.find_one({"slug": job_id})
@@ -135,8 +155,9 @@ class MongoStore:
     async def load_project(self, job_id: str) -> Project | None:
         return await Project.find_one({"slug": job_id})
 
-    async def list_projects(self) -> list[Project]:
-        return await Project.find({}).sort([("updated", -1)]).to_list()
+    async def list_projects(self, client_id: str | None = None) -> list[Project]:
+        query = {} if client_id is None else {"client_id": client_id}
+        return await Project.find(query).sort([("updated", -1)]).to_list()
 
     async def delete_project(self, job_id: str) -> bool:
         p = await Project.find_one({"slug": job_id})

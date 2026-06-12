@@ -3,6 +3,7 @@ en startup-reconciliatie van onderbroken jobs."""
 
 from __future__ import annotations
 
+import logging
 from contextlib import asynccontextmanager
 
 from beanie import init_beanie
@@ -16,6 +17,8 @@ from .deps import get_engine, get_store
 from .project import Project
 from .routers import analyses, projects
 
+logger = logging.getLogger(__name__)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -25,7 +28,7 @@ async def lifespan(app: FastAPI):
     try:
         await get_engine().reconcile_startup()
     except Exception:  # noqa: BLE001 — engine mag de start nooit blokkeren
-        pass
+        logger.exception("Startup-reconciliatie van onderbroken jobs is mislukt")
     yield
     motor_client.close()
 

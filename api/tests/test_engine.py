@@ -95,3 +95,60 @@ async def test_retry_vanuit_fout(settings, store):
 async def test_bwbid_verplicht(engine):
     with pytest.raises(ValueError):
         await engine.create_job(StartRequest(artikel="1"), "test")
+
+
+async def test_transiente_mcp_fout_wordt_geretryed(settings, store):
+    """Een transiënte MCP-fout op de eerste poging mag de job niet terminaal laten falen."""
+    settings.transient_max_retries = 2
+    settings.transient_backoff_s = 0  # geen echte slaap in de test
+
+    class FlakyWettenbank(FakeWettenbank):
+        def __init__(self):
+            super().__init__()
+            self.calls = 0
+
+        async def artikel(self, bwb_id, artikel, lid=None):
+            self.calls += 1
+            if self.calls == 1:
+                raise WettenbankError("MCP-timeout (transiënt)")
+            return await super().artikel(bwb_id, artikel, lid)
+
+    wb = FlakyWettenbank()
+    eng = WetsanalyseEngine(settings, store, FakeLLM(), wb)
+    job = await eng.create_job(_start_req(review=False), "test")
+    await eng.run_initial(job.id)
+
+    assert wb.calls == 2
+    assert (await store.load_job(job.id)).state == JobState.klaar
+
+
+async def test_create_job_retryt_bij_duplicate(engine, store, monkeypatch):
+    """Een DuplicateKeyError (gelijktijdige identieke aanmaak) leidt tot een nieuwe poging."""
+    from pymongo.errors import DuplicateKeyError
+
+    echt_insert = store.insert_job
+    pogingen = {"n": 0}
+
+    async def flaky_insert(job):
+        pogingen["n"] += 1
+        if pogingen["n"] == 1:
+            raise DuplicateKeyError("E11000 duplicate key")
+        await echt_insert(job)
+
+    monkeypatch.setattr(store, "insert_job", flaky_insert)
+    job = await engine.create_job(_start_req(review=False), "test")
+    assert pogingen["n"] == 2
+    assert (await store.load_job(job.id)) is not None
+
+
+async def test_create_job_uitputting_werpt_idconflict(engine, store, monkeypatch):
+    from pymongo.errors import DuplicateKeyError
+
+    from app.mongo_store import IdConflict
+
+    async def altijd_duplicate(job):
+        raise DuplicateKeyError("E11000 duplicate key")
+
+    monkeypatch.setattr(store, "insert_job", altijd_duplicate)
+    with pytest.raises(IdConflict):
+        await engine.create_job(_start_req(review=False), "test")

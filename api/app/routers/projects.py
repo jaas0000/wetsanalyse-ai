@@ -23,13 +23,16 @@ from fastapi.responses import PlainTextResponse, StreamingResponse
 from ..auth import require_client
 from ..contracts import Feedback, JobState, REVIEW_STATES, TERMINAL_STATES, StartRequest
 from ..deps import get_engine, get_store, schedule
+from ..mongo_store import IdConflict
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
 
-async def _project_or_404(store, project_id: str):
+async def _project_or_404(store, project_id: str, client_id: str):
+    """Laadt het project en dwingt eigenaarschap af. 404 (niet 403) bij mismatch, zodat
+    het bestaan van andermans projecten niet lekt."""
     p = await store.load_project(project_id)
-    if p is None:
+    if p is None or p.client_id != client_id:
         raise HTTPException(status_code=404, detail=f"Onbekend project: {project_id}")
     return p
 
@@ -42,6 +45,8 @@ async def maak_project(req: StartRequest, client_id: str = Depends(require_clien
         raise HTTPException(status_code=503, detail=f"Engine niet beschikbaar: {e}")
     try:
         project = await engine.create_project(req, client_id)
+    except IdConflict as e:
+        raise HTTPException(status_code=409, detail=str(e))
     except (ValueError, KeyError) as e:
         raise HTTPException(status_code=400, detail=str(e))
     schedule(engine.run_initial(project.slug))
@@ -50,7 +55,7 @@ async def maak_project(req: StartRequest, client_id: str = Depends(require_clien
 
 @router.get("")
 async def lijst_projecten(client_id: str = Depends(require_client)):
-    projects = await get_store().list_projects()
+    projects = await get_store().list_projects(client_id)
     return [
         {
             "id": p.slug,
@@ -66,14 +71,14 @@ async def lijst_projecten(client_id: str = Depends(require_client)):
 
 @router.get("/{project_id}")
 async def project_detail(project_id: str, client_id: str = Depends(require_client)):
-    p = await _project_or_404(get_store(), project_id)
+    p = await _project_or_404(get_store(), project_id, client_id)
     return p.to_job()
 
 
 @router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def verwijder_project(project_id: str, client_id: str = Depends(require_client)):
     store = get_store()
-    p = await _project_or_404(store, project_id)
+    p = await _project_or_404(store, project_id, client_id)
     if p.state not in TERMINAL_STATES:
         raise HTTPException(
             status_code=409,
@@ -85,7 +90,7 @@ async def verwijder_project(project_id: str, client_id: str = Depends(require_cl
 @router.post("/{project_id}/feedback", status_code=status.HTTP_202_ACCEPTED)
 async def geef_feedback(project_id: str, feedback: Feedback, client_id: str = Depends(require_client)):
     store = get_store()
-    p = await _project_or_404(store, project_id)
+    p = await _project_or_404(store, project_id, client_id)
     job = p.to_job()
     if job.state not in REVIEW_STATES:
         raise HTTPException(status_code=409, detail=f"Feedback alleen in review-state; nu: {job.state}")
@@ -99,7 +104,7 @@ async def geef_feedback(project_id: str, feedback: Feedback, client_id: str = De
 @router.post("/{project_id}/retry", status_code=status.HTTP_202_ACCEPTED)
 async def retry_project(project_id: str, client_id: str = Depends(require_client)):
     store = get_store()
-    p = await _project_or_404(store, project_id)
+    p = await _project_or_404(store, project_id, client_id)
     if p.state != JobState.fout:
         raise HTTPException(status_code=409, detail=f"Retry alleen vanuit fout; nu: {p.state}")
     schedule(get_engine().retry(project_id))
@@ -109,7 +114,7 @@ async def retry_project(project_id: str, client_id: str = Depends(require_client
 @router.get("/{project_id}/rapport")
 async def project_rapport(project_id: str, client_id: str = Depends(require_client)):
     store = get_store()
-    await _project_or_404(store, project_id)
+    await _project_or_404(store, project_id, client_id)
     data = await store.lees_rapport(project_id)
     if data is None:
         raise HTTPException(status_code=409, detail="Rapport nog niet gereed")
@@ -119,7 +124,7 @@ async def project_rapport(project_id: str, client_id: str = Depends(require_clie
 @router.get("/{project_id}/rapport.md", response_class=PlainTextResponse)
 async def project_rapport_md(project_id: str, client_id: str = Depends(require_client)):
     store = get_store()
-    await _project_or_404(store, project_id)
+    await _project_or_404(store, project_id, client_id)
     data = await store.lees_rapport(project_id)
     if data is None:
         raise HTTPException(status_code=409, detail="Rapport nog niet gereed")
@@ -133,7 +138,9 @@ async def project_ronde(
 ):
     if activiteit not in ("2", "3"):
         raise HTTPException(status_code=400, detail="activiteit moet 2 of 3 zijn")
-    data = await get_store().lees_analyse(project_id, activiteit, ronde)
+    store = get_store()
+    await _project_or_404(store, project_id, client_id)
+    data = await store.lees_analyse(project_id, activiteit, ronde)
     if data is None:
         raise HTTPException(status_code=404, detail="Geen analyse voor deze ronde")
     return data
@@ -143,6 +150,7 @@ async def project_ronde(
 async def project_events(project_id: str, client_id: str = Depends(require_client)):
     """SSE — stuurt state-updates totdat het project klaar of in fout is (max 10 minuten)."""
     store = get_store()
+    await _project_or_404(store, project_id, client_id)
 
     async def stream():
         seen = None
