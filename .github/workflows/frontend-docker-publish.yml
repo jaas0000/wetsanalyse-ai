@@ -17,6 +17,8 @@ on:
 
 env:
   IMAGE: ghcr.io/${{ github.repository_owner }}/wetsanalyse-frontend
+  # JS-actions (setup-node e.d.) op Node 24 draaien; weert de Node 20-deprecatiewaarschuwing.
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
   # ── Kwaliteits- en kwetsbaarhedenpoort (BIO2 / ISO 27002:2022 §8.8) ──────────
