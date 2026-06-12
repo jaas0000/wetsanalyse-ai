@@ -4,11 +4,13 @@
  */
 
 import { ArtikelInputSchema } from "../shared/schemas.js";
-import { detecteerFormaat } from "../shared/utils.js";
+import { detecteerFormaat, formatteerZodFout } from "../shared/utils.js";
+import { ClientInputError } from "../shared/fouten.js";
 import {
   haalWetstekstOp,
   extraheerDocMetadata,
-  zoekPadEnElementInDom,
+  zoekArtikelElementen,
+  verzamelArtikelnummers,
 } from "../clients/repository-client.js";
 import {
   parseElement,
@@ -16,29 +18,70 @@ import {
   transformToMcpLite,
 } from "../bwb-parser/index.js";
 
-export async function handleArtikel(args: unknown): Promise<string> {
+/** Artikelnummers die op de gevraagde invoer lijken (prefix-verwantschap), voor suggesties. */
+function zoekSuggesties(gevraagd: string, beschikbaar: string[]): string[] {
+  const z = gevraagd.trim().toLowerCase();
+  const uniek = [...new Set(beschikbaar)];
+  return uniek
+    .filter((nr) => {
+      const n = nr.trim().toLowerCase();
+      return n !== z && (n.startsWith(z) || z.startsWith(n));
+    })
+    .slice(0, 5);
+}
+
+export async function handleArtikel(args: unknown, signaal?: AbortSignal): Promise<string> {
   const parsed = ArtikelInputSchema.safeParse(args);
-  if (!parsed.success) throw new Error(parsed.error.issues[0].message);
+  if (!parsed.success) throw new ClientInputError(formatteerZodFout(parsed.error));
 
   const { bwbId, artikel, lid, peildatum } = parsed.data;
   const lidnr = lid?.trim() || null;
 
-  const { doc, regeling } = await haalWetstekstOp(bwbId, peildatum);
+  const { doc, regeling } = await haalWetstekstOp(bwbId, peildatum, signaal);
   const meta = extraheerDocMetadata(doc);
   const wetNaam = meta.citeertitel || regeling.titel;
+  const versiedatum = meta.versiedatum || regeling.geldigVanaf;
+  const root = doc.documentElement!;
 
-  const gevonden = zoekPadEnElementInDom(doc.documentElement, artikel);
-  if (!gevonden) {
-    return JSON.stringify({ fout: `Artikel ${artikel} niet gevonden.` });
+  const treffers = zoekArtikelElementen(root, artikel);
+  if (treffers.length === 0) {
+    const suggesties = zoekSuggesties(artikel, verzamelArtikelnummers(root));
+    throw new ClientInputError(
+      `Artikel ${artikel} niet gevonden in ${bwbId} (peildatum ${peildatum}).` +
+        (suggesties.length ? ` Bestaat wel: ${suggesties.join(", ")}.` : "") +
+        " Roep wettenbank_structuur aan voor de geldige artikelnummers;" +
+        " vervallen artikelen laten gaten in de nummering achter."
+    );
   }
-  const { element: artikelElement, containerPad } = gevonden;
+  const { element: artikelElement, containerPad } = treffers[0];
+  const waarschuwing =
+    treffers.length > 1
+      ? `Er zijn ${treffers.length} elementen met nummer ${artikel} (bijv. ook in een ` +
+        `bijlage); het eerste exemplaar is gebruikt` +
+        (treffers[1].containerPad.length
+          ? `, een ander staat onder "${treffers[1].containerPad.join(" > ")}".`
+          : ".")
+      : undefined;
 
   const rawNode = parseElement(artikelElement, bwbId, []);
   const normalized = normalizeNode(rawNode);
-  let results = transformToMcpLite(normalized, bwbId, wetNaam);
+  let results = transformToMcpLite(normalized, bwbId, wetNaam, versiedatum);
 
   if (lidnr) {
+    const beschikbareLeden = results
+      .map((r) => r.sectie.match(/Lid (.*)$/)?.[1])
+      .filter((l): l is string => Boolean(l));
     results = results.filter((n) => n.sectie.endsWith(` > Lid ${lidnr}`));
+    if (results.length === 0) {
+      // Expliciet falen i.p.v. een lege leden-array: een stil leeg resultaat nodigt
+      // een LLM-client uit om tekst te "raden" — precies wat hier nooit mag.
+      throw new ClientInputError(
+        `Lid ${lidnr} niet gevonden in artikel ${artikel} van ${bwbId}. ` +
+          (beschikbareLeden.length
+            ? `Beschikbare leden: ${beschikbareLeden.join(", ")}.`
+            : "Dit artikel heeft geen genummerde leden; vraag het op zonder lid-parameter.")
+      );
+    }
   }
 
   // sectie = artikel-label uit het eerste resultaat (bijv. "Artikel 9")
@@ -52,10 +95,17 @@ export async function handleArtikel(args: unknown): Promise<string> {
     ? [...containerPad, sectie].join(" > ")
     : undefined;
 
-  const ledenData = results.map((r) => ({
-    lid: r.sectie.match(/Lid (.*)$/)?.[1] || "",
-    tekst: r.tekst,
-  }));
+  // Lid- en versiespecifieke jci-bronreferentie per lid (traceerbaarheid: een
+  // lid-2-analyse op peildatum X moet naar precies die tekst verwijzen).
+  const jciVoor = (lidNr: string) =>
+    `jci1.3:c:${bwbId}&artikel=${artikel}` +
+    (lidNr ? `&lid=${lidNr}` : "") +
+    (versiedatum ? `&g=${versiedatum}` : "");
+
+  const ledenData = results.map((r) => {
+    const lidVanResultaat = r.sectie.match(/Lid (.*)$/)?.[1] || "";
+    return { lid: lidVanResultaat, tekst: r.tekst, bronreferentie: jciVoor(lidVanResultaat) };
+  });
 
   const alleeTekst = ledenData.map((l) => l.tekst).join("\n");
   const formaat = detecteerFormaat(alleeTekst);
@@ -63,7 +113,8 @@ export async function handleArtikel(args: unknown): Promise<string> {
   return JSON.stringify({
     formaat,
     citeertitel: wetNaam,
-    versiedatum: meta.versiedatum || regeling.geldigVanaf,
+    ...(regeling.type && { type: regeling.type }),
+    versiedatum,
     // Geldigheidsmetadata van de toestand — voor traceerbaarheid: sinds/tot wanneer geldt
     // deze versie en wanneer is ze laatst gewijzigd (relevant voor wetsanalyse).
     geldigVanaf: regeling.geldigVanaf,
@@ -75,6 +126,7 @@ export async function handleArtikel(args: unknown): Promise<string> {
     ...(sectie && { sectie }),
     ...(pad && { pad }),
     leden: ledenData,
-    bronreferentie: `jci1.3:c:${bwbId}&artikel=${artikel}`,
+    bronreferentie: jciVoor(lidnr ?? ""),
+    ...(waarschuwing && { waarschuwing }),
   });
 }

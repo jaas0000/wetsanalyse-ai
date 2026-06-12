@@ -4,11 +4,12 @@
  */
 
 import { ZoektermInputSchema } from "../shared/schemas.js";
-import { detecteerFormaat } from "../shared/utils.js";
+import { detecteerFormaat, formatteerZodFout } from "../shared/utils.js";
+import { ClientInputError } from "../shared/fouten.js";
 import {
   haalWetstekstOp,
   extraheerDocMetadata,
-  zoekElementInDom,
+  zoekPadEnElementInDom,
 } from "../clients/repository-client.js";
 import { parseZoekterm, zoekTermInArtikelDom } from "../search/zoekterm-engine.js";
 import {
@@ -17,40 +18,58 @@ import {
   transformToMcpLite,
 } from "../bwb-parser/index.js";
 
-export async function handleZoekterm(args: unknown): Promise<string> {
+export async function handleZoekterm(args: unknown, signaal?: AbortSignal): Promise<string> {
   const parsed = ZoektermInputSchema.safeParse(args);
-  if (!parsed.success) throw new Error(parsed.error.issues[0].message);
+  if (!parsed.success) throw new ClientInputError(formatteerZodFout(parsed.error));
 
   const { bwbId, zoekterm, peildatum, maxResultaten, includeerTekst } = parsed.data;
 
-  const { doc, regeling } = await haalWetstekstOp(bwbId, peildatum);
+  const { doc, regeling } = await haalWetstekstOp(bwbId, peildatum, signaal);
   const meta = extraheerDocMetadata(doc);
   const wetNaam = meta.citeertitel || regeling.titel;
+  const versiedatum = meta.versiedatum || regeling.geldigVanaf;
+  const root = doc.documentElement!;
 
   const resultaat = zoekTermInArtikelDom(doc, parseZoekterm(zoekterm), maxResultaten);
+
+  // Versiespecifieke jci per gevonden artikel — zo is elke treffer direct herleidbaar
+  // zonder een extra wettenbank_artikel-aanroep.
+  const jciVoor = (artikelnr: string) =>
+    `jci1.3:c:${bwbId}&artikel=${artikelnr}` + (versiedatum ? `&g=${versiedatum}` : "");
 
   // Voeg optioneel artikeltekst toe
   const artikelen = await Promise.all(
     resultaat.artikelen.map(async (art) => {
-      if (!includeerTekst) return art;
+      const basis = { ...art, bronreferentie: jciVoor(art.artikel) };
+      if (!includeerTekst) return basis;
 
-      const artikelElement = zoekElementInDom(doc.documentElement, art.artikel);
-      if (!artikelElement) return art;
+      const treffer = zoekPadEnElementInDom(root, art.artikel);
+      if (!treffer) return basis;
 
-      const rawNode = parseElement(artikelElement, bwbId, []);
+      const rawNode = parseElement(treffer.element, bwbId, []);
       const normalized = normalizeNode(rawNode);
-      const mcpNodes = transformToMcpLite(normalized, bwbId, wetNaam);
+      const mcpNodes = transformToMcpLite(normalized, bwbId, wetNaam, versiedatum);
       const tekst = mcpNodes.map((n) => n.tekst).join("\n\n");
       const formaat = detecteerFormaat(tekst);
 
-      return { ...art, tekst, formaat };
+      // pad zoals bij wettenbank_artikel: containers + artikel-label.
+      const artikelLabel = mcpNodes[0]?.sectie
+        .split(" > ")
+        .filter((d) => !d.startsWith("Lid "))
+        .pop();
+      const pad =
+        treffer.containerPad.length > 0 && artikelLabel
+          ? [...treffer.containerPad, artikelLabel].join(" > ")
+          : undefined;
+
+      return { ...basis, ...(pad && { pad }), tekst, formaat };
     })
   );
 
   return JSON.stringify({
     formaat: "plain",
-    wet: wetNaam,
-    versiedatum: meta.versiedatum || regeling.geldigVanaf,
+    citeertitel: wetNaam,
+    versiedatum,
     bwbId,
     zoekterm,
     totaalTreffers: resultaat.totaalTreffers,

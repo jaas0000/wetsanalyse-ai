@@ -371,7 +371,7 @@ describe("haalWetstekstOp", () => {
   });
 
   it("stuurt standaard vandaag als peildatum mee (bug 2)", async () => {
-    const vandaag = new Date().toISOString().slice(0, 10);
+    const vandaag = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Amsterdam" }).format(new Date());
     const sruXml = makeSruXml(makeRecord({ locatie: "https://example.com/wet.xml" }));
     const fetchMock = mockFetch([
       { ok: true, text: sruXml },
@@ -397,7 +397,9 @@ describe("haalWetstekstOp", () => {
 
     const eersteAanroep = fetchMock.mock.calls[0][0] as string;
     expect(eersteAanroep).toContain("2010-01-01");
-    expect(eersteAanroep).not.toContain(new Date().toISOString().slice(0, 10));
+    expect(eersteAanroep).not.toContain(
+      new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Amsterdam" }).format(new Date())
+    );
   });
 
   it("gooit een fout bij onbekend BWB-id", async () => {

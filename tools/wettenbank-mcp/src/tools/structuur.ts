@@ -6,11 +6,13 @@
 
 import { StructuurInputSchema } from "../shared/schemas.js";
 import type { StructuurNode } from "../shared/schemas.js";
+import { formatteerZodFout } from "../shared/utils.js";
+import { ClientInputError } from "../shared/fouten.js";
 import {
   haalWetstekstOp,
   extraheerDocMetadata,
 } from "../clients/repository-client.js";
-import { parseBwbXml, normalizeNode } from "../bwb-parser/index.js";
+import { parseBwbVanDom, normalizeNode } from "../bwb-parser/index.js";
 import type { NormalizedNode, NormalizedArtikel } from "../bwb-parser/index.js";
 
 // Structurele container-types in BWB-wetten
@@ -94,17 +96,53 @@ function bouwPlatteArtikelStructuur(node: NormalizedNode): StructuurNode[] {
   return [{ type: "wet", nr: "", artikelen }];
 }
 
-export async function handleStructuur(args: unknown): Promise<string> {
+/**
+ * Filtert op sectie: nodes waarvan nr (exact, case-insensitief) of titel
+ * (substring) matcht, inclusief hun volledige subboom.
+ */
+export function filterOpSectie(nodes: StructuurNode[], sectie: string): StructuurNode[] {
+  const zoek = sectie.trim().toLowerCase();
+  const treffers: StructuurNode[] = [];
+  for (const node of nodes) {
+    const nrMatch = node.nr.trim().toLowerCase() === zoek;
+    const titelMatch = Boolean(node.titel && node.titel.toLowerCase().includes(zoek));
+    if (nrMatch || titelMatch) {
+      treffers.push(node);
+      continue; // subboom zit al in de treffer
+    }
+    if (node.secties) treffers.push(...filterOpSectie(node.secties, sectie));
+  }
+  return treffers;
+}
+
+/**
+ * Kapt de boom af op `diepte` niveaus. Afgekapte nodes krijgen `ingekort: true`
+ * zodat zichtbaar blijft dát er meer is (opvraagbaar via de sectie-parameter) —
+ * stil weglaten zou de inhoudsopgave misleidend compleet doen lijken.
+ */
+export function beperkDiepte(nodes: StructuurNode[], diepte: number): StructuurNode[] {
+  return nodes.map((node) => {
+    if (!node.secties || node.secties.length === 0) return node;
+    if (diepte <= 1) {
+      const { secties: _weg, ...rest } = node;
+      return { ...rest, ingekort: true };
+    }
+    return { ...node, secties: beperkDiepte(node.secties, diepte - 1) };
+  });
+}
+
+export async function handleStructuur(args: unknown, signaal?: AbortSignal): Promise<string> {
   const parsed = StructuurInputSchema.safeParse(args);
-  if (!parsed.success) throw new Error(parsed.error.issues[0].message);
+  if (!parsed.success) throw new ClientInputError(formatteerZodFout(parsed.error));
 
-  const { bwbId, peildatum } = parsed.data;
+  const { bwbId, peildatum, diepte, sectie } = parsed.data;
 
-  const { rawXml, doc, regeling } = await haalWetstekstOp(bwbId, peildatum);
+  const { doc, regeling } = await haalWetstekstOp(bwbId, peildatum, signaal);
   const docMeta = extraheerDocMetadata(doc);
   const wetNaam = docMeta.citeertitel || regeling.titel;
 
-  const rawNode = parseBwbXml(rawXml, bwbId);
+  // Hergebruik het al geparste Document uit de cache — geen tweede DOM-parse.
+  const rawNode = parseBwbVanDom(doc.documentElement, bwbId);
   const normalized = normalizeNode(rawNode);
 
   let structuur = bouwStructuurNodes(normalized);
@@ -112,10 +150,24 @@ export async function handleStructuur(args: unknown): Promise<string> {
     structuur = bouwPlatteArtikelStructuur(normalized);
   }
 
+  if (sectie) {
+    structuur = filterOpSectie(structuur, sectie);
+    if (!structuur.length) {
+      throw new ClientInputError(
+        `Geen sectie gevonden die matcht op "${sectie}" in ${bwbId}. ` +
+          "Roep wettenbank_structuur zonder sectie-parameter aan voor de volledige inhoudsopgave."
+      );
+    }
+  }
+  if (diepte !== undefined) {
+    structuur = beperkDiepte(structuur, diepte);
+  }
+
   return JSON.stringify({
     formaat: "plain",
     bwbId,
     citeertitel: wetNaam,
+    ...(regeling.type && { type: regeling.type }),
     versiedatum: docMeta.versiedatum || regeling.geldigVanaf,
     structuur,
   });

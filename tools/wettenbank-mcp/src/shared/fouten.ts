@@ -99,6 +99,19 @@ export class UpstreamError extends Error {
   }
 }
 
+/**
+ * Fout door verkeerde of niet-resolvebare client-input: validatiefouten, een
+ * onbekend artikel of lid. Classificeert als `client` zodat de foutrespons en de
+ * auditlog een verkeerde input onderscheiden van een upstream-storing, en de
+ * melding hoort de LLM-client te vertellen wat de volgende stap is.
+ */
+export class ClientInputError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ClientInputError";
+  }
+}
+
 export interface FoutDetail {
   bericht: string;
   code?: string;
@@ -131,12 +144,12 @@ export function foutDetails(err: unknown): FoutDetail {
     };
   }
   if (err instanceof Error) {
-    const isZod = err.name === "ZodError";
+    const isClient = err.name === "ZodError" || err instanceof ClientInputError;
     const code = extractCode(err);
     return {
       bericht: err.message,
       code,
-      klasse: isZod ? "client" : classificeer(code, undefined),
+      klasse: isClient ? "client" : classificeer(code, undefined),
     };
   }
   return { bericht: String(err), klasse: "onbekend" };
@@ -147,10 +160,21 @@ export function logNiveauVoor(klasse: FoutKlasse): "warn" | "error" {
   return klasse === "permanent" ? "error" : "warn";
 }
 
-/** Begrens een belofte met een totale deadline; gooit een transiënte UpstreamError bij overschrijding. */
-export function metDeadline<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+/**
+ * Begrens een belofte met een totale deadline; gooit een transiënte UpstreamError bij
+ * overschrijding. De optionele AbortController wordt bij overschrijding ge-abort, zodat
+ * onderliggende fetches daadwerkelijk worden geannuleerd in plaats van door te lopen
+ * (verspilde sockets/geheugen op een drukke server).
+ */
+export function metDeadline<T>(
+  p: Promise<T>,
+  ms: number,
+  label: string,
+  controller?: AbortController
+): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const timer = setTimeout(() => {
+      controller?.abort();
       reject(
         new UpstreamError(`tool-timeout: ${label} overschreed ${ms} ms`, {
           bron: "tool",

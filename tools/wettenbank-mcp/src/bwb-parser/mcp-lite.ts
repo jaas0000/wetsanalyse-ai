@@ -26,6 +26,10 @@ interface TransformContext {
   bwbId: string;
   citeertitel: string;
   path: string[];
+  /** Inwerkingtredingsdatum van de toestand; maakt de jci-bronreferentie versiespecifiek (&g=). */
+  versiedatum?: string;
+  /** Nummer van het omvattende artikel; <lid>-elementen hebben zelf geen labelId. */
+  artikelNr?: string;
 }
 
 /**
@@ -34,13 +38,14 @@ interface TransformContext {
 export function transformToMcpLite(
   root: NormalizedNode,
   bwbId: string,
-  citeertitel: string
+  citeertitel: string,
+  versiedatum = ""
 ): McpLiteNode[] {
-  const context: TransformContext = { bwbId, citeertitel, path: [] };
+  const context: TransformContext = { bwbId, citeertitel, path: [], versiedatum };
   const result: McpLiteNode[] = [];
-  
+
   processNode(root, context, result);
-  
+
   return result;
 }
 
@@ -65,13 +70,14 @@ function processNode(
     case "circulaire_divisie": {
       // Artikelen zijn de primaire 'content-units'
       const art = node as NormalizedArtikel;
+      const artContext = art.nr ? { ...nextContext, artikelNr: art.nr } : nextContext;
       if (art.leden && art.leden.length > 0) {
         for (const lid of art.leden) {
-          result.push(createMcpLiteNode(lid, nextContext));
+          result.push(createMcpLiteNode(lid, artContext));
         }
       } else if (!art.subdivisies || art.subdivisies.length === 0) {
         // Artikel zonder leden én zonder sub-divisies: één node van het artikel zelf.
-        result.push(createMcpLiteNode(node, nextContext));
+        result.push(createMcpLiteNode(node, artContext));
       }
       // Geneste circulaire.divisie-subsecties: recursief, zodat elk dieper niveau
       // zijn eigen node met volledig pad én tekst krijgt (geen verlies, geen platslaan).
@@ -149,11 +155,20 @@ function createMcpLiteNode(
     }
   }
 
-  // 4. Bronreferentie (JCI-uri)
+  // 4. Bronreferentie (JCI-uri) — zo specifiek mogelijk: artikel, lid én versie.
+  // Het artikelnummer uit de context is de juiste jci-waarde; labelId
+  // (bwb-ng-variabel-deel, bv. "/HoofdstukI/Artikel9") is alleen de fallback.
   const labelId = node.metadata?.labelId;
-  const bronreferentie = labelId 
-    ? `jci1.3:c:${bwbId}&artikel=${labelId}` 
+  const artikelDeel = context.artikelNr ?? labelId;
+  let bronreferentie = artikelDeel
+    ? `jci1.3:c:${bwbId}&artikel=${artikelDeel}`
     : `jci1.3:c:${bwbId}`;
+  if (artikelDeel && "lidnr" in node && node.lidnr) {
+    bronreferentie += `&lid=${node.lidnr}`;
+  }
+  if (context.versiedatum) {
+    bronreferentie += `&g=${context.versiedatum}`;
+  }
 
   return {
     bwbId,
@@ -194,6 +209,10 @@ function renderContent(content: ContentItem[]): string {
       stuk = item.content && item.content.length > 0
         ? renderContent(item.content)
         : (item.label || "");
+    } else if (item.type === "br") {
+      // Regelafbreking: als spatie renderen zodat woorden niet aaneenplakken
+      // ("regel een<br/>regel twee" → "regel een regel twee").
+      stuk = " ";
     } else if (item.label) {
       stuk = item.label;
     } else if (item.content) {
@@ -216,32 +235,7 @@ function renderContent(content: ContentItem[]): string {
 function renderNodeToMarkdown(node: NormalizedNode): string {
   switch (node.type) {
     case "lijst":
-      const lijst = node as NormalizedLijst;
-      return lijst.items
-        .map((li: NormalizedListItem) => {
-          let label = li.label.trim();
-          // Alleen een punt toevoegen als het een 'nummering' is (cijfer of letter)
-          // en nog geen afsluitend teken heeft. Symbolen zoals - of • krijgen geen punt.
-          if (label && /^[a-zA-Z0-9]+$/.test(label)) {
-            label += ".";
-          }
-          const prefix = label ? `${label} ` : "* ";
-          let text = renderContent(li.content);
-          if (li.items.length > 0) {
-            // Geneste lijst met indentatie
-            const nested = li.items.map((sub: NormalizedListItem) => {
-              let subLabel = sub.label.trim();
-              if (subLabel && /^[a-zA-Z0-9]+$/.test(subLabel)) {
-                subLabel += ".";
-              }
-              const subPrefix = subLabel ? `${subLabel} ` : "* ";
-              return `  ${subPrefix}${renderContent(sub.content)}`;
-            }).join("\n");
-            text += "\n" + nested;
-          }
-          return `${prefix}${text}`;
-        })
-        .join("\n");
+      return renderLijstItems((node as NormalizedLijst).items, 0);
 
     case "table":
       return renderTableToMarkdown(node as NormalizedTable);
@@ -252,6 +246,38 @@ function renderNodeToMarkdown(node: NormalizedNode): string {
     default:
       return "";
   }
+}
+
+/** Voorziet een lijstitem-label van een afsluitende punt als het een nummering is. */
+function lijstPrefix(label: string): string {
+  let l = label.trim();
+  // Alleen een punt toevoegen als het een 'nummering' is (cijfer of letter)
+  // en nog geen afsluitend teken heeft. Symbolen zoals - of • krijgen geen punt.
+  if (l && /^[a-zA-Z0-9]+$/.test(l)) l += ".";
+  return l ? `${l} ` : "* ";
+}
+
+/**
+ * Rendert lijstitems recursief met indentatie per niveau, zodat élke diepte
+ * (a → 1° → i → …) behouden blijft. Niet-al/lijst-blokken in een item (zoals
+ * een tabel) worden ná de itemtekst gerenderd — niets verdwijnt stil.
+ */
+function renderLijstItems(items: NormalizedListItem[], diepte: number): string {
+  const indent = "  ".repeat(diepte);
+  return items
+    .map((li) => {
+      const regels = [`${indent}${lijstPrefix(li.label)}${renderContent(li.content)}`];
+      if (li.items.length > 0) {
+        regels.push(renderLijstItems(li.items, diepte + 1));
+      }
+      for (const blok of li.blocks ?? []) {
+        if (blok.type === "al" || blok.type === "lijst") continue; // al in content/items
+        const md = renderNodeToMarkdown(blok);
+        if (md) regels.push(md);
+      }
+      return regels.join("\n");
+    })
+    .join("\n");
 }
 
 /**

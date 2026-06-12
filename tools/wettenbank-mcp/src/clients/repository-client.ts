@@ -12,32 +12,44 @@ import {
   isVertrouwdeRepoUrl,
 } from "./sru-client.js";
 import type { Regeling } from "./sru-client.js";
-import { fetchMetRetry } from "./http.js";
+import { fetchTekstMetRetry } from "./http.js";
 import { UpstreamError } from "../shared/fouten.js";
+import { vandaag } from "../shared/utils.js";
 import { log } from "../logger.js";
-
-type XNode = any;
-type XElement = any;
-type XDocument = any;
+import type { DomDocument, DomElement, DomNode } from "../shared/dom.js";
 
 // ── Cache ─────────────────────────────────────────────────────────────────────
 
 interface CacheEntry {
   rawXml: string;
-  doc: XDocument;
+  doc: DomDocument;
   regeling: Regeling;
   timestamp: number;
+  bytes: number;
 }
 
+// Sleutel = toestand-URL (locatie_toestand). Verschillende peildata die naar dezelfde
+// toestand wijzen, delen zo één entry; `datumAlias` vertaalt `${bwbId}|${datum}` naar
+// die URL zodat een cache-hit géén SRU-roundtrip meer kost.
 export const xmlCache = new Map<string, CacheEntry>();
+const datumAlias = new Map<string, string>();
 const CACHE_TTL = 1000 * 60 * 60; // 1 uur
-// Bovengrens op het aantal entries (elke entry bevat de volledige rauwe XML + geparsed
-// Document, dus potentieel MB's). Naast de TTL voorkomt dit onbegrensde groei binnen
-// één uur bij veel verschillende bwbId×datum-combinaties (LRU-evictie).
+// Bovengrens op het aantal entries; naast de TTL voorkomt dit onbegrensde groei binnen
+// één uur bij veel verschillende toestanden (LRU-evictie).
 const MAX_CACHE_ENTRIES = 50;
-// Bovengrens per entry: wetten groter dan 5 MB (bijv. Omgevingswet) worden niet gecached
-// om te voorkomen dat één grote wet een onevenredig groot deel van het geheugen inneemt.
-const MAX_XML_BYTES = 5 * 1024 * 1024;
+// Totaalbudget (bytes rauwe XML) i.p.v. een per-entry-cap: zo worden juist de duurste
+// documenten (Omgevingswet, complete wetboeken) wél gecachet — herhaald downloaden en
+// parsen daarvan is veel kostbaarder dan het geheugen — terwijl het totaal begrensd
+// blijft. LRU-evictie maakt ruimte tot het nieuwe document past.
+const MAX_CACHE_BYTES = Number(process.env.WETTENBANK_CACHE_MAX_BYTES ?? 64 * 1024 * 1024);
+
+/** Som van de entry-groottes; max. 50 entries dus goedkoop, en altijd in sync
+ *  (ook als een test of aanroeper de Map rechtstreeks leegt). */
+function totaalCacheBytes(): number {
+  let som = 0;
+  for (const entry of xmlCache.values()) som += entry.bytes;
+  return som;
+}
 
 // Verwijder verlopen entries elk uur zodat de cache niet onbegrensd groeit.
 setInterval(() => {
@@ -45,27 +57,17 @@ setInterval(() => {
   for (const [key, entry] of xmlCache) {
     if (nu - entry.timestamp > CACHE_TTL) xmlCache.delete(key);
   }
+  // Aliassen die naar een verdwenen entry wijzen, kunnen weg.
+  for (const [alias, url] of datumAlias) {
+    if (!xmlCache.has(url)) datumAlias.delete(alias);
+  }
 }, CACHE_TTL).unref();
-
-function getCacheKey(bwbId: string, peildatum: string): string {
-  return `${bwbId}|${peildatum}`;
-}
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-function vandaag(): string {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const day = String(now.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface WetstekstResultaat {
   rawXml: string;
-  doc: XDocument;
+  doc: DomDocument;
   regeling: Regeling;
 }
 
@@ -76,24 +78,35 @@ export interface DocMetadata {
 
 // ── Functies ──────────────────────────────────────────────────────────────────
 
+/** Cache-hit afhandelen: LRU-positie verversen en alias registreren. */
+function cacheHit(url: string, entry: CacheEntry, aliasKey: string): WetstekstResultaat {
+  xmlCache.delete(url);
+  xmlCache.set(url, entry);
+  datumAlias.set(aliasKey, url);
+  return { rawXml: entry.rawXml, doc: entry.doc, regeling: entry.regeling };
+}
+
 export async function haalWetstekstOp(
   bwbId: string,
-  peildatum?: string
+  peildatum?: string,
+  signaal?: AbortSignal
 ): Promise<WetstekstResultaat> {
   const datum = peildatum ?? vandaag();
-  const cacheKey = getCacheKey(bwbId, datum);
-  const cached = xmlCache.get(cacheKey);
+  const aliasKey = `${bwbId}|${datum}`;
 
-  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-    // LRU: verversde toegang naar achteren verplaatsen.
-    xmlCache.delete(cacheKey);
-    xmlCache.set(cacheKey, cached);
-    return { rawXml: cached.rawXml, doc: cached.doc, regeling: cached.regeling };
+  // Snelle route: deze bwbId+datum is al eerder naar een toestand-URL vertaald.
+  const bekendeUrl = datumAlias.get(aliasKey);
+  if (bekendeUrl) {
+    const cached = xmlCache.get(bekendeUrl);
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+      return cacheHit(bekendeUrl, cached, aliasKey);
+    }
   }
 
   const sruXml = await sruRequest(
     `dcterms.identifier==${bwbId} and overheidbwb.geldigheidsdatum==${datum}`,
-    1
+    1,
+    signaal
   );
   const lijst = parseRecords(sruXml);
   if (!lijst.length) {
@@ -107,10 +120,17 @@ export async function haalWetstekstOp(
     throw new Error(`Niet-vertrouwde wetstekst-URL geweigerd voor BWB-id: ${bwbId}.`);
   }
 
-  const resp = await fetchMetRetry(
+  // Tweede cache-kans: een andere peildatum kan naar exact dezelfde toestand wijzen;
+  // dan is alleen de (goedkope) SRU-lookup nodig en vervalt download + DOM-parse.
+  const cachedToestand = xmlCache.get(r.repositoryUrl);
+  if (cachedToestand && Date.now() - cachedToestand.timestamp < CACHE_TTL) {
+    return cacheHit(r.repositoryUrl, cachedToestand, aliasKey);
+  }
+
+  const resp = await fetchTekstMetRetry(
     r.repositoryUrl,
     {},
-    { timeoutMs: 15_000, bron: "Wetstekst-repository" }
+    { timeoutMs: 15_000, bron: "Wetstekst-repository", signal: signaal }
   );
   if (!resp.ok)
     throw new UpstreamError(`Wetstekst repository onbereikbaar: ${resp.status}`, {
@@ -119,31 +139,38 @@ export async function haalWetstekstOp(
       httpStatus: resp.status,
     });
 
-  const rawXml = await resp.text();
+  const rawXml = resp.tekst;
   const doc = parseXmlDoc(rawXml, "wetstekst-repository");
 
-  // LRU-cap: gooi de oudste entry weg vóór we de nieuwe toevoegen.
-  if (xmlCache.size >= MAX_CACHE_ENTRIES) {
-    const oudste = xmlCache.keys().next().value;
-    if (oudste !== undefined) xmlCache.delete(oudste);
-  }
-
   const result = { rawXml, doc, regeling: r };
+  const bytes = Buffer.byteLength(rawXml);
 
-  if (rawXml.length > MAX_XML_BYTES) {
+  if (bytes > MAX_CACHE_BYTES) {
+    // Past zelfs in een lege cache niet binnen het budget.
     log("warn", "functioneel", "wetstekst te groot voor cache — wordt niet gecacht", {
       bwbId,
-      bytes: rawXml.length,
+      bytes,
     });
     return result;
   }
 
-  xmlCache.set(cacheKey, { ...result, timestamp: Date.now() });
+  // LRU-evictie tot de nieuwe entry binnen entry- én bytebudget past.
+  while (
+    xmlCache.size >= MAX_CACHE_ENTRIES ||
+    (xmlCache.size > 0 && totaalCacheBytes() + bytes > MAX_CACHE_BYTES)
+  ) {
+    const oudste = xmlCache.keys().next().value;
+    if (oudste === undefined) break;
+    xmlCache.delete(oudste);
+  }
+
+  xmlCache.set(r.repositoryUrl, { ...result, timestamp: Date.now(), bytes });
+  datumAlias.set(aliasKey, r.repositoryUrl);
 
   return result;
 }
 
-export function extraheerDocMetadata(doc: XDocument): DocMetadata {
+export function extraheerDocMetadata(doc: DomDocument): DocMetadata {
   const toestand = doc.getElementsByTagName("toestand")[0];
   const versiedatum = toestand ? getAttr(toestand, "inwerkingtredingsdatum") : "";
   const regelingInfo = doc.getElementsByTagName("regeling-info")[0];
@@ -158,8 +185,8 @@ const CONTAINER_TAGS_DOM = new Set([
 ]);
 
 /** Extraheert het leesbare label van een container-element via zijn <kop>. */
-function bouwContainerLabel(el: XElement): string | null {
-  const kop = el.getElementsByTagName("kop")[0];
+function bouwContainerLabel(el: DomElement): string | null {
+  const kop = el.getElementsByTagName("kop").item(0);
   if (!kop) return null;
   const label = getElText(kop, "label");
   const nr    = getElText(kop, "nr");
@@ -167,46 +194,87 @@ function bouwContainerLabel(el: XElement): string | null {
   return [label, nr, titel].filter(Boolean).join(" ") || null;
 }
 
-/**
- * Zoekt een artikel-element in de DOM en geeft zowel het element als het
- * container-pad terug (bijv. ["Hoofdstuk V", "Afdeling 5.1"]).
- * Bevat geen artikel-label zelf — alleen de omvattende containers.
- */
-export function zoekPadEnElementInDom(
-  el: XNode,
-  artikelnummer: string,
-  huidigPad: string[] = [],
-): { element: XElement; containerPad: string[] } | null {
-  if (el.nodeType !== 1) return null;
-  const tag = el.tagName;
-
-  if (tag === "artikel" || tag === "circulaire.divisie") {
-    const nr = getElText(el.getElementsByTagName("kop")[0], "nr");
-    if (nr === artikelnummer) return { element: el, containerPad: huidigPad };
-  }
-
-  const label = CONTAINER_TAGS_DOM.has(tag) ? bouwContainerLabel(el) : null;
-  const nieuwPad = label ? [...huidigPad, label] : huidigPad;
-
-  for (let i = 0; i < el.childNodes.length; i++) {
-    const found = zoekPadEnElementInDom(el.childNodes.item(i), artikelnummer, nieuwPad);
-    if (found) return found;
-  }
-  return null;
+export interface ArtikelTreffer {
+  element: DomElement;
+  containerPad: string[];
 }
 
-export function zoekElementInDom(el: XNode, artikelnummer: string): XElement | null {
+/** Normaliseert een artikelnummer voor vergelijking: trim + lowercase ("9A " ≡ "9a"). */
+function normaliseerNr(nr: string): string {
+  return nr.trim().toLowerCase();
+}
+
+/**
+ * Zoekt álle artikel-elementen met dit nummer (case-insensitief, getrimd) en geeft
+ * per treffer het element plus het container-pad (bijv. ["Hoofdstuk V", "Afdeling 5.1"]).
+ * Meerdere treffers komen voor wanneer een bijlage dezelfde nummering herstart; de
+ * aanroeper kan daar dan expliciet voor waarschuwen i.p.v. stil de eerste te nemen.
+ */
+export function zoekArtikelElementen(
+  el: DomNode,
+  artikelnummer: string,
+  huidigPad: string[] = [],
+  treffers: ArtikelTreffer[] = [],
+): ArtikelTreffer[] {
+  if (el.nodeType !== 1) return treffers;
+  const elem = el as DomElement;
+  const tag = elem.tagName;
+
+  if (tag === "artikel" || tag === "circulaire.divisie") {
+    const nr = getElText(elem.getElementsByTagName("kop").item(0), "nr");
+    if (normaliseerNr(nr) === normaliseerNr(artikelnummer)) {
+      treffers.push({ element: elem, containerPad: huidigPad });
+    }
+  }
+
+  const label = CONTAINER_TAGS_DOM.has(tag) ? bouwContainerLabel(elem) : null;
+  const nieuwPad = label ? [...huidigPad, label] : huidigPad;
+
+  for (let i = 0; i < elem.childNodes.length; i++) {
+    zoekArtikelElementen(elem.childNodes.item(i), artikelnummer, nieuwPad, treffers);
+  }
+  return treffers;
+}
+
+/**
+ * Eerste treffer (element + pad), of null. Bestaat naast zoekArtikelElementen voor
+ * aanroepers die geen duplicaat-detectie nodig hebben.
+ */
+export function zoekPadEnElementInDom(
+  el: DomNode,
+  artikelnummer: string,
+): ArtikelTreffer | null {
+  return zoekArtikelElementen(el, artikelnummer)[0] ?? null;
+}
+
+export function zoekElementInDom(el: DomNode, artikelnummer: string): DomElement | null {
   return zoekPadEnElementInDom(el, artikelnummer)?.element ?? null;
 }
 
-export function extractTextForSearch(el: XNode): string {
+/** Alle artikelnummers in documentvolgorde — voor foutmeldingen/suggesties. */
+export function verzamelArtikelnummers(el: DomNode): string[] {
+  const nummers: string[] = [];
+  (function loop(node: DomNode): void {
+    if (node.nodeType !== 1) return;
+    const elem = node as DomElement;
+    if (elem.tagName === "artikel" || elem.tagName === "circulaire.divisie") {
+      const nr = getElText(elem.getElementsByTagName("kop").item(0), "nr");
+      if (nr) nummers.push(nr);
+    }
+    for (let i = 0; i < elem.childNodes.length; i++) loop(elem.childNodes.item(i));
+  })(el);
+  return nummers;
+}
+
+export function extractTextForSearch(el: DomNode): string {
   if (el.nodeType === 3) return el.nodeValue ?? "";
   if (el.nodeType !== 1) return "";
-  if (el.tagName === "kop") return "";
+  const elem = el as DomElement;
+  if (elem.tagName === "kop") return "";
 
   let text = "";
-  for (let i = 0; i < el.childNodes.length; i++) {
-    text += extractTextForSearch(el.childNodes.item(i));
+  for (let i = 0; i < elem.childNodes.length; i++) {
+    text += extractTextForSearch(elem.childNodes.item(i));
   }
   return text;
 }

@@ -4,9 +4,7 @@
 
 import { extractTextForSearch } from "../clients/repository-client.js";
 import { getElText } from "../clients/sru-client.js";
-
-type XDocument = any;
-type XElement = any;
+import type { DomDocument, DomElement } from "../shared/dom.js";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -63,7 +61,7 @@ export function parseZoekterm(zoekterm: string): ZoekInput {
 }
 
 export function zoekTermInArtikelDom(
-  doc: XDocument | XElement,
+  doc: DomDocument | DomElement,
   invoer: ZoekInput,
   maxResultaten = 10
 ): ZoekTermResultaat {
@@ -77,13 +75,13 @@ export function zoekTermInArtikelDom(
     { count: number; leden: Set<string>; matchedPatterns: Set<number> }
   >();
 
-  const articles: XElement[] = [
+  const articles: DomElement[] = [
     ...Array.from(doc.getElementsByTagName("artikel")),
     ...Array.from(doc.getElementsByTagName("circulaire.divisie")),
   ];
 
   for (const art of articles) {
-    const nr = getElText(art.getElementsByTagName("kop")[0], "nr");
+    const nr = getElText(art.getElementsByTagName("kop").item(0), "nr");
     if (!nr) continue;
 
     const entry = tellers.get(nr) ?? {
@@ -97,15 +95,16 @@ export function zoekTermInArtikelDom(
       pat.lastIndex = 0;
       const matches = clean.match(pat);
       if (matches) {
-        const toAdd = Math.min(matches.length, 100 - entry.count);
-        entry.count += toAdd;
+        // Geen kunstmatige cap: tellen is goedkoop en een stil geplafonneerd
+        // aantal zou totaalTreffers onnauwkeurig maken.
+        entry.count += matches.length;
         entry.matchedPatterns.add(i);
         tellers.set(nr, entry);
       }
     });
 
     const lids = Array.from(art.getElementsByTagName("lid"));
-    for (const lid of lids as XElement[]) {
+    for (const lid of lids) {
       const lidnr = getElText(lid, "lidnr");
       if (!lidnr) continue;
       const lidText = extractTextForSearch(lid);

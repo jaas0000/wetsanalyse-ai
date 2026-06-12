@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Schema-getrouwe BWB-toestand-fixture (BWB-toestand/2016-1) voor de
+  brongetrouwheidstests. Geen echte wet (verzonnen BWB-id), maar de structuur en
+  randgevallen komen uit echte wetgeving: aanhef naast genummerde leden, drie
+  lijstniveaus (a → 1° → i), een tabel binnen een lijstitem, opeenvolgende
+  inline-verwijzingen gescheiden door whitespace, <br/>, en een bijlage waarin de
+  artikelnummering opnieuw begint. NB: de container draait zonder netwerk naar
+  overheid.nl; een opname van een echte toestand-XML blijft wenselijk als
+  aanvullende golden file.
+-->
+<toestand bwb-id="BWBR0099999" inwerkingtreding="2024-01-01" inwerkingtredingsdatum="2024-01-01">
+  <wetgeving>
+    <intitule>Wet houdende testbepalingen voor brongetrouwheid</intitule>
+    <citeertitel>Testwet brongetrouwheid</citeertitel>
+    <wettekst>
+      <hoofdstuk bwb-ng-variabel-deel="/HoofdstukI">
+        <kop>
+          <label>Hoofdstuk</label>
+          <nr>I</nr>
+          <titel>Algemene bepalingen</titel>
+        </kop>
+        <artikel bwb-ng-variabel-deel="/HoofdstukI/Artikel1">
+          <kop>
+            <label>Artikel</label>
+            <nr>1</nr>
+          </kop>
+          <al>In deze wet wordt verstaan onder <nadruk type="cur">ontvanger</nadruk>: de functionaris, bedoeld in <extref doc="jci1.3:c:BWBR0004770&amp;artikel=2">artikel 2</extref> <extref doc="jci1.3:c:BWBR0004770&amp;artikel=3">artikel 3</extref> van die wet.</al>
+        </artikel>
+        <afdeling bwb-ng-variabel-deel="/HoofdstukI/Afdeling1.2">
+          <kop>
+            <label>Afdeling</label>
+            <nr>1.2</nr>
+            <titel>Betaling</titel>
+          </kop>
+          <artikel bwb-ng-variabel-deel="/HoofdstukI/Artikel9">
+            <kop>
+              <label>Artikel</label>
+              <nr>9</nr>
+            </kop>
+            <al>Aanhef die naast de genummerde leden staat.</al>
+            <lid>
+              <lidnr>1</lidnr>
+              <al>Eerste regel<br/>tweede regel van het eerste lid.</al>
+            </lid>
+            <lid>
+              <lidnr>2</lidnr>
+              <al>Bij de betaling gelden de volgende onderdelen:</al>
+              <lijst>
+                <li>
+                  <li.nr>a</li.nr>
+                  <al>onderdeel a op niveau een;</al>
+                  <lijst>
+                    <li>
+                      <li.nr>1°</li.nr>
+                      <al>subonderdeel op niveau twee;</al>
+                      <lijst>
+                        <li>
+                          <li.nr>i</li.nr>
+                          <al>diepste subonderdeel op niveau drie;</al>
+                        </li>
+                      </lijst>
+                    </li>
+                  </lijst>
+                </li>
+                <li>
+                  <li.nr>b</li.nr>
+                  <al>onderdeel b met de volgende tabel:</al>
+                  <table>
+                    <tgroup cols="2">
+                      <colspec colname="col1"/>
+                      <colspec colname="col2"/>
+                      <tbody>
+                        <row>
+                          <entry>tariefgroep</entry>
+                          <entry>percentage</entry>
+                        </row>
+                        <row>
+                          <entry>eerste schijf</entry>
+                          <entry>vier procent</entry>
+                        </row>
+                      </tbody>
+                    </tgroup>
+                  </table>
+                </li>
+              </lijst>
+              <al>Slotalinea van het tweede lid na de opsomming.</al>
+            </lid>
+          </artikel>
+          <artikel bwb-ng-variabel-deel="/HoofdstukI/Artikel9a">
+            <kop>
+              <label>Artikel</label>
+              <nr>9a</nr>
+            </kop>
+            <lid>
+              <lidnr>1</lidnr>
+              <al>Bepaling van artikel negen-a, eerste lid.</al>
+            </lid>
+          </artikel>
+        </afdeling>
+      </hoofdstuk>
+      <bijlage bwb-ng-variabel-deel="/BijlageA">
+        <kop>
+          <label>Bijlage</label>
+          <nr>A</nr>
+          <titel>Behorende bij deze wet</titel>
+        </kop>
+        <artikel bwb-ng-variabel-deel="/BijlageA/Artikel1">
+          <kop>
+            <label>Artikel</label>
+            <nr>1</nr>
+          </kop>
+          <al>Bijlage-artikel met hetzelfde nummer als artikel 1 van de wettekst.</al>
+        </artikel>
+      </bijlage>
+    </wettekst>
+  </wetgeving>
+</toestand>

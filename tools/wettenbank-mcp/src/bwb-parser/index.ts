@@ -10,7 +10,7 @@
  *   result.normalized // NORMALIZED NormalizedNode-boom
  */
 
-export { parseBwbXml, parseElement } from "./parser.js";
+export { parseBwbXml, parseBwbVanDom, parseElement } from "./parser.js";
 export { normalizeNode, extractPlainText } from "./normalizer.js";
 export { transformToMcpLite } from "./mcp-lite.js";
 export type {
@@ -55,9 +55,9 @@ export function parseBwb(
 ): ParseResult {
   const raw = parseBwbXml(xml, bwbId);
   const normalized = normalizeNode(raw);
-  
+
   const finalBwbId = raw.metadata.bwbId ?? bwbId;
-  const mcpLite = transformToMcpLite(normalized, finalBwbId, citeertitel);
+  const mcpLite = transformToMcpLite(normalized, finalBwbId, citeertitel, versiedatum);
 
   return {
     bwbId: finalBwbId,

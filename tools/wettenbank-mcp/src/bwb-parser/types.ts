@@ -142,6 +142,10 @@ export interface NormalizedListItem {
   tekst: string;          // platte tekst van de <al>-nodes
   content: ContentItem[]; // gestructureerde content
   items: NormalizedListItem[]; // geneste sub-lijst
+  // Alle content-blokken in documentvolgorde, inclusief niet-al/lijst-blokken
+  // (bv. een tabel binnen een lijstitem). Optioneel voor backward-compat met
+  // handgebouwde testdata; de normalizer vult dit altijd.
+  blocks?: NormalizedNode[];
 }
 
 /** CALS-tabel met volledig uitgewerkte rowspan/colspan */

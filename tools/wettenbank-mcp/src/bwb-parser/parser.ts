@@ -16,37 +16,8 @@
 
 import { DOMParser } from "@xmldom/xmldom";
 import type { BwbNode, BwbMetadata, ContentItem, InlineNode } from "./types.js";
-
-// ── Minimale DOM-interfaces ───────────────────────────────────────────────────
-// @xmldom/xmldom heeft zijn eigen Element-type dat botst met het globale
-// lib.dom.d.ts Element. We definiëren een minimale interface die precies
-// het gedeelte van de DOM beschrijft dat de parser nodig heeft.
-
-interface DomAttr {
-  name: string;
-  value: string;
-}
-
-interface DomNode {
-  nodeType: number;
-  nodeValue: string | null;
-  childNodes: DomNodeList;
-}
-
-interface DomNodeList {
-  length: number;
-  item(index: number): DomNode;
-}
-
-interface DomElement extends DomNode {
-  tagName: string;
-  textContent: string | null;
-  getAttribute(name: string): string | null;
-  attributes: {
-    length: number;
-    item(index: number): DomAttr | null;
-  };
-}
+// Minimale DOM-interfaces — gedeeld met de clients, zie shared/dom.ts.
+import type { DomElement } from "../shared/dom.js";
 
 // ── Constanten ────────────────────────────────────────────────────────────────
 
@@ -263,7 +234,15 @@ function parseContentNodes(el: DomElement, bwbId: string, path: string[]): Conte
     if (child.nodeType === 3) {
       // TEXT_NODE — normaliseer witruimte maar behoud spaties
       const text = (child.nodeValue ?? "").replace(/\s+/g, " ");
-      if (text.trim()) items.push(text);
+      if (text.trim()) {
+        items.push(text);
+      } else if (text && items.length > 0) {
+        // Whitespace-only tekstnode tussen inline-elementen is betekenisvol: hij
+        // scheidt woorden (bijv. tussen twee opeenvolgende <extref>'s). Weggooien
+        // zou tekst verminken ("[artikel 5](a)[artikel 6](b)"); reduceer tot één
+        // spatie. Aan het begin is hij niet nodig (rendering trimt).
+        items.push(" ");
+      }
     } else if (child.nodeType === 1) {
       const childEl = child as unknown as DomElement;
       const tag = childEl.tagName;
@@ -372,8 +351,15 @@ export function parseBwbXml(xml: string, bwbId: string): BwbNode {
   const domParser = new DOMParser();
   const doc = domParser.parseFromString(xml, "text/xml");
   // doc.documentElement is @xmldom/xmldom's eigen Element-type; cast naar DomElement.
-  const root = doc.documentElement as unknown as DomElement | null;
+  return parseBwbVanDom(doc.documentElement as unknown as DomElement | null, bwbId);
+}
 
+/**
+ * Als parseBwbXml, maar vanaf een al geparset documentElement. Voorkomt een
+ * tweede volledige DOM-parse wanneer de aanroeper (zoals wettenbank_structuur)
+ * het Document al uit de cache heeft.
+ */
+export function parseBwbVanDom(root: DomElement | null, bwbId: string): BwbNode {
   if (!root) {
     return { id: bwbId, type: "leeg", metadata: { bwbId }, children: [], content: null };
   }

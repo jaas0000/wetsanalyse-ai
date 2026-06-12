@@ -16,8 +16,15 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
+import { z } from "zod";
 
 import { buildInfo } from "./build-info.js";
+import {
+  ZoekInputSchema,
+  StructuurInputSchema,
+  ArtikelInputSchema,
+  ZoektermInputSchema,
+} from "./shared/schemas.js";
 import { handleZoek } from "./tools/zoek.js";
 import { handleStructuur } from "./tools/structuur.js";
 import { handleArtikel } from "./tools/artikel.js";
@@ -39,6 +46,16 @@ export interface ServerContext {
   getSessionId?: () => string | undefined;
 }
 
+/**
+ * Zod-schema → JSON Schema voor de MCP-tooldefinitie. `$schema` gaat eruit
+ * (de MCP-envelop bepaalt het schemadialect al).
+ */
+export function alsJsonSchema(schema: z.ZodType): { type: "object"; [k: string]: unknown } {
+  const json = z.toJSONSchema(schema, { io: "input" }) as Record<string, unknown>;
+  delete json["$schema"];
+  return json as { type: "object"; [k: string]: unknown };
+}
+
 // ── Server-factory ──────────────────────────────────────────────────────────
 // createServer() bouwt een verse, volledig geconfigureerde Server. De stdio-modus
 // gebruikt één singleton (export `server` onderaan); de HTTP-modus maakt per sessie
@@ -51,6 +68,9 @@ export function createServer(ctx: ServerContext = {}): Server {
   );
 
   // ── Tool-definities ─────────────────────────────────────────────────────────
+  // De JSON-inputschema's worden gegenereerd uit de Zod-schema's in shared/schemas.ts:
+  // één bron van waarheid, dus geen drift tussen wat de LLM-client te zien krijgt en
+  // wat de handlers daadwerkelijk valideren (min/max, enums, defaults, descriptions).
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
     tools: [
@@ -59,32 +79,7 @@ export function createServer(ctx: ServerContext = {}): Server {
         description:
           "Zoek Nederlandse regelingen op naam en retourneer BWB-id + metadata. " +
           "Gebruik dit als eerste stap om het BWB-id van een wet te achterhalen.",
-        inputSchema: {
-          type: "object",
-          properties: {
-            titel: {
-              type: "string",
-              description: "Zoekterm in de titel, bijv. 'Invorderingswet'",
-            },
-            rechtsgebied: {
-              type: "string",
-              description: "bijv. belastingrecht, arbeidsrecht",
-            },
-            ministerie: {
-              type: "string",
-              description: "bijv. Financiën, Justitie",
-            },
-            regelingsoort: {
-              type: "string",
-              enum: ["wet", "AMvB", "ministeriele-regeling", "regeling", "besluit"],
-            },
-            maxResultaten: { type: "number", default: 10 },
-            peildatum: {
-              type: "string",
-              description: "Datum YYYY-MM-DD; default is vandaag.",
-            },
-          },
-        },
+        inputSchema: alsJsonSchema(ZoekInputSchema),
       },
       {
         name: "wettenbank_structuur",
@@ -92,49 +87,16 @@ export function createServer(ctx: ServerContext = {}): Server {
           "Haal de inhoudsopgave op van een Nederlandse wet: hoofdstukken, afdelingen, " +
           "paragrafen en bijbehorende artikelnummers — zonder artikeltekst. " +
           "Gebruik dit om gericht te navigeren voordat je wettenbank_artikel aanroept.",
-        inputSchema: {
-          type: "object",
-          required: ["bwbId"],
-          properties: {
-            bwbId: {
-              type: "string",
-              description: "BWB-id, bijv. BWBR0004770",
-            },
-            peildatum: {
-              type: "string",
-              description: "Datum YYYY-MM-DD; default is vandaag.",
-            },
-          },
-        },
+        inputSchema: alsJsonSchema(StructuurInputSchema),
       },
       {
         name: "wettenbank_artikel",
         description:
           "Haal één artikel op uit een Nederlandse wet in schone Markdown. " +
-          "Retourneert alle leden met platte tekst, links en tabellen. " +
+          "Retourneert alle leden met platte tekst, links, tabellen en per lid een " +
+          "lid- en versiespecifieke jci-bronreferentie. " +
           "Gebruik wettenbank_structuur eerst om het juiste artikelnummer te bepalen.",
-        inputSchema: {
-          type: "object",
-          required: ["bwbId", "artikel"],
-          properties: {
-            bwbId: {
-              type: "string",
-              description: "BWB-id, bijv. BWBR0004770",
-            },
-            artikel: {
-              type: "string",
-              description: "Artikelnummer, bijv. '25' of '3:40'.",
-            },
-            lid: {
-              type: "string",
-              description: "Optioneel lidnummer; geeft alleen dat lid terug.",
-            },
-            peildatum: {
-              type: "string",
-              description: "Datum YYYY-MM-DD; default is vandaag.",
-            },
-          },
-        },
+        inputSchema: alsJsonSchema(ArtikelInputSchema),
       },
       {
         name: "wettenbank_zoekterm",
@@ -142,38 +104,7 @@ export function createServer(ctx: ServerContext = {}): Server {
           "Zoek welke artikelen een begrip bevatten in één Nederlandse wet. " +
           "Ondersteunt wildcards (*termijn*) en booleaanse operatoren (EN / OF). " +
           "Stel includeerTekst=true in om direct de artikeltekst mee te krijgen.",
-        inputSchema: {
-          type: "object",
-          required: ["bwbId", "zoekterm"],
-          properties: {
-            bwbId: {
-              type: "string",
-              description: "BWB-id, bijv. BWBR0004770",
-            },
-            zoekterm: {
-              type: "string",
-              description:
-                "Te zoeken begrip. Wildcards: termijn* of *termijn*. " +
-                "Booleaans: 'uitstel EN belasting' of 'termijn OR afstel'.",
-            },
-            peildatum: {
-              type: "string",
-              description: "Datum YYYY-MM-DD.",
-            },
-            maxResultaten: {
-              type: "number",
-              default: 10,
-              description: "Maximum aantal artikelen in het resultaat (1-50).",
-            },
-            includeerTekst: {
-              type: "boolean",
-              default: false,
-              description:
-                "Voeg de artikeltekst toe aan elk resultaat. " +
-                "Bespaart een extra wettenbank_artikel-aanroep.",
-            },
-          },
-        },
+        inputSchema: alsJsonSchema(ZoektermInputSchema),
       },
     ],
   }));
@@ -190,16 +121,19 @@ export function createServer(ctx: ServerContext = {}): Server {
       sessionId: ctx.getSessionId?.(),
       ...veiligeToolVelden(args),
     };
+    // De deadline-controller annuleert lopende upstream-fetches zodra de tool-deadline
+    // verstrijkt — anders lopen die op de achtergrond door (verspilde sockets/geheugen).
+    const deadline = new AbortController();
     try {
       let werk: Promise<string>;
       if (name === "wettenbank_zoek") {
-        werk = handleZoek(args);
+        werk = handleZoek(args, deadline.signal);
       } else if (name === "wettenbank_structuur") {
-        werk = handleStructuur(args);
+        werk = handleStructuur(args, deadline.signal);
       } else if (name === "wettenbank_artikel") {
-        werk = handleArtikel(args);
+        werk = handleArtikel(args, deadline.signal);
       } else if (name === "wettenbank_zoekterm") {
-        werk = handleZoekterm(args);
+        werk = handleZoekterm(args, deadline.signal);
       } else {
         log("warn", "audit", "onbekende tool aangeroepen", {
           ...auditBasis,
@@ -210,7 +144,7 @@ export function createServer(ctx: ServerContext = {}): Server {
           isError: true,
         };
       }
-      const text = await metDeadline(werk, TOOL_TIMEOUT_MS, name);
+      const text = await metDeadline(werk, TOOL_TIMEOUT_MS, name, deadline);
       log("info", "audit", "tool aangeroepen", {
         ...auditBasis,
         uitkomst: "ok",
