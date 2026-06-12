@@ -1,3 +1,0 @@
-# Statische assets (favicon, afbeeldingen). Bewust aanwezig zodat de map bestaat:
-# de Dockerfile kopieert `public/` naar de runtime-image (next standalone neemt 'm
-# niet automatisch mee), en git bewaart geen lege mappen.
