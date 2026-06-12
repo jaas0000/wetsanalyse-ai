@@ -25,12 +25,14 @@ disk-interoperabiliteit met de lokale skill staat op de roadmap, niet in de huid
 - `wettenbank.py` — MCP-client; lege/fout-respons → `WettenbankError` (nooit doorgaan met lege context).
 - `validation.py` — **zacht** (skill-`check_activiteit_2/3`, schema) vs **hard** (brongetrouwheid: citaat
   letterlijk in leden-tekst na normalisatie, `vindplaats`/`bronreferentie` verplicht).
+- `ratelimit.py` — in-process per-client rate limit (dependency) + `QuotaExceeded` (beleidsgrenzen).
 - `llm/` — `LLMClient`-protocol + LiteLLM-implementatie (provider = config; output-strategie + parse).
 - `engine/` — `prompts.py` (references verbatim + canonieke JAS-lijst uit validation), `steps.py`
-  (LLM-stap + merge met brongetrouwe MCP-basis), `orchestrator.py` (state machine, auto-correctie,
-  6-rondencap, startup-reconciliatie, retry).
-- `routers/analyses.py` + `routers/projects.py` + `main.py` — endpoints (client-gescopet),
-  `/health` (liveness), `/ready`.
+  (LLM-stap + merge met brongetrouwe MCP-basis), `retry.py` (bounded backoff op transiënte
+  LLM/MCP-fouten), `orchestrator.py` (state machine, auto-correctie, 6-rondencap,
+  startup-reconciliatie, retry, quota/budget-checks).
+- `routers/projects.py` + `main.py` — de kanonieke resource onder **`/v1/projects`** (client-gescopet,
+  `response_model`s, paginatie, SSE), `/health` (liveness), `/ready` (alleen booleans).
 
 ## Garanties (niet aan tornen)
 
@@ -88,22 +90,30 @@ uv run --env-file .env --extra llm python scripts/spike_fase0.py BWBR0004770 9 1
 ```
 
 **Geen vrije model-string vanuit de client**: kies een `model_profile`; het feitelijk gebruikte model
-wordt per ronde in `job.json` vastgelegd (audit).
+wordt per ronde in de `provenance` van het `Project`-document vastgelegd (audit).
+
+Lokaal heb je ook een **MongoDB** nodig (de jobstore). Snel: `docker run -d -p 27017:27017 mongo:4.4`
+en laat `MONGODB_URL` op de default `mongodb://localhost:27017` staan (lokaal zonder auth).
 
 ### Lokaal met Docker
 
 Maak `api/docker-compose.override.yml` aan (gitignored) om de secrets-mount naar `./secrets` te
-verwijzen in plaats van het productiepad `/opt/secrets/wetsanalyse-api`:
+verwijzen in plaats van het productiepad. Voor lokaal draaien heb je naast `llm_api_key`,
+`wettenbank_token` en `api_tokens` ook `mongodb_url`, `mongo_root_username` en `mongo_root_password`
+in `./secrets` nodig (zie de productie-stappen hieronder):
 
 ```yaml
 services:
   wetsanalyse-api:
     volumes:
       - ./secrets:/run/secrets:ro
-      - wetsanalyse_analyses:/app/analyses
+  mongo:
+    volumes:
+      - ./secrets:/run/secrets:ro
 ```
 
-Daarna: `docker compose up --build` vanuit `api/`.
+Daarna: `docker compose up --build` vanuit `api/`. Er is geen `analyses/`-volume meer — de jobstore
+is MongoDB.
 
 ## Deployment
 
@@ -111,52 +121,70 @@ Docker-image + Portainer-stack achter NPM, net als de MCP (`docker-compose.yml`)
 uvicorn-worker én één replica**: state-transities worden geserialiseerd met een in-process per-job
 asyncio-lock. De jobstore is MongoDB (gedeeld), maar die lock werkt niet over processen/containers
 heen — zet dus geen `--workers >1` of `deploy.replicas >1`. Schalen kan pas met een gedeelde lock
-(Mongo state-CAS) of een echte job-queue (roadmap). LLM-key + tokens als bestanden op de host
-(`*_FILE`-patroon) — nooit als plain env var in de container of Portainer-UI.
+(Mongo state-CAS) of een echte job-queue (roadmap). De containers draaien **non-root** en **MongoDB
+draait met authenticatie**. Alle secrets (LLM-key, tokens, Mongo-credentials, connection string) staan
+als bestanden op de host (`*_FILE`-patroon) — nooit als plain env var in de container of Portainer-UI.
 Build vanaf de **projectroot**: `docker build -f api/Dockerfile -t wetsanalyse-api .` (de image heeft de
 skill-`references/scripts` nodig). `POST /v1/projects` is async (202 + polling) — nooit synchroon achter
 NPM's ~60s timeout.
 
 ### Secrets op de host (eenmalig, vóór de eerste stack-start)
 
-Het pad is configureerbaar via `SECRETS_DIR` in de stack-omgeving (default `/opt/secrets/wetsanalyse-api`).
-Op een Synology NAS gebruik je `/volume1/docker/secrets/wetsanalyse-api`.
+De stack mount één host-map op `/run/secrets` in zowel de **api**- als de **mongo**-container. Het pad
+komt uit de **GitHub Actions repo-variabele `SECRETS_DIR`** (Settings → Variables → Actions); de CI
+geeft die door aan Portainer, dat `${SECRETS_DIR}` in de compose invult. **Staat de variabele leeg,
+dan gebruikt de CI een default-pad en mount je de verkeerde map** → secrets onvindbaar (zie
+Troubleshooting). Zet `SECRETS_DIR` dus exact op je host-pad, bijv. op een Synology NAS:
+`/volume1/docker/wetsanalyse-api/secrets`.
+
+Zes bestanden, aangemaakt op de **host zelf** (niet via een laptop-mount — die neemt de Unix-perms
+vaak niet over):
 
 ```bash
-# Pas het pad aan naar jouw host (Synology: /volume1/docker/secrets/wetsanalyse-api)
-SECRETS_DIR=/opt/secrets/wetsanalyse-api
-
+SECRETS_DIR=/volume1/docker/wetsanalyse-api/secrets    # = de waarde van vars.SECRETS_DIR
 sudo mkdir -p "$SECRETS_DIR"
-sudo chmod 700 "$SECRETS_DIR"
+
 echo -n "<llm-api-key>"      | sudo tee "$SECRETS_DIR/llm_api_key"      > /dev/null
 echo -n "<wettenbank-token>" | sudo tee "$SECRETS_DIR/wettenbank_token"  > /dev/null
 echo -n "id1:tok1,id2:tok2"  | sudo tee "$SECRETS_DIR/api_tokens"        > /dev/null
 
-# MongoDB-authenticatie: root-credentials + de connection string die de API gebruikt.
+# MongoDB-auth: root-credentials + de connection string die de API gebruikt.
+# Hex-wachtwoord = URL-veilig (geen +/=/ die je in de connection string moet escapen).
 MONGO_USER=wetsanalyse
-MONGO_PASS="$(openssl rand -base64 24)"
+MONGO_PASS="$(openssl rand -hex 24)"
 echo -n "$MONGO_USER" | sudo tee "$SECRETS_DIR/mongo_root_username" > /dev/null
 echo -n "$MONGO_PASS" | sudo tee "$SECRETS_DIR/mongo_root_password" > /dev/null
 echo -n "mongodb://$MONGO_USER:$MONGO_PASS@mongo:27017/?authSource=admin" \
     | sudo tee "$SECRETS_DIR/mongodb_url" > /dev/null
-sudo chmod 600 "$SECRETS_DIR"/*
+
+# BELANGRIJK: de containers draaien non-root (mongo uid 999, api uid 10001). De bestanden zijn
+# eigendom van je host-user, dus de container-users lezen ze alleen via de "other"-bit. Gebruik
+# 644 (NIET 600 — dat geeft "Permission denied" in de container en mongo start niet).
+sudo chmod 755 "$SECRETS_DIR"
+sudo chmod 644 "$SECRETS_DIR"/*
 ```
 
-**Bestaande (auth-loze) Mongo-volume migreren.** De mongo-image maakt de root-user alleen aan bij
-een *lege* `/data/db`. Heeft het `wetsanalyse_mongo`-volume al data (bestaande analyses), doe dan
-één keer handmatig vóór je de nieuwe compose uitrolt:
+**Mongo-volume.** De mongo-image maakt de root-user alleen aan bij een *lege* `/data/db`. Een schone
+start is het simpelst: bestaat het `wetsanalyse-api_wetsanalyse_mongo`-volume al, verwijder het
+(`docker rm -f wetsanalyse-mongo && docker volume rm wetsanalyse-api_wetsanalyse_mongo`) zodat de
+nieuwe stack vers initialiseert mét auth. Wil je *bestaande data* behouden, maak dan eerst handmatig
+de user aan op de nog-draaiende auth-loze mongo:
+`docker exec wetsanalyse-mongo mongo admin --eval "db.createUser({user:'wetsanalyse', pwd:'<pass>', roles:[{role:'root',db:'admin'}]})"`.
 
-```bash
-# Tegen de nog-draaiende auth-loze mongo:
-docker exec -it wetsanalyse-mongo mongo admin --eval \
-  "db.createUser({user:'wetsanalyse', pwd:'<zelfde-pass-als-secret>', roles:[{role:'root',db:'admin'}]})"
-# Daarna de stack met de nieuwe compose (auth aan) opnieuw uitrollen.
-```
-(Of accepteer dataverlies en verwijder het volume voor een schone init.)
+Rotatie: pas het bestand aan en herstart (`docker restart wetsanalyse-api`); voor het Mongo-wachtwoord
+ook de user in Mongo bijwerken. CI stuurt geen geheime waarden naar Portainer — alleen niet-geheime
+config (`LLM_MODEL`, `LLM_PROVIDER`, e.d.) en de niet-geheime `SECRETS_DIR`/`MONGODB_DB`.
 
-Rotatie: pas het betreffende bestand aan en herstart (`docker restart wetsanalyse-api`); voor het
-Mongo-wachtwoord ook de user in Mongo bijwerken.
-CI stuurt geen geheime waarden naar Portainer — alleen niet-geheime config (`LLM_MODEL`, `LLM_PROVIDER`, e.d.).
+### Troubleshooting deploy
+
+Symptoom → oorzaak:
+- **API-log: `ServerSelectionTimeoutError: localhost:27017`** — de `mongodb_url`-secret werd niet
+  gelezen (config viel terug op de default). Vrijwel altijd: `/run/secrets` wijst naar de verkeerde
+  map → check `vars.SECRETS_DIR` en `docker inspect wetsanalyse-api --format '{{json .Mounts}}'`.
+- **Mongo-log: `/run/secrets/mongo_root_username: Permission denied`, container `unhealthy`** —
+  secret-bestanden niet leesbaar voor uid 999/10001 → `sudo chmod 644` op de host (zie boven).
+- **Portainer stack-update HTTP 500** — meestal een container die niet start (een van bovenstaande);
+  kijk in de containerlogs (`docker logs wetsanalyse-mongo` / `wetsanalyse-api`), niet alleen in de CI.
 
 ## Misbruik-/kostenbeheersing
 

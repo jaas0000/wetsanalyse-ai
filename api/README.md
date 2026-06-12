@@ -34,7 +34,7 @@ Alle analyse-endpoints zijn client-gescopet (alleen je eigen analyses) en versio
 | `GET` | `/v1/projects/{id}/ronde/{act}/{n}` | Analyse-JSON van één ronde |
 | `GET` | `/v1/projects/{id}/events` | SSE state-updates (max 10 min) |
 | `GET` | `/health` | Liveness check |
-| `GET` | `/ready` | Readiness check (auth, LLM, MCP geconfigureerd) |
+| `GET` | `/ready` | Readiness check (booleans: auth, LLM, MCP, MongoDB geconfigureerd) |
 
 Swagger-UI beschikbaar op `/docs`.
 
@@ -50,9 +50,12 @@ POST /v1/projects
 }
 ```
 
-`bwbId` of `wet` (zoekterm) verplicht; `lid` optioneel. `review: false` slaat de
-human-in-the-loop checkpoints over — uitsluitend voor geautomatiseerde verwerking.
-Gebruik `review: true` (default) voor een volwaardige analyse met reviewrondes.
+`bwbId` is verplicht in v1 (wet-only resolutie via zoekterm staat op de roadmap); `lid` optioneel.
+`review: false` slaat de human-in-the-loop checkpoints over — uitsluitend voor geautomatiseerde
+verwerking. Gebruik `review: true` (default) voor een volwaardige analyse met reviewrondes.
+
+Grenzen: per-client rate limit en een max aantal gelijktijdige analyses (beide → `429`), plus een
+optioneel LLM-token-budget per analyse. Zie `CLAUDE.md` §Misbruik-/kostenbeheersing.
 
 Job-states: `queued` → `act2-runt` → `wacht-op-review-act2` → `act3-runt` →
 `wacht-op-review-act3` → `klaar` (of `fout` bij elke stap).
@@ -68,11 +71,16 @@ mkdir api\secrets
 
 # 2. .env aanmaken (kopieer .env.example en vul in)
 
-# 3. Server starten (--env-file is verplicht)
+# 3. MongoDB draaien (de jobstore) — lokaal zonder auth
+docker run -d -p 27017:27017 --name wetsanalyse-mongo-lokaal mongo:4.4
+
+# 4. Server starten (--env-file is verplicht)
 cd api
 uv sync --extra llm --extra dev
 uv run --env-file .env uvicorn app.main:app --reload --port 3000
 ```
+
+Lokaal staat `MONGODB_URL` op de default `mongodb://localhost:27017` (geen auth nodig).
 
 Zie `CLAUDE.md` voor de volledige opstapinstructies, Azure AI Foundry-config en
 productie-deployment via Docker/Portainer.
