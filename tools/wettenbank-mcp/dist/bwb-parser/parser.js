@@ -214,8 +214,16 @@ function parseContentNodes(el, bwbId, path) {
         if (child.nodeType === 3) {
             // TEXT_NODE — normaliseer witruimte maar behoud spaties
             const text = (child.nodeValue ?? "").replace(/\s+/g, " ");
-            if (text.trim())
+            if (text.trim()) {
                 items.push(text);
+            }
+            else if (text && items.length > 0) {
+                // Whitespace-only tekstnode tussen inline-elementen is betekenisvol: hij
+                // scheidt woorden (bijv. tussen twee opeenvolgende <extref>'s). Weggooien
+                // zou tekst verminken ("[artikel 5](a)[artikel 6](b)"); reduceer tot één
+                // spatie. Aan het begin is hij niet nodig (rendering trimt).
+                items.push(" ");
+            }
         }
         else if (child.nodeType === 1) {
             const childEl = child;
@@ -308,7 +316,14 @@ export function parseBwbXml(xml, bwbId) {
     const domParser = new DOMParser();
     const doc = domParser.parseFromString(xml, "text/xml");
     // doc.documentElement is @xmldom/xmldom's eigen Element-type; cast naar DomElement.
-    const root = doc.documentElement;
+    return parseBwbVanDom(doc.documentElement, bwbId);
+}
+/**
+ * Als parseBwbXml, maar vanaf een al geparset documentElement. Voorkomt een
+ * tweede volledige DOM-parse wanneer de aanroeper (zoals wettenbank_structuur)
+ * het Document al uit de cache heeft.
+ */
+export function parseBwbVanDom(root, bwbId) {
     if (!root) {
         return { id: bwbId, type: "leeg", metadata: { bwbId }, children: [], content: null };
     }

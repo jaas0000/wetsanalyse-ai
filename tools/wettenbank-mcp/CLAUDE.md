@@ -13,7 +13,12 @@ npm test           # Run unit tests (vitest)
 npm run test:watch # Watch mode
 ```
 
-Unit tests staan in `src/index.test.ts` (vitest) en `src/bwb-parser/mcp-lite.test.ts`. Alle geëxporteerde functies zijn gedekt. Draai `npm test` voor een commit.
+Unit tests staan in `src/*.test.ts`, `src/bwb-parser/*.test.ts` en `src/tools/*.test.ts` (vitest).
+Bijzonder: `src/bwb-parser/brongetrouwheid.test.ts` draait een **round-trip-invariant** ("geen
+tekstnode uit de bron raakt zoek") tegen de schema-getrouwe fixture
+`src/bwb-parser/fixtures/toestand-fixture.xml`, en `src/tools/handlers.test.ts` valideert elke
+handler-respons tegen de OutputSchema's (contract-drift faalt dus in de test). Draai `npm test`
+voor een commit. CI bevat bovendien een dist-staleness-check: bouw en commit `dist/` mee.
 
 ## Architecture
 
@@ -56,10 +61,14 @@ beveiliging* verderop); het stdio-pad raakt ze niet aan.
 
 | Tool | Purpose |
 |------|---------|
-| `wettenbank_zoek` | Search by title, rechtsgebied, ministerie, or regelingsoort — returns `{ formaat, totaal, regelingen[] }` |
-| `wettenbank_structuur` | Table of contents of a law — returns `{ formaat, structuur[] }` (no article text) |
-| `wettenbank_artikel` | Fetch one article — returns `{ formaat, citeertitel, pad?, sectie?, leden[], bronreferentie }` |
-| `wettenbank_zoekterm` | Full-text search within a law — returns `{ formaat, artikelen[{artikel, aantalTreffers, leden, tekst?, formaat?}] }` with optional `includeerTekst` |
+| `wettenbank_zoek` | Search by title, rechtsgebied, ministerie, or regelingsoort — returns `{ formaat, totaal, totaalBeschikbaar, isVolledig, regelingen[] }`. `totaal` = wat er in dít antwoord staat; `totaalBeschikbaar` = SRU `numberOfRecords`; `isVolledig=false` = afgekapt. Meerwoordige titels zoeken met CQL `all` (alle woorden) i.p.v. `any`. |
+| `wettenbank_structuur` | Table of contents of a law — returns `{ formaat, type?, structuur[] }` (no article text). Optionele inputs `diepte` (afgekapte nodes krijgen `ingekort: true`) en `sectie` (filter op nr of titel-substring) voor zeer grote wetten. |
+| `wettenbank_artikel` | Fetch one article — returns `{ formaat, citeertitel, type?, pad?, sectie?, leden[{lid, tekst, bronreferentie}], bronreferentie, waarschuwing? }`. Artikelnummers matchen case-insensitief/getrimd; bij dubbele nummers (bijlage) wordt het eerste exemplaar gebruikt mét `waarschuwing`. |
+| `wettenbank_zoekterm` | Full-text search within a law — returns `{ formaat, citeertitel, artikelen[{artikel, aantalTreffers, leden, bronreferentie, pad?, tekst?, formaat?}] }`; `pad`/`tekst` alleen bij `includeerTekst=true` |
+
+De JSON-**inputschema's** van de tools worden bij `ListTools` gegenereerd uit de Zod-schema's in
+`shared/schemas.ts` (`z.toJSONSchema` via `alsJsonSchema` in `server.ts`) — één bron van waarheid,
+dus descriptions/limieten/defaults in Zod onderhouden, niet in `server.ts`.
 
 All tools return **pure JSON** serialized as a string in the MCP `text` content block. Every response includes `formaat: "plain" | "markdown"` so the LLM knows how to render the text.
 
@@ -68,11 +77,21 @@ All tools return **pure JSON** serialized as a string in the MCP `text` content 
 - `formaat: "plain"` — tekst is plain text
 - `formaat: "markdown"` — tekst bevat Markdown (tabellen, lijsten, links)
 - `pad` — volledig hiërarchisch pad als string, bijv. `"Hoofdstuk II > Afdeling 1 > Artikel 9"`
-- `bronreferentie` — JCI-uri, bijv. `jci1.3:c:BWBR0004770&artikel=9`
+- `bronreferentie` — JCI-uri, lid- en versiespecifiek waar mogelijk, bijv.
+  `jci1.3:c:BWBR0004770&artikel=9&lid=2&g=2024-01-01` (traceerbaarheidseis van de methode)
 
-### Validation
+### Validation & foutkanaal
 
-Every tool handler calls `ZodSchema.safeParse()` on input before any network calls. Errors return `{ "fout": "<message>" }` (backwards-compatible).
+Every tool handler calls `ZodSchema.safeParse()` on input before any network calls. Bij een
+validatiefout worden **álle** issues mét veldpad samengevoegd (`formatteerZodFout` in
+`shared/utils.ts`) en als `ClientInputError` gegooid (foutklasse `client`). Ook "artikel niet
+gevonden" en "lid niet gevonden" gooien een `ClientInputError` met een actionable melding
+(suggesties + verwijzing naar `wettenbank_structuur` resp. de beschikbare lidnummers) — er is dus
+één foutkanaal: alle fouten komen als `{ "fout", "foutCode"?, "klasse"? }` met MCP `isError: true`
+terug; een leeg-maar-geldig resultaat is nooit een stil substituut voor een fout.
+
+De default-peildatum (`vandaag()` in `shared/utils.ts`) gebruikt **Europe/Amsterdam**, niet de
+servertijdzone (de container draait in UTC).
 
 ### XML parsing
 
@@ -80,12 +99,24 @@ Uses `@xmldom/xmldom` (`DOMParser`) throughout. Mixed-content elements (`<al>`, 
 
 ### In-memory cache
 
-`xmlCache` in `repository-client.ts` (exported `Map<string, CacheEntry>`, 1-hour TTL) caches raw XML + parsed `Document` per BWB-id + date combination. Verlopen entries worden elk uur verwijderd via een `setInterval(...).unref()`; daarnaast geldt een **LRU-cap** (`MAX_CACHE_ENTRIES`) die de oudste entry evicteert vóór een nieuwe wordt toegevoegd, zodat de cache ook binnen één uur niet onbegrensd groeit (elke entry kan MB's XML+DOM bevatten).
+`xmlCache` in `repository-client.ts` (exported `Map<string, CacheEntry>`, 1-hour TTL) caches raw
+XML + parsed `Document` **per toestand-URL** (`locatie_toestand`); een tweede map (`datumAlias`)
+vertaalt `bwbId|datum` naar die URL. Twee peildata die naar dezelfde toestand wijzen delen zo één
+entry, en een alias-hit kost geen SRU-roundtrip. Verlopen entries worden elk uur verwijderd via een
+`setInterval(...).unref()`; daarnaast gelden een **LRU-cap** (`MAX_CACHE_ENTRIES`) én een
+**totaal-bytebudget** (`WETTENBANK_CACHE_MAX_BYTES`, default 64 MB rauwe XML) met LRU-evictie tot
+de nieuwe entry past. Juist grote wetten (Omgevingswet) worden dus wél gecachet — herhaald
+downloaden/parsen daarvan is duurder dan het geheugen.
 
 ### HTTP-client (timeouts & retry)
 
 Beide upstream-clients (`sruRequest` in `sru-client.ts` en `haalWetstekstOp` in
-`repository-client.ts`) fetchen via de **gedeelde** `fetchMetRetry` in `clients/http.ts`.
+`repository-client.ts`) fetchen via de **gedeelde** `fetchTekstMetRetry` in `clients/http.ts`,
+die de body bínnen het per-poging-timeout-venster leest (een upstream die snel headers maar
+druppelsgewijs de body stuurt kan dus niet blijven hangen) en een identificerende `User-Agent`
+meestuurt. De tool-deadline in `server.ts` geeft een `AbortSignal` door tot in de fetches:
+bij `TOOL_TIMEOUT` worden lopende requests echt geannuleerd i.p.v. op de achtergrond door te
+lopen.
 De bronnen van overheid.nl zijn berucht traag/wisselvallig, dus per poging geldt een
 `AbortController`-timeout (default 15s, gecleard in `finally`) en wordt **alleen bij
 transiënte fouten** herprobeerd: netwerk-/timeout-fouten en de gatewaystatussen
@@ -99,7 +130,7 @@ antwoorden (2xx, maar ook 4xx en 500) gaan direct terug; de aanroeper bepaalt ze
 
 **wettenbank_zoek:** `ZoekInputSchema.safeParse()` → build CQL query → `sruRequest()` → `parseRecords()` + `dedupliceerOpBwbId()` → JSON.
 
-**wettenbank_structuur:** `StructuurInputSchema.safeParse()` → `haalWetstekstOp()` → `parseBwbXml()` + `normalizeNode()` → traverse NormalizedNode tree → extract structural containers + article numbers → JSON.
+**wettenbank_structuur:** `StructuurInputSchema.safeParse()` → `haalWetstekstOp()` → `parseBwbVanDom()` (hergebruikt het gecachete `Document` — geen tweede DOM-parse) + `normalizeNode()` → traverse NormalizedNode tree → extract structural containers + article numbers → optionele `sectie`/`diepte`-filters → JSON.
 
 **wettenbank_artikel:** `ArtikelInputSchema.safeParse()` → `haalWetstekstOp()` (checks `xmlCache`) → `extraheerDocMetadata()` → `zoekElementInDom()` → `parseElement()` + `normalizeNode()` + `transformToMcpLite()` → detect formaat → JSON.
 
@@ -132,6 +163,13 @@ Key exports from `bwb-parser/index.ts`:
 
 **Brongetrouwheid in de normalisatie/render-stap (let op bij wijzigen):**
 
+- Whitespace-only tekstnodes tussen inline-elementen (bv. twee opeenvolgende `<extref>`'s) worden
+  als één spatie behouden (`parser.ts`); `<br/>` rendert als spatie. Lijsten renderen **recursief**
+  (élke diepte, a → 1° → i); een `<table>` binnen een `<li>` zit in `NormalizedListItem.blocks` en
+  wordt ná de itemtekst gerenderd; een aanhef-`<al>` naast `<lid>`-kinderen wordt een ongenummerd
+  lid vóór de genummerde leden. Dit alles wordt geborgd door `brongetrouwheid.test.ts`
+  (round-trip-invariant) — laat die meedraaien bij elke parserwijziging.
+
 - `NormalizedLid` heeft naast `content`/`tekst`/`children` ook `blocks` — alle content-blokken
   (`al`, `lijst`, `table`, …) in **documentvolgorde**. `transformToMcpLite` rendert uit `blocks`,
   zodat de interleave *tekst → tabel/lijst → tekst* binnen een lid behouden blijft. `content`/`tekst`
@@ -162,7 +200,8 @@ operator), splitst, en bouwt per deelterm een patroon via **`bouwTermPatroon`** 
 waarheid — het testpad = het productiepad). Lege deeltermen en bare `*` worden geweigerd.
 Resultaat: `ZoekInput { patronen: RegExp[], operator: "EN"|"OF" }`. With EN, only articles where all patterns occur are returned. Patterns carry the `gi` flags; `pat.lastIndex` is explicitly reset to `0` before every `.match()` / `.test()` call to prevent stateful drift when the same instance is reused across articles.
 
-Special characters are pre-escaped via `escapeerRegex()`.
+Special characters are pre-escaped via `escapeerRegex()`. Treffer-aantallen kennen géén
+kunstmatige cap; `totaalTreffers` is exact.
 
 ### XML schemas as design basis
 
@@ -197,13 +236,21 @@ afgestemd op BIO2 / NEN-EN-ISO/IEC 27002:2022. Zie `SECURITY.md` voor het volled
   op `warn`, zodat SIEM-alerting op `error` zinvol is. Het foutmodel staat in `src/shared/fouten.ts`
   (`UpstreamError` + `foutDetails`).
 - **Auth** (`src/auth.ts`): **per-client bearer-tokens** via `MCP_AUTH_TOKENS="id:token,id2:token2"`
-  (constant-tijd vergeleken), met de legacy `MCP_AUTH_TOKEN` als fallback (clientId `default`).
-  Tokens mogen ook uit een bestand komen (`MCP_AUTH_TOKENS_FILE`, voor Docker secrets/vault).
+  (constant-tijd vergeleken), met de legacy `MCP_AUTH_TOKEN` als fallback (clientId `default`;
+  een kale token zonder `id:`-prefix logt een security-warn). Tokens mogen ook uit een bestand
+  komen (`MCP_AUTH_TOKENS_FILE`, voor Docker secrets/vault — aanbevolen boven stack-env).
   Optioneel **OIDC** (`src/oidc.ts`, dormant tenzij `OIDC_ISSUER` gezet): JWT-bearer-validatie via
-  JWKS, met de statische tokens als fallback. In HTTP-modus is de start fail-closed: zonder enige
-  auth weigert `index.ts` te starten, tenzij `MCP_ALLOW_NO_AUTH=1`.
-- **Rate limiting** (`src/rate-limit.ts`): token-bucket per IP. `MCP_RATE_BURST` (default 60) en
-  `MCP_RATE_PER_MIN` (default 120); over de limiet → `429`. Het client-IP komt uit
+  JWKS; `OIDC_AUDIENCE` is dan **verplicht** (anders token-confusion) en het JWKS-endpoint komt
+  uit OIDC-discovery (`.well-known/openid-configuration` → `jwks_uri`) of expliciet
+  `OIDC_JWKS_URI`. In HTTP-modus is de start fail-closed: zonder enige auth weigert `index.ts`
+  te starten, tenzij `MCP_ALLOW_NO_AUTH=1` — en `startHttpServer` zelf throwt eveneens zonder
+  auth tenzij `allowNoAuth: true`. **Sessies zijn gebonden aan de initialiserende clientId**:
+  een ander token met hetzelfde sessie-ID krijgt 404. Optionele `MCP_ALLOWED_HOSTS` weigert
+  vreemde `Host`-headers op `/mcp` (DNS-rebinding). `/health` toont build-info alleen mét token.
+- **Rate limiting** (`src/rate-limit.ts`): token-bucket per IP (IPv6 per /64-prefix, hard plafond
+  op het aantal emmers). `MCP_RATE_BURST` (default 60) en `MCP_RATE_PER_MIN` (default 120); over
+  de limiet → `429`. Ná auth volgt een tweede, ruimere limiter per `clientId`
+  (`MCP_RATE_CLIENT_BURST`/`MCP_RATE_CLIENT_PER_MIN`, defaults 120/300). Het client-IP komt uit
   `X-Forwarded-For` via de N-de waarde van rechts (`MCP_TRUSTED_PROXY_HOPS`, default 1), zodat een
   zelf meegestuurde XFF de limiet niet omzeilt — de reverse-proxy (NPM) moet XFF dus **zetten**.
 - **Securityheaders**: `X-Content-Type-Options: nosniff`, `Referrer-Policy`, `Cache-Control: no-store`
@@ -248,7 +295,7 @@ afgestemd op BIO2 / NEN-EN-ISO/IEC 27002:2022. Zie `SECURITY.md` voor het volled
 **Remote (HTTP) via Docker** — voor een gedeelde, gecontaineriseerde server.
 
 - `Dockerfile` (multi-stage, non-root, `HEALTHCHECK` op `/health`, default `MCP_TRANSPORT=http`). Build-context = deze map: `docker build -t wettenbank-mcp tools/wettenbank-mcp`.
-- `docker-compose.yml` — Portainer-stack achter Nginx Proxy Manager: géén host-poort, container op het gedeelde NPM-netwerk (`PROXY_NETWORK`), NPM proxyt `wettenbank-mcp.ipalm.nl` → `wettenbank-mcp:3000` met TLS. `MCP_AUTH_TOKEN` als stack-env.
+- `docker-compose.yml` — Portainer-stack achter Nginx Proxy Manager: géén host-poort, container op het gedeelde NPM-netwerk (`PROXY_NETWORK`), NPM proxyt `wettenbank-mcp.ipalm.nl` → `wettenbank-mcp:3000` met TLS. Tokens via `MCP_AUTH_TOKENS` (stack-env) of liever `MCP_AUTH_TOKENS_FILE` (gemount bestand); runtime-hardening (`read_only`, `cap_drop: ALL`, `no-new-privileges`, mem/pids-limieten). CI deployt **op digest** via de stack-var `WETTENBANK_IMAGE` (default `:latest` voor handmatige deploys).
 - `.github/workflows/docker-publish.yml` — bouwt en pusht `ghcr.io/<owner>/wettenbank-mcp` (CI is de build-route; lokaal hoeft geen Docker-engine aanwezig te zijn).
 - `HANDLEIDING-IMAGE.md` — beknopte stap-voor-stap voor **externe gebruikers** die alleen het publieke image willen draaien (placeholders i.p.v. deze deployment-namen). Verwijs hiernaar bij vragen "hoe draait iemand anders dit?".
 

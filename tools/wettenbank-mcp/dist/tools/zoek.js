@@ -3,17 +3,23 @@
  * Zoekt Nederlandse regelingen via SRU en retourneert metadata.
  */
 import { ZoekInputSchema } from "../shared/schemas.js";
-import { sruRequest, parseRecords, dedupliceerOpBwbId } from "../clients/sru-client.js";
-export async function handleZoek(args) {
+import { formatteerZodFout } from "../shared/utils.js";
+import { ClientInputError } from "../shared/fouten.js";
+import { sruRequest, parseRecords, parseAantalRecords, dedupliceerOpBwbId, } from "../clients/sru-client.js";
+export async function handleZoek(args, signaal) {
     const parsed = ZoekInputSchema.safeParse(args);
     if (!parsed.success)
-        throw new Error(parsed.error.issues[0].message);
+        throw new ClientInputError(formatteerZodFout(parsed.error));
     const { titel, rechtsgebied, ministerie, regelingsoort, maxResultaten, peildatum } = parsed.data;
     // Escape dubbele quotes in zoekwaarden zodat een titel met " de CQL-query niet breekt.
     const cql = (s) => s.replace(/"/g, '\\"');
     const queryDelen = [];
-    if (titel)
-        queryDelen.push(`overheidbwb.titel any "${cql(titel)}"`);
+    if (titel) {
+        // 'any' is OR-per-woord: "Wet milieubeheer" matcht dan elke wet met "wet" in de
+        // titel. Bij meerwoordige titels eist 'all' alle woorden — veel minder ruis.
+        const relatie = /\s/.test(titel.trim()) ? "all" : "any";
+        queryDelen.push(`overheidbwb.titel ${relatie} "${cql(titel)}"`);
+    }
     if (rechtsgebied)
         queryDelen.push(`overheidbwb.rechtsgebied == "${cql(rechtsgebied)}"`);
     if (ministerie)
@@ -21,11 +27,18 @@ export async function handleZoek(args) {
     if (regelingsoort)
         queryDelen.push(`dcterms.type == "${cql(regelingsoort)}"`);
     queryDelen.push(`overheidbwb.geldigheidsdatum==${peildatum}`);
-    const xml = await sruRequest(queryDelen.join(" and "), maxResultaten);
-    const regelingen = dedupliceerOpBwbId(parseRecords(xml));
+    const xml = await sruRequest(queryDelen.join(" and "), maxResultaten, signaal);
+    const records = parseRecords(xml);
+    const regelingen = dedupliceerOpBwbId(records);
+    const totaalBeschikbaar = parseAantalRecords(xml);
     return JSON.stringify({
         formaat: "plain",
         totaal: regelingen.length,
+        // Afkap-signalering: totaal telt wat hier staat; totaalBeschikbaar wat de bron
+        // in totaal heeft. isVolledig=false → verfijn de zoekopdracht of verhoog
+        // maxResultaten.
+        totaalBeschikbaar,
+        isVolledig: totaalBeschikbaar === null ? true : records.length >= totaalBeschikbaar,
         regelingen,
     });
 }

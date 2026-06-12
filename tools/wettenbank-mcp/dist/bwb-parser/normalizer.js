@@ -32,6 +32,9 @@ export function extractPlainText(content) {
         .map((item) => {
         if (typeof item === "string")
             return item;
+        // <br/> scheidt woorden; als lege string zouden ze aaneenplakken.
+        if (item.type === "br")
+            return " ";
         if (item.label)
             return item.label;
         if (item.content)
@@ -137,18 +140,23 @@ function normalizeArtikel(node) {
     else {
         // Regulier artikel
         const lidNodes = node.children.filter((c) => c.type === "lid");
+        // Content die direct onder het artikel staat (geen kop, geen lid): bij een
+        // artikel zonder leden is dat de volledige inhoud, bij een artikel mét leden
+        // een aanhef of slotalinea naast de genummerde leden. Die mag niet stil
+        // verdwijnen — brongetrouwheid.
+        const directeContent = node.children.filter((c) => c.type !== "kop" && c.type !== "lid");
         if (lidNodes.length > 0) {
+            if (directeContent.length > 0) {
+                leden.push(buildLid(`${node.id}:lid:aanhef`, "", directeContent, node.metadata));
+            }
             for (const lid of lidNodes) {
                 const lidnr = lid.metadata.lidnr ?? "";
                 leden.push(buildLid(lid.id, lidnr, lid.children, lid.metadata));
             }
         }
-        else {
+        else if (directeContent.length > 0) {
             // Artikel zonder genummerde leden: directe content-kinderen
-            const contentChildren = node.children.filter((c) => c.type !== "kop");
-            if (contentChildren.length > 0) {
-                leden.push(buildLid(`${node.id}:lid:0`, "", contentChildren, node.metadata));
-            }
+            leden.push(buildLid(`${node.id}:lid:0`, "", directeContent, node.metadata));
         }
     }
     return {
@@ -190,14 +198,17 @@ function normalizeLijst(node) {
 }
 function normalizeLi(li) {
     const label = li.metadata.linr ?? "";
-    const alNodes = li.children.filter((c) => c.type === "al");
-    const content = alNodes.flatMap((al) => al.content ?? []);
+    // Alle content-blokken in documentvolgorde, ook niet-al/lijst (zoals een
+    // <table> in een lijstitem) — die zouden anders structureel verloren gaan.
+    const blocks = li.children.map(normalizeNode);
+    const alLeaves = blocks.filter((b) => b.type === "al");
+    const content = alLeaves.flatMap((al) => al.content);
     const tekst = extractPlainText(content);
     // Geneste sub-lijsten
-    const items = li.children
-        .filter((c) => c.type === "lijst")
-        .flatMap((l) => normalizeLijst(l).items);
-    return { id: li.id, label, tekst, content, items, metadata: li.metadata };
+    const items = blocks
+        .filter((b) => b.type === "lijst")
+        .flatMap((l) => l.items);
+    return { id: li.id, label, tekst, content, items, blocks, metadata: li.metadata };
 }
 // ── CALS Tabel ────────────────────────────────────────────────────────────────
 function normalizeTable(node) {

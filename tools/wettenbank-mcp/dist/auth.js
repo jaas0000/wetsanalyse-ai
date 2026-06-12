@@ -23,6 +23,7 @@
  */
 import { timingSafeEqual } from "node:crypto";
 import { readFileSync } from "node:fs";
+import { log } from "./logger.js";
 /** Lees een waarde uit een bestand (*_FILE) als dat is gezet, anders de inline env. */
 function envOfBestand(env, naam) {
     const pad = env[`${naam}_FILE`];
@@ -73,6 +74,11 @@ export function leesClients(env = process.env) {
             token = scheiding === 0 ? trimmed.slice(1).trim() : trimmed;
             id = kaalIndex === 0 ? "default" : `client${kaalIndex + 1}`;
             kaalIndex++;
+            // Zichtbaar maken: een vergeten id-prefix (typfout) zou anders stilzwijgend
+            // een werkende, anonieme token opleveren i.p.v. een herkenbare configfout.
+            log("warn", "security", "kale token zonder id-prefix in MCP_AUTH_TOKENS", {
+                toegewezen_clientId: id,
+            });
         }
         if (!id || !token || gezien.has(id))
             continue;

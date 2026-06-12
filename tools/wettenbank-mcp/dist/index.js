@@ -51,6 +51,8 @@ if (process.argv[1] === __filename) {
         const httpServer = startHttpServer({
             port: Number(process.env.PORT ?? 3000),
             clients,
+            // startHttpServer is zelf óók fail-closed; deze vlag geeft de bewuste keuze door.
+            allowNoAuth: process.env.MCP_ALLOW_NO_AUTH === "1",
         });
         // Graceful shutdown: bij SIGTERM/SIGINT de server netjes sluiten (de close-listener
         // ruimt cleanup-timer en rate-limiter op) zodat de container schoon afsluit.

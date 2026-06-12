@@ -47,7 +47,7 @@ export function zoekTermInArtikelDom(doc, invoer, maxResultaten = 10) {
         ...Array.from(doc.getElementsByTagName("circulaire.divisie")),
     ];
     for (const art of articles) {
-        const nr = getElText(art.getElementsByTagName("kop")[0], "nr");
+        const nr = getElText(art.getElementsByTagName("kop").item(0), "nr");
         if (!nr)
             continue;
         const entry = tellers.get(nr) ?? {
@@ -60,8 +60,9 @@ export function zoekTermInArtikelDom(doc, invoer, maxResultaten = 10) {
             pat.lastIndex = 0;
             const matches = clean.match(pat);
             if (matches) {
-                const toAdd = Math.min(matches.length, 100 - entry.count);
-                entry.count += toAdd;
+                // Geen kunstmatige cap: tellen is goedkoop en een stil geplafonneerd
+                // aantal zou totaalTreffers onnauwkeurig maken.
+                entry.count += matches.length;
                 entry.matchedPatterns.add(i);
                 tellers.set(nr, entry);
             }

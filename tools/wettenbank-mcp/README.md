@@ -159,7 +159,7 @@ Elke laag is puur en testbaar in isolatie. Informatie gaat nooit verloren tussen
 
 ### In-memory cache
 
-`repository-client.ts` beheert een `xmlCache: Map<string, CacheEntry>` met TTL van 1 uur. Sleutel: `"bwbId|peildatum"`. Voorkomt herhaalde netwerkverzoeken voor dezelfde wet op dezelfde datum. Verlopen entries worden elk uur opgeschoond via een `setInterval(...).unref()`. Naast de TTL gelden twee groottegrenzen: een **LRU-cap** (`MAX_CACHE_ENTRIES = 50`) die de oudste entry evicteert vóór een nieuwe wordt toegevoegd, en een **per-entry groottegrens** (`MAX_XML_BYTES = 5 MB`) die voorkomt dat één zeer grote wet (bijv. Omgevingswet) een onevenredig groot deel van het geheugen inneemt.
+`repository-client.ts` beheert een `xmlCache: Map<string, CacheEntry>` met TTL van 1 uur. Sleutel: de **toestand-URL** (`locatie_toestand`); een aliasmap vertaalt `"bwbId|peildatum"` naar die URL, zodat verschillende peildata die naar dezelfde toestand wijzen één entry delen. Verlopen entries worden elk uur opgeschoond via een `setInterval(...).unref()`. Naast de TTL gelden twee grenzen: een **LRU-cap** (`MAX_CACHE_ENTRIES = 50`) en een **totaal-bytebudget** (`WETTENBANK_CACHE_MAX_BYTES`, default 64 MB rauwe XML) met LRU-evictie tot de nieuwe entry past — juist grote wetten (bijv. Omgevingswet) worden zo wél gecachet, want die opnieuw downloaden en parsen is duurder dan het geheugen.
 
 ---
 
@@ -180,7 +180,7 @@ Zoekt in het Basiswettenbestand op naam en/of filtert op type, rechtsgebied of m
 | `maxResultaten` | number |           | Maximum aantal resultaten (standaard: 10, maximum: 50) |
 | `peildatum`     | string |           | Versie geldig op datum `YYYY-MM-DD` (standaard: vandaag) |
 
-Minimaal één zoekcriterium is vereist (Zod `.refine()`).
+Minimaal één zoekcriterium is vereist (Zod `.refine()`). Meerwoordige titels zoeken met CQL `all` (alle woorden moeten voorkomen); één woord met `any`. `totaal` telt de geretourneerde (gededupliceerde) regelingen, `totaalBeschikbaar` het brontotaal (SRU `numberOfRecords`); `isVolledig: false` betekent dat het resultaat is afgekapt — verfijn de zoekopdracht.
 
 **Resultaatformaat (JSON):**
 
@@ -188,6 +188,8 @@ Minimaal één zoekcriterium is vereist (Zod `.refine()`).
 {
   "formaat": "plain",
   "totaal": 2,
+  "totaalBeschikbaar": 2,
+  "isVolledig": true,
   "regelingen": [
     {
       "bwbId": "BWBR0004770",
@@ -215,7 +217,9 @@ Haalt de inhoudsopgave van een wet op. Retourneert alleen structuurmetadata (num
 | Parameter   | Type   | Verplicht | Omschrijving |
 |-------------|--------|:---------:|--------------|
 | `bwbId`     | string | **ja**    | BWB-id, bijv. `BWBR0004770` |
-| `peildatum` | string |           | Datum `YYYY-MM-DD` (standaard: vandaag) |
+| `peildatum` | string |           | Datum `YYYY-MM-DD` (standaard: vandaag, Europe/Amsterdam) |
+| `diepte`    | number |           | Beperk de boom tot dit aantal niveaus; afgekapte nodes krijgen `ingekort: true` |
+| `sectie`    | string |           | Toon alleen de sectie(s) met dit nummer of deze titel(-substring) |
 
 **Resultaatformaat (JSON):**
 
@@ -224,6 +228,7 @@ Haalt de inhoudsopgave van een wet op. Retourneert alleen structuurmetadata (num
   "formaat": "plain",
   "bwbId": "BWBR0004770",
   "citeertitel": "Invorderingswet 1990",
+  "type": "wet",
   "versiedatum": "2024-01-01",
   "structuur": [
     {
@@ -278,6 +283,7 @@ Haalt één artikel op via BWB-id en artikelnummer. De response bevat alle leden
 {
   "formaat": "plain",
   "citeertitel": "Invorderingswet 1990",
+  "type": "wet",
   "versiedatum": "2024-01-01",
   "bwbId": "BWBR0004770",
   "artikel": "9",
@@ -286,14 +292,16 @@ Haalt één artikel op via BWB-id en artikelnummer. De response bevat alle leden
   "leden": [
     {
       "lid": "1",
-      "tekst": "Een belastingaanslag is invorderbaar zes weken na de dagtekening van het aanslagbiljet."
+      "tekst": "Een belastingaanslag is invorderbaar zes weken na de dagtekening van het aanslagbiljet.",
+      "bronreferentie": "jci1.3:c:BWBR0004770&artikel=9&lid=1&g=2024-01-01"
     },
     {
       "lid": "2",
-      "tekst": "In afwijking van het eerste lid is een navorderingsaanslag..."
+      "tekst": "In afwijking van het eerste lid is een navorderingsaanslag...",
+      "bronreferentie": "jci1.3:c:BWBR0004770&artikel=9&lid=2&g=2024-01-01"
     }
   ],
-  "bronreferentie": "jci1.3:c:BWBR0004770&artikel=9"
+  "bronreferentie": "jci1.3:c:BWBR0004770&artikel=9&g=2024-01-01"
 }
 ```
 
@@ -303,7 +311,9 @@ Haalt één artikel op via BWB-id en artikelnummer. De response bevat alle leden
 
 **`leden`-array:** Één entry per genummerd lid. Bij artikelen zonder genummerde leden (bijv. Leidraad `circulaire.divisie`) één entry met `lid: ""`.
 
-Artikel niet gevonden: `{ "fout": "Artikel 999 niet gevonden." }`
+Artikelnummers matchen case-insensitief en getrimd (`"9A"` vindt `"9a"`). Komt hetzelfde nummer meerdere keren voor (bijv. opnieuw genummerde bijlage), dan wordt het eerste exemplaar gebruikt en meldt een `waarschuwing`-veld dat.
+
+Artikel of lid niet gevonden geeft een **fout** (MCP `isError`) met een actionable melding, bijv. `{ "fout": "Artikel 999 niet gevonden in BWBR0004770 (peildatum 2024-01-01). Bestaat wel: 9, 9a. Roep wettenbank_structuur aan voor de geldige artikelnummers; ...", "klasse": "client" }` — nooit een stil leeg `leden`-array.
 
 ---
 
@@ -339,7 +349,7 @@ Zoekt welke artikelen een begrip bevatten. Ondersteunt wildcards en booleaanse o
 ```json
 {
   "formaat": "plain",
-  "wet": "Invorderingswet 1990",
+  "citeertitel": "Invorderingswet 1990",
   "versiedatum": "2024-01-01",
   "bwbId": "BWBR0004770",
   "zoekterm": "dwangbevel",
@@ -347,8 +357,10 @@ Zoekt welke artikelen een begrip bevatten. Ondersteunt wildcards en booleaanse o
   "isVolledig": true,
   "aantalArtikelen": 4,
   "artikelen": [
-    { "artikel": "13", "aantalTreffers": 5, "leden": ["1", "3"] },
-    { "artikel": "14", "aantalTreffers": 3, "leden": [] }
+    { "artikel": "13", "aantalTreffers": 5, "leden": ["1", "3"],
+      "bronreferentie": "jci1.3:c:BWBR0004770&artikel=13&g=2024-01-01" },
+    { "artikel": "14", "aantalTreffers": 3, "leden": [],
+      "bronreferentie": "jci1.3:c:BWBR0004770&artikel=14&g=2024-01-01" }
   ]
 }
 ```
@@ -360,6 +372,8 @@ Zoekt welke artikelen een begrip bevatten. Ondersteunt wildcards en booleaanse o
   "artikel": "13",
   "aantalTreffers": 5,
   "leden": ["1", "3"],
+  "bronreferentie": "jci1.3:c:BWBR0004770&artikel=13&g=2024-01-01",
+  "pad": "Hoofdstuk III > Artikel 13",
   "tekst": "**Lid 1** Een dwangbevel...\n\n**Lid 3** ...",
   "formaat": "markdown"
 }

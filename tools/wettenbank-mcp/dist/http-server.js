@@ -25,7 +25,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import { createServer } from "./server.js";
 import { authenticeer } from "./auth.js";
-import { maakRateLimiter, leesRateConfig } from "./rate-limit.js";
+import { maakRateLimiter, leesRateConfig, leesClientRateConfig, normaliseerIpSleutel, } from "./rate-limit.js";
 import { maakOidcVerifier, oidcConfigUitEnv } from "./oidc.js";
 import { buildInfo } from "./build-info.js";
 import { log } from "./logger.js";
@@ -76,22 +76,49 @@ export function kiesClientIp(xff, socketIp, hops = TRUSTED_PROXY_HOPS) {
 function clientIp(req) {
     return kiesClientIp(req.headers["x-forwarded-for"], req.socket.remoteAddress);
 }
-/** Lees en JSON-parse de request-body; undefined bij een lege body. */
+/** Hostnaam uit de Host-header, zonder poort (incl. IPv6 met blokhaken). */
+export function hostZonderPoort(host) {
+    if (!host)
+        return "";
+    if (host.startsWith("[")) {
+        const eind = host.indexOf("]");
+        return eind > 0 ? host.slice(1, eind) : host;
+    }
+    return host.split(":")[0];
+}
+/** Toegestane hosts (DNS-rebinding-bescherming) uit MCP_ALLOWED_HOSTS; leeg = check uit. */
+export function leesAllowedHosts(env = process.env) {
+    return (env.MCP_ALLOWED_HOSTS ?? "")
+        .split(",")
+        .map((h) => h.trim().toLowerCase())
+        .filter(Boolean);
+}
+/**
+ * Lees en JSON-parse de request-body; undefined bij een lege body.
+ * De cap telt bytes (Buffer-lengte), niet string-karakters: bij multibyte-payloads
+ * zou een karakter-telling tot ~4× zoveel werkelijke bytes binnenlaten, en decoderen
+ * per chunk kan een multibyte-teken op een chunk-grens corrumperen. Daarom pas op
+ * `end` concateneren en decoderen.
+ */
 function leesBody(req) {
     return new Promise((resolve, reject) => {
-        let data = "";
+        const chunks = [];
+        let bytes = 0;
         req.on("data", (chunk) => {
-            data += chunk;
-            if (data.length > MAX_BODY_BYTES) {
+            const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+            bytes += buf.length;
+            if (bytes > MAX_BODY_BYTES) {
                 reject(new Error("request-body te groot"));
                 req.destroy();
+                return;
             }
+            chunks.push(buf);
         });
         req.on("end", () => {
-            if (!data)
+            if (bytes === 0)
                 return resolve(undefined);
             try {
-                resolve(JSON.parse(data));
+                resolve(JSON.parse(Buffer.concat(chunks).toString("utf8")));
             }
             catch (err) {
                 reject(err);
@@ -122,10 +149,20 @@ export function startHttpServer(opts) {
     // OIDC: expliciet meegegeven, anders uit de omgeving (null als OIDC_ISSUER ontbreekt).
     const oidc = opts.oidc !== undefined ? opts.oidc : maakOidcVerifier(oidcConfigUitEnv());
     const authVereist = clients.length > 0 || oidc !== null;
+    if (!authVereist && !opts.allowNoAuth) {
+        throw new Error("startHttpServer: geen enkele authenticatie geconfigureerd (tokens noch OIDC). " +
+            "Geef expliciet allowNoAuth: true mee om bewust zonder auth te draaien.");
+    }
     const rateLimiter = opts.rateLimiter ?? maakRateLimiter(leesRateConfig());
+    const clientRateLimiter = opts.clientRateLimiter ?? maakRateLimiter(leesClientRateConfig());
+    const allowedHosts = opts.allowedHosts ?? leesAllowedHosts();
     const sessionIdleMs = opts.sessionIdleMs ?? SESSION_IDLE_MS;
     // Eén transport per sessie; gekoppeld aan een verse Server-instantie.
     const transports = {};
+    // Eigenaar (clientId) per sessie: een sessie is alleen bruikbaar met het token
+    // waarmee hij is geïnitialiseerd. Anders kan client B met een gelekt sessie-ID de
+    // sessie van client A overnemen én verschijnen B's acties als A in de auditlog.
+    const sessieClient = {};
     // Laatste activiteit per sessie, voor idle-opruiming.
     const lastSeen = {};
     // Aantal in-flight requests per sessie. Een langlevende SSE-stream (de standalone
@@ -148,6 +185,7 @@ export function startHttpServer(opts) {
                 delete transports[sid];
                 delete lastSeen[sid];
                 delete actief[sid];
+                delete sessieClient[sid];
                 log("info", "functioneel", "sessie opgeruimd (idle)", { sessionId: sid });
             }
         }
@@ -158,15 +196,26 @@ export function startHttpServer(opts) {
         const ip = clientIp(req);
         const url = new URL(req.url ?? "/", "http://localhost");
         zetSecurityHeaders(res);
-        // Healthcheck — altijd vrij toegankelijk, geen logging (ruis van Portainer/Azure).
-        // Geeft naast de status ook build-info terug (version/commit/builtAt), zodat
-        // deploy-pariteit met één request controleerbaar is. Geen secrets — alleen herkomst.
+        // Healthcheck — altijd vrij toegankelijk (Docker HEALTHCHECK), geen logging (ruis
+        // van Portainer/Azure). Build-info (version/commit/builtAt) gaat alleen mee als het
+        // request zich met een geldige statische token meldt of als auth uitstaat: een
+        // volledige git-SHA op het publieke domein is fingerprint-informatie.
         if (req.method === "GET" && url.pathname === "/health") {
+            const metBuild = !authVereist ||
+                Boolean(authenticeer(req.headers["authorization"], clients));
             res.writeHead(200, { "content-type": "application/json" });
-            res.end(JSON.stringify({ status: "ok", ...buildInfo }));
+            res.end(JSON.stringify(metBuild ? { status: "ok", ...buildInfo } : { status: "ok" }));
             return;
         }
-        // Readiness — weerspiegelt of de upstream-bronnen bereikbaar zijn (504 bij niet-bereikbaar),
+        // Rate limiting per IP — vóór alle overige endpoints (ook /ready: die triggert
+        // upstream-checks) en vóór het auth-pad (brute-force). IPv6 wordt per /64 gebucket.
+        if (!rateLimiter.staToe(normaliseerIpSleutel(ip))) {
+            log("warn", "security", "rate limit overschreden", { requestId, ip, pad: url.pathname });
+            res.setHeader("Retry-After", "1");
+            stuurFout(res, 429, "Te veel verzoeken");
+            return;
+        }
+        // Readiness — weerspiegelt of de upstream-bronnen bereikbaar zijn (503 bij niet-bereikbaar),
         // i.t.t. /health (liveness). Auth-vrij; alleen op debug gelogd.
         if (req.method === "GET" && url.pathname === "/ready") {
             const upstream = await leesReadiness();
@@ -180,12 +229,16 @@ export function startHttpServer(opts) {
             res.writeHead(404).end();
             return;
         }
-        // Rate limiting per IP — beschermt ook het auth-pad tegen brute-force.
-        if (!rateLimiter.staToe(ip)) {
-            log("warn", "security", "rate limit overschreden", { requestId, ip, pad: url.pathname });
-            res.setHeader("Retry-After", "1");
-            stuurFout(res, 429, "Te veel verzoeken");
-            return;
+        // DNS-rebinding-bescherming: alleen requests met een verwachte Host-header.
+        // Auth dekt dit risico al grotendeels af (een browser kan geen Authorization-header
+        // cross-origin meesturen), maar deze check sluit de klasse definitief uit.
+        if (allowedHosts.length > 0) {
+            const host = hostZonderPoort(req.headers.host).toLowerCase();
+            if (!allowedHosts.includes(host)) {
+                log("warn", "security", "host-header geweigerd", { requestId, ip, host });
+                stuurFout(res, 403, "Forbidden: onbekende Host");
+                return;
+            }
         }
         // Auth: per-client bearer-token (statisch, snel), met OIDC-JWT als fallback.
         // clientId belandt in de auditlog.
@@ -206,21 +259,41 @@ export function startHttpServer(opts) {
                 return;
             }
             clientId = result;
+            // Tweede limiter per afnemer: één client achter een gedeeld proxy-IP (of met
+            // veel IP's) kan de bron anders alsnog overbelasten.
+            if (!clientRateLimiter.staToe(clientId)) {
+                log("warn", "security", "client-rate-limit overschreden", { requestId, ip, clientId });
+                res.setHeader("Retry-After", "1");
+                stuurFout(res, 429, "Te veel verzoeken voor deze client");
+                return;
+            }
         }
         const sessionId = req.headers["mcp-session-id"];
-        // Alleen verversen voor een bekende sessie. Anders kan een client met een willekeurige
-        // mcp-session-id ongebonden lastSeen-entries laten groeien: de idle-cleanup itereert over
-        // `transports` en ruimt zulke verweesde entries nooit op. De init-tak zet lastSeen zelf
-        // in `onsessioninitialized`.
-        if (sessionId && transports[sessionId])
+        // Sessie-eigenaarschap: een bekend sessie-ID telt alleen als "bestaande sessie" voor
+        // de client die hem initialiseerde. Bij een andere clientId behandelen we het ID als
+        // onbekend (zelfde 404 als een verlopen sessie — geen informatie-lek over bestaan).
+        const sessieVanClient = Boolean(sessionId && transports[sessionId] && sessieClient[sessionId] === clientId);
+        if (sessionId && transports[sessionId] && !sessieVanClient) {
+            log("warn", "security", "sessie-ID van andere client geweigerd", {
+                requestId,
+                ip,
+                clientId,
+                sessionId,
+            });
+        }
+        // Alleen verversen voor een bekende eigen sessie. Anders kan een client met een
+        // willekeurige mcp-session-id ongebonden lastSeen-entries laten groeien: de idle-cleanup
+        // itereert over `transports` en ruimt zulke verweesde entries nooit op. De init-tak zet
+        // lastSeen zelf in `onsessioninitialized`.
+        if (sessionId && sessieVanClient)
             lastSeen[sessionId] = Date.now();
         const start = Date.now();
         try {
             if (req.method === "POST") {
                 const body = await leesBody(req);
                 let transport;
-                if (sessionId && transports[sessionId]) {
-                    // Bestaande sessie.
+                if (sessionId && sessieVanClient) {
+                    // Bestaande sessie van deze client.
                     transport = transports[sessionId];
                 }
                 else if (isInitializeRequest(body)) {
@@ -240,6 +313,7 @@ export function startHttpServer(opts) {
                         onsessioninitialized: (sid) => {
                             transports[sid] = transport;
                             lastSeen[sid] = Date.now();
+                            sessieClient[sid] = clientId;
                             log("info", "functioneel", "sessie geïnitialiseerd", {
                                 requestId,
                                 sessionId: sid,
@@ -253,6 +327,7 @@ export function startHttpServer(opts) {
                             delete transports[transport.sessionId];
                             delete lastSeen[transport.sessionId];
                             delete actief[transport.sessionId];
+                            delete sessieClient[transport.sessionId];
                             log("info", "functioneel", "sessie gesloten", { sessionId: transport.sessionId });
                         }
                     };
@@ -283,8 +358,8 @@ export function startHttpServer(opts) {
                 return;
             }
             if (req.method === "GET" || req.method === "DELETE") {
-                // SSE-stream of sessie-afsluiting: vereist een bestaande sessie.
-                if (!sessionId || !transports[sessionId]) {
+                // SSE-stream of sessie-afsluiting: vereist een bestaande, eigen sessie.
+                if (!sessionId || !sessieVanClient) {
                     stuurFout(res, 400, "Bad Request: ontbrekende of onbekende sessie-ID");
                     return;
                 }
@@ -323,6 +398,7 @@ export function startHttpServer(opts) {
     httpServer.on("close", () => {
         clearInterval(cleanup);
         rateLimiter.stop();
+        clientRateLimiter.stop();
     });
     httpServer.listen(opts.port, "0.0.0.0", () => {
         log("info", "functioneel", "HTTP-server gestart", {

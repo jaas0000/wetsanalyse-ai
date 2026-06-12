@@ -5,7 +5,7 @@
 import { DOMParser } from "@xmldom/xmldom";
 import { log } from "../logger.js";
 import { UpstreamError } from "../shared/fouten.js";
-import { fetchMetRetry } from "./http.js";
+import { fetchTekstMetRetry } from "./http.js";
 export const SRU_BASE = "https://zoekservice.overheid.nl/sru/Search";
 export const REPO_BASE = "https://repository.officiele-overheidspublicaties.nl/bwb";
 const REPO_HOST = "repository.officiele-overheidspublicaties.nl";
@@ -32,10 +32,32 @@ export function stripXml(xml) {
         .replace(/\s+/g, " ")
         .trim();
 }
+/**
+ * Eerste element met deze (eventueel gekwalificeerde) tagnaam; valt terug op een
+ * namespace-onafhankelijke match op de lokale naam. Zo blijven de WTI-velden
+ * vindbaar als de SRU-server ooit een ander prefix kiest (semantisch identieke
+ * XML zou anders alle records wegfilteren).
+ */
+export function eersteMetTag(parent, tagName) {
+    const direct = parent.getElementsByTagName(tagName).item(0);
+    if (direct)
+        return direct;
+    const lokaal = tagName.includes(":") ? tagName.slice(tagName.indexOf(":") + 1) : tagName;
+    return parent.getElementsByTagNameNS?.("*", lokaal)?.item(0) ?? null;
+}
+/** Alle elementen met deze tagnaam, met dezelfde namespace-fallback als eersteMetTag. */
+export function alleMetTag(parent, tagName) {
+    const direct = Array.from(parent.getElementsByTagName(tagName));
+    if (direct.length > 0)
+        return direct;
+    const lokaal = tagName.includes(":") ? tagName.slice(tagName.indexOf(":") + 1) : tagName;
+    const ns = parent.getElementsByTagNameNS?.("*", lokaal);
+    return ns ? Array.from(ns) : [];
+}
 export function getElText(parent, tagName) {
     if (!parent)
         return "";
-    const el = parent.getElementsByTagName(tagName)[0];
+    const el = eersteMetTag(parent, tagName);
     return el?.textContent?.trim() ?? "";
 }
 export function getAttr(el, attrName) {
@@ -63,7 +85,7 @@ export function parseXmlDoc(xml, bron) {
 }
 // ── SRU client ───────────────────────────────────────────────────────────────
 const FETCH_TIMEOUT_MS = 15_000;
-export async function sruRequest(query, maxRecords = 10) {
+export async function sruRequest(query, maxRecords = 10, signaal) {
     const params = new URLSearchParams({
         operation: "searchRetrieve",
         version: "2.0",
@@ -71,14 +93,14 @@ export async function sruRequest(query, maxRecords = 10) {
         query,
         maximumRecords: String(maxRecords),
     });
-    const res = await fetchMetRetry(`${SRU_BASE}?${params}`, { headers: { Accept: "application/xml" } }, { timeoutMs: FETCH_TIMEOUT_MS, bron: "SRU" });
+    const res = await fetchTekstMetRetry(`${SRU_BASE}?${params}`, { headers: { Accept: "application/xml" } }, { timeoutMs: FETCH_TIMEOUT_MS, bron: "SRU", signal: signaal });
     if (!res.ok)
         throw new UpstreamError(`SRU HTTP ${res.status}`, {
             bron: "SRU",
             url: SRU_BASE,
             httpStatus: res.status,
         });
-    return res.text();
+    return res.tekst;
 }
 /**
  * Snelle bereikbaarheidscheck van de upstream-hosts voor `/ready`. Elke HTTP-respons
@@ -106,16 +128,29 @@ export async function upstreamStatus(timeoutMs = 3000) {
     ]);
     return { sru, repository };
 }
+/**
+ * Totaal aantal treffers bij de bron (SRU `numberOfRecords`), of null als het
+ * element ontbreekt. Hiermee kan de zoek-tool melden dat een resultaat is
+ * afgekapt in plaats van een misleidend "totaal".
+ */
+export function parseAantalRecords(xml) {
+    const doc = parseXmlDoc(xml, "SRU-service");
+    const el = eersteMetTag(doc, "numberOfRecords");
+    if (!el)
+        return null;
+    const n = parseInt(el.textContent?.trim() ?? "", 10);
+    return Number.isFinite(n) ? n : null;
+}
 export function parseRecords(xml) {
     const doc = parseXmlDoc(xml, "SRU-service");
-    const records = Array.from(doc.getElementsByTagName("record"));
+    const records = alleMetTag(doc, "record");
     const geparsed = records.map((rec) => {
-        const gzd = rec.getElementsByTagName("gzd")[0];
-        const owmskern = gzd?.getElementsByTagName("owmskern")[0];
-        const bwbipm = gzd?.getElementsByTagName("bwbipm")[0];
-        const enrich = gzd?.getElementsByTagName("enrichedData")[0];
+        const gzd = eersteMetTag(rec, "gzd");
+        const owmskern = gzd ? eersteMetTag(gzd, "owmskern") : null;
+        const bwbipm = gzd ? eersteMetTag(gzd, "bwbipm") : null;
+        const enrich = gzd ? eersteMetTag(gzd, "enrichedData") : null;
         const bwbId = getElText(owmskern, "dcterms:identifier");
-        const rgEls = bwbipm ? Array.from(bwbipm.getElementsByTagName("overheidbwb:rechtsgebied")) : [];
+        const rgEls = bwbipm ? alleMetTag(bwbipm, "overheidbwb:rechtsgebied") : [];
         const rechtsgebiedStr = rgEls.map((e) => e.textContent?.trim()).filter(Boolean).join(", ");
         // SSRF-mitigatie: vertrouw de bron-URL alleen als hij naar de bekende repository wijst;
         // anders een zelf-geconstrueerde URL gebruiken (vaste host, geen door de bron gestuurd doel).

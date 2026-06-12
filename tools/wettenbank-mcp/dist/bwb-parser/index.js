@@ -9,7 +9,7 @@
  *   result.raw        // volledige RAW BwbNode-boom
  *   result.normalized // NORMALIZED NormalizedNode-boom
  */
-export { parseBwbXml, parseElement } from "./parser.js";
+export { parseBwbXml, parseBwbVanDom, parseElement } from "./parser.js";
 export { normalizeNode, extractPlainText } from "./normalizer.js";
 export { transformToMcpLite } from "./mcp-lite.js";
 import { parseBwbXml } from "./parser.js";
@@ -27,7 +27,7 @@ export function parseBwb(xml, bwbId, citeertitel = "", versiedatum = "") {
     const raw = parseBwbXml(xml, bwbId);
     const normalized = normalizeNode(raw);
     const finalBwbId = raw.metadata.bwbId ?? bwbId;
-    const mcpLite = transformToMcpLite(normalized, finalBwbId, citeertitel);
+    const mcpLite = transformToMcpLite(normalized, finalBwbId, citeertitel, versiedatum);
     return {
         bwbId: finalBwbId,
         citeertitel,
