@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Fraunces, Hanken_Grotesk, Spline_Sans_Mono } from "next/font/google";
 import Link from "next/link";
 import "./globals.css";
@@ -29,6 +29,24 @@ export const metadata: Metadata = {
   title: "Wetsanalyse",
   description:
     "Gestructureerd, brongetrouw en traceerbaar duiden van Nederlandse wet- en regelgeving (JAS).",
+  manifest: "/manifest.webmanifest",
+  applicationName: "Wetsanalyse",
+  appleWebApp: { capable: true, title: "Wetsanalyse", statusBarStyle: "default" },
+  icons: {
+    icon: [
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/favicon.svg", type: "image/svg+xml" },
+      { url: "/favicon-16.png", sizes: "16x16", type: "image/png" },
+      { url: "/favicon-32.png", sizes: "32x32", type: "image/png" },
+      { url: "/favicon-48.png", sizes: "48x48", type: "image/png" },
+      { url: "/favicon-192.png", sizes: "192x192", type: "image/png" },
+    ],
+    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#01689b",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
