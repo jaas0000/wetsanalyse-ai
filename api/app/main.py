@@ -5,34 +5,29 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 
+from beanie import init_beanie
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from motor.motor_asyncio import AsyncIOMotorClient
 
 from . import __version__
 from .config import get_settings
-from .deps import get_store
+from .deps import get_engine, get_store
+from .project import Project
 from .routers import analyses
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: markeer jobs die in een runt-state hingen als onderbroken (geen lopende taak meer).
+    settings = get_settings()
+    motor_client = AsyncIOMotorClient(settings.mongodb_url)
+    await init_beanie(database=motor_client[settings.mongodb_db], document_models=[Project])
     try:
-        from .contracts import FoutKlasse, JobFout, JobState
-
-        store = get_store()
-        for job in store.list_jobs():
-            if job.state in (JobState.act2_runt, JobState.act3_runt, JobState.bouwt):
-                job.state = JobState.fout
-                job.error = JobFout(
-                    stap=job.current_activiteit or "?",
-                    ronde=job.current_ronde or None,
-                    klasse=FoutKlasse.intern,
-                    bericht="Onderbroken bij herstart van de dienst (gebruik /retry).",
-                )
-                store.save_job(job)
-    except Exception:  # noqa: BLE001 — reconciliatie mag de start nooit blokkeren
+        await get_engine().reconcile_startup()
+    except Exception:  # noqa: BLE001 — engine mag de start nooit blokkeren
         pass
     yield
+    motor_client.close()
 
 
 app = FastAPI(
@@ -42,6 +37,15 @@ app = FastAPI(
     "rapport.json als primaire bron. Auth via per-client bearer-token.",
     lifespan=lifespan,
 )
+
+settings = get_settings()
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origins,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 app.include_router(analyses.router)
 
 
@@ -60,5 +64,5 @@ async def ready():
         "auth_geconfigureerd": bool(s.client_tokens) or not s.auth_required,
         "mcp_url": s.mcp_url,
         "llm_model_gezet": bool(s.llm_model),
-        "analyses_dir": str(s.analyses_dir),
+        "mongodb_url": s.mongodb_url,
     }

@@ -8,12 +8,10 @@ from pathlib import Path
 
 import pytest
 
-# Maak `app` importeerbaar (de service is geen geïnstalleerd package in de tests).
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.config import Settings  # noqa: E402
 from app.llm.base import LLMResult  # noqa: E402
-from app.store import Store  # noqa: E402
 
 _LID_RE = re.compile(r"^Lid (\S+): (.*)$", re.MULTILINE)
 
@@ -85,12 +83,18 @@ def settings(tmp_path) -> Settings:
 
 
 @pytest.fixture
-def store(settings) -> Store:
-    return Store(settings)
+async def store(settings):
+    import mongomock_motor
+    from beanie import init_beanie
+    from app.mongo_store import MongoStore
+    from app.project import Project
+
+    client = mongomock_motor.AsyncMongoMockClient()
+    await init_beanie(database=client["test"], document_models=[Project])
+    return MongoStore(settings)
 
 
 @pytest.fixture
-def engine(settings, store):
+async def engine(settings, store):
     from app.engine.orchestrator import WetsanalyseEngine
-
     return WetsanalyseEngine(settings, store, FakeLLM(), FakeWettenbank())

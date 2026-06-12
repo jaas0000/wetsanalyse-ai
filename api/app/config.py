@@ -77,6 +77,14 @@ class Settings:
         }
         self.default_model_profile = os.environ.get("LLM_DEFAULT_PROFILE", "azure-sonnet")
 
+        # --- MongoDB ---
+        self.mongodb_url = os.environ.get("MONGODB_URL", "mongodb://localhost:27017")
+        self.mongodb_db = os.environ.get("MONGODB_DB", "wetsanalyse")
+
+        # --- CORS ---
+        raw_origins = os.environ.get("CORS_ORIGINS", "*")
+        self.cors_origins: list[str] = [o.strip() for o in raw_origins.split(",") if o.strip()]
+
         # --- Build-herkomst (door CI meegegeven; zichtbaar op /health) ---
         self.git_sha = os.environ.get("GIT_SHA", "")
         self.build_time = os.environ.get("BUILD_TIME", "")

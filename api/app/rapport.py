@@ -1,15 +1,21 @@
-"""Rapportbouw — hergebruikt de helpers uit build_rapport_json.py, in-proces.
+"""Rapportbouw — twee varianten:
+
+  bouw_rapport(werk, ...)      — filesystem-variant voor de lokale skill-flow
+  bouw_rapport_async(store, ..) — MongoDB-variant voor de API (geen filesystem-afhankelijkheid)
 
 We roepen het script NIET als subprocess of via main() aan: dat doet sys.exit() bij fouten en
-zou de FastAPI-worker killen. We importeren de pure helpers en bouwen het rapport-dict zelf,
-met exact dezelfde structuur als build_rapport_json.py produceert.
+zou de FastAPI-worker killen.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from .validation import _load_skill_module
+
+if TYPE_CHECKING:
+    from .mongo_store import MongoStore
 
 _build = _load_skill_module("build_rapport_json")
 laatste_ronde = _build.laatste_ronde
@@ -63,6 +69,56 @@ def bouw_rapport(
                 "samenvatting": reviewlog_act3.strip(),
                 "rondes": bouw_reviewlog_rondes(verzamel_rondes(dir3)),
             },
+        },
+        "aandachtspunten": aandachtspunten.strip(),
+    }
+
+
+async def bouw_rapport_async(
+    store: "MongoStore",
+    job_id: str,
+    reviewlog_act2: str = "",
+    reviewlog_act3: str = "",
+    aandachtspunten: str = "",
+) -> dict:
+    """Rapportbouw direct uit MongoDB — gebruikt door de API-orchestrator."""
+    n2 = await store.hoogste_ronde(job_id, "2")
+    n3 = await store.hoogste_ronde(job_id, "3")
+    a2 = await store.lees_analyse(job_id, "2", n2) or {}
+    a3 = await store.lees_analyse(job_id, "3", n3) or {}
+    rondes2 = await store.lees_alle_rondes(job_id, "2")
+    rondes3 = await store.lees_alle_rondes(job_id, "3")
+
+    def reviewlog_rondes(rondes: dict) -> list[dict]:
+        return [
+            {
+                "ronde": int(k),
+                "items": (rd.feedback or {}).get("items", {}),
+                "algemeen": (rd.feedback or {}).get("algemeen", ""),
+            }
+            for k, rd in sorted(rondes.items(), key=lambda x: int(x[0]))
+        ]
+
+    return {
+        "wet": a2.get("wet", ""),
+        "bwbId": a2.get("bwbId", ""),
+        "artikel": a2.get("artikel", ""),
+        "versiedatum": a2.get("versiedatum", ""),
+        "bronreferentie": a2.get("bronreferentie", ""),
+        "type": a2.get("type", ""),
+        "pad": a2.get("pad", ""),
+        "analysefocus": a2.get("analysefocus", ""),
+        "reikwijdte": a2.get("reikwijdte", ""),
+        "geraadpleegde": a2.get("geraadpleegde", ""),
+        "leden": a2.get("leden", []),
+        "markeringen": a2.get("markeringen", []),
+        "samenhang": a2.get("samenhang", ""),
+        "begrippen": a3.get("begrippen", []),
+        "afleidingsregels": a3.get("afleidingsregels", []),
+        "validatiepunten": a3.get("validatiepunten", []),
+        "reviewlog": {
+            "activiteit2": {"samenvatting": reviewlog_act2.strip(), "rondes": reviewlog_rondes(rondes2)},
+            "activiteit3": {"samenvatting": reviewlog_act3.strip(), "rondes": reviewlog_rondes(rondes3)},
         },
         "aandachtspunten": aandachtspunten.strip(),
     }

@@ -36,13 +36,15 @@ services:
       LLM_API_KEY_FILE: /run/secrets/llm_api_key
       LLM_API_VERSION: ${LLM_API_VERSION:-}
       LLM_OUTPUT_STRATEGY: ${LLM_OUTPUT_STRATEGY:-prompt_and_parse}
+      MONGODB_URL: mongodb://mongo:27017
+      MONGODB_DB: wetsanalyse
     volumes:
-      # Secrets als bestanden op de host (read-only); waarden nooit als plain env var.
       - ${SECRETS_DIR:-/opt/secrets/wetsanalyse-api}:/run/secrets:ro
-      # Persistente, met de lokale skill deelbare artefactenmap.
-      - ${ANALYSES_DIR:-/volume1/docker/wetsanalyse/analyses}:/app/analyses
     networks:
       - proxy
+    depends_on:
+      mongo:
+        condition: service_healthy
     healthcheck:
       test:
         - CMD
@@ -52,7 +54,25 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
+      start_period: 15s
+
+  mongo:
+    image: mongo:7
+    container_name: wetsanalyse-mongo
+    restart: unless-stopped
+    volumes:
+      - wetsanalyse_mongo:/data/db
+    networks:
+      - proxy
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
       start_period: 10s
+
+volumes:
+  wetsanalyse_mongo:
 
 networks:
   proxy:
