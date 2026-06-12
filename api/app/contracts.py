@@ -106,6 +106,8 @@ class StartRequest(BaseModel):
     wet: str | None = None
     artikel: str
     lid: str | None = None
+    naam: str = ""
+    omschrijving: str = ""
     analysefocus: str | None = None
     review: bool = True
     model_profile: str | None = None

@@ -14,7 +14,7 @@ from . import __version__
 from .config import get_settings
 from .deps import get_engine, get_store
 from .project import Project
-from .routers import analyses
+from .routers import analyses, projects
 
 
 @asynccontextmanager
@@ -47,6 +47,7 @@ app.add_middleware(
 )
 
 app.include_router(analyses.router)
+app.include_router(projects.router)
 
 
 @app.get("/health", tags=["meta"])

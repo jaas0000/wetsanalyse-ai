@@ -31,6 +31,29 @@ class WetsanalyseEngine:
 
     # --- publieke API -----------------------------------------------------
 
+    async def create_project(self, req: StartRequest, client_id: str):
+        """Maak een Project-document aan zonder de analyse te starten."""
+        from ..project import Project as ProjectDoc
+        if not req.bwbId:
+            raise ValueError("bwbId is verplicht in v1 (wet-only resolutie is roadmap).")
+        self.s.resolve_profile(req.model_profile)
+        slug = await self.store.afgeleid_id(req.bwbId, req.artikel, req.lid)
+        naam = req.naam or f"Art. {req.artikel}{f' lid {req.lid}' if req.lid else ''}"
+        project = ProjectDoc(
+            slug=slug,
+            naam=naam,
+            omschrijving=req.omschrijving,
+            bwbId=req.bwbId,
+            artikel=req.artikel,
+            lid=req.lid,
+            review=req.review,
+            model_profile=req.model_profile or self.s.default_model_profile,
+            analysefocus=req.analysefocus or "",
+            client_id=client_id,
+        )
+        await project.insert()
+        return project
+
     async def create_job(self, req: StartRequest, client_id: str) -> Job:
         if not req.bwbId:
             raise ValueError("bwbId is verplicht in v1 (wet-only resolutie is roadmap).")
