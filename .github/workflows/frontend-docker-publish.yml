@@ -1,0 +1,166 @@
+# Bouwt de Wetsanalyse-frontend-image en pusht naar GitHub Container Registry (GHCR).
+# Draait bij wijzigingen in de frontend-map op master en bij versietags (v*). Portainer pullt
+# vervolgens ghcr.io/<owner>/wetsanalyse-frontend:latest.
+# Spiegelt .github/workflows/api-docker-publish.yml qua opzet en securitypoort.
+
+name: frontend-docker-publish
+
+on:
+  push:
+    branches: [master]
+    tags: ["v*"]
+    paths:
+      - "frontend/**"
+      - "!frontend/**/*.md"
+      - ".github/workflows/frontend-docker-publish.yml"
+  workflow_dispatch:
+
+env:
+  IMAGE: ghcr.io/${{ github.repository_owner }}/wetsanalyse-frontend
+
+jobs:
+  # ── Kwaliteits- en kwetsbaarhedenpoort (BIO2 / ISO 27002:2022 §8.8) ──────────
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "26"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run build
+      - name: npm audit (faalt bij high/critical)
+        run: npm audit --omit=dev --audit-level=high
+
+  build-and-push:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      security-events: write
+    env:
+      PORTAINER_URL: ${{ secrets.PORTAINER_URL }}
+      PORTAINER_API_KEY: ${{ secrets.PORTAINER_API_KEY }}
+      PORTAINER_STACK_ID: ${{ vars.PORTAINER_FRONTEND_STACK_ID }}
+      PORTAINER_ENDPOINT_ID: "1"
+      PROXY_NETWORK: "homeinfra_internal"
+      SECRETS_DIR: ${{ vars.SECRETS_DIR }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in bij GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Metadata (tags + labels)
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=ref,event=tag
+            type=sha,format=short
+
+      - name: Buildtijd bepalen
+        id: buildtime
+        run: echo "ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+
+      - name: Build en push
+        id: build
+        uses: docker/build-push-action@v7
+        with:
+          context: frontend
+          file: frontend/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            GIT_SHA=${{ github.sha }}
+            BUILD_TIME=${{ steps.buildtime.outputs.ts }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          sbom: true
+          provenance: mode=max
+
+      # ── Image-scan (BIO2 / ISO 27002:2022 §8.8) ───────────────────────────────
+      - name: Trivy image-scan (SARIF)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ env.IMAGE }}@${{ steps.build.outputs.digest }}
+          format: sarif
+          output: trivy-results.sarif
+          ignore-unfixed: true
+          vuln-type: os,library
+
+      - name: Upload Trivy-resultaten naar Security-tab
+        if: always()
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: trivy-results.sarif
+
+      - name: Trivy gate (faalt bij CRITICAL)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ env.IMAGE }}@${{ steps.build.outputs.digest }}
+          format: table
+          ignore-unfixed: true
+          severity: CRITICAL
+          exit-code: "1"
+
+      - name: Portainer redeploy via stack-update (pull :latest)
+        if: ${{ github.ref == 'refs/heads/master' && env.PORTAINER_API_KEY != '' && env.PORTAINER_STACK_ID != '' }}
+        env:
+          HEALTH_URL: https://wetsanalyse.ipalm.nl/api/health
+        run: |
+          set -euo pipefail
+          payload=$(jq -n \
+            --rawfile compose frontend/docker-compose.yml \
+            --arg net "$PROXY_NETWORK" \
+            --arg secrets_dir "${SECRETS_DIR:-/volume1/docker/secrets/wetsanalyse-api}" \
+            '{stackFileContent:$compose,
+              env:[{name:"PROXY_NETWORK",value:$net},
+                   {name:"SECRETS_DIR",value:$secrets_dir}],
+              pullImage:true, prune:false}')
+          rc=0
+          code=$(curl -sS -X PUT --max-time 300 \
+            "$PORTAINER_URL/api/stacks/$PORTAINER_STACK_ID?endpointId=$PORTAINER_ENDPOINT_ID" \
+            -H "X-API-Key: $PORTAINER_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d "$payload" -o /tmp/portainer-resp.json -w "%{http_code}") || rc=$?
+          echo "redeploy: curl_rc=$rc http=$code"
+          if [ "$rc" -ne 0 ]; then
+            echo "::warning::curl-fout (rc=$rc) — update draait mogelijk async door; health-check is bepalend."
+          else
+            case "$code" in
+              2*) echo "Stack-update geaccepteerd." ;;
+              4*) echo "::error::Stack-update geweigerd (HTTP $code)"; cat /tmp/portainer-resp.json || true; exit 1 ;;
+              *)  echo "::warning::HTTP $code — update draait mogelijk async door; health-check is bepalend." ;;
+            esac
+          fi
+          echo "Health-verificatie op $HEALTH_URL ..."
+          for i in $(seq 1 20); do
+            if curl -fsS --max-time 10 "$HEALTH_URL" -o /dev/null; then
+              echo "Service gezond na redeploy (poging $i)."
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "::error::Service niet gezond na redeploy. Controleer de containerlogs in Portainer."
+          exit 1

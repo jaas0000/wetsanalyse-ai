@@ -1,0 +1,72 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Warm-neutraal "archief/perkament"-palet met bordeaux accent — geen generieke AI-tinten. */
+  --paper: 246 243 236; /* #F6F3EC */
+  --surface: 252 250 245; /* #FCFAF5 */
+  --ink: 28 26 23; /* #1C1A17 */
+  --muted: 92 86 76; /* #5C564C */
+  --faint: 138 131 119; /* #8A8377 */
+  --line: 222 216 204; /* #DED8CC */
+  --accent: 122 46 46; /* #7A2E2E bordeaux */
+  --accent-soft: 158 78 78; /* #9E4E4E */
+  --gold: 161 124 56; /* #A17C38 */
+}
+
+* {
+  border-color: rgb(var(--line));
+}
+
+html {
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  background-color: rgb(var(--paper));
+  color: rgb(var(--ink));
+  font-family: var(--font-body), system-ui, sans-serif;
+}
+
+/* Subtiele perkament-textuur: een fijn, bijna onzichtbaar grein over de achtergrond. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0.5;
+  background-image: radial-gradient(rgb(var(--line) / 0.35) 0.5px, transparent 0.5px);
+  background-size: 22px 22px;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-display), Georgia, serif;
+  letter-spacing: -0.01em;
+}
+
+::selection {
+  background: rgb(var(--accent) / 0.16);
+}
+
+/* Dunne, smaakvolle scrollbar. */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: rgb(var(--faint) / 0.45);
+  border-radius: 999px;
+  border: 2px solid rgb(var(--paper));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}
