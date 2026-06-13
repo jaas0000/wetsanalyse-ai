@@ -57,7 +57,7 @@ export function SiteNav() {
           onClick={() => setOpen(false)}
           className="absolute inset-x-0 top-full z-20 flex flex-col gap-2 border-b border-line bg-surface px-6 py-4 shadow-sm sm:hidden"
         >
-          <LinkButton href="/" variant="ghost" className="w-full justify-start">
+          <LinkButton href="/" variant="ghost" className="w-full">
             Projecten
           </LinkButton>
           <LinkButton href="/nieuw" className="w-full">

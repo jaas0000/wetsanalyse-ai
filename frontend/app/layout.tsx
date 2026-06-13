@@ -54,7 +54,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="nl" className={`${display.variable} ${body.variable} ${mono.variable}`}>
       <body className="min-h-screen">
-        <header className="border-b border-line/80 bg-surface/70 backdrop-blur-sm">
+        <header className="relative z-30 border-b border-line/80 bg-surface/70 backdrop-blur-sm">
           <div className="relative mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
             <Link href="/" className="group flex items-baseline gap-3">
               <span className="font-display text-xl font-semibold tracking-tight text-ink">
