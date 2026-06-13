@@ -79,7 +79,7 @@ def brongetrouwheid_check(data: dict, activiteit: str) -> list[str]:
     schendingen: list[str] = []
 
     if not (data.get("bronreferentie") or "").strip():
-        schendingen.append("bronreferentie (jci) ontbreekt — moet uit de MCP komen, niet uit het LLM.")
+        schendingen.append("Bronreferentie (jci) ontbreekt — moet uit de MCP komen, niet uit het LLM.")
 
     if activiteit == "2":
         leden_genorm = normaliseer(
@@ -88,17 +88,17 @@ def brongetrouwheid_check(data: dict, activiteit: str) -> list[str]:
         for m in data.get("markeringen") or []:
             mid = m.get("id", "?")
             if not (m.get("vindplaats") or "").strip():
-                schendingen.append(f"[{mid}] vindplaats ontbreekt (herleidbaarheid verplicht).")
+                schendingen.append(f"[{mid}] Vindplaats ontbreekt (herleidbaarheid verplicht).")
             formulering = (m.get("formulering") or "").strip()
             if formulering and leden_genorm and normaliseer(formulering) not in leden_genorm:
                 kort = formulering[:60] + ("…" if len(formulering) > 60 else "")
                 schendingen.append(
-                    f"[{mid}] formulering is geen letterlijk citaat uit de leden-tekst: '{kort}'"
+                    f"[{mid}] Formulering is geen letterlijk citaat uit de leden-tekst: '{kort}'"
                 )
     else:
         for item in (data.get("begrippen") or []) + (data.get("afleidingsregels") or []):
             iid = item.get("id", "?")
             if not (item.get("vindplaats") or "").strip():
-                schendingen.append(f"[{iid}] vindplaats ontbreekt (herleidbaarheid verplicht).")
+                schendingen.append(f"[{iid}] Vindplaats ontbreekt (herleidbaarheid verplicht).")
 
     return schendingen

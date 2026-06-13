@@ -34,8 +34,8 @@ def test_brongetrouwheid_citaat_normalisatie():
 
 def test_brongetrouwheid_bronreferentie_en_vindplaats_verplicht():
     schend = brongetrouwheid_check({"leden": [], "markeringen": [{"id": "m1", "formulering": ""}]}, "2")
-    assert any("bronreferentie" in s for s in schend)
-    assert any("vindplaats" in s for s in schend)
+    assert any("Bronreferentie" in s for s in schend)
+    assert any("Vindplaats" in s for s in schend)
 
 
 def test_normaliseer():
@@ -60,7 +60,7 @@ def test_schema_check_filtert_overlap_met_hard():
     # De harde check blijft de schendingen wél melden (precies één per concern).
     schend = brongetrouwheid_check(data, "2")
     assert any("letterlijk citaat" in s for s in schend)
-    assert any("vindplaats" in s for s in schend)
+    assert any("Vindplaats" in s for s in schend)
 
 
 def test_schema_check_act3_filtert_vindplaats():
