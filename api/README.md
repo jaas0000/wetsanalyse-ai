@@ -81,8 +81,10 @@ POST /v1/projects
 `review: false` slaat de human-in-the-loop checkpoints over — uitsluitend voor geautomatiseerde
 verwerking. Gebruik `review: true` (default) voor een volwaardige analyse met reviewrondes.
 
-Grenzen: per-client rate limit en een max aantal gelijktijdige analyses (beide → `429`), plus een
-optioneel LLM-token-budget per analyse. Zie `CLAUDE.md` §Misbruik-/kostenbeheersing.
+Grenzen: per-client rate limit en een max aantal gelijktijdige analyses (beide → `429`), een
+optioneel LLM-token-budget per analyse, en een globale rem op gelijktijdige LLM-calls
+(`WETSANALYSE_LLM_MAX_CONCURRENCY`) tegen provider-rate-limits — een 429 wordt geretryed met respect
+voor de `Retry-After`-header. Zie `CLAUDE.md` §Misbruik-/kostenbeheersing.
 
 Job-states: `queued` → `act2-runt` → `wacht-op-review-act2` → `act3-runt` →
 `wacht-op-review-act3` → `klaar` (of `fout` bij elke stap).
