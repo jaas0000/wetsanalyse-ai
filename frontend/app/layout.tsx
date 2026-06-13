@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Fraunces, Hanken_Grotesk, Spline_Sans_Mono } from "next/font/google";
 import Link from "next/link";
+import { LinkButton } from "@/components/ui/Button";
 import "./globals.css";
 
 const display = Fraunces({
@@ -70,12 +71,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               >
                 Projecten
               </Link>
-              <Link
-                href="/nieuw"
-                className="whitespace-nowrap rounded-md bg-accent px-3 py-1.5 font-medium text-paper transition-colors hover:bg-accent-soft"
-              >
-                Nieuwe analyse
-              </Link>
+              <LinkButton href="/nieuw">Nieuwe analyse</LinkButton>
             </nav>
           </div>
         </header>
