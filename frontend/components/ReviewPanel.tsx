@@ -195,10 +195,10 @@ export function ReviewPanel({
           onClick={() => verstuur("wijzigingen")}
           disabled={bezig !== null || !items}
         >
-          {bezig === "wijzigingen" ? "Versturen…" : "Wijzigingen indienen"}
+          {bezig === "wijzigingen" ? "Versturen…" : "Wijzigen"}
         </Button>
         <Button onClick={() => verstuur("akkoord")} disabled={bezig !== null || !items}>
-          {bezig === "akkoord" ? "Versturen…" : "Akkoord — door"}
+          {bezig === "akkoord" ? "Versturen…" : "Akkoord"}
         </Button>
       </div>
     </Card>
