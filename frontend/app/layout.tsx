@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Fraunces, Hanken_Grotesk, Spline_Sans_Mono } from "next/font/google";
 import Link from "next/link";
-import { LinkButton } from "@/components/ui/Button";
+import { SiteNav } from "@/components/SiteNav";
 import "./globals.css";
 
 const display = Fraunces({
@@ -55,7 +55,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="nl" className={`${display.variable} ${body.variable} ${mono.variable}`}>
       <body className="min-h-screen">
         <header className="border-b border-line/80 bg-surface/70 backdrop-blur-sm">
-          <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
+          <div className="relative mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
             <Link href="/" className="group flex items-baseline gap-3">
               <span className="font-display text-xl font-semibold tracking-tight text-ink">
                 Wetsanalyse
@@ -64,12 +64,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 JAS · brongetrouw
               </span>
             </Link>
-            <nav className="flex shrink-0 items-center gap-2 text-sm">
-              <LinkButton href="/" variant="ghost">
-                Projecten
-              </LinkButton>
-              <LinkButton href="/nieuw">Nieuwe analyse</LinkButton>
-            </nav>
+            <SiteNav />
           </div>
         </header>
         <main className="mx-auto max-w-6xl px-6 py-10">{children}</main>

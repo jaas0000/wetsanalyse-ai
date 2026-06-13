@@ -38,7 +38,9 @@ export default async function ProjectenPagina() {
             Analyseschema: markeren &amp; classificeren, daarna begrippen &amp; afleidingsregels.
           </p>
         </div>
-        <LinkButton href="/nieuw">Nieuwe analyse</LinkButton>
+        <LinkButton href="/nieuw" className="self-start">
+          Nieuwe analyse
+        </LinkButton>
       </div>
 
       {fout && (
