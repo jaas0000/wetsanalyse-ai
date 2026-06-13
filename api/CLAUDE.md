@@ -18,6 +18,13 @@ disk-interoperabiliteit met de lokale skill staat op de roadmap, niet in de huid
 - `config.py` — env-config + projectpaden (PROJECT_ROOT = repo-root).
 - `contracts.py` — Pydantic-modellen (1-op-1 met `references/review-checkpoints.md`) + `Job`/state machine.
 - `auth.py` — per-client bearer-tokens (erft het MCP-patroon; fail-closed; constant-tijd).
+  `require_admin` is een aparte, altijd-verplichte bearer voor `/v1/admin/*` (LLM-beheer).
+- `llm_profile.py` — Beanie `LlmProfile`-document (benoemde modelprofielen in Mongo; vervangt de
+  vroegere hardcoded `Settings.model_profiles`). `profiles.py` — service eroverheen: CRUD,
+  default-beheer, `resolve_config` (profiel → `LlmConfig`, ontsleutelt de key, env-fallback) en
+  `ensure_seeded` (seedt bij eerste start één default-profiel uit de env). `secrets_crypto.py` —
+  Fernet-versleuteling-at-rest van de API-key (master key uit `LLM_CONFIG_SECRET(_FILE)`).
+  `usage.py` — read-only token-verbruik-aggregatie over `provenance`.
 - `jobstore.py` — `JobStore`-Protocol (opslag-abstractie) + `IdConflict`. `mongo_store.py` —
   de Beanie/MongoDB-implementatie: gerichte `$set`-writes, **ronde-immutabiliteit**, client-scoping.
 - `project.py` — het Beanie `Project`-document (state + embedded rondes/feedback/rapport).
@@ -33,6 +40,10 @@ disk-interoperabiliteit met de lokale skill staat op de roadmap, niet in de huid
   startup-reconciliatie, retry, quota/budget-checks).
 - `routers/projects.py` + `main.py` — de kanonieke resource onder **`/v1/projects`** (client-gescopet,
   `response_model`s, paginatie, SSE), `/health` (liveness), `/ready` (alleen booleans).
+- `routers/admin.py` — **`/v1/admin/*`** achter `require_admin`: modelprofielen-CRUD
+  (`/profiles`, write-only API-key, `api_key_set` nooit de key zelf), default zetten, verbinding
+  testen, en `/usage` (token-verbruik). De engine bouwt per analyse de LLM-client uit het
+  profiel van de job, dus runtime-wijzigingen werken zonder redeploy.
 
 ## Garanties (niet aan tornen)
 
@@ -68,7 +79,12 @@ LLM_API_BASE=https://<resource-naam>.services.ai.azure.com   # geen /models acht
 LLM_API_KEY_FILE=secrets/llm_api_key
 WETTENBANK_TOKEN_FILE=secrets/wettenbank_token
 WETSANALYSE_API_TOKENS_FILE=secrets/api_tokens
+WETSANALYSE_ADMIN_TOKENS=admin:<zelfgekozen-admin-token>
+LLM_CONFIG_SECRET=<fernet-key>   # nodig om API-keys via de admin-UI op te slaan
 ```
+
+Genereer de Fernet-master-key met:
+`python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`.
 
 ### 3. Server starten
 
@@ -89,8 +105,10 @@ uv run pytest -q               # unit-tests (fakes; geen netwerk)
 uv run --env-file .env --extra llm python scripts/spike_fase0.py BWBR0004770 9 1
 ```
 
-**Geen vrije model-string vanuit de client**: kies een `model_profile`; het feitelijk gebruikte model
-wordt per ronde in de `provenance` van het `Project`-document vastgelegd (audit).
+**Geen vrije model-string vanuit de client**: kies een `model_profile` (benoemd, beheerd in Mongo via
+`/v1/admin/profiles` of het `/beheer`-scherm in de frontend); het feitelijk gebruikte model wordt per
+ronde in de `provenance` van het `Project`-document vastgelegd (audit). De env-`LLM_*`-waarden seeden
+alleen het eerste default-profiel en blijven de fallback-key.
 
 Lokaal heb je ook een **MongoDB** nodig (de jobstore). Snel: `docker run -d -p 27017:27017 mongo:4.4`
 en laat `MONGODB_URL` op de default `mongodb://localhost:27017` staan (lokaal zonder auth).
@@ -100,7 +118,9 @@ en laat `MONGODB_URL` op de default `mongodb://localhost:27017` staan (lokaal zo
 Maak `api/docker-compose.override.yml` aan (gitignored) om de secrets-mount naar `./secrets` te
 verwijzen in plaats van het productiepad. Voor lokaal draaien heb je naast `llm_api_key`,
 `wettenbank_token` en `api_tokens` ook `mongodb_url`, `mongo_root_username` en `mongo_root_password`
-in `./secrets` nodig (zie de productie-stappen hieronder):
+in `./secrets` nodig (zie de productie-stappen hieronder). Voor het LLM-beheer bovendien
+`admin_tokens` en `llm_config_secret` — ontbreken die, dan boot de API gewoon, maar geeft
+`/v1/admin/*` 401 (geen admin-tokens) en kun je geen API-key via de UI opslaan (geen master key):
 
 ```yaml
 services:
@@ -147,6 +167,11 @@ sudo mkdir -p "$SECRETS_DIR"
 echo -n "<llm-api-key>"      | sudo tee "$SECRETS_DIR/llm_api_key"      > /dev/null
 echo -n "<wettenbank-token>" | sudo tee "$SECRETS_DIR/wettenbank_token"  > /dev/null
 echo -n "id1:tok1,id2:tok2"  | sudo tee "$SECRETS_DIR/api_tokens"        > /dev/null
+
+# Admin-laag (LLM-modelprofielen): aparte admin-tokens + Fernet-master-key voor key-versleuteling.
+echo -n "admin:adm-tok"                                   | sudo tee "$SECRETS_DIR/admin_tokens"      > /dev/null
+python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())" \
+    | sudo tee "$SECRETS_DIR/llm_config_secret" > /dev/null
 
 # MongoDB-auth: root-credentials + de connection string die de API gebruikt.
 # Hex-wachtwoord = URL-veilig (geen +/=/ die je in de connection string moet escapen).

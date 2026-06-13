@@ -16,7 +16,8 @@
 # Secrets leven als bestanden op de host in SECRETS_DIR en worden via *_FILE-variabelen
 # doorgegeven (nooit als plain env var in de container of Portainer-UI):
 #   llm_api_key, wettenbank_token, api_tokens, mongodb_url,
-#   mongo_root_username, mongo_root_password.
+#   mongo_root_username, mongo_root_password,
+#   admin_tokens (bearer voor /v1/admin/*), llm_config_secret (Fernet-key voor API-key-opslag).
 # Zie api/CLAUDE.md §"Secrets op de host" voor provisioning + de migratie van een BESTAANDE
 # (nog auth-loze) Mongo-volume — auth aanzetten op bestaande data vereist handmatige stappen.
 
@@ -33,6 +34,7 @@ services:
     environment:
       WETSANALYSE_API_TOKENS_FILE: /run/secrets/api_tokens
       WETSANALYSE_AUTH_REQUIRED: "1"
+      WETSANALYSE_ADMIN_TOKENS_FILE: /run/secrets/admin_tokens
       WETTENBANK_MCP_URL: "http://wettenbank-mcp:3000/mcp"
       WETTENBANK_TOKEN_FILE: /run/secrets/wettenbank_token
       LLM_PROVIDER: ${LLM_PROVIDER:-azure_ai}
@@ -41,6 +43,8 @@ services:
       LLM_API_KEY_FILE: /run/secrets/llm_api_key
       LLM_API_VERSION: ${LLM_API_VERSION:-}
       LLM_OUTPUT_STRATEGY: ${LLM_OUTPUT_STRATEGY:-prompt_and_parse}
+      # Master key voor versleuteling-at-rest van via de admin-UI opgeslagen API-keys.
+      LLM_CONFIG_SECRET_FILE: /run/secrets/llm_config_secret
       MONGODB_URL_FILE: /run/secrets/mongodb_url
       MONGODB_DB: wetsanalyse
     volumes:

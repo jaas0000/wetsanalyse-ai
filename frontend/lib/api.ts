@@ -10,8 +10,12 @@ import type {
   FeedbackAccepted,
   Job,
   JobSummary,
+  LlmProfileIn,
+  LlmProfileOut,
   Rapport,
   StartRequest,
+  TestResult,
+  UsageReport,
 } from "./types";
 
 async function parseError(res: Response): Promise<ApiError> {
@@ -81,4 +85,40 @@ export async function getRonde(id: string, act: "2" | "3", n: number): Promise<A
 
 export function isApiError(e: unknown): e is ApiError {
   return typeof e === "object" && e !== null && "status" in e && "detail" in e;
+}
+
+// --- Admin: LLM-modelprofielen + verbruik -----------------------------------
+
+export async function listProfiles(): Promise<LlmProfileOut[]> {
+  const res = await fetch("/api/admin/profiles", { cache: "no-store" });
+  return json<LlmProfileOut[]>(res);
+}
+
+export async function saveProfile(name: string, body: LlmProfileIn): Promise<LlmProfileOut> {
+  const res = await fetch(`/api/admin/profiles/${encodeURIComponent(name)}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return json<LlmProfileOut>(res);
+}
+
+export async function deleteProfile(name: string): Promise<void> {
+  const res = await fetch(`/api/admin/profiles/${encodeURIComponent(name)}`, { method: "DELETE" });
+  if (!res.ok) throw await parseError(res);
+}
+
+export async function setDefaultProfile(name: string): Promise<LlmProfileOut> {
+  const res = await fetch(`/api/admin/profiles/${encodeURIComponent(name)}/default`, { method: "POST" });
+  return json<LlmProfileOut>(res);
+}
+
+export async function testProfile(name: string): Promise<TestResult> {
+  const res = await fetch(`/api/admin/profiles/${encodeURIComponent(name)}/test`, { method: "POST" });
+  return json<TestResult>(res);
+}
+
+export async function getUsage(groupBy = "model"): Promise<UsageReport> {
+  const res = await fetch(`/api/admin/usage?group_by=${encodeURIComponent(groupBy)}`, { cache: "no-store" });
+  return json<UsageReport>(res);
 }

@@ -52,3 +52,37 @@ def require_client(credentials: HTTPAuthorizationCredentials | None = Depends(_b
     """FastAPI-dependency: geeft de client_id of werpt 401."""
     authorization = f"Bearer {credentials.credentials}" if credentials else None
     return authenticate(authorization, get_settings())
+
+
+def authenticate_admin(authorization: str | None, settings: Settings) -> str:
+    """Valideer de Authorization-header tegen de aparte admin-tokens. Geeft de admin-id terug.
+
+    Altijd auth-plichtig (geen `auth_required`-bypass): de admin-laag beheert de LLM-config en
+    mag nooit open staan. Fail-closed: geen admin-tokens geconfigureerd ⇒ alles 401.
+    """
+    if not settings.admin_tokens:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Admin-auth niet geconfigureerd (geen admin-tokens).",
+        )
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Bearer-token vereist.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    presented = authorization[len("Bearer ") :].strip()
+    for token, admin_id in settings.admin_tokens.items():
+        if hmac.compare_digest(presented, token):
+            return admin_id
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Ongeldig admin-token.",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+
+def require_admin(credentials: HTTPAuthorizationCredentials | None = Depends(_bearer)) -> str:
+    """FastAPI-dependency: geeft de admin-id of werpt 401."""
+    authorization = f"Bearer {credentials.credentials}" if credentials else None
+    return authenticate_admin(authorization, get_settings())

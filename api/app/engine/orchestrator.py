@@ -21,6 +21,8 @@ from ..contracts import (
     REVIEW_STATES, TERMINAL_STATES, StartRequest,
 )
 from ..llm.base import LLMClient, LLMError
+from ..llm.litellm_client import build_llm_client
+from .. import profiles
 from ..concurrency import lock_for
 from ..jobstore import IdConflict, JobStore
 from ..ratelimit import QuotaExceeded
@@ -36,11 +38,19 @@ BASIS_KEYS = ("wet", "bwbId", "artikel", "versiedatum", "bronreferentie", "pad",
 
 
 class WetsanalyseEngine:
-    def __init__(self, settings: Settings, store: JobStore, llm: LLMClient, wb: WettenbankClient) -> None:
+    def __init__(self, settings: Settings, store: JobStore, llm: LLMClient | None, wb: WettenbankClient) -> None:
         self.s = settings
         self.store = store
-        self.llm = llm
+        # Een geïnjecteerde client (tests/eval) overschrijft profiel-resolutie; in productie is
+        # dit None en bouwt de engine per analyse een client uit het profiel van de job.
+        self._llm_override = llm
         self.wb = wb
+
+    async def _llm_for(self, job: Job) -> LLMClient:
+        if self._llm_override is not None:
+            return self._llm_override
+        cfg = await profiles.resolve_config(job.model_profile, self.s)
+        return build_llm_client(cfg)
 
     # --- publieke API -----------------------------------------------------
 
@@ -51,7 +61,8 @@ class WetsanalyseEngine:
         from ..project import Project as ProjectDoc
         if not req.bwbId:
             raise ValueError("bwbId is verplicht in v1 (wet-only resolutie is roadmap).")
-        self.s.resolve_profile(req.model_profile)
+        if req.model_profile:
+            await profiles.ensure_exists(req.model_profile)
         await self._check_active_quota(client_id)
         naam = req.naam or f"Art. {req.artikel}{f' lid {req.lid}' if req.lid else ''}"
         # Begrensde retry: twee gelijktijdige identieke POSTs kunnen dezelfde vrije slug zien;
@@ -82,7 +93,8 @@ class WetsanalyseEngine:
 
         if not req.bwbId:
             raise ValueError("bwbId is verplicht in v1 (wet-only resolutie is roadmap).")
-        self.s.resolve_profile(req.model_profile)
+        if req.model_profile:
+            await profiles.ensure_exists(req.model_profile)
         await self._check_active_quota(client_id)
         # Begrensde retry tegen de gelijktijdige-aanmaak-race (zie create_project). insert_job
         # maakt altijd een nieuw document, zodat de tweede POST geen bestaand project overschrijft.
@@ -196,12 +208,14 @@ class WetsanalyseEngine:
                 )
                 return
 
+        llm = await self._llm_for(job)
+
         async def maak():
             if feedback is not None:
-                return await steps.herzie(self.llm, activiteit, basis, ronde, vorige, feedback)
+                return await steps.herzie(llm, activiteit, basis, ronde, vorige, feedback)
             if activiteit == "2":
-                return await steps.genereer_act2(self.llm, basis, ronde, job.analysefocus or None)
-            return await steps.genereer_act3(self.llm, basis, ronde, act2)
+                return await steps.genereer_act2(llm, basis, ronde, job.analysefocus or None)
+            return await steps.genereer_act3(llm, basis, ronde, act2)
 
         analyse, prov = await self._met_retry(maak)
         pogingen = 0

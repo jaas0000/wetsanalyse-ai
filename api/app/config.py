@@ -50,6 +50,16 @@ class Settings:
         # Fail-closed: leeg betekent "auth verplicht maar geen tokens" → alles 401.
         self.auth_required = os.environ.get("WETSANALYSE_AUTH_REQUIRED", "1") != "0"
 
+        # --- Admin-auth: aparte tokens voor /v1/admin/* (LLM-beheer) ---
+        raw_admin = _read_secret("WETSANALYSE_ADMIN_TOKENS") or ""
+        self.admin_tokens: dict[str, str] = {}
+        for part in raw_admin.split(","):
+            part = part.strip()
+            if not part or ":" not in part:
+                continue
+            admin_id, token = part.split(":", 1)
+            self.admin_tokens[token.strip()] = admin_id.strip()
+
         # --- Wettenbank-MCP (intern netwerk in productie) ---
         self.mcp_url = os.environ.get(
             "WETTENBANK_MCP_URL", "https://wettenbank-mcp.ipalm.nl/mcp"
@@ -67,14 +77,14 @@ class Settings:
         self.llm_output_strategy = os.environ.get("LLM_OUTPUT_STRATEGY", "prompt_and_parse")
         self.llm_temperature = float(os.environ.get("LLM_TEMPERATURE", "0"))
 
+        # Master key voor versleuteling-at-rest van via de admin-UI opgeslagen API-keys.
+        # Geldige Fernet-key (32 url-safe base64-bytes); ontbreekt 'ie → geen key-opslag (fail-closed).
+        self.llm_config_secret = _read_secret("LLM_CONFIG_SECRET")
+
         # Benoemde profielen → geen vrije model-string vanuit de client (governance).
-        # Default-profiel "azure-sonnet" verwijst naar de hierboven geconfigureerde waarden.
-        self.model_profiles: dict[str, dict[str, str]] = {
-            "azure-sonnet": {
-                "provider": self.llm_provider,
-                "model": self.llm_model,
-            },
-        }
+        # De profielen leven in MongoDB (beheerbaar via /v1/admin/profiles); de env-waarden
+        # hierboven seeden bij de eerste start één default-profiel (zie app/profiles.py) en
+        # blijven de fallback wanneer een profiel geen eigen API-key heeft.
         self.default_model_profile = os.environ.get("LLM_DEFAULT_PROFILE", "azure-sonnet")
 
         # --- MongoDB ---
@@ -110,13 +120,6 @@ class Settings:
         self.analyses_dir = Path(
             os.environ.get("WETSANALYSE_ANALYSES_DIR", str(ANALYSES_DIR))
         )
-
-    def resolve_profile(self, naam: str | None) -> dict[str, str]:
-        key = naam or self.default_model_profile
-        if key not in self.model_profiles:
-            raise KeyError(f"Onbekend model_profile: {key!r}")
-        return self.model_profiles[key]
-
 
 @lru_cache
 def get_settings() -> Settings:

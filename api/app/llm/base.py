@@ -15,6 +15,23 @@ _FENCE = re.compile(r"^\s*```(?:json)?\s*|\s*```\s*$", re.IGNORECASE)
 
 
 @dataclass
+class LlmConfig:
+    """Resolved configuratie voor één LLM-call — afgeleid uit een modelprofiel (of env-fallback).
+
+    Maakt de adapter onafhankelijk van Settings: per analyse kan een ander profiel (en dus een
+    andere `LlmConfig`) gelden, runtime-beheerbaar via de admin-UI.
+    """
+
+    provider: str = "azure_ai"
+    model: str = ""
+    api_base: str = ""
+    api_key: str | None = None
+    api_version: str | None = None
+    output_strategy: str = "prompt_and_parse"
+    temperature: float = 0.0
+
+
+@dataclass
 class LLMResult:
     data: dict
     model: str = ""

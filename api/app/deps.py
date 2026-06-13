@@ -42,8 +42,8 @@ def get_store() -> JobStore:
 @lru_cache
 def get_engine():
     from .engine.orchestrator import WetsanalyseEngine
-    from .llm.litellm_client import build_llm_client
 
     settings = get_settings()
-    llm = build_llm_client(settings)
-    return WetsanalyseEngine(settings, get_store(), llm, WettenbankClient(settings))
+    # Geen vaste LLM-client meer: de engine resolveert per analyse het modelprofiel (Mongo) en
+    # bouwt de adapter dan pas. Zo pakt het runtime-beheer (admin-UI) wijzigingen direct op.
+    return WetsanalyseEngine(settings, get_store(), None, WettenbankClient(settings))

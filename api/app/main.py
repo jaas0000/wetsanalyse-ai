@@ -14,8 +14,9 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from . import __version__
 from .config import get_settings
 from .deps import get_engine, get_store
+from .llm_profile import LlmProfile
 from .project import Project
-from .routers import projects
+from .routers import admin, projects
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +25,15 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     settings = get_settings()
     motor_client = AsyncIOMotorClient(settings.mongodb_url)
-    await init_beanie(database=motor_client[settings.mongodb_db], document_models=[Project])
+    await init_beanie(
+        database=motor_client[settings.mongodb_db], document_models=[Project, LlmProfile]
+    )
+    try:
+        from . import profiles
+
+        await profiles.ensure_seeded(settings)
+    except Exception:  # noqa: BLE001 — seeding mag de start nooit blokkeren
+        logger.exception("Seeden van het default-modelprofiel is mislukt")
     try:
         await get_engine().reconcile_startup()
     except Exception:  # noqa: BLE001 — engine mag de start nooit blokkeren
@@ -52,6 +61,7 @@ app.add_middleware(
 # Eén kanonieke resource onder een versie-prefix (/v1/projects). De eerdere losse
 # /analyses-router is geconsolideerd; clients migreren naar /v1/projects.
 app.include_router(projects.router, prefix="/v1")
+app.include_router(admin.router, prefix="/v1")
 
 
 @app.get("/health", tags=["meta"])

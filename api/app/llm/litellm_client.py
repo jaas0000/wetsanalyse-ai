@@ -1,17 +1,17 @@
 """LiteLLM-implementatie van LLMClient.
 
-Provider-prefix/auth komen uit de config (Azure-endpointtype vastgesteld in Fase 0:
-`azure_ai/...` voor Foundry/MaaS, `azure/...` voor Azure OpenAI). De echte JSON-garantie is
-niet de provider-feature maar deze laag: schema verbatim in de prompt → parse → één gerichte
-repareer-retry → de caller valideert tegen Pydantic.
+Provider-prefix/auth komen uit de meegegeven `LlmConfig` (afgeleid uit een modelprofiel of de
+env-fallback; Azure-endpointtype vastgesteld in Fase 0: `azure_ai/...` voor Foundry/MaaS,
+`azure/...` voor Azure OpenAI). De echte JSON-garantie is niet de provider-feature maar deze
+laag: schema verbatim in de prompt → parse → één gerichte repareer-retry → de caller valideert
+tegen Pydantic.
 """
 
 from __future__ import annotations
 
 import json
 
-from ..config import Settings
-from .base import LLMError, LLMResult, parse_json_strict
+from .base import LlmConfig, LLMError, LLMResult, parse_json_strict
 
 _REPAREER = (
     "Je vorige antwoord was geen geldige JSON. Geef UITSLUITEND geldig JSON terug dat exact "
@@ -20,28 +20,28 @@ _REPAREER = (
 
 
 class LiteLLMClient:
-    def __init__(self, settings: Settings) -> None:
-        self.s = settings
-        if not settings.llm_model:
-            raise RuntimeError("LLM_MODEL niet geconfigureerd.")
+    def __init__(self, config: LlmConfig) -> None:
+        self.c = config
+        if not config.model:
+            raise RuntimeError("LLM-model niet geconfigureerd (leeg in profiel én env).")
 
     def _model_ref(self) -> str:
         # LiteLLM verwacht "<provider>/<model>" tenzij het model al een prefix bevat.
-        model = self.s.llm_model
+        model = self.c.model
         if "/" in model:
             return model
-        return f"{self.s.llm_provider}/{model}"
+        return f"{self.c.provider}/{model}"
 
     def _kwargs(self) -> dict:
-        kw: dict = {"temperature": self.s.llm_temperature}
-        if self.s.llm_api_base:
-            kw["api_base"] = self.s.llm_api_base
-        if self.s.llm_api_key:
-            kw["api_key"] = self.s.llm_api_key
-        if self.s.llm_api_version:  # alleen Azure OpenAI
-            kw["api_version"] = self.s.llm_api_version
+        kw: dict = {"temperature": self.c.temperature}
+        if self.c.api_base:
+            kw["api_base"] = self.c.api_base
+        if self.c.api_key:
+            kw["api_key"] = self.c.api_key
+        if self.c.api_version:  # alleen Azure OpenAI
+            kw["api_version"] = self.c.api_version
         # json_object-strategie: laat de provider geldig JSON afdwingen waar dat kan.
-        if self.s.llm_output_strategy == "json_object":
+        if self.c.output_strategy == "json_object":
             kw["response_format"] = {"type": "json_object"}
         return kw
 
@@ -78,15 +78,15 @@ class LiteLLMClient:
 
         return LLMResult(
             data=data,
-            model=getattr(resp, "model", self.s.llm_model) or self.s.llm_model,
-            provider=self.s.llm_provider,
-            output_strategie=self.s.llm_output_strategy,
+            model=getattr(resp, "model", self.c.model) or self.c.model,
+            provider=self.c.provider,
+            output_strategie=self.c.output_strategy,
             tokens_in=getattr(usage, "prompt_tokens", 0) or 0,
             tokens_out=getattr(usage, "completion_tokens", 0) or 0,
             ruwe_tekst=tekst,
         )
 
 
-def build_llm_client(settings: Settings):
+def build_llm_client(config: LlmConfig):
     """Factory — nu LiteLLM; uitbreidbaar naar andere adapters zonder de caller te raken."""
-    return LiteLLMClient(settings)
+    return LiteLLMClient(config)

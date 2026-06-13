@@ -4,6 +4,7 @@
 import { readFileSync } from "node:fs";
 
 let cachedToken: string | null = null;
+let cachedAdminToken: string | null = null;
 
 export function apiBaseUrl(): string {
   return (process.env.API_BASE_URL || "http://wetsanalyse-api:3000").replace(/\/+$/, "");
@@ -27,5 +28,26 @@ export function apiToken(): string {
 
 export function authHeader(): Record<string, string> {
   const token = apiToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+/** Apart admin-bearer-token (voor /v1/admin/*) uit ADMIN_API_TOKEN_FILE (voorrang) of ADMIN_API_TOKEN. */
+export function adminToken(): string {
+  if (cachedAdminToken !== null) return cachedAdminToken;
+  const file = process.env.ADMIN_API_TOKEN_FILE;
+  if (file) {
+    try {
+      cachedAdminToken = readFileSync(file, "utf8").trim();
+      return cachedAdminToken;
+    } catch (err) {
+      throw new Error(`Kan ADMIN_API_TOKEN_FILE niet lezen (${file}): ${(err as Error).message}`);
+    }
+  }
+  cachedAdminToken = (process.env.ADMIN_API_TOKEN || "").trim();
+  return cachedAdminToken;
+}
+
+export function adminAuthHeader(): Record<string, string> {
+  const token = adminToken();
   return token ? { Authorization: `Bearer ${token}` } : {};
 }

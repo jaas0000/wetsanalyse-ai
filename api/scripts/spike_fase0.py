@@ -20,6 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from app.config import get_settings  # noqa: E402
 from app.engine import steps  # noqa: E402
 from app.llm.litellm_client import build_llm_client  # noqa: E402
+from app.profiles import _config_uit_env  # noqa: E402
 from app.validation import brongetrouwheid_check, schema_check  # noqa: E402
 from app.wettenbank import WettenbankClient, map_artikel_naar_analyse_basis  # noqa: E402
 
@@ -31,7 +32,8 @@ async def main() -> int:
 
     settings = get_settings()
     wb = WettenbankClient(settings)
-    llm = build_llm_client(settings)
+    # Spike draait standalone (geen Mongo-profielen): bouw de client uit de env-config.
+    llm = build_llm_client(_config_uit_env(settings))
 
     print(f"→ Ophalen {bwb_id} art. {artikel}" + (f" lid {lid}" if lid else "") + " via MCP …")
     artikel_data = await wb.artikel(bwb_id, artikel, lid)

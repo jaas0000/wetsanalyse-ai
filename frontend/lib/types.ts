@@ -209,6 +209,57 @@ export interface Rapport {
   aandachtspunten: string;
 }
 
+// --- Admin: LLM-modelprofielen + verbruik -----------------------------------
+
+export interface LlmProfileIn {
+  provider?: string;
+  model?: string;
+  api_base?: string;
+  api_version?: string | null;
+  output_strategy?: string;
+  temperature?: number;
+  /** Write-only: leeg laten = bestaande key ongewijzigd. */
+  api_key?: string;
+  is_default?: boolean;
+}
+
+export interface UsageRow {
+  sleutel: string;
+  tokens_in: number;
+  tokens_out: number;
+  rondes: number;
+  analyses: number;
+}
+
+export interface LlmProfileOut {
+  name: string;
+  provider: string;
+  model: string;
+  api_base: string;
+  api_version: string | null;
+  output_strategy: string;
+  temperature: number;
+  is_default: boolean;
+  api_key_set: boolean;
+  updated_by: string;
+  updated: string;
+  verbruik: UsageRow | null;
+}
+
+export interface TestResult {
+  ok: boolean;
+  model: string;
+  tokens_in: number;
+  tokens_out: number;
+  detail: string;
+}
+
+export interface UsageReport {
+  group_by: string;
+  rows: UsageRow[];
+  totaal: { tokens_in: number; tokens_out: number; rondes: number; analyses: number };
+}
+
 // --- SSE --------------------------------------------------------------------
 
 export interface SSEUpdate {

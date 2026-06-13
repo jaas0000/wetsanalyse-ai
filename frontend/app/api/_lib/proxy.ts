@@ -2,7 +2,7 @@
 // en geef de upstream-status + body ONGEWIJZIGD terug (incl. 401/404/409/429/503 en de
 // Retry-After / Location headers), zodat de client correcte foutafhandeling houdt.
 
-import { apiBaseUrl, authHeader } from "@/lib/config";
+import { adminAuthHeader, apiBaseUrl, authHeader } from "@/lib/config";
 
 const PASS_THROUGH_HEADERS = ["retry-after", "location", "content-type"];
 
@@ -12,15 +12,18 @@ interface ProxyInit {
   body?: BodyInit;
   /** Extra headers naar de upstream (bv. Content-Type). */
   headers?: Record<string, string>;
+  /** Injecteer het admin-token i.p.v. het gewone client-token (voor /v1/admin/*). */
+  admin?: boolean;
 }
 
 export async function proxy(path: string, init: ProxyInit = {}): Promise<Response> {
   const upstreamUrl = `${apiBaseUrl()}${path}`;
+  const auth = init.admin ? adminAuthHeader() : authHeader();
   let upstream: Response;
   try {
     upstream = await fetch(upstreamUrl, {
       method: init.method ?? "GET",
-      headers: { ...authHeader(), ...(init.headers ?? {}) },
+      headers: { ...auth, ...(init.headers ?? {}) },
       body: init.body,
       cache: "no-store",
     });

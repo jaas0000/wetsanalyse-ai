@@ -22,6 +22,9 @@ export function SiteNav() {
         <LinkButton href="/" variant="ghost">
           Projecten
         </LinkButton>
+        <LinkButton href="/beheer" variant="ghost">
+          Beheer
+        </LinkButton>
         <LinkButton href="/nieuw">Nieuwe analyse</LinkButton>
       </nav>
 
@@ -59,6 +62,9 @@ export function SiteNav() {
         >
           <LinkButton href="/" variant="ghost" className="w-full">
             Projecten
+          </LinkButton>
+          <LinkButton href="/beheer" variant="ghost" className="w-full">
+            Beheer
           </LinkButton>
           <LinkButton href="/nieuw" className="w-full">
             Nieuwe analyse
