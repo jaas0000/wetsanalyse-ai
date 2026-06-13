@@ -108,6 +108,14 @@ class Settings:
         self.transient_max_retries = int(os.environ.get("WETSANALYSE_TRANSIENT_MAX_RETRIES", "2"))
         self.transient_backoff_s = float(os.environ.get("WETSANALYSE_TRANSIENT_BACKOFF", "0.5"))
 
+        # --- Concurrency (Mongo state-CAS, horizontaal schalen) ---
+        # Een claim op een job is geldig voor lease_s; de owner verlengt 'm via een heartbeat.
+        # Verloopt de lease (worker weg/gecrasht), dan mag de reaper de job opruimen. Kies ruim
+        # langer dan de langste realistische stap; de heartbeat tikt op lease_s/2. Reaper-interval
+        # 0 = uit (1b voegt de reaper toe; in 1a wordt alleen de lease al gezet).
+        self.lease_s = int(os.environ.get("WETSANALYSE_LEASE_S", "120"))
+        self.reaper_interval_s = int(os.environ.get("WETSANALYSE_REAPER_INTERVAL_S", "60"))
+
         # --- Misbruik-/kostenbeheersing (0 = uit) ---
         # Per-client request-rate op de muterende endpoints.
         self.rate_limit_max = int(os.environ.get("WETSANALYSE_RATE_LIMIT_MAX", "30"))

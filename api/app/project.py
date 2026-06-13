@@ -45,6 +45,12 @@ class Project(Document):
     error: JobFout | None = None
     provenance: list[RondeProvenance] = Field(default_factory=list)
 
+    # Concurrency: alleen beheerd via MongoStore.claim() en de lease-heartbeat — NOOIT via
+    # save_job (zie _STATE_FIELDS). owner = per-proces id van de worker die de job verwerkt;
+    # lease_until = tot wanneer die claim geldig is (verloopt → de reaper mag de job opruimen).
+    owner: str | None = None
+    lease_until: datetime | None = None
+
     created: datetime = Field(default_factory=_utcnow)
     updated: datetime = Field(default_factory=_utcnow)
 
@@ -81,4 +87,6 @@ class Project(Document):
             IndexModel([("slug", ASCENDING)], unique=True),
             IndexModel([("state", ASCENDING)]),
             IndexModel([("updated", DESCENDING)]),
+            # Reaper-query: runt-jobs met een verlopen lease.
+            IndexModel([("state", ASCENDING), ("lease_until", ASCENDING)]),
         ]

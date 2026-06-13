@@ -26,9 +26,10 @@ disk-interoperabiliteit met de lokale skill staat op de roadmap, niet in de huid
   Fernet-versleuteling-at-rest van de API-key (master key uit `LLM_CONFIG_SECRET(_FILE)`).
   `usage.py` — read-only token-verbruik-aggregatie over `provenance`.
 - `jobstore.py` — `JobStore`-Protocol (opslag-abstractie) + `IdConflict`. `mongo_store.py` —
-  de Beanie/MongoDB-implementatie: gerichte `$set`-writes, **ronde-immutabiliteit**, client-scoping.
-- `project.py` — het Beanie `Project`-document (state + embedded rondes/feedback/rapport).
-- `concurrency.py` — per-job `asyncio.Lock` (single-worker/replica-aanname).
+  de Beanie/MongoDB-implementatie: gerichte `$set`-writes, **ronde-immutabiliteit**, client-scoping,
+  en de **Mongo state-CAS** (`claim`/`verleng_lease`/`lijst_verlopen_running`/`markeer_lease_loze_running`).
+- `project.py` — het Beanie `Project`-document (state + embedded rondes/feedback/rapport; `owner`/
+  `lease_until` voor de concurrency-claim, alleen door `claim`/heartbeat beheerd — nooit via `save_job`).
 - `wettenbank.py` — MCP-client; lege/fout-respons → `WettenbankError` (nooit doorgaan met lege context).
 - `validation.py` — **zacht** (skill-`check_activiteit_2/3`, schema) vs **hard** (brongetrouwheid: citaat
   letterlijk in leden-tekst na normalisatie, `vindplaats`/`bronreferentie` verplicht).
@@ -143,12 +144,14 @@ is MongoDB.
 
 ## Deployment
 
-Docker-image + Portainer-stack achter NPM, net als de MCP (`docker-compose.yml`). **Exact één
-uvicorn-worker én één replica**: state-transities worden geserialiseerd met een in-process per-job
-asyncio-lock. De jobstore is MongoDB (gedeeld), maar die lock werkt niet over processen/containers
-heen — zet dus geen `--workers >1` of `deploy.replicas >1`. Schalen kan pas met een gedeelde lock
-(Mongo state-CAS) of een echte job-queue (roadmap). De containers draaien **non-root** en **MongoDB
-draait met authenticatie**. Alle secrets (LLM-key, tokens, Mongo-credentials, connection string) staan
+Docker-image + Portainer-stack achter NPM, net als de MCP (`docker-compose.yml`). De dienst is
+**horizontaal schaalbaar**: state-transities lopen via een atomaire **Mongo state-CAS** (`store.claim`),
+dus `--workers >1` en `deploy.replicas >1` zijn veilig. Een geclaimde job draagt een `owner` +
+`lease_until`; de owner houdt de lease vers (heartbeat) en schrijft fenced (alleen zolang hij de job
+bezit), en een periodieke **reaper** ruimt jobs met een verlopen lease op (crashende worker → job
+naar `fout`, herstelbaar via `retry`). Knoppen: `WETSANALYSE_LEASE_S` (default 120) en
+`WETSANALYSE_REAPER_INTERVAL_S` (default 60; 0 = uit). Kies de lease ruim langer dan de langste
+realistische staptijd. De containers draaien **non-root** en **MongoDB draait met authenticatie**. Alle secrets (LLM-key, tokens, Mongo-credentials, connection string) staan
 als bestanden op de host (`*_FILE`-patroon) — nooit als plain env var in de container of Portainer-UI.
 Build vanaf de **projectroot**: `docker build -f api/Dockerfile -t wetsanalyse-api .` (de image heeft de
 skill-`references/scripts` nodig). `POST /v1/projects` is async (202 + polling) — nooit synchroon achter
@@ -219,17 +222,21 @@ Symptoom → oorzaak:
 
 ## Misbruik-/kostenbeheersing
 
-In-process en per proces (past bij de single-worker/replica-aanname). Knoppen via env (0 = uit):
-`WETSANALYSE_RATE_LIMIT_MAX`/`_WINDOW` (per-client request-rate op de muterende endpoints → 429),
-`WETSANALYSE_MAX_ACTIVE_JOBS` (max gelijktijdig lopende analyses per client → 429),
-`WETSANALYSE_LLM_TOKEN_BUDGET` (token-plafond per analyse → job naar `fout`, `FoutKlasse.quota`).
-Multi-tenant isolatie is afgedwongen: elke analyse is client-gescopet (404 op andermans id).
+Knoppen via env (0 = uit): `WETSANALYSE_RATE_LIMIT_MAX`/`_WINDOW` (per-client request-rate op de
+muterende endpoints → 429), `WETSANALYSE_MAX_ACTIVE_JOBS` (max gelijktijdig lopende analyses per
+client → 429), `WETSANALYSE_LLM_TOKEN_BUDGET` (token-plafond per analyse → job naar `fout`, `FoutKlasse.quota`).
+Let op bij >1 replica: de **rate limit** is in-process (per replica → de effectieve grens schaalt
+mee met het aantal replica's); **max-active-jobs** en het token-budget zijn DB-/`provenance`-
+gebaseerd en dus accuraat over replica's heen. Multi-tenant isolatie is afgedwongen: elke analyse is
+client-gescopet (404 op andermans id).
 
 ## Roadmap (nog niet gebouwd)
 
-MS Teams-client; wet-only resolutie (nu is `bwbId` verplicht); echte job-queue; OIDC + per-gebruiker
-toegangscontrole op de frontend (nu is `/beheer` alleen via het admin-token van de BFF afgeschermd,
-niet per browser-sessie); gedeelde lock (Mongo state-CAS) voor horizontaal schalen.
+MS Teams-client; wet-only resolutie (nu is `bwbId` verplicht); echte job-queue (werk-distributie:
+nu draait een analyse op de replica die het request kreeg — horizontaal schalen geeft spreiding van
+verschillende analyses, geen parallellisme binnen één analyse); OIDC + per-gebruiker toegangscontrole
+op de frontend (nu is `/beheer` alleen via het admin-token van de BFF afgeschermd, niet per
+browser-sessie); cross-referenties (definities uit andere wetten automatisch meezuigen).
 
 De **webapp** is inmiddels gebouwd: zie `frontend/` (Next.js BFF) — analyses aanmaken, reviewen, en
 de LLM-modelprofielen beheren via `/beheer`.

@@ -5,25 +5,29 @@ Driehoek van garanties:
   - ZACHTE schema-fouten blokkeren niet; ze gaan als waarschuwing mee naar het checkpoint
     (review:true) of worden gelogd (review:false).
   - Auto-correctie is GEEN ronde: her-genereren binnen één ronde, vóór het wegschrijven.
-De jobstore is MongoDB (gedeeld), maar state-transities worden geserialiseerd met een
-in-process per-job asyncio-lock. Die lock werkt alleen binnen één proces, dus de dienst
-vereist EXACT één worker én één replica (zie Dockerfile). Horizontaal schalen kan pas met
-een gedeelde lock (Mongo state-CAS) of een echte job-queue — beide staan op de roadmap.
+De jobstore is MongoDB (gedeeld). State-transities worden geserialiseerd met een atomaire
+**Mongo state-CAS** (`store.claim`): alleen de transitie NAAR een runt-state hoeft atomair,
+de runt-state zelf is daarna de 'claimed'-marker zodat geen tweede worker dezelfde job oppakt.
+Dit vervangt de vroegere in-process asyncio-lock en maakt de dienst **horizontaal schaalbaar**
+(>1 worker/replica). Een geclaimde job draagt een `owner` + `lease_until`; de owner houdt de
+lease vers via een heartbeat (`_guard`), schrijft alleen fenced (`_save`, conditioneel op nog-
+eigenaar-zijn), en een periodieke reaper (`reap_once`) ruimt jobs met een verlopen lease op.
 """
 
 from __future__ import annotations
 
+import asyncio
 import logging
+from uuid import uuid4
 
 from ..config import Settings
 from ..contracts import (
     FoutKlasse, Job, JobFout, JobState, RondeProvenance,
-    REVIEW_STATES, TERMINAL_STATES, StartRequest,
+    REVIEW_STATES, RUNNING_STATES, TERMINAL_STATES, StartRequest,
 )
 from ..llm.base import LLMClient, LLMError
 from ..llm.litellm_client import build_llm_client
 from .. import profiles
-from ..concurrency import lock_for
 from ..jobstore import IdConflict, JobStore
 from ..ratelimit import QuotaExceeded
 from ..rapport import bouw_rapport_async
@@ -37,6 +41,11 @@ logger = logging.getLogger(__name__)
 BASIS_KEYS = ("wet", "bwbId", "artikel", "versiedatum", "bronreferentie", "pad", "leden")
 
 
+class LeaseVerloren(Exception):
+    """De worker is zijn lease/eigenaarschap kwijt (bv. door een reaper-claim). De fase moet
+    stoppen zonder verder te schrijven — een andere worker bezit de job nu."""
+
+
 class WetsanalyseEngine:
     def __init__(self, settings: Settings, store: JobStore, llm: LLMClient | None, wb: WettenbankClient) -> None:
         self.s = settings
@@ -45,6 +54,9 @@ class WetsanalyseEngine:
         # dit None en bouwt de engine per analyse een client uit het profiel van de job.
         self._llm_override = llm
         self.wb = wb
+        # Per-proces id: identificeert deze worker als eigenaar van een geclaimde job. Eén engine
+        # per proces (deps.get_engine is @lru_cache), dus dit id is stabiel binnen de worker.
+        self.owner = uuid4().hex
 
     async def _llm_for(self, job: Job) -> LLMClient:
         if self._llm_override is not None:
@@ -119,55 +131,86 @@ class WetsanalyseEngine:
         raise IdConflict("Kon geen uniek analyse-id reserveren; probeer opnieuw.")
 
     async def run_initial(self, job_id: str) -> None:
-        async with lock_for(job_id):
-            job = await self.store.load_job(job_id)
-            if job is None or job.state != JobState.queued:
-                return
-            await self._guard(job, "act2", self._fase_start(job))
+        # CAS: claim queued → act2_runt. Faalt de claim, dan is de job al opgepakt/voorbij —
+        # geen tweede worker pakt 'm op (de runt-state is de 'claimed'-marker).
+        job = await self.store.claim(job_id, {JobState.queued}, JobState.act2_runt, self.owner, self.s.lease_s)
+        if job is None:
+            return
+        await self._guard(job, "act2", self._fase_start(job))
 
     async def apply_feedback(self, job_id: str, feedback) -> None:
-        async with lock_for(job_id):
-            job = await self.store.load_job(job_id)
-            if job is None or job.state not in REVIEW_STATES:
-                return
-            activiteit = "2" if job.state == JobState.wacht_review_act2 else "3"
-            ronde = job.current_ronde
-            await self.store.schrijf_feedback(job.id, activiteit, ronde, feedback)
-            await self._guard(job, f"act{activiteit}", self._fase_feedback(job, activiteit, ronde, feedback))
+        job = await self.store.load_job(job_id)
+        if job is None or job.state not in REVIEW_STATES:
+            return
+        activiteit = "2" if job.state == JobState.wacht_review_act2 else "3"
+        naar = JobState.act2_runt if activiteit == "2" else JobState.act3_runt
+        # Claim de review-state atomair → runt; pas NA een geslaagde claim schrijven we de
+        # feedback (een verloren race schrijft dan geen feedback).
+        claimed = await self.store.claim(job_id, {job.state}, naar, self.owner, self.s.lease_s)
+        if claimed is None:
+            return
+        ronde = claimed.current_ronde
+        await self.store.schrijf_feedback(claimed.id, activiteit, ronde, feedback)
+        await self._guard(claimed, f"act{activiteit}", self._fase_feedback(claimed, activiteit, ronde, feedback))
 
     async def retry(self, job_id: str) -> None:
-        async with lock_for(job_id):
-            job = await self.store.load_job(job_id)
-            if job is None or job.state != JobState.fout:
-                return
-            r2 = await self.store.hoogste_ronde(job.id, "2")
-            r3 = await self.store.hoogste_ronde(job.id, "3")
-            job.error = None
-            try:
-                if r3 > 0:
-                    job.state, job.current_activiteit, job.current_ronde = JobState.wacht_review_act3, "3", r3
-                elif r2 > 0:
-                    job.state, job.current_activiteit, job.current_ronde = JobState.wacht_review_act2, "2", r2
-                else:
-                    job.state = JobState.queued
-                await self.store.save_job(job)
-            except Exception:  # noqa: BLE001 — laat de job in `fout` i.p.v. stil hangen
-                logger.exception("Retry van job %s kon de state niet herstellen", job_id)
-                return
-            if job.state == JobState.queued:
-                await self._guard(job, "act2", self._fase_start(job))
+        job = await self.store.load_job(job_id)
+        if job is None or job.state != JobState.fout:
+            return
+        r2 = await self.store.hoogste_ronde(job.id, "2")
+        r3 = await self.store.hoogste_ronde(job.id, "3")
+        # Doelstate vóór de claim bepalen. Een verse job (geen rondes) gaat direct naar act2_runt
+        # i.p.v. via een queued-tussenstap, zodat er geen venster is waarin niets de job claimt.
+        if r3 > 0:
+            naar, activiteit, ronde = JobState.wacht_review_act3, "3", r3
+        elif r2 > 0:
+            naar, activiteit, ronde = JobState.wacht_review_act2, "2", r2
+        else:
+            naar, activiteit, ronde = JobState.act2_runt, None, 0
+        claimed = await self.store.claim(job_id, {JobState.fout}, naar, self.owner, self.s.lease_s)
+        if claimed is None:
+            return
+        try:
+            claimed.error = None
+            if activiteit is not None:
+                claimed.current_activiteit, claimed.current_ronde = activiteit, ronde
+            await self.store.save_job(claimed)
+        except Exception:  # noqa: BLE001 — laat de job in een herstelbare state i.p.v. stil hangen
+            logger.exception("Retry van job %s kon de state niet herstellen", job_id)
+            return
+        if naar == JobState.act2_runt:
+            await self._guard(claimed, "act2", self._fase_start(claimed))
 
     async def reconcile_startup(self) -> None:
-        """Na herstart: een job in een runt-state heeft geen lopende taak meer → markeer onderbroken."""
-        for job in await self.store.list_jobs():
-            if job.state in (JobState.act2_runt, JobState.act3_runt, JobState.bouwt):
-                await self._fail(job, job.state.value, FoutKlasse.intern, "Onderbroken bij herstart van de dienst.")
+        """Migratie-/herstelvangnet bij opstart. Onder >1 replica mag een opstartende worker NIET
+        zomaar alle runt-jobs doodverklaren (die kunnen van een levende collega zijn). We geven
+        daarom alleen runt-jobs *zonder* lease (pre-upgrade of een crash waarbij het lease-veld
+        nooit gezet werd) een verlopen lease, zodat de reaper ze opruimt. Jobs met een geldige
+        lease blijven ongemoeid; verloopt die lease, dan pakt de reaper ze alsnog op."""
+        n = await self.store.markeer_lease_loze_running()
+        if n:
+            logger.info("Reconcile: %d lease-loze runt-job(s) gemarkeerd voor de reaper.", n)
+
+    async def reap_once(self) -> None:
+        """Eén reaper-ronde: claim elke runt-job met een verlopen lease naar `fout`. De claim is
+        atomair én vereist een verlopen lease, dus een job van een levende worker (verse lease)
+        wordt nooit gekaapt."""
+        for job_id in await self.store.lijst_verlopen_running():
+            claimed = await self.store.claim(
+                job_id, RUNNING_STATES, JobState.fout, self.owner, self.s.lease_s,
+                vereist_verlopen_lease=True,
+            )
+            if claimed is None:
+                continue  # lease intussen verlengd of al opgepakt door een andere reaper
+            logger.warning("Reaper: job %s had een verlopen lease → fout (onderbroken).", job_id)
+            await self._fail(claimed, claimed.current_activiteit or "intern", FoutKlasse.intern,
+                             "Onderbroken: lease verlopen (worker weg of gecrasht).")
 
     # --- fasen (coroutines, uitgevoerd binnen _guard) ---------------------
 
     async def _fase_start(self, job: Job) -> None:
         job.state = JobState.act2_runt
-        await self.store.save_job(job)
+        await self._save(job)
         artikel_data = await self._met_retry(lambda: self.wb.artikel(job.bwbId, job.artikel, job.lid))
         basis = map_artikel_naar_analyse_basis(artikel_data)
         await self._genereer(job, "2", 1, basis, vorige=None, feedback=None)
@@ -180,7 +223,7 @@ class WetsanalyseEngine:
             await self._advance_akkoord(job, activiteit)
             return
         job.state = JobState.act2_runt if activiteit == "2" else JobState.act3_runt
-        await self.store.save_job(job)
+        await self._save(job)
         basis = await self._basis(job)
         vorige = await self.store.lees_analyse(job.id, activiteit, ronde)
         await self._genereer(job, activiteit, ronde + 1, basis, vorige=vorige, feedback=feedback.model_dump())
@@ -188,7 +231,7 @@ class WetsanalyseEngine:
     async def _advance_akkoord(self, job: Job, activiteit: str) -> None:
         if activiteit == "2":
             job.state = JobState.act3_runt
-            await self.store.save_job(job)
+            await self._save(job)
             basis = await self._basis(job)
             n = await self.store.hoogste_ronde(job.id, "2")
             act2 = await self.store.lees_analyse(job.id, "2", n)
@@ -234,7 +277,7 @@ class WetsanalyseEngine:
         job.current_activiteit = activiteit
         job.current_ronde = ronde
         job.waarschuwingen = schendingen + fouten + waarschuwingen
-        await self.store.save_job(job)
+        await self._save(job)
 
         if schendingen:
             await self._fail(
@@ -244,7 +287,7 @@ class WetsanalyseEngine:
             return
         if job.review:
             job.state = JobState.wacht_review_act2 if activiteit == "2" else JobState.wacht_review_act3
-            await self.store.save_job(job)
+            await self._save(job)
             return
         await self._advance_akkoord(job, activiteit)
 
@@ -252,7 +295,7 @@ class WetsanalyseEngine:
 
     async def _bouw_rapport(self, job: Job) -> None:
         job.state = JobState.bouwt
-        await self.store.save_job(job)
+        await self._save(job)
         rapport = await bouw_rapport_async(
             self.store,
             job.id,
@@ -262,7 +305,7 @@ class WetsanalyseEngine:
         )
         await self.store.schrijf_rapport(job.id, rapport)
         job.state = JobState.klaar
-        await self.store.save_job(job)
+        await self._save(job)
 
     async def _reviewlog(self, job: Job, activiteit: str) -> str:
         n = await self.store.hoogste_ronde(job.id, activiteit)
@@ -313,10 +356,35 @@ class WetsanalyseEngine:
         job.error = JobFout(stap=stap, ronde=job.current_ronde or None, klasse=klasse, bericht=bericht)
         await self.store.save_job(job)
 
+    async def _save(self, job: Job) -> None:
+        """Fenced state-write: schrijft alleen als deze worker de job nog bezit. Verloren lease
+        (bv. door een reaper-claim) → LeaseVerloren, zodat de fase stopt i.p.v. een andere worker
+        te overschrijven."""
+        if not await self.store.save_job(job, owner=self.owner):
+            raise LeaseVerloren(job.id)
+
+    async def _heartbeat(self, job_id: str) -> None:
+        """Houd de lease vers terwijl de fase loopt, zodat de reaper een levende job niet kaapt.
+        Tikt op lease_s/2. Raakt de owner de job kwijt, dan stopt de heartbeat; de eerstvolgende
+        fenced `_save` breekt de fase dan netjes af."""
+        interval = max(self.s.lease_s / 2, 1)
+        try:
+            while True:
+                await asyncio.sleep(interval)
+                if not await self.store.verleng_lease(job_id, self.owner, self.s.lease_s):
+                    return
+        except asyncio.CancelledError:
+            return
+
     async def _guard(self, job: Job, stap: str, coro) -> None:
-        """Voer een fase uit en vertaal faalklassen naar een terminale `fout`-state."""
+        """Voer een fase uit (met lease-heartbeat) en vertaal faalklassen naar een terminale
+        `fout`-state. Verliest de worker zijn lease, dan stopt de fase zonder de job te raken."""
+        hb = asyncio.create_task(self._heartbeat(job.id))
         try:
             await coro
+        except LeaseVerloren:
+            logger.warning("Job %s: lease verloren tijdens %s — afgebroken (andere worker bezit "
+                           "de job nu).", job.id, stap)
         except WettenbankError as e:
             logger.warning("Job %s faalt op %s (MCP): %s", job.id, stap, e)
             await self._fail(job, stap, FoutKlasse.mcp, str(e))
@@ -326,3 +394,9 @@ class WetsanalyseEngine:
         except Exception as e:  # noqa: BLE001
             logger.exception("Job %s faalt op %s (intern)", job.id, stap)
             await self._fail(job, stap, FoutKlasse.intern, f"{type(e).__name__}: {e}")
+        finally:
+            hb.cancel()
+            try:
+                await hb
+            except asyncio.CancelledError:
+                pass

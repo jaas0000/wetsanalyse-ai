@@ -4,7 +4,9 @@
 - `QuotaExceeded` voor beleidsgrenzen die dieper in de engine worden afgedwongen
   (max gelijktijdige analyses, token-budget).
 
-Net als de per-job lock is dit per proces; het past bij de single-worker/replica-aanname.
+Per proces (in-process): bij >1 replica geldt deze rate limit per replica, dus de effectieve
+grens schaalt mee met het aantal replica's. De engine-grenzen (max-active-jobs, token-budget)
+zijn wél DB-/provenance-gebaseerd en daarmee accuraat over replica's heen.
 """
 
 from __future__ import annotations

@@ -21,9 +21,10 @@
 # Zie api/CLAUDE.md §"Secrets op de host" voor provisioning + de migratie van een BESTAANDE
 # (nog auth-loze) Mongo-volume — auth aanzetten op bestaande data vereist handmatige stappen.
 
-# LET OP: draai exact ÉÉN replica van wetsanalyse-api. Het concurrency-model serialiseert
-# state-transities met een in-process per-job asyncio-lock; die dekt geen tweede container.
-# Zet dus geen `deploy.replicas > 1` (en de image draait al met --workers 1).
+# Horizontaal schaalbaar: het concurrency-model is een atomaire Mongo state-CAS (geen in-process
+# lock meer), dus `deploy.replicas > 1` is veilig. Elke replica/worker krijgt een eigen owner-id;
+# een lease + reaper ruimt jobs van een gecrashte replica op. Stel evt. WETSANALYSE_LEASE_S /
+# WETSANALYSE_REAPER_INTERVAL_S in.
 services:
   wetsanalyse-api:
     image: ghcr.io/palmw01/wetsanalyse-api:latest

@@ -1,3 +1,5 @@
+from datetime import datetime, timedelta, timezone
+
 import pytest
 
 from app.contracts import Feedback, Job, JobState
@@ -72,3 +74,67 @@ async def test_schrijfpaden_falen_netjes_zonder_project(store):
         await store.schrijf_analyse("bestaat-niet", "2", 1, {})
     with pytest.raises(KeyError):
         await store.schrijf_feedback("bestaat-niet", "2", 1, fb)
+
+
+# --- concurrency: Mongo state-CAS (claim/lease) ---
+
+async def test_claim_eenmalig(store):
+    """De eerste claim wint; een tweede claim ziet de al-gewijzigde state → None (geen dubbele pickup)."""
+    await store.save_job(Job(id="c1", bwbId="X", artikel="1", state=JobState.queued))
+    eerste = await store.claim("c1", {JobState.queued}, JobState.act2_runt, "worker-a", 120)
+    assert eerste is not None and eerste.state == JobState.act2_runt
+    tweede = await store.claim("c1", {JobState.queued}, JobState.act2_runt, "worker-b", 120)
+    assert tweede is None
+    # De job is nu eigendom van worker-a met een verse lease.
+    p = await store.load_project("c1")
+    assert p.owner == "worker-a" and p.lease_until is not None
+
+
+async def test_claim_alleen_verlopen_lease(store):
+    """vereist_verlopen_lease=True claimt een verse lease NIET, een verlopen lease wel (reaper)."""
+    await store.save_job(Job(id="c2", bwbId="X", artikel="1", state=JobState.act2_runt))
+    p = await store.load_project("c2")
+    p.owner, p.lease_until = "worker-a", datetime.now(timezone.utc) + timedelta(seconds=120)
+    await p.save()
+    # Verse lease → reaper-claim mist.
+    assert await store.claim("c2", {JobState.act2_runt}, JobState.fout, "reaper", 120,
+                             vereist_verlopen_lease=True) is None
+    # Lease in het verleden → reaper-claim slaagt.
+    p.lease_until = datetime.now(timezone.utc) - timedelta(seconds=1)
+    await p.save()
+    geclaimd = await store.claim("c2", {JobState.act2_runt}, JobState.fout, "reaper", 120,
+                                 vereist_verlopen_lease=True)
+    assert geclaimd is not None and geclaimd.state == JobState.fout
+
+
+async def test_verleng_lease_alleen_door_owner(store):
+    """De heartbeat verlengt de lease alleen voor de huidige owner in een runt-state (fencing)."""
+    await store.save_job(Job(id="c3", bwbId="X", artikel="1", state=JobState.queued))
+    await store.claim("c3", {JobState.queued}, JobState.act2_runt, "worker-a", 120)
+    assert await store.verleng_lease("c3", "worker-a", 120) is True
+    assert await store.verleng_lease("c3", "worker-b", 120) is False  # niet de owner
+
+
+async def test_lijst_verlopen_running(store):
+    """Alleen runt-jobs met een verlopen lease komen in de reaper-lijst."""
+    verleden = datetime.now(timezone.utc) - timedelta(seconds=1)
+    toekomst = datetime.now(timezone.utc) + timedelta(seconds=120)
+    await Project(slug="r-verlopen", state=JobState.act2_runt, lease_until=verleden).insert()
+    await Project(slug="r-vers", state=JobState.act3_runt, lease_until=toekomst).insert()
+    await Project(slug="r-review", state=JobState.wacht_review_act2, lease_until=verleden).insert()
+    ids = await store.lijst_verlopen_running()
+    assert ids == ["r-verlopen"]
+
+
+async def test_claim_overschrijft_geen_owner_via_save_job(store):
+    """save_job mag owner/lease_until NIET schrijven — die horen alleen bij claim/verleng_lease."""
+    await store.save_job(Job(id="c4", bwbId="X", artikel="1", state=JobState.queued))
+    await store.claim("c4", {JobState.queued}, JobState.act2_runt, "worker-a", 120)
+    voor = await store.load_project("c4")
+    # Een latere state-overgang via een verse Job-snapshot (zonder owner-kennis).
+    job = await store.load_job("c4")
+    job.state = JobState.wacht_review_act2
+    await store.save_job(job)
+    na = await store.load_project("c4")
+    assert na.owner == "worker-a"
+    assert na.lease_until == voor.lease_until
