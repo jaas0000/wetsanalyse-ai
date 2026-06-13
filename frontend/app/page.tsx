@@ -30,7 +30,7 @@ export default async function ProjectenPagina() {
 
   return (
     <div className="animate-rise space-y-8">
-      <div className="flex items-end justify-between gap-4">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="font-display text-3xl font-semibold text-ink">Analyses</h1>
           <p className="mt-1 max-w-prose text-sm text-muted">
