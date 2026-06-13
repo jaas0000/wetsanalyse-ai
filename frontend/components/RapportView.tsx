@@ -19,7 +19,7 @@ function Veld({ label, waarde }: { label: string; waarde?: string }) {
   return (
     <div className="flex gap-2 text-sm">
       <span className="shrink-0 text-xs uppercase tracking-wide text-faint">{label}</span>
-      <span className="text-muted">{waarde}</span>
+      <span className="min-w-0 break-words text-muted">{waarde}</span>
     </div>
   );
 }

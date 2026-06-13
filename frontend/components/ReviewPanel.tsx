@@ -153,7 +153,7 @@ export function ReviewPanel({
                 .map((r) => (
                   <div key={r.label} className="flex gap-2">
                     <dt className="shrink-0 text-xs uppercase tracking-wide text-faint">{r.label}</dt>
-                    <dd className="text-muted">{r.waarde}</dd>
+                    <dd className="min-w-0 break-words text-muted">{r.waarde}</dd>
                   </div>
                 ))}
             </dl>
