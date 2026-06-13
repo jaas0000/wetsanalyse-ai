@@ -63,16 +63,16 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 JAS · brongetrouw
               </span>
             </Link>
-            <nav className="flex items-center gap-2 text-sm">
+            <nav className="flex shrink-0 items-center gap-2 text-sm">
               <Link
                 href="/"
-                className="rounded-md px-3 py-1.5 text-muted transition-colors hover:bg-paper hover:text-ink"
+                className="whitespace-nowrap rounded-md px-3 py-1.5 text-muted transition-colors hover:bg-paper hover:text-ink"
               >
                 Projecten
               </Link>
               <Link
                 href="/nieuw"
-                className="rounded-md bg-accent px-3 py-1.5 font-medium text-paper transition-colors hover:bg-accent-soft"
+                className="whitespace-nowrap rounded-md bg-accent px-3 py-1.5 font-medium text-paper transition-colors hover:bg-accent-soft"
               >
                 Nieuwe analyse
               </Link>

@@ -63,7 +63,8 @@ export default async function ProjectenPagina() {
 
       {projecten.length > 0 && (
         <Card className="overflow-hidden">
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[34rem] text-sm">
             <thead>
               <tr className="border-b border-line text-left text-xs uppercase tracking-wide text-faint">
                 <th className="px-4 py-3 font-medium">Naam</th>
@@ -98,6 +99,7 @@ export default async function ProjectenPagina() {
               ))}
             </tbody>
           </table>
+          </div>
         </Card>
       )}
     </div>
