@@ -6,7 +6,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Werkruimte voor **Wetsanalyse**: het gestructureerd, brongetrouw en traceerbaar duiden van
 Nederlandse wet- en regelgeving volgens de methode Wetsanalyse (Ausems, Bulles & Lokin) en
-het Juridisch Analyseschema (JAS). Het project bestaat uit drie samenwerkende delen:
+het Juridisch Analyseschema (JAS). Het project kent een **skill-spoor** (interactief in Claude Code)
+en een **dienst-spoor** (API + webapp); beide hergebruiken dezelfde MCP-databron en dezelfde
+inhoudelijke `references/`/`scripts/`. De samenwerkende delen:
 
 1. **`tools/wettenbank-mcp/`** — een MCP-server (TypeScript) die de actuele wettekst ophaalt
    via de publieke SRU-API van `overheid.nl`. Dit is de databron. Heeft een eigen, gedetailleerde
@@ -18,6 +20,13 @@ het Juridisch Analyseschema (JAS). Het project bestaat uit drie samenwerkende de
 3. **`analyses/`** — output: per analyse een map met het eindrapport en de `werk/`-tussenbestanden.
    De map heet naar de BWB-id in kleine letters: `<bwbid>-art<nr>[-lidN]` (bijv.
    `bwbr0004770-art9-lid2`), gelijk aan de bestandsnaam die de rapportgenerator afleidt.
+4. **`api/`** — headless FastAPI-backend die dezelfde JAS-werkstroom als async REST-API aanbiedt
+   (MongoDB-jobstore, per-client bearer-auth). Heeft een eigen `CLAUDE.md` + `README.md` — lees die
+   bij werk *in* de API. Het LLM wordt aangestuurd via **benoemde modelprofielen** (Mongo, beheerbaar
+   via `/v1/admin/profiles`); de env-`LLM_*`-waarden seeden alleen het eerste default-profiel.
+5. **`frontend/`** — Next.js-webapp (BFF) bovenop de API: analyses aanmaken/reviewen en de
+   modelprofielen + het token-verbruik beheren via het **`/beheer`-scherm** (achter een apart
+   admin-token). Eigen `README.md`.
 
 De skill is geen vervanger van de analist: de kern is interpretatiekeuzes **expliciet** maken,
 inclusief twijfel en aannames. Brongetrouwheid is niet onderhandelbaar — werk alleen met

@@ -221,5 +221,9 @@ Multi-tenant isolatie is afgedwongen: elke analyse is client-gescopet (404 op an
 
 ## Roadmap (nog niet gebouwd)
 
-Webapp + MS Teams-clients; wet-only resolutie (nu is `bwbId` verplicht); echte job-queue;
-OIDC; gedeelde lock (Mongo state-CAS) voor horizontaal schalen.
+MS Teams-client; wet-only resolutie (nu is `bwbId` verplicht); echte job-queue; OIDC + per-gebruiker
+toegangscontrole op de frontend (nu is `/beheer` alleen via het admin-token van de BFF afgeschermd,
+niet per browser-sessie); gedeelde lock (Mongo state-CAS) voor horizontaal schalen.
+
+De **webapp** is inmiddels gebouwd: zie `frontend/` (Next.js BFF) — analyses aanmaken, reviewen, en
+de LLM-modelprofielen beheren via `/beheer`.
