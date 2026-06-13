@@ -17,6 +17,10 @@ import type {
   StartRequest,
   TestResult,
   UsageReport,
+  WetChoice,
+  WetIn,
+  WetOut,
+  WetResolveResult,
 } from "./types";
 
 async function parseError(res: Response): Promise<ApiError> {
@@ -94,6 +98,12 @@ export async function listModelProfiles(): Promise<ProfileChoice[]> {
   return json<ProfileChoice[]>(res);
 }
 
+/** Keuzelijst wetten (niet-admin) voor de dropdown in het analyseformulier. */
+export async function listWetten(): Promise<WetChoice[]> {
+  const res = await fetch("/api/wetten", { cache: "no-store" });
+  return json<WetChoice[]>(res);
+}
+
 // --- Admin: LLM-modelprofielen + verbruik -----------------------------------
 
 export async function listProfiles(): Promise<LlmProfileOut[]> {
@@ -128,4 +138,30 @@ export async function testProfile(name: string): Promise<TestResult> {
 export async function getUsage(groupBy = "model"): Promise<UsageReport> {
   const res = await fetch(`/api/admin/usage?group_by=${encodeURIComponent(groupBy)}`, { cache: "no-store" });
   return json<UsageReport>(res);
+}
+
+// --- Admin: wet-catalogus ---------------------------------------------------
+
+export async function listWetCatalog(): Promise<WetOut[]> {
+  const res = await fetch("/api/admin/wetten", { cache: "no-store" });
+  return json<WetOut[]>(res);
+}
+
+export async function saveWet(bwbId: string, body: WetIn): Promise<WetOut> {
+  const res = await fetch(`/api/admin/wetten/${encodeURIComponent(bwbId)}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return json<WetOut>(res);
+}
+
+export async function deleteWet(bwbId: string): Promise<void> {
+  const res = await fetch(`/api/admin/wetten/${encodeURIComponent(bwbId)}`, { method: "DELETE" });
+  if (!res.ok) throw await parseError(res);
+}
+
+export async function resolveWetNaam(bwbId: string): Promise<WetResolveResult> {
+  const res = await fetch(`/api/admin/wetten/${encodeURIComponent(bwbId)}/resolve`, { method: "POST" });
+  return json<WetResolveResult>(res);
 }

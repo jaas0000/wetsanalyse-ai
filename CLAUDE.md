@@ -25,7 +25,8 @@ inhoudelijke `references/`/`scripts/`. De samenwerkende delen:
    bij werk *in* de API. Het LLM wordt aangestuurd via **benoemde modelprofielen** (Mongo, beheerbaar
    via `/v1/admin/profiles`); de env-`LLM_*`-waarden seeden alleen het eerste default-profiel.
 5. **`frontend/`** — Next.js-webapp (BFF) bovenop de API: analyses aanmaken/reviewen en de
-   modelprofielen + het token-verbruik beheren via het **`/beheer`-scherm** (achter een apart
+   modelprofielen, de **wet-catalogus** (BWB-id + naam, selecteerbaar via dropdown bij een nieuwe
+   analyse) en het token-verbruik beheren via het **`/beheer`-scherm** (achter een apart
    admin-token). Eigen `README.md`.
 
 De skill is geen vervanger van de analist: de kern is interpretatiekeuzes **expliciet** maken,

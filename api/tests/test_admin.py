@@ -9,6 +9,7 @@ from httpx import ASGITransport, AsyncClient
 
 from app.llm_profile import LlmProfile
 from app.project import Project
+from app.wet_catalog import WetCatalogus
 
 
 def _fresh_settings(monkeypatch, **env):
@@ -29,7 +30,7 @@ def _fresh_settings(monkeypatch, **env):
 @pytest.fixture
 async def db():
     client = mongomock_motor.AsyncMongoMockClient()
-    await init_beanie(database=client["test"], document_models=[Project, LlmProfile])
+    await init_beanie(database=client["test"], document_models=[Project, LlmProfile, WetCatalogus])
     return client
 
 
@@ -146,7 +147,7 @@ async def admin_client(monkeypatch):
     ratelimit.reset()
 
     mock_mongo = mongomock_motor.AsyncMongoMockClient()
-    await init_beanie(database=mock_mongo["test"], document_models=[Project, LlmProfile])
+    await init_beanie(database=mock_mongo["test"], document_models=[Project, LlmProfile, WetCatalogus])
 
     import app.main as main_module
     monkeypatch.setattr(main_module, "AsyncIOMotorClient", lambda *a, **kw: mock_mongo)
@@ -208,3 +209,65 @@ async def test_admin_usage_endpoint(admin_client):
     assert r.status_code == 200
     assert "totaal" in r.json() and "rows" in r.json()
     assert (await admin_client.get("/v1/admin/usage", headers=_H, params={"group_by": "fout"})).status_code == 400
+
+
+# --- wet-catalogus -------------------------------------------------------------
+
+async def test_wet_catalogus_crud(admin_client):
+    # Upsert (admin) → terug in lijst.
+    r = await admin_client.put("/v1/admin/wetten/BWBR0004770", headers=_H, json={"naam": "Successiewet 1956"})
+    assert r.status_code == 200, r.text
+    assert r.json() == {
+        "bwbId": "BWBR0004770", "naam": "Successiewet 1956",
+        "updated_by": r.json()["updated_by"], "updated": r.json()["updated"],
+    }
+    lijst = (await admin_client.get("/v1/admin/wetten", headers=_H)).json()
+    assert [w["bwbId"] for w in lijst] == ["BWBR0004770"]
+
+    # Bijwerken (zelfde sleutel) en verwijderen.
+    await admin_client.put("/v1/admin/wetten/BWBR0004770", headers=_H, json={"naam": "Successiewet"})
+    assert (await admin_client.get("/v1/admin/wetten", headers=_H)).json()[0]["naam"] == "Successiewet"
+    assert (await admin_client.delete("/v1/admin/wetten/BWBR0004770", headers=_H)).status_code == 204
+    assert (await admin_client.delete("/v1/admin/wetten/BWBR0004770", headers=_H)).status_code == 404
+
+
+async def test_wet_catalogus_admin_only(admin_client):
+    # Beheer vereist het admin-token; de keuzelijst niet.
+    assert (await admin_client.get("/v1/admin/wetten")).status_code == 401
+    assert (await admin_client.put("/v1/admin/wetten/BWBR0004770", json={"naam": "x"})).status_code == 401
+
+
+async def test_catalog_wetten_zonder_admin(admin_client):
+    await admin_client.put("/v1/admin/wetten/BWBR0004770", headers=_H, json={"naam": "Successiewet 1956"})
+    r = await admin_client.get("/v1/wetten")
+    assert r.status_code == 200
+    assert r.json() == [{"bwbId": "BWBR0004770", "naam": "Successiewet 1956"}]
+
+
+async def test_wet_resolve_via_mcp(admin_client, monkeypatch):
+    class FakeClient:
+        def __init__(self, *a, **kw):
+            pass
+
+        async def structuur(self, bwb_id):
+            return {"bwbId": bwb_id, "citeertitel": "Successiewet 1956"}
+
+    monkeypatch.setattr("app.wetten.WettenbankClient", FakeClient)
+    r = await admin_client.post("/v1/admin/wetten/BWBR0004770/resolve", headers=_H)
+    assert r.status_code == 200, r.text
+    assert r.json() == {"naam": "Successiewet 1956"}
+
+
+async def test_wet_resolve_mcp_fout_geeft_502(admin_client, monkeypatch):
+    from app.wettenbank import WettenbankError
+
+    class FakeClient:
+        def __init__(self, *a, **kw):
+            pass
+
+        async def structuur(self, bwb_id):
+            raise WettenbankError("MCP onbereikbaar")
+
+    monkeypatch.setattr("app.wetten.WettenbankClient", FakeClient)
+    r = await admin_client.post("/v1/admin/wetten/BWBR0004770/resolve", headers=_H)
+    assert r.status_code == 502

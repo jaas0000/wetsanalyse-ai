@@ -17,6 +17,7 @@ from .deps import get_engine, get_store
 from .llm_profile import LlmProfile
 from .project import Project
 from .routers import admin, catalog, projects
+from .wet_catalog import WetCatalogus
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +27,8 @@ async def lifespan(app: FastAPI):
     settings = get_settings()
     motor_client = AsyncIOMotorClient(settings.mongodb_url)
     await init_beanie(
-        database=motor_client[settings.mongodb_db], document_models=[Project, LlmProfile]
+        database=motor_client[settings.mongodb_db],
+        document_models=[Project, LlmProfile, WetCatalogus],
     )
     try:
         from . import profiles

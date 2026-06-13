@@ -6,19 +6,26 @@ import { Card, Section } from "@/components/ui/Card";
 import { Tag } from "@/components/ui/Badge";
 import {
   deleteProfile,
+  deleteWet,
   isApiError,
   listProfiles,
+  listWetCatalog,
   setDefaultProfile,
   testProfile,
 } from "@/lib/api";
-import type { LlmProfileOut, TestResult } from "@/lib/types";
+import type { LlmProfileOut, TestResult, WetOut } from "@/lib/types";
 import { ProfileEditor } from "./ProfileEditor";
+import { WetEditor } from "./WetEditor";
 import { UsagePanel } from "./UsagePanel";
 
-type EditState = { open: false } | { open: true; profile: LlmProfileOut | null };
+type EditState =
+  | { open: false }
+  | { open: true; kind: "profile"; profile: LlmProfileOut | null }
+  | { open: true; kind: "wet"; wet: WetOut | null };
 
 export function BeheerClient() {
   const [profielen, setProfielen] = useState<LlmProfileOut[] | null>(null);
+  const [wetten, setWetten] = useState<WetOut[] | null>(null);
   const [fout, setFout] = useState<string | null>(null);
   const [edit, setEdit] = useState<EditState>({ open: false });
   const [tests, setTests] = useState<Record<string, TestResult | "bezig">>({});
@@ -30,6 +37,12 @@ export function BeheerClient() {
     } catch (e) {
       setFout(isApiError(e) ? `${e.detail} (${e.status})` : (e as Error).message);
       setProfielen([]);
+    }
+    try {
+      setWetten(await listWetCatalog());
+    } catch (e) {
+      setFout(isApiError(e) ? `${e.detail} (${e.status})` : (e as Error).message);
+      setWetten([]);
     }
   }, []);
 
@@ -69,10 +82,33 @@ export function BeheerClient() {
     }
   }
 
-  if (edit.open) {
+  async function onDeleteWet(bwbId: string) {
+    if (!confirm(`Wet "${bwbId}" verwijderen?`)) return;
+    try {
+      await deleteWet(bwbId);
+      await laad();
+    } catch (e) {
+      setFout(isApiError(e) ? `${e.detail} (${e.status})` : (e as Error).message);
+    }
+  }
+
+  if (edit.open && edit.kind === "profile") {
     return (
       <ProfileEditor
         profile={edit.profile}
+        onCancel={() => setEdit({ open: false })}
+        onDone={() => {
+          setEdit({ open: false });
+          laad();
+        }}
+      />
+    );
+  }
+
+  if (edit.open && edit.kind === "wet") {
+    return (
+      <WetEditor
+        wet={edit.wet}
         onCancel={() => setEdit({ open: false })}
         onDone={() => {
           setEdit({ open: false });
@@ -89,7 +125,7 @@ export function BeheerClient() {
           <div className="mb-3 rounded-md border border-accent/30 bg-accent/5 px-3 py-2 text-sm text-accent">{fout}</div>
         )}
         <div className="mb-4 flex justify-end">
-          <Button onClick={() => setEdit({ open: true, profile: null })}>Nieuw profiel</Button>
+          <Button onClick={() => setEdit({ open: true, kind: "profile", profile: null })}>Nieuw profiel</Button>
         </div>
 
         {profielen === null ? (
@@ -134,7 +170,7 @@ export function BeheerClient() {
                   )}
 
                   <div className="mt-3 flex flex-wrap gap-2">
-                    <Button size="sm" variant="secondary" onClick={() => setEdit({ open: true, profile: p })}>
+                    <Button size="sm" variant="secondary" onClick={() => setEdit({ open: true, kind: "profile", profile: p })}>
                       Bewerken
                     </Button>
                     <Button size="sm" variant="secondary" onClick={() => onTest(p.name)} disabled={test === "bezig"}>
@@ -154,6 +190,37 @@ export function BeheerClient() {
                 </Card>
               );
             })}
+          </div>
+        )}
+      </Section>
+
+      <Section title="Wetten" count={wetten?.length} subtitle="Selecteerbaar bij nieuwe analyse">
+        <div className="mb-4 flex justify-end">
+          <Button onClick={() => setEdit({ open: true, kind: "wet", wet: null })}>Nieuwe wet</Button>
+        </div>
+
+        {wetten === null ? (
+          <p className="text-sm text-muted">Laden…</p>
+        ) : wetten.length === 0 ? (
+          <p className="text-sm text-muted">Nog geen wetten. Voeg er een toe om de dropdown te vullen.</p>
+        ) : (
+          <div className="space-y-3">
+            {wetten.map((w) => (
+              <Card key={w.bwbId} className="p-4">
+                <div className="flex flex-wrap items-center gap-3">
+                  <span className="font-display font-semibold text-ink">{w.naam || "(geen naam)"}</span>
+                  <Tag>{w.bwbId}</Tag>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button size="sm" variant="secondary" onClick={() => setEdit({ open: true, kind: "wet", wet: w })}>
+                    Bewerken
+                  </Button>
+                  <Button size="sm" variant="danger" onClick={() => onDeleteWet(w.bwbId)}>
+                    Verwijderen
+                  </Button>
+                </div>
+              </Card>
+            ))}
           </div>
         )}
       </Section>

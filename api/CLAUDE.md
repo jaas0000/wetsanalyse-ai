@@ -40,10 +40,16 @@ disk-interoperabiliteit met de lokale skill staat op de roadmap, niet in de huid
   startup-reconciliatie, retry, quota/budget-checks).
 - `routers/projects.py` + `main.py` — de kanonieke resource onder **`/v1/projects`** (client-gescopet,
   `response_model`s, paginatie, SSE), `/health` (liveness), `/ready` (alleen booleans).
+- `wet_catalog.py` — Beanie `WetCatalogus`-document (BWB-id + leesbare naam). `wetten.py` — service
+  eroverheen: CRUD + `resolve_naam` (officiële citeertitel via `wettenbank_structuur`). De catalogus
+  is een **gemak voor de UI-dropdown, niet dwingend**: de orchestrator dwingt geen lidmaatschap af en
+  een willekeurige BWB-id blijft geldig. De wet-naam in het rapport komt los hiervan uit de MCP.
 - `routers/admin.py` — **`/v1/admin/*`** achter `require_admin`: modelprofielen-CRUD
   (`/profiles`, write-only API-key, `api_key_set` nooit de key zelf), default zetten, verbinding
-  testen, en `/usage` (token-verbruik). De engine bouwt per analyse de LLM-client uit het
-  profiel van de job, dus runtime-wijzigingen werken zonder redeploy.
+  testen, `/usage` (token-verbruik), en de wet-catalogus (`/wetten` CRUD + `/wetten/{bwbId}/resolve`).
+  De engine bouwt per analyse de LLM-client uit het profiel van de job, dus runtime-wijzigingen
+  werken zonder redeploy. De niet-admin keuzelijsten (`/v1/profiles`, `/v1/wetten`) staan in
+  `routers/catalog.py` zodat de frontend de dropdowns zonder admin-token vult.
 
 ## Garanties (niet aan tornen)
 

@@ -5,10 +5,12 @@ JAS-workflow in de browser: analyse aanmaken, live voortgang, de human-in-the-lo
 het eindrapport.
 
 Daarnaast een **`/beheer`-scherm** voor het LLM-beheer: de modelprofielen die de analyses aansturen
-(toevoegen/bewerken/verwijderen, default kiezen, verbinding testen) en een overzicht van het
-token-verbruik. Bij **Nieuwe analyse** kies je het profiel uit een dropdown die de profielen live
-ophaalt, zodat wijzigingen in de draaiende app direct meekomen. Het beheer loopt via aparte
-`/api/admin/*`-routes met een **apart admin-token** (zie hieronder).
+(toevoegen/bewerken/verwijderen, default kiezen, verbinding testen), een **wet-catalogus** (BWB-id +
+naam, met "Naam ophalen" via de MCP) en een overzicht van het token-verbruik. Bij **Nieuwe analyse**
+kies je zowel het modelprofiel als de wet uit een dropdown die live wordt opgehaald, zodat
+wijzigingen in de draaiende app direct meekomen. De wet-dropdown is een gemak: is de catalogus leeg,
+dan val je terug op vrije BWB-id-invoer. Het beheer loopt via aparte `/api/admin/*`-routes met een
+**apart admin-token** (zie hieronder).
 
 ## Architectuur — BFF met server-side token
 

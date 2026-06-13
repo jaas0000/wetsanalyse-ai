@@ -209,11 +209,33 @@ export interface Rapport {
   aandachtspunten: string;
 }
 
-// --- Catalogus (niet-admin): keuzelijst modelprofielen ----------------------
+// --- Catalogus (niet-admin): keuzelijsten -----------------------------------
 
 export interface ProfileChoice {
   name: string;
   is_default: boolean;
+}
+
+export interface WetChoice {
+  bwbId: string;
+  naam: string;
+}
+
+// --- Admin: wet-catalogus ---------------------------------------------------
+
+export interface WetIn {
+  naam: string;
+}
+
+export interface WetOut {
+  bwbId: string;
+  naam: string;
+  updated_by: string;
+  updated: string;
+}
+
+export interface WetResolveResult {
+  naam: string;
 }
 
 // --- Admin: LLM-modelprofielen + verbruik -----------------------------------

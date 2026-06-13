@@ -11,6 +11,11 @@ DELETE /v1/admin/profiles/{name}          — verwijder (niet de default)
 POST   /v1/admin/profiles/{name}/default  — markeer als default
 POST   /v1/admin/profiles/{name}/test     — test de verbinding (kleine LLM-call)
 GET    /v1/admin/usage                    — token-verbruik (aggregatie over provenance)
+
+PUT    /v1/admin/wetten/{bwbId}           — maak/werk wet-catalogus-item bij (BWB-id + naam)
+GET    /v1/admin/wetten                   — lijst catalogus-items
+DELETE /v1/admin/wetten/{bwbId}           — verwijder catalogus-item
+POST   /v1/admin/wetten/{bwbId}/resolve   — stel de officiële citeertitel voor via de MCP
 """
 
 from __future__ import annotations
@@ -18,11 +23,13 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
-from .. import profiles, usage
+from .. import profiles, usage, wetten
 from ..auth import require_admin
 from ..llm.litellm_client import build_llm_client
 from ..llm_profile import LlmProfile
 from ..secrets_crypto import SecretsCryptoError, crypto_beschikbaar
+from ..wet_catalog import WetCatalogus
+from ..wettenbank import WettenbankError
 
 router = APIRouter(prefix="/admin", tags=["admin"], dependencies=[Depends(require_admin)])
 
@@ -172,3 +179,52 @@ async def token_verbruik(
         return await usage.usage_report(group_by=group_by, van=van, tot=tot)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+# --- wet-catalogus -------------------------------------------------------------
+
+class WetIn(BaseModel):
+    naam: str = Field(default="", max_length=256)
+
+
+class WetOut(BaseModel):
+    bwbId: str
+    naam: str
+    updated_by: str = ""
+    updated: str = ""
+
+
+class ResolveResult(BaseModel):
+    naam: str
+
+
+def _wet_to_out(w: WetCatalogus) -> WetOut:
+    return WetOut(bwbId=w.bwbId, naam=w.naam, updated_by=w.updated_by, updated=w.updated.isoformat())
+
+
+@router.get("/wetten", response_model=list[WetOut])
+async def lijst_wetten():
+    return [_wet_to_out(w) for w in await wetten.list_wetten()]
+
+
+@router.put("/wetten/{bwbId}", response_model=WetOut)
+async def upsert_wet(bwbId: str, body: WetIn, admin_id: str = Depends(require_admin)):
+    w = await wetten.upsert_wet(bwbId, naam=body.naam, updated_by=admin_id)
+    return _wet_to_out(w)
+
+
+@router.delete("/wetten/{bwbId}", status_code=status.HTTP_204_NO_CONTENT)
+async def verwijder_wet(bwbId: str):
+    try:
+        await wetten.delete_wet(bwbId)
+    except wetten.WetError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.post("/wetten/{bwbId}/resolve", response_model=ResolveResult)
+async def resolve_wet_naam(bwbId: str):
+    try:
+        naam = await wetten.resolve_naam(bwbId)
+    except WettenbankError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    return ResolveResult(naam=naam)

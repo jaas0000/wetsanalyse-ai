@@ -34,6 +34,7 @@ Alle analyse-endpoints zijn client-gescopet (alleen je eigen analyses) en versio
 | `GET` | `/v1/projects/{id}/ronde/{act}/{n}` | Analyse-JSON van één ronde |
 | `GET` | `/v1/projects/{id}/events` | SSE state-updates (max 10 min) |
 | `GET` | `/v1/profiles` | Keuzelijst modelprofielen (alleen naam + default; client-auth, geen geheimen) |
+| `GET` | `/v1/wetten` | Keuzelijst wetten (BWB-id + naam; client-auth) voor de dropdown |
 | `GET` | `/health` | Liveness check |
 | `GET` | `/ready` | Readiness check (booleans: auth, LLM, MCP, MongoDB geconfigureerd) |
 
@@ -47,6 +48,10 @@ Admin-endpoints (LLM-beheer) achter een **apart admin-token**, onder `/v1/admin`
 | `POST` | `/v1/admin/profiles/{name}/default` | Markeer als default |
 | `POST` | `/v1/admin/profiles/{name}/test` | Test de verbinding (kleine LLM-call) |
 | `GET` | `/v1/admin/usage` | Token-verbruik (aggregatie over `provenance`; `group_by=model\|model_profile\|client_id`) |
+| `GET` | `/v1/admin/wetten` | Lijst wet-catalogus (BWB-id + naam) |
+| `PUT` | `/v1/admin/wetten/{bwbId}` | Maak/werk catalogus-item bij (BWB-id + naam) |
+| `DELETE` | `/v1/admin/wetten/{bwbId}` | Verwijder catalogus-item |
+| `POST` | `/v1/admin/wetten/{bwbId}/resolve` | Stel de officiële citeertitel voor via de MCP |
 
 Swagger-UI beschikbaar op `/docs`.
 

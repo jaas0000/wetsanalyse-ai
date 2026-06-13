@@ -6,8 +6,8 @@ import { z } from "zod";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Field, Input, Textarea } from "@/components/ui/Field";
-import { createProject, isApiError, listModelProfiles } from "@/lib/api";
-import type { ProfileChoice, StartRequest } from "@/lib/types";
+import { createProject, isApiError, listModelProfiles, listWetten } from "@/lib/api";
+import type { ProfileChoice, StartRequest, WetChoice } from "@/lib/types";
 
 const selectClass =
   "w-full rounded-md border border-line bg-paper px-3 py-2 text-sm text-ink focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20";
@@ -31,8 +31,10 @@ export function ProjectForm() {
   const [fout, setFout] = useState<string | null>(null);
   const [profielen, setProfielen] = useState<ProfileChoice[] | null>(null);
   const [profiel, setProfiel] = useState("");
+  const [wetten, setWetten] = useState<WetChoice[] | null>(null);
+  const [bwbId, setBwbId] = useState("");
 
-  // Live ophalen zodat profielen die in de draaiende app worden toegevoegd/verwijderd direct meekomen.
+  // Live ophalen zodat profielen/wetten die in de draaiende app worden toegevoegd/verwijderd direct meekomen.
   useEffect(() => {
     let levend = true;
     listModelProfiles()
@@ -42,6 +44,9 @@ export function ProjectForm() {
         setProfiel((ps.find((p) => p.is_default) ?? ps[0])?.name ?? "");
       })
       .catch(() => levend && setProfielen([]));
+    listWetten()
+      .then((ws) => levend && setWetten(ws))
+      .catch(() => levend && setWetten([]));
     return () => {
       levend = false;
     };
@@ -100,8 +105,35 @@ export function ProjectForm() {
     <Card className="p-6">
       <form onSubmit={onSubmit} className="space-y-5">
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-          <Field label="BWB-id" hint="bv. BWBR0004770" error={veldFout.bwbId}>
-            <Input name="bwbId" placeholder="BWBR0004770" autoComplete="off" />
+          <Field
+            label="Wet"
+            hint={wetten === null ? "laden…" : wetten.length > 0 ? "beheer via /beheer" : "BWB-id, bv. BWBR0004770"}
+            error={veldFout.bwbId}
+          >
+            {wetten && wetten.length > 0 ? (
+              <select
+                name="bwbId"
+                value={bwbId}
+                onChange={(e) => setBwbId(e.target.value)}
+                className={selectClass}
+              >
+                <option value="">— kies een wet —</option>
+                {wetten.map((w) => (
+                  <option key={w.bwbId} value={w.bwbId}>
+                    {w.naam ? `${w.naam} — ${w.bwbId}` : w.bwbId}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              // Fallback: lege catalogus → vrije BWB-id-invoer.
+              <Input
+                name="bwbId"
+                value={bwbId}
+                onChange={(e) => setBwbId(e.target.value)}
+                placeholder="BWBR0004770"
+                autoComplete="off"
+              />
+            )}
           </Field>
           <Field
             label="Model-profiel"
