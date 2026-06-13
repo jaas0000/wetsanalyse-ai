@@ -26,7 +26,7 @@ Alle analyse-endpoints zijn client-gescopet (alleen je eigen analyses) en versio
 | `POST` | `/v1/projects` | Start een nieuwe analyse (async, 202 + `Location`) |
 | `GET` | `/v1/projects?limit=&offset=` | Lijst van je analyses (gepagineerd) |
 | `GET` | `/v1/projects/{id}` | Status en voortgang van een job |
-| `DELETE` | `/v1/projects/{id}` | Verwijder (alleen in terminal state) |
+| `DELETE` | `/v1/projects/{id}` | Verwijder (terminal of `wacht-op-review-*`; lopend → 409) |
 | `POST` | `/v1/projects/{id}/feedback` | Geef reviewfeedback (alleen in `wacht-op-review-*`) |
 | `POST` | `/v1/projects/{id}/retry` | Herstart een job in `fout`-state |
 | `GET` | `/v1/projects/{id}/rapport` | Volledig rapport als JSON |

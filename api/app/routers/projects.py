@@ -6,7 +6,7 @@ Eén URL-conventie voor sub-resources (`/ronde/{act}/{n}`). Vervangt de eerdere 
 POST   /v1/projects                     — maak project aan en start analyse (202 + Location)
 GET    /v1/projects?limit=&offset=      — lijst eigen projecten (beknopt, gepagineerd)
 GET    /v1/projects/{id}                — volledig project-object
-DELETE /v1/projects/{id}                — verwijder (alleen terminal state, anders 409)
+DELETE /v1/projects/{id}                — verwijder (terminal of review-state; lopend → 409)
 POST   /v1/projects/{id}/feedback       — review-feedback
 POST   /v1/projects/{id}/retry          — herstart vanuit fout
 GET    /v1/projects/{id}/rapport        — rapport JSON
@@ -91,10 +91,14 @@ async def project_detail(project_id: str, client_id: str = Depends(require_clien
 async def verwijder_project(project_id: str, client_id: str = Depends(require_client)):
     store = get_store()
     p = await _project_or_404(store, project_id, client_id)
-    if p.state not in TERMINAL_STATES:
+    # Verwijderen mag vanuit een eindstaat (klaar/fout) én vanuit een review-pauze
+    # (de analist kan een lopende analyse tijdens de review weggooien). In een
+    # lopende/queued state draait er nog een achtergrondtaak die het document muteert
+    # → niet verwijderen (anders 409).
+    if p.state not in TERMINAL_STATES | REVIEW_STATES:
         raise HTTPException(
             status_code=409,
-            detail=f"Kan alleen terminal projecten verwijderen; staat nu op: {p.state}",
+            detail=f"Kan alleen verwijderen vanuit een review- of eindstaat; staat nu op: {p.state}",
         )
     await store.delete_project(project_id)
 

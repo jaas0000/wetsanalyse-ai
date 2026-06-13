@@ -195,7 +195,13 @@ export function ProjectClient({ initieel }: { initieel: Job }) {
           <Card className="p-6 text-sm text-muted">Rapport laden…</Card>
         )
       ) : reviewAct ? (
-        <ReviewPanel job={job} activiteit={reviewAct} onSubmitted={refreshJob} />
+        <ReviewPanel
+          job={job}
+          activiteit={reviewAct}
+          onSubmitted={refreshJob}
+          onDelete={onDelete}
+          verwijderBezig={actie === "delete"}
+        />
       ) : job.state !== "fout" ? (
         <Card className="p-6">
           <p className="mb-4 text-sm text-muted">

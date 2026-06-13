@@ -38,6 +38,7 @@ async def client(monkeypatch):
     await store.save_job(Job(id="bwbr1-art1", state=JobState.queued, bwbId="BWBR1", artikel="1", client_id="anonymous"))
     await store.save_job(Job(id="klaar-art1", state=JobState.klaar, bwbId="BWBR2", artikel="1", client_id="anonymous"))
     await store.schrijf_rapport("klaar-art1", rapport)
+    await store.save_job(Job(id="review-art1", state=JobState.wacht_review_act2, bwbId="BWBR4", artikel="1", client_id="anonymous"))
     # Project van een andere tenant — mag voor "anonymous" onzichtbaar zijn (404 + niet in lijst).
     await store.save_job(Job(id="andermans-art1", state=JobState.klaar, bwbId="BWBR3", artikel="1", client_id="andere-client"))
     await store.schrijf_rapport("andermans-art1", rapport)
@@ -90,6 +91,17 @@ async def test_feedback_buiten_review_409(client):
 
 async def test_rapport_nog_niet_gereed_409(client):
     assert (await client.get("/v1/projects/bwbr1-art1/rapport")).status_code == 409
+
+
+async def test_verwijderen_states(client):
+    """Verwijderen mag vanuit een eindstaat én een review-pauze, niet vanuit een lopende state."""
+    # queued (lopend) → 409
+    assert (await client.delete("/v1/projects/bwbr1-art1")).status_code == 409
+    # review-pauze → 204 (de analist gooit de analyse tijdens de review weg)
+    assert (await client.delete("/v1/projects/review-art1")).status_code == 204
+    assert (await client.get("/v1/projects/review-art1")).status_code == 404
+    # eindstaat → 204
+    assert (await client.delete("/v1/projects/klaar-art1")).status_code == 204
 
 
 async def test_input_limiet_422(client):

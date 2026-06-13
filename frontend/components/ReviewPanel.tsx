@@ -74,10 +74,15 @@ export function ReviewPanel({
   job,
   activiteit,
   onSubmitted,
+  onDelete,
+  verwijderBezig,
 }: {
   job: Job;
   activiteit: "2" | "3";
   onSubmitted: () => void | Promise<void>;
+  /** Gooi de hele analyse weg (incl. bevestiging) — afgehandeld door de ouder. */
+  onDelete?: () => void | Promise<void>;
+  verwijderBezig?: boolean;
 }) {
   const [items, setItems] = useState<ReviewItem[] | null>(null);
   const [laadFout, setLaadFout] = useState<string | null>(null);
@@ -225,17 +230,34 @@ export function ReviewPanel({
         </div>
       )}
 
-      <div className="mt-5 flex items-center justify-end gap-3 border-t border-line pt-4">
-        <Button
-          variant="secondary"
-          onClick={() => verstuur("wijzigingen")}
-          disabled={bezig !== null || !items}
-        >
-          {bezig === "wijzigingen" ? "Versturen…" : "Wijzigen"}
-        </Button>
-        <Button onClick={() => verstuur("akkoord")} disabled={bezig !== null || !items}>
-          {bezig === "akkoord" ? "Versturen…" : "Akkoord"}
-        </Button>
+      <div className="mt-5 flex items-center justify-between gap-3 border-t border-line pt-4">
+        {onDelete ? (
+          <Button
+            variant="danger"
+            onClick={() => onDelete()}
+            disabled={bezig !== null || verwijderBezig}
+            title="Verwijder deze analyse definitief"
+          >
+            {verwijderBezig ? "Verwijderen…" : "Analyse verwijderen"}
+          </Button>
+        ) : (
+          <span />
+        )}
+        <div className="flex items-center gap-3">
+          <Button
+            variant="secondary"
+            onClick={() => verstuur("wijzigingen")}
+            disabled={bezig !== null || verwijderBezig || !items}
+          >
+            {bezig === "wijzigingen" ? "Versturen…" : "Wijzigen"}
+          </Button>
+          <Button
+            onClick={() => verstuur("akkoord")}
+            disabled={bezig !== null || verwijderBezig || !items}
+          >
+            {bezig === "akkoord" ? "Versturen…" : "Akkoord"}
+          </Button>
+        </div>
       </div>
     </Card>
   );
