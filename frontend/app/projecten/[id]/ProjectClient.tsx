@@ -13,6 +13,24 @@ import { isReview, isTerminal, reviewActiviteit } from "@/lib/states";
 import type { Job, Rapport } from "@/lib/types";
 import { useRouter } from "next/navigation";
 
+/** Korte uitleg in mensentaal bij een foutklasse, zodat de pagina niet alleen een kale code toont. */
+function foutUitleg(klasse: string): string {
+  switch (klasse) {
+    case "validatie":
+      return "De analyse voldeed niet aan de brongetrouwheid-eisen — bijvoorbeeld een markering waarvan de formulering niet letterlijk in de wettekst staat. Dit corrigeer je via de review.";
+    case "mcp":
+      return "De wettekst kon niet uit de wettenbank worden opgehaald. Vaak tijdelijk; later opnieuw proberen helpt meestal.";
+    case "llm":
+      return "Het taalmodel gaf een fout of ongeldig antwoord. Opnieuw proberen lost dit doorgaans op.";
+    case "quota":
+      return "Het tokenbudget voor deze analyse is bereikt.";
+    case "intern":
+      return "De analyse werd onderbroken, bijvoorbeeld door een herstart van de dienst.";
+    default:
+      return "Er ging iets mis tijdens de analyse.";
+  }
+}
+
 export function ProjectClient({ initieel }: { initieel: Job }) {
   const router = useRouter();
   const [job, setJob] = useState<Job>(initieel);
@@ -83,6 +101,9 @@ export function ProjectClient({ initieel }: { initieel: Job }) {
   }
 
   const reviewAct = reviewActiviteit(job.state);
+  // Retry hervat een al-weggeschreven ronde in review; alleen zonder ronde draait hij echt opnieuw.
+  const heeftRonde = job.provenance.length > 0;
+  const retryLabel = heeftRonde ? "Terug naar review" : "Opnieuw proberen";
 
   return (
     <div className="animate-rise space-y-6">
@@ -105,8 +126,17 @@ export function ProjectClient({ initieel }: { initieel: Job }) {
         </div>
         <div className="flex gap-2">
           {job.state === "fout" && (
-            <Button variant="primary" onClick={onRetry} disabled={actie !== null}>
-              {actie === "retry" ? "Bezig…" : "Opnieuw proberen"}
+            <Button
+              variant="primary"
+              onClick={onRetry}
+              disabled={actie !== null}
+              title={
+                heeftRonde
+                  ? "Heropent de laatste ronde zodat je via reviewfeedback kunt corrigeren"
+                  : "Start de analyse opnieuw vanaf het begin"
+              }
+            >
+              {actie === "retry" ? "Bezig…" : retryLabel}
             </Button>
           )}
           {isTerminal(job.state) && (
@@ -117,8 +147,9 @@ export function ProjectClient({ initieel }: { initieel: Job }) {
         </div>
       </div>
 
-      {/* Waarschuwingen */}
-      {job.waarschuwingen.length > 0 && (
+      {/* Waarschuwingen — in review-states toont de ReviewPanel ze (algemeen + per item), dus
+          hier alleen buiten review om dubbele weergave te voorkomen. */}
+      {job.waarschuwingen.length > 0 && !reviewAct && (
         <Card className="border-gold/40 bg-gold/5 p-4">
           <p className="text-xs font-medium uppercase tracking-wide text-gold">Waarschuwingen</p>
           <ul className="mt-2 list-inside list-disc space-y-1 text-sm text-muted">
@@ -134,7 +165,21 @@ export function ProjectClient({ initieel }: { initieel: Job }) {
         <Card className="border-accent/30 bg-accent/5 p-5">
           <p className="font-display text-lg text-accent">Analyse gestopt</p>
           <p className="mt-1 text-sm text-ink">{job.error.bericht}</p>
-          <p className="mt-2 text-xs text-muted">
+          <p className="mt-2 text-sm text-muted">{foutUitleg(job.error.klasse)}</p>
+          <p className="mt-3 text-sm text-muted">
+            {heeftRonde ? (
+              <>
+                Met <strong className="text-ink">Terug naar review</strong> open je de laatste ronde
+                opnieuw; verwerk de aandachtspunten als reviewfeedback en dien een nieuwe ronde in.
+              </>
+            ) : (
+              <>
+                Met <strong className="text-ink">Opnieuw proberen</strong> start de analyse opnieuw.
+              </>
+            )}{" "}
+            Met <strong className="text-ink">Verwijderen</strong> gooi je de analyse definitief weg.
+          </p>
+          <p className="mt-3 text-xs text-faint">
             Stap <span className="font-mono">{job.error.stap}</span> · klasse{" "}
             <span className="font-mono">{job.error.klasse}</span>
             {job.error.ronde != null && <> · ronde {job.error.ronde}</>}

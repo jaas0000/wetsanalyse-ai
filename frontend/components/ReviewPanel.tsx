@@ -16,6 +16,19 @@ interface ReviewItem {
   twijfel?: string;
 }
 
+/** Splits de mechanische waarschuwingen in item-specifieke (prefix "[id]") en algemene. */
+function splitsWaarschuwingen(ws: string[]): { perId: Record<string, string[]>; algemeen: string[] } {
+  const perId: Record<string, string[]> = {};
+  const algemeen: string[] = [];
+  const re = /^\[([^\]]+)\]\s*/;
+  for (const w of ws) {
+    const m = re.exec(w);
+    if (m) (perId[m[1]] ??= []).push(w.slice(m[0].length));
+    else algemeen.push(w);
+  }
+  return { perId, algemeen };
+}
+
 function itemsUitAnalyse(act: "2" | "3", data: Analyse2 | Analyse3): ReviewItem[] {
   if (act === "2") {
     const a = data as Analyse2;
@@ -74,6 +87,9 @@ export function ReviewPanel({
   const [fout, setFout] = useState<string | null>(null);
 
   const ronde = job.current_ronde || 1;
+  const { perId: waarschuwingenPerId, algemeen: algemeneWaarschuwingen } = splitsWaarschuwingen(
+    job.waarschuwingen,
+  );
 
   useEffect(() => {
     let actief = true;
@@ -135,6 +151,18 @@ export function ReviewPanel({
           Kon de ronde niet laden: {laadFout}
         </div>
       )}
+
+      {algemeneWaarschuwingen.length > 0 && (
+        <div className="mb-4 rounded-md border border-gold/40 bg-gold/5 px-3 py-2 text-sm text-gold">
+          <p className="font-medium">Aandachtspunten bij deze ronde</p>
+          <ul className="mt-1 list-inside list-disc space-y-0.5">
+            {algemeneWaarschuwingen.map((w, i) => (
+              <li key={i}>{w}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {!items && !laadFout && <p className="text-sm text-muted">Laden…</p>}
 
       <div className="space-y-3">
@@ -162,6 +190,14 @@ export function ReviewPanel({
                 Twijfel: {it.twijfel}
               </p>
             )}
+            {waarschuwingenPerId[it.id]?.map((w, i) => (
+              <p
+                key={i}
+                className="mt-2 rounded border border-accent/40 bg-accent/5 px-2 py-1 text-xs text-accent"
+              >
+                Let op: {w}
+              </p>
+            ))}
             <Textarea
               value={opmerkingen[it.id] ?? ""}
               onChange={(e) => setOpmerkingen((o) => ({ ...o, [it.id]: e.target.value }))}

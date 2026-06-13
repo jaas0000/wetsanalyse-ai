@@ -120,7 +120,7 @@ export function ProjectForm() {
                 <option value="">— kies een wet —</option>
                 {wetten.map((w) => (
                   <option key={w.bwbId} value={w.bwbId}>
-                    {w.naam ? `${w.naam} — ${w.bwbId}` : w.bwbId}
+                    {w.naam || w.bwbId}
                   </option>
                 ))}
               </select>
