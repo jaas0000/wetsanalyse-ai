@@ -1,0 +1,10 @@
+# Build-context van de api-image = projectroot (zie api/Dockerfile). Houd host-only en
+# zware mappen buiten de context: anders kopieert `COPY api /app/api` een lokale .venv
+# (host-python, verkeerde symlinks) over de in de builder gebouwde venv heen.
+**/.venv
+**/__pycache__
+**/*.pyc
+**/node_modules
+.git
+.github
+analyses/

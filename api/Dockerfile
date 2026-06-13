@@ -1,9 +1,18 @@
 # Build-context = projectroot (de API leest de skill-references/scripts via PROJECT_ROOT).
 # Bouwen vanaf de root:  docker build -f api/Dockerfile -t wetsanalyse-api .
 # CI (api-docker-publish.yml) pusht de image naar GHCR; Portainer pullt :latest.
-FROM python:3.12-slim
 
-COPY --from=ghcr.io/astral-sh/uv:0.10 /uv /bin/uv
+# ── Builder ───────────────────────────────────────────────────────────────────
+# uv leeft alléén in deze stage: het bouwt de .venv en blijft daarna buiten de
+# runtime-image (anders scant Trivy de uv-binary en z'n gebundelde crates mee).
+FROM python:3.12-slim AS builder
+
+COPY --from=ghcr.io/astral-sh/uv:0.11 /uv /bin/uv
+
+# Forceer de systeem-Python van de base-image: dan symlinkt de .venv naar
+# /usr/local/bin/python3.12 — een pad dat óók in de identieke runtime-stage bestaat.
+# Zonder dit zou uv een eigen "managed" Python kunnen downloaden en breekt de COPY.
+ENV UV_PYTHON_PREFERENCE=only-system
 
 WORKDIR /app/api
 
@@ -11,6 +20,18 @@ WORKDIR /app/api
 # (LiteLLM + MCP-client) is in productie nodig. De lock zorgt voor reproduceerbare builds.
 COPY api/pyproject.toml api/uv.lock /app/api/
 RUN uv sync --extra llm --frozen
+
+# ── Runtime ───────────────────────────────────────────────────────────────────
+# Schone base, identiek aan de builder → de venv-symlinks naar /usr/local/bin/python
+# blijven geldig. Geen uv meer; systeem-pip naar een gepatchte versie (BIO2 / ISO 27002).
+FROM python:3.12-slim AS runtime
+
+RUN pip install --no-cache-dir --upgrade 'pip>=26.1'
+
+WORKDIR /app/api
+
+# De gebouwde virtualenv uit de builder (bevat alle runtime-dependencies).
+COPY --from=builder /app/api/.venv /app/api/.venv
 
 # Applicatiecode + de gedeelde skill-kennis (references/scripts). analyses/ is een volume.
 COPY api /app/api
