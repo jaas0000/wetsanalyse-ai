@@ -65,12 +65,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               </span>
             </Link>
             <nav className="flex shrink-0 items-center gap-2 text-sm">
-              <Link
-                href="/"
-                className="whitespace-nowrap rounded-md px-3 py-1.5 text-muted transition-colors hover:bg-paper hover:text-ink"
-              >
+              <LinkButton href="/" variant="ghost">
                 Projecten
-              </Link>
+              </LinkButton>
               <LinkButton href="/nieuw">Nieuwe analyse</LinkButton>
             </nav>
           </div>
