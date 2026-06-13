@@ -1,7 +1,10 @@
+from datetime import datetime, timedelta, timezone
+
 import pytest
 
 from app.contracts import Feedback, JobState, StartRequest
 from app.engine.orchestrator import WetsanalyseEngine
+from app.project import Project
 from app.wettenbank import WettenbankError
 
 from conftest import FakeLLM, FakeWettenbank
@@ -95,6 +98,78 @@ async def test_retry_vanuit_fout(settings, store):
 async def test_bwbid_verplicht(engine):
     with pytest.raises(ValueError):
         await engine.create_job(StartRequest(artikel="1"), "test")
+
+
+async def test_dubbele_run_initial_geen_dubbele_pickup(engine, store):
+    """CAS: een tweede run_initial op een al-geclaimde job is een no-op (geen dubbele generatie)."""
+    job = await engine.create_job(_start_req(review=True), "test")
+    await engine.run_initial(job.id)
+    eerste = await store.load_job(job.id)
+    assert eerste.state == JobState.wacht_review_act2
+    assert len(eerste.provenance) == 1
+
+    await engine.run_initial(job.id)  # state is niet meer queued → claim mist → niets gebeurt
+    tweede = await store.load_job(job.id)
+    assert tweede.state == JobState.wacht_review_act2
+    assert len(tweede.provenance) == 1
+
+
+async def test_feedback_na_verloren_race_is_noop(engine, store):
+    """Is de review-state al weggeclaimd (andere worker), dan verwerkt apply_feedback niets."""
+    job = await engine.create_job(_start_req(review=True), "test")
+    await engine.run_initial(job.id)
+    # Simuleer dat een andere worker de review-state net wegclaimde.
+    await store.claim(job.id, {JobState.wacht_review_act2}, JobState.act2_runt, "andere-worker", 120)
+
+    await engine.apply_feedback(
+        job.id, Feedback(status="wijzigingen", activiteit="2", items={"m1": "x"})
+    )
+    # Geen nieuwe ronde, geen feedback verwerkt (de claim van deze worker miste).
+    assert await store.hoogste_ronde(job.id, "2") == 1
+    assert await store.lees_feedback(job.id, "2", 1) is None
+
+
+# --- 1b: lease / reaper / fencing ---
+
+async def test_reaper_ruimt_verlopen_lease_op(engine, store):
+    """Een runt-job met verlopen lease (worker weg/gecrasht) wordt door de reaper op fout gezet;
+    een verse lease blijft ongemoeid."""
+    verleden = datetime.now(timezone.utc) - timedelta(seconds=1)
+    toekomst = datetime.now(timezone.utc) + timedelta(seconds=120)
+    await Project(slug="verweesd", state=JobState.act3_runt, current_activiteit="3",
+                  owner="dode-worker", lease_until=verleden).insert()
+    await Project(slug="levend", state=JobState.act2_runt,
+                  owner="levende-worker", lease_until=toekomst).insert()
+
+    await engine.reap_once()
+
+    verweesd = await store.load_job("verweesd")
+    assert verweesd.state == JobState.fout
+    assert verweesd.error.klasse.value == "intern"
+    assert (await store.load_job("levend")).state == JobState.act2_runt
+
+
+async def test_reconcile_markeert_lease_loze_runtjob(engine, store):
+    """Migratie-vangnet: een runt-job zónder lease (pre-upgrade) wordt door reconcile gemarkeerd
+    en daarna door de reaper opgeruimd — hij hangt dus niet eeuwig."""
+    await Project(slug="pre-upgrade", state=JobState.act2_runt).insert()  # geen owner/lease
+    await engine.reconcile_startup()
+    await engine.reap_once()
+    assert (await store.load_job("pre-upgrade")).state == JobState.fout
+
+
+async def test_fenced_save_faalt_na_verloren_eigenaarschap(engine, store):
+    """Een worker die zijn job aan een ander is verloren, kan met een fenced save niet clobberen."""
+    job = await engine.create_job(_start_req(review=True), "test")
+    await engine.run_initial(job.id)  # job is nu eigendom van engine.owner
+    # Een andere worker kaapt de job (reaper/retry-scenario).
+    await store.claim(job.id, {JobState.wacht_review_act2}, JobState.act2_runt, "andere-worker", 120)
+
+    snapshot = await store.load_job(job.id)
+    snapshot.state = JobState.klaar  # de oude worker zou willen doorschrijven
+    assert await store.save_job(snapshot, owner=engine.owner) is False
+    # De fenced write landde niet: de kaper houdt zijn state.
+    assert (await store.load_job(job.id)).state == JobState.act2_runt
 
 
 async def test_max_active_jobs_quota(settings, store):

@@ -53,8 +53,7 @@ USER appuser
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:3000/health').status==200 else 1)"
 
-# EXACT één worker: het concurrency-model serialiseert state-transities met per-job
-# asyncio-locks (in-process). De jobstore is gedeeld (MongoDB), maar die lock werkt alleen
-# binnen één proces — meerdere workers/replica's zouden de serialisatie doorbreken. Schaal
-# pas op na een gedeelde lock (Mongo state-CAS) of een echte job-queue (zie roadmap).
+# Conservatieve default van één worker. Het concurrency-model is een atomaire Mongo state-CAS
+# (geen in-process lock meer), dus `--workers >1` en meerdere replica's zijn veilig — verhoog dit
+# gerust voor horizontaal schalen (elke worker krijgt een eigen owner-id + reaper).
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "3000", "--workers", "1"]

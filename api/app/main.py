@@ -3,6 +3,7 @@ en startup-reconciliatie van onderbroken jobs."""
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 
@@ -22,9 +23,23 @@ from .wet_catalog import WetCatalogus
 logger = logging.getLogger(__name__)
 
 
+async def _reaper_loop(interval_s: int) -> None:
+    """Periodieke reaper: ruimt runt-jobs met een verlopen lease op (worker weg/gecrasht).
+    Mag de app nooit killen — fouten worden gelogd, niet doorgegooid."""
+    while True:
+        await asyncio.sleep(interval_s)
+        try:
+            await get_engine().reap_once()
+        except Exception:  # noqa: BLE001
+            logger.exception("Reaper-ronde is mislukt")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = get_settings()
+    # Globale LLM-concurrency-rem instellen (kostenbeheersing tegen zelf-veroorzaakte rate-limits).
+    from .llm import throttle
+    throttle.configure(settings.llm_max_concurrency)
     motor_client = AsyncIOMotorClient(settings.mongodb_url)
     await init_beanie(
         database=motor_client[settings.mongodb_db],
@@ -40,7 +55,16 @@ async def lifespan(app: FastAPI):
         await get_engine().reconcile_startup()
     except Exception:  # noqa: BLE001 — engine mag de start nooit blokkeren
         logger.exception("Startup-reconciliatie van onderbroken jobs is mislukt")
+    reaper_task: asyncio.Task | None = None
+    if settings.reaper_interval_s > 0:
+        reaper_task = asyncio.create_task(_reaper_loop(settings.reaper_interval_s))
     yield
+    if reaper_task is not None:
+        reaper_task.cancel()
+        try:
+            await reaper_task
+        except asyncio.CancelledError:
+            pass
     motor_client.close()
 
 

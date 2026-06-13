@@ -5,11 +5,15 @@ Kritisch: save_job overschrijft uitsluitend state-machine velden — nooit ronde
 
 from __future__ import annotations
 
-from .concurrency import discard_lock
+from datetime import timedelta
+
 from .config import Settings
-from .contracts import Analyse2, Analyse3, Feedback, Job
+from .contracts import Analyse2, Analyse3, Feedback, Job, JobState, RUNNING_STATES
 from .project import Project, RondeData, _utcnow
 
+# Velden die save_job mag overschrijven. Bewust ZONDER owner/lease_until: die worden
+# uitsluitend door claim()/verleng_lease() beheerd, zodat een stale Job-snapshot de lease
+# (en daarmee het eigenaarschap) nooit kan overschrijven.
 _STATE_FIELDS = frozenset({
     "state", "current_activiteit", "current_ronde", "waarschuwingen",
     "error", "provenance", "bwbId", "artikel", "lid", "review",
@@ -35,7 +39,27 @@ class MongoStore:
 
     # --- job (state-machine view) ---
 
-    async def save_job(self, job: Job) -> None:
+    @staticmethod
+    def _state_payload(job: Job) -> dict:
+        """Serialiseer de state-velden naar een BSON-vriendelijk $set-blok (pydantic → dict)."""
+        payload: dict = {}
+        for field in _STATE_FIELDS:
+            v = getattr(job, field, None)
+            if hasattr(v, "model_dump"):
+                v = v.model_dump(mode="python")
+            elif isinstance(v, list):
+                v = [x.model_dump(mode="python") if hasattr(x, "model_dump") else x for x in v]
+            payload[field] = v
+        payload["updated"] = _utcnow()
+        return payload
+
+    async def save_job(self, job: Job, *, owner: str | None = None) -> bool:
+        """Schrijf de state-machine-velden. Met `owner` is de write *fenced*: hij landt alleen als
+        die owner de job nog bezit (verloren lease → False, geen clobber). Return True = geschreven.
+
+        Gericht $set: uitsluitend state-machine-velden. Schrijft nooit rondes/rapport/naam/
+        omschrijving, zodat een (mogelijk verouderde) job-snapshot die artefacten niet kan wissen.
+        """
         project = await Project.find_one({"slug": job.id})
         if project is None:
             project = Project(slug=job.id)
@@ -43,12 +67,18 @@ class MongoStore:
                 setattr(project, field, getattr(job, field, None))
             project.touch()
             await project.insert()
-            return
-        # Gericht $set: uitsluitend state-machine-velden. Schrijft nooit rondes/rapport/naam/
-        # omschrijving, zodat een (mogelijk verouderde) job-snapshot die artefacten niet kan wissen.
-        updates = {field: getattr(job, field, None) for field in _STATE_FIELDS}
-        updates["updated"] = _utcnow()
-        await project.set(updates)
+            return True
+        if owner is None:
+            updates = {field: getattr(job, field, None) for field in _STATE_FIELDS}
+            updates["updated"] = _utcnow()
+            await project.set(updates)
+            return True
+        # Fenced: atomair en uitsluitend zolang wij de job bezitten.
+        coll = Project.get_motor_collection()
+        res = await coll.update_one(
+            {"slug": job.id, "owner": owner}, {"$set": self._state_payload(job)}
+        )
+        return res.matched_count == 1
 
     async def insert_job(self, job: Job) -> None:
         """Maak altijd een nieuw project-document aan (nooit bijwerken). Werpt
@@ -58,6 +88,78 @@ class MongoStore:
             setattr(project, field, getattr(job, field, None))
         project.touch()
         await project.insert()
+
+    async def claim(
+        self,
+        job_id: str,
+        van: set[JobState],
+        naar: JobState,
+        owner: str,
+        lease_s: int,
+        *,
+        vereist_verlopen_lease: bool = False,
+    ) -> Job | None:
+        """Atomaire state-transitie (Mongo CAS): zet de job van een van de `van`-states naar
+        `naar` en claim 'm voor `owner` met een verse lease. Slaagt de match → de aanroeper
+        bezit de job (return Job); geen match (andere state/andere worker bezig) → None.
+
+        Dit vervangt de in-process lock: alleen de transitie HOEFT atomair, de runt-state zelf
+        fungeert daarna als 'claimed'-marker zodat geen tweede worker dezelfde job oppakt.
+        """
+        now = _utcnow()
+        filter_: dict = {"slug": job_id, "state": {"$in": [s.value for s in van]}}
+        if vereist_verlopen_lease:
+            filter_["lease_until"] = {"$lt": now}
+        update = {"$set": {
+            "state": naar.value,
+            "owner": owner,
+            "lease_until": now + timedelta(seconds=lease_s),
+            "updated": now,
+        }}
+        coll = Project.get_motor_collection()
+        doc = await coll.find_one_and_update(filter_, update, return_document=True)
+        if doc is None:
+            return None
+        return Project.model_validate(doc).to_job()
+
+    async def verleng_lease(self, job_id: str, owner: str, lease_s: int) -> bool:
+        """Heartbeat: verleng de lease, maar UITSLUITEND zolang `owner` de job nog bezit en hij
+        in een runt-state staat. Geen match → de worker is zijn lease kwijt (return False)."""
+        now = _utcnow()
+        coll = Project.get_motor_collection()
+        res = await coll.update_one(
+            {"slug": job_id, "owner": owner, "state": {"$in": [s.value for s in RUNNING_STATES]}},
+            {"$set": {"lease_until": now + timedelta(seconds=lease_s)}},
+        )
+        # matched_count (niet modified_count): de vraag is of WIJ de job nog bezitten, niet of
+        # de lease-waarde feitelijk veranderde — dat is de fencing-semantiek.
+        return res.matched_count == 1
+
+    async def lijst_verlopen_running(self) -> list[str]:
+        """Ids van runt-jobs met een verlopen lease — input voor de reaper."""
+        now = _utcnow()
+        cursor = Project.find({
+            "state": {"$in": [s.value for s in RUNNING_STATES]},
+            "lease_until": {"$lt": now},
+        })
+        return [p.slug for p in await cursor.to_list()]
+
+    async def markeer_lease_loze_running(self) -> int:
+        """Migratie-/herstelvangnet: geef runt-jobs zónder lease (pre-upgrade of na een crash waar
+        het lease-veld nooit gezet werd) een verlopen lease, zodat de reaper ze in de volgende ronde
+        oppakt. Jobs met een nog-geldige lease zijn van een levende worker en blijven ongemoeid:
+        het `$lt: now`-filter van de reaper raakt ze niet, maar een ontbrekend veld matcht dat filter
+        ook niet → zonder deze markering zouden ze eeuwig hangen."""
+        now = _utcnow()
+        coll = Project.get_motor_collection()
+        res = await coll.update_many(
+            {
+                "state": {"$in": [s.value for s in RUNNING_STATES]},
+                "$or": [{"lease_until": None}, {"lease_until": {"$exists": False}}],
+            },
+            {"$set": {"lease_until": now - timedelta(seconds=1)}},
+        )
+        return res.modified_count
 
     async def load_job(self, job_id: str) -> Job | None:
         p = await Project.find_one({"slug": job_id})
@@ -157,5 +259,4 @@ class MongoStore:
         if p is None:
             return False
         await p.delete()
-        discard_lock(job_id)  # voorkom onbegrensde groei van de lock-registry
         return True
