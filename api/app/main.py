@@ -37,6 +37,9 @@ async def _reaper_loop(interval_s: int) -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = get_settings()
+    # Globale LLM-concurrency-rem instellen (kostenbeheersing tegen zelf-veroorzaakte rate-limits).
+    from .llm import throttle
+    throttle.configure(settings.llm_max_concurrency)
     motor_client = AsyncIOMotorClient(settings.mongodb_url)
     await init_beanie(
         database=motor_client[settings.mongodb_db],

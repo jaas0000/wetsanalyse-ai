@@ -345,6 +345,7 @@ class WetsanalyseEngine:
             maak,
             max_retries=self.s.transient_max_retries,
             backoff=self.s.transient_backoff_s,
+            max_backoff=self.s.transient_max_backoff_s,
         )
 
     async def _basis(self, job: Job) -> dict:

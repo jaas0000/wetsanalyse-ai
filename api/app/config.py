@@ -105,8 +105,16 @@ class Settings:
         self.max_rondes = int(os.environ.get("WETSANALYSE_MAX_RONDES", "6"))
         self.max_autocorrectie = int(os.environ.get("WETSANALYSE_MAX_AUTOCORRECTIE", "1"))
         # Bounded retry op transiënte LLM/MCP-fouten (429/5xx/timeout) vóór terminale `fout`.
-        self.transient_max_retries = int(os.environ.get("WETSANALYSE_TRANSIENT_MAX_RETRIES", "2"))
+        self.transient_max_retries = int(os.environ.get("WETSANALYSE_TRANSIENT_MAX_RETRIES", "5"))
         self.transient_backoff_s = float(os.environ.get("WETSANALYSE_TRANSIENT_BACKOFF", "0.5"))
+        # Plafond op de exponentiële backoff (en op een gehonoreerde Retry-After) zodat één 429
+        # de job niet eindeloos laat hangen. Jitter spreidt gelijktijdige retries (geen thundering herd).
+        self.transient_max_backoff_s = float(os.environ.get("WETSANALYSE_TRANSIENT_MAX_BACKOFF", "30"))
+
+        # --- LLM-concurrency (kostenrem tegen zelf-veroorzaakte rate-limits) ---
+        # Globaal plafond op het aantal GELIJKTIJDIGE LLM-calls over alle analyses heen (per proces).
+        # 0 = uit. Voorkomt dat veel gelijktijdige analyses samen tegen de provider-quota knallen.
+        self.llm_max_concurrency = int(os.environ.get("WETSANALYSE_LLM_MAX_CONCURRENCY", "4"))
 
         # --- Concurrency (Mongo state-CAS, horizontaal schalen) ---
         # Een claim op een job is geldig voor lease_s; de owner verlengt 'm via een heartbeat.

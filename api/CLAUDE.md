@@ -35,10 +35,12 @@ disk-interoperabiliteit met de lokale skill staat op de roadmap, niet in de huid
   letterlijk in leden-tekst na normalisatie, `vindplaats`/`bronreferentie` verplicht).
 - `ratelimit.py` — in-process per-client rate limit (dependency) + `QuotaExceeded` (beleidsgrenzen).
 - `llm/` — `LLMClient`-protocol + LiteLLM-implementatie (provider = config; output-strategie + parse).
+  `throttle.py` — proces-globale **concurrency-rem** (semafoor) op gelijktijdige LLM-calls
+  (`WETSANALYSE_LLM_MAX_CONCURRENCY`), tegen zelf-veroorzaakte rate-limits; ingesteld in de lifespan.
 - `engine/` — `prompts.py` (references verbatim + canonieke JAS-lijst uit validation), `steps.py`
   (LLM-stap + merge met brongetrouwe MCP-basis), `retry.py` (bounded backoff op transiënte
-  LLM/MCP-fouten), `orchestrator.py` (state machine, auto-correctie, 6-rondencap,
-  startup-reconciliatie, retry, quota/budget-checks).
+  LLM/MCP-fouten; honoreert **`Retry-After`** bij een 429, met plafond + jitter), `orchestrator.py`
+  (state machine, auto-correctie, 6-rondencap, startup-reconciliatie, retry, quota/budget-checks).
 - `routers/projects.py` + `main.py` — de kanonieke resource onder **`/v1/projects`** (client-gescopet,
   `response_model`s, paginatie, SSE), `/health` (liveness), `/ready` (alleen booleans).
 - `wet_catalog.py` — Beanie `WetCatalogus`-document (BWB-id + leesbare naam). `wetten.py` — service
@@ -224,11 +226,14 @@ Symptoom → oorzaak:
 
 Knoppen via env (0 = uit): `WETSANALYSE_RATE_LIMIT_MAX`/`_WINDOW` (per-client request-rate op de
 muterende endpoints → 429), `WETSANALYSE_MAX_ACTIVE_JOBS` (max gelijktijdig lopende analyses per
-client → 429), `WETSANALYSE_LLM_TOKEN_BUDGET` (token-plafond per analyse → job naar `fout`, `FoutKlasse.quota`).
-Let op bij >1 replica: de **rate limit** is in-process (per replica → de effectieve grens schaalt
-mee met het aantal replica's); **max-active-jobs** en het token-budget zijn DB-/`provenance`-
-gebaseerd en dus accuraat over replica's heen. Multi-tenant isolatie is afgedwongen: elke analyse is
-client-gescopet (404 op andermans id).
+client → 429), `WETSANALYSE_LLM_TOKEN_BUDGET` (token-plafond per analyse → job naar `fout`,
+`FoutKlasse.quota`), `WETSANALYSE_LLM_MAX_CONCURRENCY` (globaal plafond op gelijktijdige LLM-calls,
+default 4 — de echte rem tegen provider-rate-limits). Een 429 wordt bovendien geretryed met respect
+voor de `Retry-After`-header (`WETSANALYSE_TRANSIENT_MAX_RETRIES`/`_BACKOFF`/`_MAX_BACKOFF`). Let op
+bij >1 replica: de **rate limit** én de **LLM-concurrency-rem** zijn in-process (per replica → de
+effectieve grens schaalt mee met het aantal replica's); **max-active-jobs** en het token-budget zijn
+DB-/`provenance`-gebaseerd en dus accuraat over replica's heen. Multi-tenant isolatie is afgedwongen:
+elke analyse is client-gescopet (404 op andermans id).
 
 ## Roadmap (nog niet gebouwd)
 

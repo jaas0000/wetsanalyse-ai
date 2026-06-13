@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 
 from .base import LlmConfig, LLMError, LLMResult, parse_json_strict
+from .throttle import llm_slot
 
 _REPAREER = (
     "Je vorige antwoord was geen geldige JSON. Geef UITSLUITEND geldig JSON terug dat exact "
@@ -59,22 +60,25 @@ class LiteLLMClient:
             {"role": "user", "content": user + schema_hint},
         ]
 
-        resp = await litellm.acompletion(model=self._model_ref(), messages=messages, **self._kwargs())
-        tekst = resp.choices[0].message.content or ""
-        usage = getattr(resp, "usage", None)
-
-        try:
-            data = parse_json_strict(tekst)
-        except json.JSONDecodeError:
-            # Eén gerichte repareer-retry.
-            messages.append({"role": "assistant", "content": tekst})
-            messages.append({"role": "user", "content": _REPAREER})
+        # Eén completion (incl. de evt. repareer-retry) telt als één concurrency-slot: zo houdt de
+        # globale rem het aantal gelijktijdige LLM-calls onder het plafond, ongeacht de repair.
+        async with llm_slot():
             resp = await litellm.acompletion(model=self._model_ref(), messages=messages, **self._kwargs())
             tekst = resp.choices[0].message.content or ""
+            usage = getattr(resp, "usage", None)
+
             try:
                 data = parse_json_strict(tekst)
-            except json.JSONDecodeError as e:
-                raise LLMError(f"Geen geldige JSON na reparatie: {e}") from e
+            except json.JSONDecodeError:
+                # Eén gerichte repareer-retry.
+                messages.append({"role": "assistant", "content": tekst})
+                messages.append({"role": "user", "content": _REPAREER})
+                resp = await litellm.acompletion(model=self._model_ref(), messages=messages, **self._kwargs())
+                tekst = resp.choices[0].message.content or ""
+                try:
+                    data = parse_json_strict(tekst)
+                except json.JSONDecodeError as e:
+                    raise LLMError(f"Geen geldige JSON na reparatie: {e}") from e
 
         return LLMResult(
             data=data,
