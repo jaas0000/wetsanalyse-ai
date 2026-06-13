@@ -111,7 +111,7 @@ export function RapportView({ rapport, projectId }: { rapport: Rapport; projectI
                 <div className="space-y-2">
                   {items.map((m) => (
                     <Card key={m.id} className="p-4">
-                      <p className="font-display text-[15px] leading-relaxed text-ink">
+                      <p className="break-words font-display text-[15px] leading-relaxed text-ink">
                         “{m.formulering}”
                       </p>
                       <div className="mt-2 space-y-1">
@@ -144,7 +144,7 @@ export function RapportView({ rapport, projectId }: { rapport: Rapport; projectI
             {rapport.begrippen.map((b) => (
               <Card key={b.id} className="p-4">
                 <div className="flex items-start justify-between gap-2">
-                  <p className="font-display text-base font-medium text-ink">{b.naam}</p>
+                  <p className="min-w-0 break-words font-display text-base font-medium text-ink">{b.naam}</p>
                   {b.klasse && <JasBadge klasse={b.klasse} />}
                 </div>
                 <div className="mt-2 space-y-1">
@@ -167,7 +167,7 @@ export function RapportView({ rapport, projectId }: { rapport: Rapport; projectI
             {rapport.afleidingsregels.map((r) => (
               <Card key={r.id} className="p-4">
                 <div className="flex items-start justify-between gap-2">
-                  <p className="font-display text-base font-medium text-ink">{r.naam}</p>
+                  <p className="min-w-0 break-words font-display text-base font-medium text-ink">{r.naam}</p>
                   {r.type && <Tag>{r.type}</Tag>}
                 </div>
                 <div className="mt-2 grid grid-cols-1 gap-1 sm:grid-cols-2">

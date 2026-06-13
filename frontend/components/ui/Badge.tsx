@@ -3,7 +3,7 @@ import { STATE_LABEL, STATE_STYLE } from "@/lib/states";
 import { jasStyle } from "@/lib/jas";
 
 const base =
-  "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium whitespace-nowrap";
+  "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium whitespace-nowrap";
 
 export function StateBadge({ state }: { state: JobState }) {
   return (
@@ -20,7 +20,7 @@ export function JasBadge({ klasse }: { klasse: string }) {
 
 export function Tag({ children }: { children: React.ReactNode }) {
   return (
-    <span className="inline-flex items-center rounded-md border border-line bg-paper px-2 py-0.5 font-mono text-xs text-muted">
+    <span className="inline-flex shrink-0 items-center rounded-md border border-line bg-paper px-2 py-0.5 font-mono text-xs text-muted">
       {children}
     </span>
   );
