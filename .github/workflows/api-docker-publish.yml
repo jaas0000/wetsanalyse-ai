@@ -13,9 +13,11 @@ on:
       - "api/**"
       # API-documentatie (*.md) triggert géén build/deploy.
       - "!api/**/*.md"
-      # De skill-references/scripts worden in de image gebakken → wél rebuilden (incl. .md).
+      # De skill-references/scripts/assets worden in de image gebakken → wél rebuilden (incl. .md).
+      # assets/ levert de viewer-HTML (rapport.html/review.html) die de server serveert.
       - ".claude/skills/wetsanalyse/references/**"
       - ".claude/skills/wetsanalyse/scripts/**"
+      - ".claude/skills/wetsanalyse/assets/**"
       - ".github/workflows/api-docker-publish.yml"
   workflow_dispatch:
 
