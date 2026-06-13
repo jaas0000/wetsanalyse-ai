@@ -1,13 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { z } from "zod";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Field, Input, Textarea } from "@/components/ui/Field";
-import { createProject, isApiError } from "@/lib/api";
-import type { StartRequest } from "@/lib/types";
+import { createProject, isApiError, listModelProfiles } from "@/lib/api";
+import type { ProfileChoice, StartRequest } from "@/lib/types";
+
+const selectClass =
+  "w-full rounded-md border border-line bg-paper px-3 py-2 text-sm text-ink focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20";
 
 const schema = z.object({
   bwbId: z.string().trim().max(64).optional(),
@@ -26,6 +29,23 @@ export function ProjectForm() {
   const [bezig, setBezig] = useState(false);
   const [veldFout, setVeldFout] = useState<Record<string, string>>({});
   const [fout, setFout] = useState<string | null>(null);
+  const [profielen, setProfielen] = useState<ProfileChoice[] | null>(null);
+  const [profiel, setProfiel] = useState("");
+
+  // Live ophalen zodat profielen die in de draaiende app worden toegevoegd/verwijderd direct meekomen.
+  useEffect(() => {
+    let levend = true;
+    listModelProfiles()
+      .then((ps) => {
+        if (!levend) return;
+        setProfielen(ps);
+        setProfiel((ps.find((p) => p.is_default) ?? ps[0])?.name ?? "");
+      })
+      .catch(() => levend && setProfielen([]));
+    return () => {
+      levend = false;
+    };
+  }, []);
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -40,7 +60,7 @@ export function ProjectForm() {
       omschrijving: String(fd.get("omschrijving") ?? ""),
       analysefocus: String(fd.get("analysefocus") ?? ""),
       review,
-      model_profile: String(fd.get("model_profile") ?? ""),
+      model_profile: profiel,
     };
     const parsed = schema.safeParse(raw);
     if (!parsed.success) {
@@ -83,8 +103,35 @@ export function ProjectForm() {
           <Field label="BWB-id" hint="bv. BWBR0004770" error={veldFout.bwbId}>
             <Input name="bwbId" placeholder="BWBR0004770" autoComplete="off" />
           </Field>
-          <Field label="Model-profiel" hint="optioneel" error={veldFout.model_profile}>
-            <Input name="model_profile" placeholder="azure-sonnet" autoComplete="off" />
+          <Field
+            label="Model-profiel"
+            hint={profielen === null ? "laden…" : "beheer via /beheer"}
+            error={veldFout.model_profile}
+          >
+            {profielen && profielen.length > 0 ? (
+              <select
+                name="model_profile"
+                value={profiel}
+                onChange={(e) => setProfiel(e.target.value)}
+                className={selectClass}
+              >
+                {profielen.map((p) => (
+                  <option key={p.name} value={p.name}>
+                    {p.name}
+                    {p.is_default ? " (default)" : ""}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              // Fallback: geen profielen opgehaald → vrije invoer (API valt terug op de default).
+              <Input
+                name="model_profile"
+                value={profiel}
+                onChange={(e) => setProfiel(e.target.value)}
+                placeholder="azure-sonnet"
+                autoComplete="off"
+              />
+            )}
           </Field>
           <Field label="Artikel" required error={veldFout.artikel}>
             <Input name="artikel" placeholder="9" autoComplete="off" />

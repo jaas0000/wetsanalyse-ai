@@ -16,7 +16,7 @@ from .config import get_settings
 from .deps import get_engine, get_store
 from .llm_profile import LlmProfile
 from .project import Project
-from .routers import admin, projects
+from .routers import admin, catalog, projects
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +61,7 @@ app.add_middleware(
 # Eén kanonieke resource onder een versie-prefix (/v1/projects). De eerdere losse
 # /analyses-router is geconsolideerd; clients migreren naar /v1/projects.
 app.include_router(projects.router, prefix="/v1")
+app.include_router(catalog.router, prefix="/v1")
 app.include_router(admin.router, prefix="/v1")
 
 

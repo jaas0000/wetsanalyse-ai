@@ -12,6 +12,7 @@ import type {
   JobSummary,
   LlmProfileIn,
   LlmProfileOut,
+  ProfileChoice,
   Rapport,
   StartRequest,
   TestResult,
@@ -85,6 +86,12 @@ export async function getRonde(id: string, act: "2" | "3", n: number): Promise<A
 
 export function isApiError(e: unknown): e is ApiError {
   return typeof e === "object" && e !== null && "status" in e && "detail" in e;
+}
+
+/** Keuzelijst modelprofielen (niet-admin) — live opgehaald zodat wijzigingen direct meekomen. */
+export async function listModelProfiles(): Promise<ProfileChoice[]> {
+  const res = await fetch("/api/profiles", { cache: "no-store" });
+  return json<ProfileChoice[]>(res);
 }
 
 // --- Admin: LLM-modelprofielen + verbruik -----------------------------------

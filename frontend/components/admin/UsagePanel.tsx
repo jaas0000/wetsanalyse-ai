@@ -55,7 +55,8 @@ export function UsagePanel() {
 
       {rapport && (
         <Card className="overflow-hidden">
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[34rem] text-sm">
             <thead>
               <tr className="border-b border-line bg-paper/50 text-left text-xs text-faint">
                 <th className="px-4 py-2 font-medium">{GROUPS.find((g) => g.key === groupBy)?.label}</th>
@@ -93,6 +94,7 @@ export function UsagePanel() {
               </tfoot>
             )}
           </table>
+          </div>
         </Card>
       )}
     </Section>

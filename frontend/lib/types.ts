@@ -209,6 +209,13 @@ export interface Rapport {
   aandachtspunten: string;
 }
 
+// --- Catalogus (niet-admin): keuzelijst modelprofielen ----------------------
+
+export interface ProfileChoice {
+  name: string;
+  is_default: boolean;
+}
+
 // --- Admin: LLM-modelprofielen + verbruik -----------------------------------
 
 export interface LlmProfileIn {
