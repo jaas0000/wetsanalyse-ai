@@ -27,7 +27,7 @@ inhoudelijke `references/`/`scripts/`. De samenwerkende delen:
 5. **`frontend/`** — Next.js-webapp (BFF) bovenop de API: analyses aanmaken/reviewen en de
    modelprofielen, de **wet-catalogus** (BWB-id + naam, selecteerbaar via dropdown bij een nieuwe
    analyse) en het token-verbruik beheren via het **`/beheer`-scherm** (achter een apart
-   admin-token). Eigen `README.md`.
+   admin-token). Heeft een eigen `CLAUDE.md` + `README.md` — lees die bij werk *in* de frontend.
 
 De skill is geen vervanger van de analist: de kern is interpretatiekeuzes **expliciet** maken,
 inclusief twijfel en aannames. Brongetrouwheid is niet onderhandelbaar — werk alleen met
