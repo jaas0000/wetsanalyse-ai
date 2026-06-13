@@ -35,11 +35,32 @@ GELDIGE_JAS_KLASSEN: set[str] = _validate.GELDIGE_JAS_KLASSEN  # canonieke bron 
 GELDIGE_REGELTYPEN: set[str] = _validate.GELDIGE_REGELTYPEN
 
 
+# Concerns die in de API door de harde, genormaliseerde brongetrouwheid_check worden gedekt.
+# De zachte skill-checks rapporteren ze óók (rauwe substring-match, zonder normalisatie), wat tot
+# dubbele en soms vals-positieve waarschuwingen leidt. We filteren ze hier zodat per concern nog
+# precies één — de harde — melding overblijft. De skill-scripts zelf blijven ongemoeid: in het
+# skill-spoor (zonder harde check) zijn deze waarschuwingen de enige citaat/vindplaats-controle.
+_OVERLAPT_MET_HARD = (
+    "lijkt geen letterlijk citaat",        # citaat (act 2)
+    "Veld 'vindplaats' ontbreekt",         # vindplaats (act 2)
+    "geen 'vindplaats'",                   # vindplaats (act 3: begrip/afleidingsregel)
+)
+
+
 def schema_check(data: dict, activiteit: str) -> tuple[list[str], list[str]]:
-    """Zachte schema/volledigheidscheck — delegeert naar de skill-functies."""
+    """Zachte schema/volledigheidscheck — delegeert naar de skill-functies.
+
+    Waarschuwingen die de harde brongetrouwheid_check al dekt (citaat, vindplaats) worden
+    uitgefilterd om dubbele meldingen in de review te voorkomen.
+    """
     if activiteit == "2":
-        return _validate.check_activiteit_2(data)
-    return _validate.check_activiteit_3(data)
+        fouten, waarschuwingen = _validate.check_activiteit_2(data)
+    else:
+        fouten, waarschuwingen = _validate.check_activiteit_3(data)
+    waarschuwingen = [
+        w for w in waarschuwingen if not any(m in w for m in _OVERLAPT_MET_HARD)
+    ]
+    return fouten, waarschuwingen
 
 
 # --- harde brongetrouwheid-invariant -----------------------------------------

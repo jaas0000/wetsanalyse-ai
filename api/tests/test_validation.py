@@ -40,3 +40,31 @@ def test_brongetrouwheid_bronreferentie_en_vindplaats_verplicht():
 
 def test_normaliseer():
     assert normaliseer("  A’B  \n c ") == "a'b c"
+
+
+def test_schema_check_filtert_overlap_met_hard():
+    """De zachte citaat/vindplaats-waarschuwingen worden onderdrukt; de harde check dekt ze.
+
+    Zo verschijnt per concern nog precies één melding in de review i.p.v. twee bijna-gelijke.
+    """
+    data = {
+        "bronreferentie": "jci:x",
+        "leden": [{"lid": "1", "tekst": "De belastingplichtige doet aangifte."}],
+        "markeringen": [{"id": "m1", "klasse": "Rechtssubject",
+                         "formulering": "iets dat er niet staat"}],  # geen citaat + geen vindplaats
+    }
+    _, waarschuwingen = schema_check(data, "2")
+    assert not any("letterlijk citaat" in w for w in waarschuwingen)
+    assert not any("vindplaats" in w for w in waarschuwingen)
+
+    # De harde check blijft de schendingen wél melden (precies één per concern).
+    schend = brongetrouwheid_check(data, "2")
+    assert any("letterlijk citaat" in s for s in schend)
+    assert any("vindplaats" in s for s in schend)
+
+
+def test_schema_check_act3_filtert_vindplaats():
+    data = {"bronreferentie": "jci:x",
+            "begrippen": [{"id": "b1", "naam": "x", "klasse": "Rechtssubject", "definitie": "y"}]}
+    _, waarschuwingen = schema_check(data, "3")
+    assert not any("vindplaats" in w for w in waarschuwingen)
