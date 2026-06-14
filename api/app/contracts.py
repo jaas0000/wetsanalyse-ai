@@ -115,7 +115,7 @@ class Feedback(BaseModel):
 class StartRequest(BaseModel):
     bwbId: str | None = Field(default=None, max_length=64)
     wet: str | None = Field(default=None, max_length=256)
-    artikel: str = Field(max_length=32)
+    artikel: str = Field(min_length=1, max_length=32)
     lid: str | None = Field(default=None, max_length=16)
     naam: str = Field(default="", max_length=200)
     omschrijving: str = Field(default="", max_length=2000)

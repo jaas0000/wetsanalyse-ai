@@ -48,7 +48,7 @@ export async function proxy(path: string, init: ProxyInit = {}): Promise<Respons
 }
 
 /** Vertaal een upstream Location (/v1/projects/{id}) naar de eigen BFF-route. */
-function rewriteLocation(loc: string): string {
+export function rewriteLocation(loc: string): string {
   return loc.replace(/^.*\/v1\/projects\//, "/api/projects/");
 }
 

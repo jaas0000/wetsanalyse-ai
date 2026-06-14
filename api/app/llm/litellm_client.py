@@ -41,6 +41,8 @@ class LiteLLMClient:
             kw["api_key"] = self.c.api_key
         if self.c.api_version:  # alleen Azure OpenAI
             kw["api_version"] = self.c.api_version
+        if self.c.timeout:  # 0 = geen expliciete timeout (laat de provider-default staan)
+            kw["timeout"] = self.c.timeout
         # json_object-strategie: laat de provider geldig JSON afdwingen waar dat kan.
         if self.c.output_strategy == "json_object":
             kw["response_format"] = {"type": "json_object"}

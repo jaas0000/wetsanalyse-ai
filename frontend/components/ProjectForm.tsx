@@ -2,26 +2,15 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { z } from "zod";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Field, Input, Textarea } from "@/components/ui/Field";
 import { createProject, isApiError, listModelProfiles, listWetten } from "@/lib/api";
-import type { ProfileChoice, StartRequest, WetChoice } from "@/lib/types";
+import { buildStartRequest, projectSchema } from "@/lib/projectForm";
+import type { ProfileChoice, WetChoice } from "@/lib/types";
 
 const selectClass =
   "w-full rounded-md border border-line bg-paper px-3 py-2 text-sm text-ink focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20";
-
-const schema = z.object({
-  bwbId: z.string().trim().max(64).optional(),
-  artikel: z.string().trim().min(1, "Artikel is verplicht").max(32),
-  lid: z.string().trim().max(16).optional(),
-  naam: z.string().trim().max(200).optional(),
-  omschrijving: z.string().trim().max(2000).optional(),
-  analysefocus: z.string().trim().max(2000).optional(),
-  review: z.boolean(),
-  model_profile: z.string().trim().max(64).optional(),
-});
 
 export function ProjectForm() {
   const router = useRouter();
@@ -67,7 +56,7 @@ export function ProjectForm() {
       review,
       model_profile: profiel,
     };
-    const parsed = schema.safeParse(raw);
+    const parsed = projectSchema.safeParse(raw);
     if (!parsed.success) {
       const errs: Record<string, string> = {};
       for (const issue of parsed.error.issues) errs[String(issue.path[0])] = issue.message;
@@ -75,15 +64,7 @@ export function ProjectForm() {
       return;
     }
 
-    // Lege strings → weglaten zodat de API z'n defaults gebruikt.
-    const d = parsed.data;
-    const body: StartRequest = { artikel: d.artikel, review: d.review };
-    if (d.bwbId) body.bwbId = d.bwbId;
-    if (d.lid) body.lid = d.lid;
-    if (d.naam) body.naam = d.naam;
-    if (d.omschrijving) body.omschrijving = d.omschrijving;
-    if (d.analysefocus) body.analysefocus = d.analysefocus;
-    if (d.model_profile) body.model_profile = d.model_profile;
+    const body = buildStartRequest(parsed.data);
 
     setBezig(true);
     try {

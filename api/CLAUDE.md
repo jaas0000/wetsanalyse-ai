@@ -228,7 +228,9 @@ Knoppen via env (0 = uit): `WETSANALYSE_RATE_LIMIT_MAX`/`_WINDOW` (per-client re
 muterende endpoints → 429), `WETSANALYSE_MAX_ACTIVE_JOBS` (max gelijktijdig lopende analyses per
 client → 429), `WETSANALYSE_LLM_TOKEN_BUDGET` (token-plafond per analyse → job naar `fout`,
 `FoutKlasse.quota`), `WETSANALYSE_LLM_MAX_CONCURRENCY` (globaal plafond op gelijktijdige LLM-calls,
-default 4 — de echte rem tegen provider-rate-limits). Een 429 wordt bovendien geretryed met respect
+default 4 — de echte rem tegen provider-rate-limits), `WETSANALYSE_LLM_TIMEOUT_S` (harde wandklok-
+timeout per LLM-call, default 120; 0 = uit — voorkomt dat een hangende provider-verbinding een
+worker langer vasthoudt dan de lease). Een 429 wordt bovendien geretryed met respect
 voor de `Retry-After`-header (`WETSANALYSE_TRANSIENT_MAX_RETRIES`/`_BACKOFF`/`_MAX_BACKOFF`). Let op
 bij >1 replica: de **rate limit** én de **LLM-concurrency-rem** zijn in-process (per replica → de
 effectieve grens schaalt mee met het aantal replica's); **max-active-jobs** en het token-budget zijn

@@ -194,6 +194,39 @@ async def test_admin_crud_en_key_nooit_terug(admin_client):
     assert (await admin_client.delete("/v1/admin/profiles/snel", headers=_H)).status_code == 204
 
 
+async def test_default_blijft_uniek_na_meerdere_wissels(admin_client):
+    """`_clear_default` zet in één bulk-update alle andere defaults uit: na herhaald wisselen
+    blijft er exact één default over."""
+    for naam, model in [("a", "m-a"), ("b", "m-b"), ("c", "m-c")]:
+        await admin_client.put(f"/v1/admin/profiles/{naam}", headers=_H, json={"model": model})
+    await admin_client.post("/v1/admin/profiles/b/default", headers=_H)
+    await admin_client.post("/v1/admin/profiles/c/default", headers=_H)
+    lijst = (await admin_client.get("/v1/admin/profiles", headers=_H)).json()
+    assert [p["name"] for p in lijst if p["is_default"]] == ["c"]
+
+
+async def test_test_route_redigeert_api_key(admin_client, monkeypatch):
+    """De verbindingstest toont de fout, maar echoot de geconfigureerde API-key niet terug."""
+    await admin_client.put(
+        "/v1/admin/profiles/snel", headers=_H, json={"model": "gpt-x", "api_key": "sk-supersecret-123"}
+    )
+
+    class BoomClient:
+        def __init__(self, *a, **kw):
+            pass
+
+        async def complete(self, *a, **kw):
+            raise RuntimeError("auth geweigerd met key sk-supersecret-123")
+
+    monkeypatch.setattr("app.routers.admin.build_llm_client", lambda cfg: BoomClient())
+    r = await admin_client.post("/v1/admin/profiles/snel/test", headers=_H)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["ok"] is False
+    assert "sk-supersecret-123" not in r.text
+    assert "***" in body["detail"]
+
+
 async def test_catalog_profiles_zonder_admin(admin_client):
     # /v1/profiles is niet-admin (geen admin-token) en geeft alleen naam + default.
     await admin_client.put("/v1/admin/profiles/snel", headers=_H, json={"model": "gpt-x"})
