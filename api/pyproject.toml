@@ -16,7 +16,7 @@ dependencies = [
 [project.optional-dependencies]
 # LiteLLM (LLM-adapter) en mcp (MCP-client) zijn alleen nodig voor de engine.
 # Beide worden lazy geïmporteerd, zodat de tests zonder deze (zwaardere) dependencies draaien.
-llm = ["litellm>=1.50", "mcp>=1.2"]
+llm = ["litellm>=1.89.0", "mcp>=1.2"]
 dev = [
     "pytest>=9.1.0",
     "pytest-asyncio>=0.23",
