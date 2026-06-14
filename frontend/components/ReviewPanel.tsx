@@ -233,30 +233,33 @@ export function ReviewPanel({
         </div>
       )}
 
-      <div className="mt-5 flex items-center justify-between gap-3 border-t border-line pt-4">
+      <div className="mt-5 flex flex-col-reverse gap-3 border-t border-line pt-4 sm:flex-row sm:items-center sm:justify-between">
         {onDelete ? (
           <Button
             variant="danger"
             onClick={() => onDelete()}
             disabled={bezig !== null || verwijderBezig}
             title="Verwijder deze analyse definitief"
+            className="w-full sm:w-auto"
           >
             {verwijderBezig ? "Verwijderen…" : "Analyse verwijderen"}
           </Button>
         ) : (
           <span />
         )}
-        <div className="flex items-center gap-3">
+        <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center">
           <Button
             variant="secondary"
             onClick={() => verstuur("wijzigingen")}
             disabled={bezig !== null || verwijderBezig || !items}
+            className="w-full sm:w-auto"
           >
             {bezig === "wijzigingen" ? "Versturen…" : "Wijzigen"}
           </Button>
           <Button
             onClick={() => verstuur("akkoord")}
             disabled={bezig !== null || verwijderBezig || !items}
+            className="w-full sm:w-auto"
           >
             {bezig === "akkoord" ? "Versturen…" : "Akkoord"}
           </Button>
