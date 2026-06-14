@@ -3,6 +3,7 @@
 import { Card, Section } from "@/components/ui/Card";
 import { JasBadge, Tag } from "@/components/ui/Badge";
 import { LinkButton } from "@/components/ui/Button";
+import { LedenLijst } from "@/components/LedenLijst";
 import { pathSegment } from "@/lib/url";
 import type { Markering, Rapport } from "@/lib/types";
 
@@ -72,26 +73,7 @@ export function RapportView({ rapport, projectId }: { rapport: Rapport; projectI
       {/* Leden */}
       {rapport.leden?.length > 0 && (
         <Section title="Wettekst per lid" count={rapport.leden.length}>
-          <div className="space-y-3">
-            {rapport.leden.map((l) => (
-              <Card key={l.lid} className="p-4">
-                <div className="flex items-baseline justify-between">
-                  <span className="font-mono text-xs text-faint">lid {l.lid}</span>
-                  {l.bronreferentie && (
-                    <a
-                      href={l.bronreferentie}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="font-mono text-xs text-accent hover:underline"
-                    >
-                      bron ↗
-                    </a>
-                  )}
-                </div>
-                <p className="mt-1 font-display text-[15px] leading-relaxed text-ink">{l.tekst}</p>
-              </Card>
-            ))}
-          </div>
+          <LedenLijst leden={rapport.leden} />
         </Section>
       )}
 
