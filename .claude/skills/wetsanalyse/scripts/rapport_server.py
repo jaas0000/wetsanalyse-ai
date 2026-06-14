@@ -104,6 +104,32 @@ def rapport_naar_md(d: dict) -> str:
         "",
     ]
 
+    # §2b Verwijzingen
+    verwijzingen = d.get("verwijzingen", [])
+    if verwijzingen:
+        regels += [
+            "## 2b. Verwijzingen",
+            "",
+            "> Uitgaande verwijzingen van de bepaling, naar functie en scope-status.",
+            "",
+            "| # | Functie | Doel | Bron | Soort | Status | Betekenis |",
+            "| --- | --- | --- | --- | --- | --- | --- |",
+        ]
+        for v in verwijzingen:
+            doel = v.get("doel") or {}
+            doel_tekst = doel.get("label") or doel.get("target") or ""
+            if doel.get("target"):
+                doel_tekst = f"[{doel_tekst}](https://wetten.overheid.nl/{doel['target']})"
+            soort = v.get("soort", "")
+            if v.get("extern"):
+                soort = (soort + " · extern").strip(" ·")
+            regels.append(
+                f"| {cel(v.get('id'))} | {cel(v.get('functie'))} | {cel(doel_tekst)} | "
+                f"{cel(v.get('bron_lid'))} | {cel(soort)} | {cel(v.get('status'))} | "
+                f"{cel(v.get('betekenis'))} |"
+            )
+        regels.append("")
+
     # §3 Begrippen
     regels += [
         "## 3. Activiteit 3 — Betekenis",

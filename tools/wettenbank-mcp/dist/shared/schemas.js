@@ -147,6 +147,14 @@ export const ZoektermOutputSchema = z.object({
         formaat: z.enum(["plain", "markdown"]).optional(),
     })),
 });
+// Eén uitgaande verwijzing (intref/extref) bij een lid — zie VerwijzingRef in bwb-parser.
+export const VerwijzingSchema = z.object({
+    soort: z.enum(["intref", "extref"]),
+    target: z.string(),
+    label: z.string(),
+    bwbIdDoel: z.string().optional(),
+    extern: z.boolean(),
+});
 export const ArtikelOutputSchema = z.object({
     formaat: z.enum(["plain", "markdown"]),
     citeertitel: z.string(),
@@ -164,6 +172,7 @@ export const ArtikelOutputSchema = z.object({
         lid: z.string(),
         tekst: z.string(),
         bronreferentie: z.string(), // lid- en versiespecifieke jci-uri
+        verwijzingen: z.array(VerwijzingSchema).optional(), // uitgaande intref/extref
     })),
     bronreferentie: z.string(),
     waarschuwing: z.string().nullable().optional(),

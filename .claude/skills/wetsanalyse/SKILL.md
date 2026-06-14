@@ -81,6 +81,31 @@ betekenis van de bepaling die je analyseert).
 Als de MCP niet beschikbaar is, zeg dat eerlijk en werk verder met door de gebruiker
 aangeleverde tekst, met dezelfde brongetrouwheid.
 
+## Stap 1b — Verwijzingen inventariseren en volgen
+
+Wetsformuleringen verwijzen naar andere bepalingen die de betekenis bepalen: het
+definitieartikel, andere leden ("in afwijking van het eerste lid"), schakelbepalingen ("van
+overeenkomstige toepassing") en gedelegeerde regelingen. Inventariseer die uitgaande
+verwijzingen vóór je classificeert, volg de relevante volgens beleid, en leg ze vast als
+`verwijzingen`-array in `analyse.json`.
+
+Bron: `wettenbank_artikel` geeft per lid een `verwijzingen`-array (getagde intref/extref,
+óók als inline-link in de tekst); natuurlijke-taalverwijzingen ("het eerste lid") herken je
+zelf en noteer je met `soort: "natuurlijk"`. Classificeer elke verwijzing naar **functie**
+(definitie / schakel / delegatie / intra-artikel / informatief) en bepaal het **scope-besluit**
+volgens de beleidstabel, met een **diepte-cap van 1** en een **relevantie-gate** (volg alleen
+op als het de focus-bepaling betekenis geeft). Delegaties zijn *bounded*: identificeren +
+betekenis verwerken, volledige sub-analyse signaleren als validatiepunt.
+
+`verwijzingen` is een **aparte as** náást de markeringen — uitgaande pointers, geen tweede
+registratie van JAS-klassen. Begrippen/regels die op een gevolgde verwijzing steunen (bv. een
+hergebruikte brondefinitie) wijzen daarnaar met `bron_verwijzing`.
+
+**Houd deze stap licht** (inventariseren + gericht ophalen, niet al classificeren). De
+volledige werkwijze, beleidstabel en grenzen staan in `references/verwijzingen-volgen.md`;
+het schema in `references/review-checkpoints.md`. De verwijzing-inventaris hoort bij het
+activiteit-2 review-checkpoint, zodat de analist de scope kan bijsturen.
+
 ## Stap 2 — Activiteit 2: markeren en classificeren
 
 Lees de tekst lid voor lid. Identificeer samenhangende formuleringen (2a) en ken elk een
@@ -276,6 +301,9 @@ Na bevestiging van de analist is het rapport gereed.
 - Zijn alle klassen uit het JAS, en geen verzonnen klassen?
 - Zijn brondefinities opgehaald en hergebruikt waar de bepaling naar gedefinieerde termen
   verwijst?
+- Zijn de uitgaande verwijzingen geïnventariseerd, geclassificeerd naar functie en gevolgd
+  volgens beleid (diepte-cap + relevantie-gate)? Steunt elke hergebruikte brondefinitie via
+  `bron_verwijzing` op een opgehaalde verwijzing?
 - Zijn interpretatiekeuzes en twijfel expliciet benoemd in plaats van weggepoetst?
 - Zijn beide iteratieve review-checkpoints doorlopen tot de analist akkoord was zonder
   opmerkingen (of bewust overgeslagen via `WETSANALYSE_NO_REVIEW`), en is de feedback per

@@ -163,7 +163,7 @@ const VORIGE_ITEMS = buildVorigeItems(VORIGE && VORIGE.analyse);
 function buildVorigeItems(analyse) {
   const map = {};
   if (!analyse) return map;
-  for (const key of ["markeringen", "begrippen", "afleidingsregels"]) {
+  for (const key of ["markeringen", "verwijzingen", "begrippen", "afleidingsregels"]) {
     for (const it of (analyse[key] || [])) {
       if (it && it.id != null) map[it.id] = it;
     }
@@ -251,6 +251,41 @@ function renderMarkeringen() {
   return `<div class="panel"><h2>Markeringen &amp; classificaties (${(A.markeringen||[]).length})</h2>${items}</div>`;
 }
 
+const VW_FUNCTIE_LABEL = {
+  "definitie": "Definitie", "schakel": "Schakel/afwijking", "delegatie": "Delegatie",
+  "intra-artikel": "Intra-artikel", "informatief": "Informatief",
+};
+
+function renderVerwijzingen() {
+  const vs = A.verwijzingen || [];
+  if (!vs.length) return "";
+  const items = vs.map(v => {
+    const doel = v.doel || {};
+    const label = doel.label || doel.target || "(verwijzing)";
+    const href = doel.target ? "https://wetten.overheid.nl/" + esc(doel.target) : "";
+    const doelHtml = href
+      ? `<a href="${href}" target="_blank" rel="noopener">${esc(label)}</a>` : esc(label);
+    return `
+    <div class="item">
+      <div class="top">
+        <span class="id">#${esc(v.id)}</span>
+        <span class="chip">${esc(VW_FUNCTIE_LABEL[v.functie] || v.functie || "")}</span>
+        <span class="chip">${esc(v.status || "")}</span>
+        <span class="meta">${esc(v.bron_lid || "")}${v.soort ? " · " + esc(v.soort) : ""}${v.extern ? " · extern" : ""}</span>
+      </div>
+      <div class="formulering">${doelHtml}</div>
+      ${v.betekenis ? `<div class="meta">${esc(v.betekenis)}</div>` : ""}
+      ${fb(v.id)}
+      ${vorigeBlok(v.id, [["Functie", "functie"], ["Status", "status"],
+        ["Betekenis", "betekenis"]])}
+    </div>`;
+  }).join("");
+  return `<div class="panel"><h2>Verwijzingen (${vs.length})</h2>
+    <div class="meta" style="margin-bottom:10px">Stuur het scope-besluit per verwijzing bij
+      (bv. "volg deze delegatie wél verder" of "deze hoort buiten scope").</div>
+    ${items}</div>`;
+}
+
 function renderSamenhang() {
   if (!A.samenhang) return "";
   return `<div class="panel"><h2>Samenhang centrale klassen</h2>
@@ -327,7 +362,7 @@ function render() {
   renderHeader();
   let html = renderBanner() + renderWettekst();
   if (ACT === "2") {
-    html += renderMarkeringen() + renderSamenhang();
+    html += renderMarkeringen() + renderVerwijzingen() + renderSamenhang();
   } else {
     html += renderBegrippen() + renderRegels() + renderValidatie();
   }

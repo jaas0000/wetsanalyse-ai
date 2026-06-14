@@ -104,7 +104,12 @@ export async function handleArtikel(args: unknown, signaal?: AbortSignal): Promi
 
   const ledenData = results.map((r) => {
     const lidVanResultaat = r.sectie.match(/Lid (.*)$/)?.[1] || "";
-    return { lid: lidVanResultaat, tekst: r.tekst, bronreferentie: jciVoor(lidVanResultaat) };
+    return {
+      lid: lidVanResultaat,
+      tekst: r.tekst,
+      bronreferentie: jciVoor(lidVanResultaat),
+      ...(r.verwijzingen && r.verwijzingen.length > 0 ? { verwijzingen: r.verwijzingen } : {}),
+    };
   });
 
   const alleeTekst = ledenData.map((l) => l.tekst).join("\n");

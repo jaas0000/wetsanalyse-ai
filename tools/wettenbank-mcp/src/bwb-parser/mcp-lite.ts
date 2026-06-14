@@ -20,7 +20,76 @@ import type {
   NormalizedArtikel,
   NormalizedLijst,
   NormalizedLeaf,
+  VerwijzingRef,
 } from "./types.js";
+
+/** BWB-id uit een (ruw) verwijzing-target halen, indien eenduidig aanwezig. */
+function extraheerBwbId(target: string): string | undefined {
+  return target.match(/BWB[RVW]\d+/i)?.[0];
+}
+
+/**
+ * Verzamelt intref/extref-verwijzingen uit een ContentItem[] (incl. geneste inline,
+ * bv. een intref binnen <nadruk>). De volgorde volgt de documentvolgorde.
+ */
+function verzamelVerwijzingenUitContent(
+  content: ContentItem[],
+  bwbId: string,
+  acc: VerwijzingRef[]
+): void {
+  for (const item of content) {
+    if (typeof item === "string") continue;
+    if ((item.type === "intref" || item.type === "extref") && item.target) {
+      const bwbIdDoel = extraheerBwbId(item.target);
+      acc.push({
+        soort: item.type,
+        target: item.target,
+        label: item.label || item.target,
+        ...(bwbIdDoel ? { bwbIdDoel } : {}),
+        // Zonder herleidbaar doel-BWB gaan we uit van een interne verwijzing (intref).
+        extern: bwbIdDoel ? bwbIdDoel.toUpperCase() !== bwbId.toUpperCase() : false,
+      });
+    }
+    if (item.content) verzamelVerwijzingenUitContent(item.content, bwbId, acc);
+  }
+}
+
+/**
+ * Verzamelt alle uitgaande verwijzingen onder één genormaliseerde node. Spiegelt de
+ * render-logica: waar `blocks` aanwezig is, wint die van `content` (anders zouden de
+ * al-nodes — die zowel in `content` als in `blocks` zitten — dubbel geteld worden).
+ */
+function verzamelVerwijzingenUitNode(node: unknown, bwbId: string, acc: VerwijzingRef[]): void {
+  if (!node || typeof node !== "object") return;
+  const n = node as Record<string, unknown>;
+
+  // Tabel: loop door alle cellen.
+  if (Array.isArray(n.groups)) {
+    for (const g of n.groups as NormalizedTable["groups"]) {
+      for (const rows of [g.head, g.body, g.foot]) {
+        for (const row of rows) {
+          for (const cell of row.cells) verzamelVerwijzingenUitContent(cell.content, bwbId, acc);
+        }
+      }
+    }
+    return;
+  }
+
+  const heeftBlocks = Array.isArray(n.blocks) && n.blocks.length > 0;
+  if (heeftBlocks) {
+    for (const b of n.blocks as NormalizedNode[]) verzamelVerwijzingenUitNode(b, bwbId, acc);
+  } else if (Array.isArray(n.content)) {
+    verzamelVerwijzingenUitContent(n.content as ContentItem[], bwbId, acc);
+  }
+
+  if (Array.isArray(n.leden)) for (const l of n.leden as NormalizedNode[]) verzamelVerwijzingenUitNode(l, bwbId, acc);
+  if (Array.isArray(n.subdivisies)) for (const s of n.subdivisies as NormalizedNode[]) verzamelVerwijzingenUitNode(s, bwbId, acc);
+  if (Array.isArray(n.items)) for (const it of n.items as NormalizedNode[]) verzamelVerwijzingenUitNode(it, bwbId, acc);
+  // children alleen als er geen blocks waren (blocks omvatten de kinderen al).
+  if (!heeftBlocks && Array.isArray(n.children)) {
+    for (const c of n.children as NormalizedNode[]) verzamelVerwijzingenUitNode(c, bwbId, acc);
+  }
+}
 
 interface TransformContext {
   bwbId: string;
@@ -170,12 +239,17 @@ function createMcpLiteNode(
     bronreferentie += `&g=${context.versiedatum}`;
   }
 
+  // Uitgaande verwijzingen (intref/extref) als zelfstandig gegeven naast de tekst.
+  const verwijzingen: VerwijzingRef[] = [];
+  verzamelVerwijzingenUitNode(node, bwbId, verwijzingen);
+
   return {
     bwbId,
     citeertitel,
     sectie,
     tekst: tekstParts.filter(Boolean).join("\n\n").trim(),
     bronreferentie,
+    ...(verwijzingen.length > 0 ? { verwijzingen } : {}),
     metadata: {
       status: node.metadata?.status,
     } as Partial<BwbMetadata>

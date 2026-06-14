@@ -139,8 +139,9 @@ def main() -> None:
         # §1 wettekst (uit act-2)
         "leden":         a2.get("leden", []),
 
-        # §2 markeringen (uit act-2)
+        # §2 markeringen + uitgaande verwijzingen (uit act-2)
         "markeringen":   a2.get("markeringen", []),
+        "verwijzingen":  a2.get("verwijzingen", []),
         "samenhang":     a2.get("samenhang", ""),
 
         # §3 begrippen + regels (uit act-3)
@@ -176,6 +177,21 @@ def main() -> None:
     if leeg:
         print(f"Let op: {leeg} vrij tekstveld(en) nog leeg "
               "(--reviewlog-act2, --reviewlog-act3, --aandachtspunten).")
+
+    # Referentiële integriteit: elke bron_verwijzing op een begrip/regel moet naar een
+    # bestaande verwijzing-id wijzen. Hier (na het mergen) is het volledige beeld bekend;
+    # validate_analyse.py kan dit per los bestand niet over de activiteiten heen checken.
+    verwijzing_ids = {v.get("id") for v in rapport["verwijzingen"] if v.get("id")}
+    dangling = []
+    for groep, enkelvoud in (("begrippen", "begrip"), ("afleidingsregels", "afleidingsregel")):
+        for item in rapport[groep]:
+            bv = item.get("bron_verwijzing")
+            if bv and bv not in verwijzing_ids:
+                dangling.append(f"{enkelvoud} '{item.get('id', '?')}' → bron_verwijzing '{bv}'")
+    if dangling:
+        print("Let op: bron_verwijzing zonder bijbehorende verwijzing (controleer act-2/act-3):")
+        for d in dangling:
+            print(f"  - {d}")
 
 
 if __name__ == "__main__":

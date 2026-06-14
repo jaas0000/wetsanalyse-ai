@@ -216,6 +216,52 @@ describe("MCP-Lite Transformation", () => {
     expect(result.mcpLite[1].sectie).toContain("Lid 2");
   });
 
+  it("verzamelt intref/extref als verwijzingen, met tekst ongewijzigd", () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<toestand bwb-id="BWBR0004770" inwerkingtreding="2024-01-01">
+  <wetgeving><wettekst>
+    <artikel>
+      <kop><nr>9</nr></kop>
+      <lid><lidnr>2</lidnr>
+        <al>In afwijking van <intref doc="jci1.3:c:BWBR0004770&amp;artikel=9&amp;lid=1">het eerste lid</intref> is een aanslag invorderbaar, mede gelet op <extref doc="jci1.3:c:BWBR0002320&amp;artikel=4">artikel 4 van de Awb</extref>.</al>
+      </lid>
+    </artikel>
+  </wettekst></wetgeving>
+</toestand>`;
+    const node = parseBwb(xml, "BWBR0004770", "Invorderingswet 1990").mcpLite[0];
+
+    // De tekst behoudt de inline-Markdown-links (backward compatible).
+    expect(node.tekst).toContain("[het eerste lid](jci1.3:c:BWBR0004770&artikel=9&lid=1)");
+    expect(node.tekst).toContain("[artikel 4 van de Awb](jci1.3:c:BWBR0002320&artikel=4)");
+
+    // En de verwijzingen staan los, machine-leesbaar.
+    expect(node.verwijzingen).toHaveLength(2);
+    const [intern, extern] = node.verwijzingen!;
+
+    expect(intern.soort).toBe("intref");
+    expect(intern.label).toBe("het eerste lid");
+    expect(intern.bwbIdDoel).toBe("BWBR0004770");
+    expect(intern.extern).toBe(false);
+
+    expect(extern.soort).toBe("extref");
+    expect(extern.label).toBe("artikel 4 van de Awb");
+    expect(extern.bwbIdDoel).toBe("BWBR0002320");
+    expect(extern.extern).toBe(true);
+  });
+
+  it("laat verwijzingen weg wanneer een lid geen intref/extref bevat", () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<toestand bwb-id="BWBR0004770">
+  <wetgeving><wettekst>
+    <artikel><kop><nr>9</nr></kop>
+      <lid><lidnr>1</lidnr><al>Een belastingaanslag is invorderbaar zes weken na de dagtekening.</al></lid>
+    </artikel>
+  </wettekst></wetgeving>
+</toestand>`;
+    const node = parseBwb(xml, "BWBR0004770", "Invorderingswet 1990").mcpLite[0];
+    expect(node.verwijzingen).toBeUndefined();
+  });
+
   it("behoudt de blokvolgorde tekst → tabel → tekst binnen één lid (#5)", () => {
     const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <toestand bwb-id="BWBR12345">

@@ -20,9 +20,11 @@ Leg per begrip vast:
   zelfstandig-naamwoordvorm van het werkwoord (bv. 'recht op zorgtoeslag').
 - **Klasse** — de JAS-klasse waartoe het begrip hoort.
 - **Definitie** — *hergebruik een brondefinitie letterlijk* als de wet de term definieert
-  (verwijs naar het definitieartikel). Bestaat er geen wettelijke definitie, formuleer dan
-  een heldere werkdefinitie op basis van de tekst en **markeer dit expliciet als
-  interpretatie** (het is een keuze die validatie vraagt).
+  (verwijs naar het definitieartikel). Staat die definitie in een **ander** artikel, dan heb
+  je dat in stap 1b als verwijzing met functie *definitie* opgehaald: koppel het begrip
+  daaraan met **`bron_verwijzing`** (het id van die verwijzing). Bestaat er geen wettelijke
+  definitie, formuleer dan een heldere werkdefinitie op basis van de tekst en **markeer dit
+  expliciet als interpretatie** (het is een keuze die validatie vraagt).
 - **Voorbeeld** — een concreet, sprekend voorbeeld dat de definitie toetst en aanscherpt.
 - **Kenmerken/relaties** — eigenschappen van het begrip en relaties met andere begrippen,
   gebaseerd op het JAS. Twee soorten:

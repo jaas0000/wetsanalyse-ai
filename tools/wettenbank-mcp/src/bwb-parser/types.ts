@@ -189,12 +189,31 @@ export interface NormalizedTableCell {
 // MCP-LITE transformeert complexe juridische structuren naar een token-efficiënt,
 // Markdown-georiënteerd JSON-formaat voor LLM-gebruik.
 
+/**
+ * Eén uitgaande verwijzing (intref/extref) van een content-unit naar een ander
+ * artikel of regeling. De `tekst` bevat deze al als inline-Markdown-link; dit veld
+ * maakt ze daarnaast als zelfstandig, machine-leesbaar gegeven beschikbaar zodat een
+ * analyse ze kan inventariseren en volgen.
+ *
+ * `target` blijft de RUWE @doc/@reeks-waarde (heterogeen: volledige JCI, kale BWB-id
+ * of een fragment) — er wordt géén artikel/lid uit gedestilleerd. `bwbIdDoel` wordt
+ * alleen gevuld als er eenduidig een BWB-id uit het target te halen is.
+ */
+export interface VerwijzingRef {
+  soort: "intref" | "extref";
+  target: string;       // ruwe @doc/@reeks-waarde
+  label: string;        // zichtbare linktekst
+  bwbIdDoel?: string;   // BWB-id uit target, indien eenduidig herleidbaar
+  extern: boolean;      // verwijst naar een ANDERE regeling dan de huidige bwbId
+}
+
 export interface McpLiteNode {
   bwbId: string;
   citeertitel: string;
   sectie: string;          // bijv. "Hoofdstuk 1 > Artikel 1" of "Paragraaf 1.1.2 Definities"
   tekst: string;           // platte tekst met Markdown links, lijsten en tabellen
   bronreferentie: string;  // JCI-uri of stabiele BWB-link voor navigatie
+  verwijzingen?: VerwijzingRef[]; // uitgaande intref/extref-verwijzingen (alleen indien aanwezig)
   metadata?: Partial<BwbMetadata>; // optionele basis-metadata (status, etc.)
 }
 

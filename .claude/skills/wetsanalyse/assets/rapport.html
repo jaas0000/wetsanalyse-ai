@@ -165,6 +165,17 @@
   .status.ok { color: var(--ok); font-weight: 600; }
   .status.err { color: var(--k-voorwaarde); font-weight: 600; }
   .samenhang-tekst { white-space: pre-wrap; font-size: 14px; line-height: 1.65; }
+  .vw-doel a { color: var(--accent); text-decoration: none; border-bottom: 1px solid var(--accent-light); }
+  .vw-doel a:hover { color: var(--accent-light); }
+  .vw-status {
+    font-family: var(--sans); font-size: 11px; font-weight: 600; letter-spacing: 0.04em;
+    text-transform: uppercase; padding: 2px 9px; border: 1px solid var(--line); background: var(--chip);
+  }
+  .vw-status[data-status="opgehaald"] { color: var(--ok); border-color: #86efac; background: #dcfce7; }
+  .vw-status[data-status="gevolgd"]   { color: var(--k-rechtsbetrekking); border-color: #86efac; background: #f0fdf4; }
+  .vw-status[data-status="gesignaleerd"] { color: var(--muted); }
+  .vw-status[data-status="buiten-scope-diepte"] { color: var(--gold); border-color: #fcd34d; background: var(--gold-light); }
+  .vw-extern { font-family: var(--sans); font-size: 11px; color: var(--muted); letter-spacing: 0.04em; }
 </style>
 </head>
 <body>
@@ -266,6 +277,59 @@ function renderSectie2() {
     </div>
     ${items}
     ${samenhang}
+  </div>`;
+}
+
+// --- §2b Verwijzingen --------------------------------------------------------
+
+const VW_FUNCTIE_LABEL = {
+  "definitie": "Definitie", "schakel": "Schakel / afwijking", "delegatie": "Delegatie",
+  "intra-artikel": "Intra-artikel", "informatief": "Informatief",
+};
+const VW_STATUS_LABEL = {
+  "opgehaald": "opgehaald", "gevolgd": "gevolgd", "gesignaleerd": "gesignaleerd",
+  "buiten-scope-diepte": "buiten scope (diepte)",
+};
+const VW_VOLGORDE = ["definitie", "schakel", "delegatie", "intra-artikel", "informatief"];
+
+function renderVerwijzingen() {
+  const vs = D.verwijzingen || [];
+  if (!vs.length) return "";
+
+  const groepen = {};
+  vs.forEach(v => { (groepen[v.functie] = groepen[v.functie] || []).push(v); });
+  const functies = VW_VOLGORDE.filter(f => groepen[f])
+    .concat(Object.keys(groepen).filter(f => !VW_VOLGORDE.includes(f)));
+
+  const blokken = functies.map(f => {
+    const items = groepen[f].map(v => {
+      const doel = v.doel || {};
+      const label = doel.label || doel.target || "(verwijzing)";
+      const href = doel.target ? "https://wetten.overheid.nl/" + esc(doel.target) : "";
+      const doelHtml = href
+        ? `<a href="${href}" target="_blank" rel="noopener">${esc(label)}</a>`
+        : esc(label);
+      const status = VW_STATUS_LABEL[v.status] || v.status || "";
+      return `<div class="item" style="border-left-color:var(--k-delegatie)">
+        <div class="top">
+          <span class="id">#${esc(v.id)}</span>
+          <span class="vw-status" data-status="${esc(v.status || "")}">${esc(status)}</span>
+          ${v.soort ? `<span class="vw-extern">${esc(v.soort)}${v.extern ? " · extern" : ""}</span>` : ""}
+          ${v.bron_lid ? `<span style="color:var(--muted);font-size:13px">${esc(v.bron_lid)}</span>` : ""}
+        </div>
+        <div class="vw-doel" style="margin:6px 0;font-size:14px">${doelHtml}</div>
+        ${v.betekenis ? `<div style="font-size:13.5px;color:var(--ink)">${esc(v.betekenis)}</div>` : ""}
+      </div>`;
+    }).join("");
+    return `<h3>${esc(VW_FUNCTIE_LABEL[f] || f)} (${groepen[f].length})</h3>${items}`;
+  }).join("");
+
+  return `<div class="panel">
+    <h2>2b. Verwijzingen</h2>
+    <p style="color:var(--muted);font-size:13px;margin:0 0 10px">
+      Uitgaande verwijzingen van de bepaling, geclassificeerd naar functie en met hun
+      scope-status. Links openen de bron op wetten.overheid.nl.</p>
+    ${blokken}
   </div>`;
 }
 
@@ -384,6 +448,7 @@ function render() {
     renderSectie0() +
     renderSectie1() +
     renderSectie2() +
+    renderVerwijzingen() +
     renderSectie3() +
     renderSectie4();
   restoreDraft();
