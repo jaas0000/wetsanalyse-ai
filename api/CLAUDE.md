@@ -252,7 +252,17 @@ MS Teams-client; wet-only resolutie (nu is `bwbId` verplicht); echte job-queue (
 nu draait een analyse op de replica die het request kreeg — horizontaal schalen geeft spreiding van
 verschillende analyses, geen parallellisme binnen één analyse); OIDC + per-gebruiker toegangscontrole
 op de frontend (nu is `/beheer` alleen via het admin-token van de BFF afgeschermd, niet per
-browser-sessie); cross-referenties (definities uit andere wetten automatisch meezuigen).
+browser-sessie).
+
+**Cross-referenties (gebouwd).** Activiteit 2 is twee-fase: een lichte inventaris-stap
+(`prompts.act2_inventaris_prompt`, geeft per verwijzing `functie` + `volgen`) gevolgd door een
+begrensde deterministische fetch-lus (`orchestrator._volg_verwijzingen`, diepte 1, cap
+`WETSANALYSE_MAX_VERWIJZING_FETCHES`, gefaalde fetch degradeert stil), waarna het LLM in act-2b
+`betekenis`/`status` brongetrouw invult met de opgehaalde tekst. `wettenbank.parse_jci` stuurt de
+fetch; de MCP-getagde verwijzingen (per lid) voeden de inventaris. Het rapport draagt een
+`verwijzingen`-array; begrippen kunnen via `bron_verwijzing` op een definitie-verwijzing steunen.
+Diepere navolging (verwezen artikelen vól door de JAS-werkstroom halen i.p.v. alleen de tekst
+meenemen) blijft toekomstwerk.
 
 De **webapp** is inmiddels gebouwd: zie `frontend/` (Next.js BFF) — analyses aanmaken, reviewen, en
 de LLM-modelprofielen beheren via `/beheer`.
