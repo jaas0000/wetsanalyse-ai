@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
+import { ButtonRow } from "@/components/ui/ButtonRow";
 import { Card } from "@/components/ui/Card";
 import { Field, Input, Textarea } from "@/components/ui/Field";
 import { createProject, isApiError, listModelProfiles, listWetten } from "@/lib/api";
@@ -193,11 +194,11 @@ export function ProjectForm() {
           </div>
         )}
 
-        <div className="flex items-center justify-end gap-3 pt-2">
+        <ButtonRow className="pt-2">
           <Button type="submit" disabled={bezig}>
             {bezig ? "Bezig met starten…" : "Analyse starten"}
           </Button>
-        </div>
+        </ButtonRow>
       </form>
     </Card>
   );

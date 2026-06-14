@@ -33,7 +33,7 @@ export function UsagePanel() {
 
   return (
     <Section title="Token-verbruik" subtitle="over alle analyses">
-      <div className="mb-3 flex gap-2">
+      <div className="mb-3 flex flex-wrap gap-2">
         {GROUPS.map((g) => (
           <button
             key={g.key}
