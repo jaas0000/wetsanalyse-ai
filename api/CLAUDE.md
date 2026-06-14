@@ -211,6 +211,15 @@ Rotatie: pas het bestand aan en herstart (`docker restart wetsanalyse-api`); voo
 ook de user in Mongo bijwerken. CI stuurt geen geheime waarden naar Portainer — alleen niet-geheime
 config (`LLM_MODEL`, `LLM_PROVIDER`, e.d.) en de niet-geheime `SECRETS_DIR`/`MONGODB_DB`.
 
+**Mongo-versie (handmatige migratie, géén blinde bump).** De compose pint `mongo:4.4`, dat
+end-of-life is (sinds feb. 2022). Upgraden is wenselijk maar **niet** door simpelweg de tag te
+verhogen: MongoDB leest geen datafiles van twee of meer majors terug, dus een sprong 4.4 → 7.0/8.0
+laat de container crashen op het bestaande `wetsanalyse_mongo`-volume. Migreer sequentieel
+(4.4 → 5.0 → 6.0 → 7.0), per stap met `db.adminCommand({setFeatureCompatibilityVersion: "<major>"})`
+vóór de volgende stap; of, bij een lege/wegwerpbare jobstore, verwijder het volume en start vers op de
+nieuwe versie (zie "Mongo-volume" hierboven). Plan dit als losse onderhoudsactie, los van een
+code-deploy.
+
 ### Troubleshooting deploy
 
 Symptoom → oorzaak:

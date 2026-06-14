@@ -33,7 +33,7 @@ jobs:
       packages: write
     steps:
       - name: MCP-image opruimen (bewaar laatste 5 builds)
-        uses: dataaxiom/ghcr-cleanup-action@v1
+        uses: dataaxiom/ghcr-cleanup-action@d52806a0dc70b430571a37da1fde39733ffd640f # v1
         with:
           package: wettenbank-mcp
           keep-n-tagged: 5        # bewaar de 5 nieuwste getagde builds
@@ -45,7 +45,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: API-image opruimen (bewaar laatste 5 builds)
-        uses: dataaxiom/ghcr-cleanup-action@v1
+        uses: dataaxiom/ghcr-cleanup-action@d52806a0dc70b430571a37da1fde39733ffd640f # v1
         with:
           package: wetsanalyse-api
           keep-n-tagged: 5
