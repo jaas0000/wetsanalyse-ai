@@ -5,8 +5,9 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { JasBadge } from "@/components/ui/Badge";
 import { Textarea } from "@/components/ui/Field";
+import { LedenLijst } from "@/components/LedenLijst";
 import { getRonde, sendFeedback, isApiError } from "@/lib/api";
-import type { Analyse2, Analyse3, Feedback, Job } from "@/lib/types";
+import type { Analyse2, Analyse3, Feedback, Job, Lid } from "@/lib/types";
 
 interface ReviewItem {
   id: string;
@@ -85,6 +86,7 @@ export function ReviewPanel({
   verwijderBezig?: boolean;
 }) {
   const [items, setItems] = useState<ReviewItem[] | null>(null);
+  const [leden, setLeden] = useState<Lid[] | null>(null);
   const [laadFout, setLaadFout] = useState<string | null>(null);
   const [opmerkingen, setOpmerkingen] = useState<Record<string, string>>({});
   const [algemeen, setAlgemeen] = useState("");
@@ -98,9 +100,28 @@ export function ReviewPanel({
 
   useEffect(() => {
     let actief = true;
-    getRonde(job.id, activiteit, ronde)
-      .then((d) => actief && setItems(itemsUitAnalyse(activiteit, d)))
-      .catch((e) => actief && setLaadFout(isApiError(e) ? e.detail : (e as Error).message));
+    (async () => {
+      try {
+        const d = await getRonde(job.id, activiteit, ronde);
+        if (!actief) return;
+        setItems(itemsUitAnalyse(activiteit, d));
+        // Wettekst als context. Bij activiteit 2 zit 'leden' in de ronde zelf; bij activiteit 3
+        // niet, maar de brongetrouwe wettekst is in elke activiteit-2-ronde identiek → haal 'm
+        // best-effort uit ronde 1 van activiteit 2 (mislukt dat, dan tonen we simpelweg geen tekst).
+        if (activiteit === "2") {
+          setLeden((d as Analyse2).leden ?? []);
+        } else {
+          try {
+            const a2 = await getRonde(job.id, "2", 1);
+            if (actief) setLeden((a2 as Analyse2).leden ?? []);
+          } catch {
+            /* wettekst is context, geen blocker */
+          }
+        }
+      } catch (e) {
+        if (actief) setLaadFout(isApiError(e) ? e.detail : (e as Error).message);
+      }
+    })();
     return () => {
       actief = false;
     };
@@ -168,6 +189,17 @@ export function ReviewPanel({
             ))}
           </ul>
         </div>
+      )}
+
+      {leden && leden.length > 0 && (
+        <details open className="mb-4 rounded-lg border border-line bg-paper/50 p-4">
+          <summary className="cursor-pointer text-sm font-medium text-ink">
+            Wettekst (letterlijk) — context
+          </summary>
+          <div className="mt-3">
+            <LedenLijst leden={leden} />
+          </div>
+        </details>
       )}
 
       {!items && !laadFout && <p className="text-sm text-muted">Laden…</p>}
