@@ -63,7 +63,7 @@ beveiliging* verderop); het stdio-pad raakt ze niet aan.
 |------|---------|
 | `wettenbank_zoek` | Search by title, rechtsgebied, ministerie, or regelingsoort — returns `{ formaat, totaal, totaalBeschikbaar, isVolledig, regelingen[] }`. `totaal` = wat er in dít antwoord staat; `totaalBeschikbaar` = SRU `numberOfRecords`; `isVolledig=false` = afgekapt. Meerwoordige titels zoeken met CQL `all` (alle woorden) i.p.v. `any`. |
 | `wettenbank_structuur` | Table of contents of a law — returns `{ formaat, type?, structuur[] }` (no article text). Optionele inputs `diepte` (afgekapte nodes krijgen `ingekort: true`) en `sectie` (filter op nr of titel-substring) voor zeer grote wetten. |
-| `wettenbank_artikel` | Fetch one article — returns `{ formaat, citeertitel, type?, pad?, sectie?, leden[{lid, tekst, bronreferentie}], bronreferentie, waarschuwing? }`. Artikelnummers matchen case-insensitief/getrimd; bij dubbele nummers (bijlage) wordt het eerste exemplaar gebruikt mét `waarschuwing`. |
+| `wettenbank_artikel` | Fetch one article — returns `{ formaat, citeertitel, type?, pad?, sectie?, leden[{lid, tekst, bronreferentie, verwijzingen?}], bronreferentie, waarschuwing? }`. Per lid is `verwijzingen` (optioneel) de lijst getagde intref/extref met `{soort, target, label, bwbIdDoel?, extern}` — náást de inline-Markdown-links in `tekst` (zie *bwb-parser*). Artikelnummers matchen case-insensitief/getrimd; bij dubbele nummers (bijlage) wordt het eerste exemplaar gebruikt mét `waarschuwing`. |
 | `wettenbank_zoekterm` | Full-text search within a law — returns `{ formaat, citeertitel, artikelen[{artikel, aantalTreffers, leden, bronreferentie, pad?, tekst?, formaat?}] }`; `pad`/`tekst` alleen bij `includeerTekst=true` |
 
 De JSON-**inputschema's** van de tools worden bij `ListTools` gegenereerd uit de Zod-schema's in
@@ -159,7 +159,12 @@ Key exports from `bwb-parser/index.ts`:
 | `transformToMcpLite(node, bwbId, citeertitel)` | `NormalizedNode` → `McpLiteNode[]` |
 | `parseBwb(xml, bwbId, citeertitel?, versiedatum?)` | Full pipeline; returns `ParseResult` |
 
-`McpLiteNode` has: `bwbId`, `citeertitel`, `sectie`, `tekst`, `bronreferentie`.
+`McpLiteNode` has: `bwbId`, `citeertitel`, `sectie`, `tekst`, `bronreferentie`, and optional
+`verwijzingen: VerwijzingRef[]`. De inline `<intref>`/`<extref>`-elementen renderen als
+Markdown-links `[label](target)` in `tekst` (in `renderContent`); `verzamelVerwijzingenUitNode`
+oogst ze daarnaast als gestructureerde `VerwijzingRef[]` (`soort`, `target` opaque, `label`,
+`bwbIdDoel?`, `extern`) zodat een consument ze als zelfstandig gegeven kan inventariseren. De
+collector spiegelt de render-logica (blocks winnen van content) om dubbeltelling te vermijden.
 
 **Brongetrouwheid in de normalisatie/render-stap (let op bij wijzigen):**
 

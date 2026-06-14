@@ -81,6 +81,13 @@ POST /v1/projects
 `review: false` slaat de human-in-the-loop checkpoints over — uitsluitend voor geautomatiseerde
 verwerking. Gebruik `review: true` (default) voor een volwaardige analyse met reviewrondes.
 
+**Cross-referenties.** Activiteit 2 is twee-fase: eerst een lichte *verwijzing-inventaris* (per
+verwijzing een functie + `volgen`-vlag), dan een begrensde deterministische fetch-lus die de
+te-volgen verwezen artikelen via de MCP ophaalt (diepte 1, cap `WETSANALYSE_MAX_VERWIJZING_FETCHES`,
+default 6; een gefaalde fetch degradeert stil en laat de job nooit falen), waarna het LLM de
+`betekenis`/`status` brongetrouw invult met de opgehaalde tekst. Het rapport draagt een
+`verwijzingen`-array; begrippen kunnen via `bron_verwijzing` op een definitie-verwijzing steunen.
+
 Grenzen: per-client rate limit en een max aantal gelijktijdige analyses (beide → `429`), een
 optioneel LLM-token-budget per analyse, en een globale rem op gelijktijdige LLM-calls
 (`WETSANALYSE_LLM_MAX_CONCURRENCY`) tegen provider-rate-limits — een 429 wordt geretryed met respect

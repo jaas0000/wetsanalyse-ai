@@ -31,7 +31,7 @@ De Wettenbank MCP-server maakt het mogelijk om **vanuit Claude Code rechtstreeks
 |--------------------------|------|
 | `wettenbank_zoek`        | Regelingen zoeken op titel, rechtsgebied, ministerie of regelingsoort; retourneert **JSON** met `regelingen`-array |
 | `wettenbank_structuur`   | Inhoudsopgave van een wet ophalen: hiërarchie van hoofdstukken, afdelingen, paragrafen en artikelnummers — zonder artikeltekst te laden |
-| `wettenbank_artikel`     | Één artikel ophalen via BWB-id + artikelnummer; retourneert **JSON** met `leden`, `pad`, `bronreferentie` en `formaat` |
+| `wettenbank_artikel`     | Één artikel ophalen via BWB-id + artikelnummer; retourneert **JSON** met `leden` (incl. per lid de getagde `verwijzingen`), `pad`, `bronreferentie` en `formaat` |
 | `wettenbank_zoekterm`    | Zoeken welke artikelen een begrip bevatten; wildcards en EN/OF-operatoren; optioneel direct artikeltekst meesturen |
 
 **Aanbevolen workflow voor een LLM:**
@@ -297,8 +297,17 @@ Haalt één artikel op via BWB-id en artikelnummer. De response bevat alle leden
     },
     {
       "lid": "2",
-      "tekst": "In afwijking van het eerste lid is een navorderingsaanslag...",
-      "bronreferentie": "jci1.3:c:BWBR0004770&artikel=9&lid=2&g=2024-01-01"
+      "tekst": "In afwijking van het eerste lid is een navorderingsaanslag, ... als bedoeld in [artikel 4 van de Algemene wet bestuursrecht](jci1.3:c:BWBR0005537&artikel=4) ...",
+      "bronreferentie": "jci1.3:c:BWBR0004770&artikel=9&lid=2&g=2024-01-01",
+      "verwijzingen": [
+        {
+          "soort": "extref",
+          "target": "jci1.3:c:BWBR0005537&artikel=4",
+          "label": "artikel 4 van de Algemene wet bestuursrecht",
+          "bwbIdDoel": "BWBR0005537",
+          "extern": true
+        }
+      ]
     }
   ],
   "bronreferentie": "jci1.3:c:BWBR0004770&artikel=9&g=2024-01-01"
@@ -310,6 +319,8 @@ Haalt één artikel op via BWB-id en artikelnummer. De response bevat alle leden
 **`pad`-veld:** Volledig hiërarchisch pad als compacte string. Alleen aanwezig als het artikel structuurancestors heeft.
 
 **`leden`-array:** Één entry per genummerd lid. Bij artikelen zonder genummerde leden (bijv. Leidraad `circulaire.divisie`) één entry met `lid: ""`.
+
+**`verwijzingen`-array (per lid, optioneel):** De uitgaande **getagde** verwijzingen (`<intref>`/`<extref>`) van dat lid, als zelfstandig veld náást de Markdown-links in `tekst`. Per verwijzing: `soort` (`intref`/`extref`), `target` (de ruwe `@doc`/`@reeks`-waarde — JCI-uri of BWB-id, *opaque*; er wordt géén artikel/lid uit gedestilleerd), `label` (linktekst), `bwbIdDoel` (BWB-id indien eenduidig herleidbaar) en `extern` (`true` als het naar een andere regeling dan `bwbId` wijst). Het veld ontbreekt als het lid geen getagde verwijzingen bevat. Let op: natuurlijke-taalverwijzingen zonder XML-tag ("het eerste lid") worden hier **niet** gevangen — dat blijft aan de consument (de skill/API herkent ze in de tekst).
 
 Artikelnummers matchen case-insensitief en getrimd (`"9A"` vindt `"9a"`). Komt hetzelfde nummer meerdere keren voor (bijv. opnieuw genummerde bijlage), dan wordt het eerste exemplaar gebruikt en meldt een `waarschuwing`-veld dat.
 
@@ -409,7 +420,8 @@ Zoekt welke artikelen een begrip bevatten. Ondersteunt wildcards en booleaanse o
 | NORMALIZED | `NormalizedLid` | Lid met `lidnr`, `tekst`, `content`, `children` |
 | NORMALIZED | `NormalizedLijst` | Gestructureerde lijst met `items: NormalizedListItem[]` |
 | NORMALIZED | `NormalizedTable` | CALS-tabel met uitgewerkte rowspan/colspan |
-| MCP-LITE | `McpLiteNode` | `{ bwbId, citeertitel, sectie, tekst, bronreferentie }` |
+| MCP-LITE | `McpLiteNode` | `{ bwbId, citeertitel, sectie, tekst, bronreferentie, verwijzingen? }` |
+| MCP-LITE | `VerwijzingRef` | `{ soort, target, label, bwbIdDoel?, extern }` — één getagde intref/extref |
 
 ### `StructuurNode` (recursief)
 

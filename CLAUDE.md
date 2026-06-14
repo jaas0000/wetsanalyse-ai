@@ -88,6 +88,12 @@ kernstructuur die meerdere bestanden raakt:
 
 - **Stap 1** haalt tekst op via de MCP-tools `wettenbank_zoek` → `wettenbank_structuur` →
   `wettenbank_artikel` (en `wettenbank_zoekterm` voor brondefinities in definitieartikelen).
+- **Stap 1b — verwijzingen inventariseren & volgen** (`references/verwijzingen-volgen.md`): de
+  uitgaande verwijzingen van de bepaling opsporen (de MCP geeft getagde intref/extref per lid;
+  natuurlijke-taalverwijzingen herkent de skill zelf), classificeren naar functie en volgens
+  beleid volgen (diepte-cap 1 + relevantie-gate; delegaties bounded). Ze worden vastgelegd als
+  `verwijzingen`-array in `analyse.json` (aparte as náást de markeringen) en horen bij het
+  activiteit-2 checkpoint; begrippen koppelen via `bron_verwijzing` aan een definitie-verwijzing.
 - **Activiteit 2 → checkpoint → Activiteit 3 → checkpoint → rapport.** Na elke activiteit
   is er een **iteratief human-in-the-loop review**: de skill schrijft
   `werk/activiteit-{2,3}/ronde-{N}/analyse.json`, draait eerst `scripts/validate_analyse.py`
@@ -111,9 +117,10 @@ kernstructuur die meerdere bestanden raakt:
   deel meer uit van de normale skill-flow.
 
 Inhoudelijke regels die je moet kennen voordat je classificeert of begrippen opstelt:
-`references/jas-klassen-referentie.md` (de dertien JAS-klassen — verzin er geen), en
-`references/begrippen-en-afleidingsregels-opstellen.md`. Voorbeeld-output (met `rapport.json`)
-staat in `analyses/bwbr0004770-art9-lid2/`.
+`references/jas-klassen-referentie.md` (de dertien JAS-klassen — verzin er geen),
+`references/begrippen-en-afleidingsregels-opstellen.md` en `references/verwijzingen-volgen.md`
+(het volg-beleid voor cross-referenties: functies, diepte/relevantie-grens, bounded delegaties).
+Voorbeeld-output (met `rapport.json`) staat in `analyses/bwbr0004770-art9-lid2/`.
 
 Komt een analyse onbetrouwbaar uit (verzonnen tekst, niet-bestaande klasse, overgeslagen
 review, niet-convergerende lus — géén gewone review-feedback), dan is

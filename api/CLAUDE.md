@@ -41,6 +41,10 @@ disk-interoperabiliteit met de lokale skill staat op de roadmap, niet in de huid
   (LLM-stap + merge met brongetrouwe MCP-basis), `retry.py` (bounded backoff op transiënte
   LLM/MCP-fouten; honoreert **`Retry-After`** bij een 429, met plafond + jitter), `orchestrator.py`
   (state machine, auto-correctie, 6-rondencap, startup-reconciliatie, retry, quota/budget-checks).
+  **Activiteit 2 is twee-fase** voor de cross-referenties: een verwijzing-inventaris
+  (`steps.inventariseer_verwijzingen` / `prompts.act2_inventaris_prompt`) → begrensde fetch-lus
+  (`orchestrator._volg_verwijzingen` + `wettenbank.parse_jci`) → de volledige act-2 met de
+  opgehaalde verwezen tekst als context (zie §Roadmap → Cross-referenties).
 - `routers/projects.py` + `main.py` — de kanonieke resource onder **`/v1/projects`** (client-gescopet,
   `response_model`s, paginatie, SSE), `/health` (liveness), `/ready` (alleen booleans).
 - `wet_catalog.py` — Beanie `WetCatalogus`-document (BWB-id + leesbare naam). `wetten.py` — service
@@ -239,7 +243,9 @@ client → 429), `WETSANALYSE_LLM_TOKEN_BUDGET` (token-plafond per analyse → j
 `FoutKlasse.quota`), `WETSANALYSE_LLM_MAX_CONCURRENCY` (globaal plafond op gelijktijdige LLM-calls,
 default 4 — de echte rem tegen provider-rate-limits), `WETSANALYSE_LLM_TIMEOUT_S` (harde wandklok-
 timeout per LLM-call, default 120; 0 = uit — voorkomt dat een hangende provider-verbinding een
-worker langer vasthoudt dan de lease). Een 429 wordt bovendien geretryed met respect
+worker langer vasthoudt dan de lease), `WETSANALYSE_MAX_VERWIJZING_FETCHES` (cap op het aantal
+verwezen artikelen dat per analyse wordt opgehaald in de cross-referentie-fetch-lus, default 6;
+0 = niet volgen). Een 429 wordt bovendien geretryed met respect
 voor de `Retry-After`-header (`WETSANALYSE_TRANSIENT_MAX_RETRIES`/`_BACKOFF`/`_MAX_BACKOFF`). Let op
 bij >1 replica: de **rate limit** én de **LLM-concurrency-rem** zijn in-process (per replica → de
 effectieve grens schaalt mee met het aantal replica's); **max-active-jobs** en het token-budget zijn

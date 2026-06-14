@@ -30,6 +30,10 @@ De skill werkt brongetrouw — alleen letterlijk opgehaalde wettekst, alles herl
 artikel + lid + bronreferentie — en doorloopt:
 
 1. **Wettekst ophalen** via de MCP (`wettenbank_zoek` → `wettenbank_structuur` → `wettenbank_artikel`).
+1b. **Verwijzingen inventariseren & volgen**: de uitgaande verwijzingen van de bepaling (naar het
+   definitieartikel, andere leden, schakelbepalingen, gedelegeerde regelingen) opsporen,
+   classificeren naar functie, en de relevante volgens beleid volgen (diepte-cap 1 +
+   relevantie-gate) — zodat brondefinities en afwijkende hoofdregels brongetrouw meewegen.
 2. **Activiteit 2 — markeren & classificeren**: relevante wetsformuleringen markeren en elk een
    van de dertien JAS-klassen geven (rechtssubject, rechtsbetrekking, voorwaarde, afleidingsregel, …).
 3. **Activiteit 3 — betekenis vaststellen**: begrippen (met definitie, voorbeeld, relaties) en

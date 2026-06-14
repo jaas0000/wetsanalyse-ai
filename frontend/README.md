@@ -2,7 +2,9 @@
 
 Next.js (App Router) + TypeScript-frontend voor de [Wetsanalyse-API](../api). Ontsluit de hele
 JAS-workflow in de browser: analyse aanmaken, live voortgang, de human-in-the-loop review-lus en
-het eindrapport.
+het eindrapport — inclusief de **cross-referenties** (een Verwijzingen-sectie in het rapport, per
+functie met status en `wetten.overheid.nl`-links, en per-verwijzing scope-feedback in de
+activiteit-2 review).
 
 Daarnaast een **`/beheer`-scherm** voor het LLM-beheer: de modelprofielen die de analyses aansturen
 (toevoegen/bewerken/verwijderen, default kiezen, verbinding testen), een **wet-catalogus** (BWB-id +

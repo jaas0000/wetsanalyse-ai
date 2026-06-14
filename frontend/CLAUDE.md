@@ -50,7 +50,10 @@ De **harde scheidingslijn**: alles met een token is server-only.
 - `app/**/page.tsx` (Server Components) — data ophalen via `lib/server.ts`; interactie delegeren naar
   een `*Client.tsx` Client Component (bv. `app/projecten/[id]/ProjectClient.tsx`).
 - `components/` — presentatie; `components/admin/` is het `/beheer`-scherm (achter het admin-token),
-  `components/ui/` zijn de primitives.
+  `components/ui/` zijn de primitives. De **cross-referenties** (`Verwijzing`-type in `lib/types.ts`)
+  renderen puur in `RapportView.tsx` (Verwijzingen-sectie) en `ReviewPanel.tsx` (scope-feedback per
+  verwijzing, via het bestaande per-id-feedbackmechanisme) uit de bestaande `/rapport`- en
+  `/ronde`-data — er is **geen nieuwe BFF-route** voor nodig.
 
 ## Regels (niet aan tornen)
 
