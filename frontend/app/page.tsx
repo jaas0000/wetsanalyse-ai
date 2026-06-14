@@ -3,6 +3,7 @@ import { getProjectsServer } from "@/lib/server";
 import { StateBadge } from "@/components/ui/Badge";
 import { LinkButton } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { pathSegment } from "@/lib/url";
 import type { JobSummary } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -82,7 +83,7 @@ export default async function ProjectenPagina() {
                   className="group border-b border-line/60 last:border-0 transition-colors hover:bg-paper/60"
                 >
                   <td className="px-4 py-3">
-                    <Link href={`/projecten/${p.id}`} className="block">
+                    <Link href={`/projecten/${pathSegment(p.id)}`} className="block">
                       <span className="font-medium text-ink group-hover:text-accent">
                         {p.naam || p.id}
                       </span>

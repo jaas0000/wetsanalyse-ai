@@ -3,6 +3,7 @@
 import { Card, Section } from "@/components/ui/Card";
 import { JasBadge, Tag } from "@/components/ui/Badge";
 import { LinkButton } from "@/components/ui/Button";
+import { pathSegment } from "@/lib/url";
 import type { Markering, Rapport } from "@/lib/types";
 
 function Twijfel({ tekst }: { tekst?: string }) {
@@ -55,7 +56,7 @@ export function RapportView({ rapport, projectId }: { rapport: Rapport; projectI
               )}
             </div>
           </div>
-          <LinkButton href={`/api/projects/${projectId}/rapport-md`} variant="secondary">
+          <LinkButton href={`/api/projects/${pathSegment(projectId)}/rapport-md`} variant="secondary">
             Download .md
           </LinkButton>
         </div>

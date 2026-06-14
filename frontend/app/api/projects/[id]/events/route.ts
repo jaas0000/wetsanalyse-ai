@@ -3,6 +3,7 @@
 // route en heeft dus geen Authorization-header nodig.
 
 import { apiBaseUrl, authHeader } from "@/lib/config";
+import { pathSegment } from "@/lib/url";
 
 export const dynamic = "force-dynamic";
 
@@ -12,7 +13,7 @@ export async function GET(req: Request, { params }: Params) {
   const { id } = await params;
   let upstream: Response;
   try {
-    upstream = await fetch(`${apiBaseUrl()}/v1/projects/${encodeURIComponent(id)}/events`, {
+    upstream = await fetch(`${apiBaseUrl()}/v1/projects/${pathSegment(id)}/events`, {
       headers: { ...authHeader(), Accept: "text/event-stream" },
       signal: req.signal, // client-disconnect propageren naar de upstream
       cache: "no-store",

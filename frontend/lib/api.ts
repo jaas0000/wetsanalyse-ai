@@ -22,6 +22,7 @@ import type {
   WetOut,
   WetResolveResult,
 } from "./types";
+import { pathSegment } from "./url";
 
 export async function parseError(res: Response): Promise<ApiError> {
   let detail = res.statusText;
@@ -55,17 +56,17 @@ export async function listProjects(): Promise<JobSummary[]> {
 }
 
 export async function getProject(id: string): Promise<Job> {
-  const res = await fetch(`/api/projects/${id}`, { cache: "no-store" });
+  const res = await fetch(`/api/projects/${pathSegment(id)}`, { cache: "no-store" });
   return json<Job>(res);
 }
 
 export async function deleteProject(id: string): Promise<void> {
-  const res = await fetch(`/api/projects/${id}`, { method: "DELETE" });
+  const res = await fetch(`/api/projects/${pathSegment(id)}`, { method: "DELETE" });
   if (!res.ok) throw await parseError(res);
 }
 
 export async function sendFeedback(id: string, body: Feedback): Promise<FeedbackAccepted> {
-  const res = await fetch(`/api/projects/${id}/feedback`, {
+  const res = await fetch(`/api/projects/${pathSegment(id)}/feedback`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -74,17 +75,17 @@ export async function sendFeedback(id: string, body: Feedback): Promise<Feedback
 }
 
 export async function retryProject(id: string): Promise<CreateAccepted> {
-  const res = await fetch(`/api/projects/${id}/retry`, { method: "POST" });
+  const res = await fetch(`/api/projects/${pathSegment(id)}/retry`, { method: "POST" });
   return json<CreateAccepted>(res);
 }
 
 export async function getRapport(id: string): Promise<Rapport> {
-  const res = await fetch(`/api/projects/${id}/rapport`, { cache: "no-store" });
+  const res = await fetch(`/api/projects/${pathSegment(id)}/rapport`, { cache: "no-store" });
   return json<Rapport>(res);
 }
 
 export async function getRonde(id: string, act: "2" | "3", n: number): Promise<Analyse2 | Analyse3> {
-  const res = await fetch(`/api/projects/${id}/ronde/${act}/${n}`, { cache: "no-store" });
+  const res = await fetch(`/api/projects/${pathSegment(id)}/ronde/${act}/${n}`, { cache: "no-store" });
   return json<Analyse2 | Analyse3>(res);
 }
 
