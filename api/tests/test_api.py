@@ -112,6 +112,14 @@ async def test_input_limiet_422(client):
     assert r.status_code == 422
 
 
+async def test_leeg_artikel_422(client):
+    """Een leeg `artikel` wordt door Pydantic geweigerd (422), vóór MCP/LLM geraakt worden."""
+    r = await client.post("/v1/projects", json={"artikel": "", "bwbId": "BWBR1"})
+    assert r.status_code == 422
+    # Ontbrekend artikel-veld blijft eveneens 422.
+    assert (await client.post("/v1/projects", json={"bwbId": "BWBR1"})).status_code == 422
+
+
 async def test_tenant_isolatie(client):
     """Een project van een andere client is onzichtbaar: 404 op alle by-id-routes en
     niet aanwezig in de lijst."""

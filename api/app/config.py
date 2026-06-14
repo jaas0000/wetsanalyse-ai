@@ -76,6 +76,9 @@ class Settings:
         self.llm_api_version = os.environ.get("LLM_API_VERSION")  # alleen Azure-OpenAI
         self.llm_output_strategy = os.environ.get("LLM_OUTPUT_STRATEGY", "prompt_and_parse")
         self.llm_temperature = float(os.environ.get("LLM_TEMPERATURE", "0"))
+        # Harde wandklok-timeout per LLM-call (0 = uit). Voorkomt dat een hangende provider-
+        # verbinding een worker langer vasthoudt dan bedoeld; spiegelt `mcp_timeout_s`.
+        self.llm_timeout_s = float(os.environ.get("WETSANALYSE_LLM_TIMEOUT_S", "120"))
 
         # Master key voor versleuteling-at-rest van via de admin-UI opgeslagen API-keys.
         # Geldige Fernet-key (32 url-safe base64-bytes); ontbreekt 'ie → geen key-opslag (fail-closed).

@@ -29,6 +29,8 @@ class LlmConfig:
     api_version: str | None = None
     output_strategy: str = "prompt_and_parse"
     temperature: float = 0.0
+    # Wandklok-timeout per call in seconden (0 = uit) — doorgegeven aan de provider-call.
+    timeout: float = 0.0
 
 
 @dataclass

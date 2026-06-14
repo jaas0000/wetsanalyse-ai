@@ -53,6 +53,7 @@ def _config_uit_env(s: Settings) -> LlmConfig:
         api_version=s.llm_api_version,
         output_strategy=s.llm_output_strategy,
         temperature=s.llm_temperature,
+        timeout=s.llm_timeout_s,
     )
 
 
@@ -72,6 +73,7 @@ async def resolve_config(name: str | None, settings: Settings | None = None) -> 
         api_version=profile.api_version,
         output_strategy=profile.output_strategy,
         temperature=profile.temperature,
+        timeout=s.llm_timeout_s,
     )
 
 
@@ -118,7 +120,7 @@ async def upsert_profile(
     profile.updated_by = updated_by
     profile.updated = _utcnow()
 
-    # Eerste profiel is altijd default; expliciet default zetten verschuift de vlag atomisch.
+    # Eerste profiel is altijd default; expliciet default zetten wist eerst elke andere default.
     geen_profielen = is_new and await LlmProfile.find_all().count() == 0
     if is_default or geen_profielen:
         await _clear_default()
@@ -149,9 +151,11 @@ async def delete_profile(name: str) -> None:
 
 
 async def _clear_default() -> None:
-    async for p in LlmProfile.find(LlmProfile.is_default == True):  # noqa: E712
-        p.is_default = False
-        await p.save()
+    # Eén bulk-update i.p.v. document-voor-document opslaan: zet elke huidige default in één
+    # DB-operatie uit, zodat twee gelijktijdige default-wissels geen dubbele default achterlaten.
+    await LlmProfile.find(LlmProfile.is_default == True).update(  # noqa: E712
+        {"$set": {"is_default": False}}
+    )
 
 
 # --- seeding -------------------------------------------------------------------

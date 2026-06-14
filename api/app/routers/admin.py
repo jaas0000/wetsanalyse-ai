@@ -163,7 +163,10 @@ async def test_profiel(name: str):
     except SecretsCryptoError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:  # noqa: BLE001 — toon de fout, lek geen secrets
-        return TestResult(ok=False, model=cfg.model if cfg else "", detail=f"{type(e).__name__}: {e}")
+        detail = f"{type(e).__name__}: {e}"
+        if cfg and cfg.api_key:
+            detail = detail.replace(cfg.api_key, "***")  # key niet in de respons echoën
+        return TestResult(ok=False, model=cfg.model if cfg else "", detail=detail)
     return TestResult(ok=True, model=res.model, tokens_in=res.tokens_in, tokens_out=res.tokens_out)
 
 
