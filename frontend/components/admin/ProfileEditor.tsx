@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/Button";
+import { ButtonRow } from "@/components/ui/ButtonRow";
 import { Card } from "@/components/ui/Card";
 import { Field, Input } from "@/components/ui/Field";
 import { isApiError, saveProfile } from "@/lib/api";
@@ -111,14 +112,14 @@ export function ProfileEditor({ profile, onDone, onCancel }: Props) {
           <div className="rounded-md border border-accent/30 bg-accent/5 px-3 py-2 text-sm text-accent">{fout}</div>
         )}
 
-        <div className="flex items-center justify-end gap-3 pt-2">
+        <ButtonRow className="pt-2">
           <Button type="button" variant="ghost" onClick={onCancel} disabled={bezig}>
             Annuleren
           </Button>
           <Button type="submit" disabled={bezig}>
             {bezig ? "Bezig met opslaan…" : "Opslaan"}
           </Button>
-        </div>
+        </ButtonRow>
       </form>
     </Card>
   );

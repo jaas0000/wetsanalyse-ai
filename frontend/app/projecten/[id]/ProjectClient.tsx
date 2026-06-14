@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { StateBadge, Tag } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { ButtonRow } from "@/components/ui/ButtonRow";
 import { Card } from "@/components/ui/Card";
 import { StatusTimeline } from "@/components/StatusTimeline";
 import { ReviewPanel } from "@/components/ReviewPanel";
@@ -109,7 +110,7 @@ export function ProjectClient({ initieel }: { initieel: Job }) {
   return (
     <div className="animate-rise space-y-6">
       {/* Kop */}
-      <div className="flex flex-wrap items-start justify-between gap-4">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <Link href="/" className="text-xs text-faint hover:text-accent">
             ← Projecten
@@ -125,7 +126,7 @@ export function ProjectClient({ initieel }: { initieel: Job }) {
             {!job.review && <Tag>volautomatisch</Tag>}
           </div>
         </div>
-        <div className="flex gap-2">
+        <ButtonRow align="end">
           {job.state === "fout" && (
             <Button
               variant="primary"
@@ -145,7 +146,7 @@ export function ProjectClient({ initieel }: { initieel: Job }) {
               {actie === "delete" ? "Bezig…" : "Verwijderen"}
             </Button>
           )}
-        </div>
+        </ButtonRow>
       </div>
 
       {/* Waarschuwingen — in review-states toont de ReviewPanel ze (algemeen + per item), dus

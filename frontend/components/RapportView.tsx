@@ -32,7 +32,7 @@ export function RapportView({ rapport, projectId }: { rapport: Rapport; projectI
     <div className="space-y-10">
       {/* Kop */}
       <Card className="p-6">
-        <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <h2 className="font-display text-2xl font-semibold text-ink">
               {rapport.wet || "Wetsanalyse"}
@@ -56,7 +56,7 @@ export function RapportView({ rapport, projectId }: { rapport: Rapport; projectI
               )}
             </div>
           </div>
-          <LinkButton href={`/api/projects/${pathSegment(projectId)}/rapport-md`} variant="secondary">
+          <LinkButton href={`/api/projects/${pathSegment(projectId)}/rapport-md`} variant="secondary" className="w-full sm:w-auto">
             Download .md
           </LinkButton>
         </div>

@@ -39,7 +39,7 @@ export default async function ProjectenPagina() {
             Analyseschema: markeren &amp; classificeren, daarna begrippen &amp; afleidingsregels.
           </p>
         </div>
-        <LinkButton href="/nieuw" className="self-start">
+        <LinkButton href="/nieuw" className="w-full sm:w-auto sm:self-start">
           Nieuwe analyse
         </LinkButton>
       </div>
@@ -58,7 +58,7 @@ export default async function ProjectenPagina() {
             Start je eerste analyse: kies een BWB-id en een artikel, en de orchestrator haalt de
             actuele wettekst op en begeleidt je door de review-lus.
           </p>
-          <LinkButton href="/nieuw" className="mt-2">
+          <LinkButton href="/nieuw" className="mt-2 w-full sm:w-auto">
             Eerste analyse starten
           </LinkButton>
         </Card>

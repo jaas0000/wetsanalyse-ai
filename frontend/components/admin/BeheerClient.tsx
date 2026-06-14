@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/Button";
+import { ButtonRow } from "@/components/ui/ButtonRow";
 import { Card, Section } from "@/components/ui/Card";
 import { Tag } from "@/components/ui/Badge";
 import {
@@ -124,9 +125,9 @@ export function BeheerClient() {
         {fout && (
           <div className="mb-3 rounded-md border border-accent/30 bg-accent/5 px-3 py-2 text-sm text-accent">{fout}</div>
         )}
-        <div className="mb-4 flex justify-end">
+        <ButtonRow className="mb-4">
           <Button onClick={() => setEdit({ open: true, kind: "profile", profile: null })}>Nieuw profiel</Button>
-        </div>
+        </ButtonRow>
 
         {profielen === null ? (
           <p className="text-sm text-muted">Laden…</p>
@@ -169,7 +170,7 @@ export function BeheerClient() {
                     </div>
                   )}
 
-                  <div className="mt-3 flex flex-wrap gap-2">
+                  <ButtonRow align="start" className="mt-3">
                     <Button size="sm" variant="secondary" onClick={() => setEdit({ open: true, kind: "profile", profile: p })}>
                       Bewerken
                     </Button>
@@ -186,7 +187,7 @@ export function BeheerClient() {
                         Verwijderen
                       </Button>
                     )}
-                  </div>
+                  </ButtonRow>
                 </Card>
               );
             })}
@@ -195,9 +196,9 @@ export function BeheerClient() {
       </Section>
 
       <Section title="Wetten" count={wetten?.length} subtitle="Selecteerbaar bij nieuwe analyse">
-        <div className="mb-4 flex justify-end">
+        <ButtonRow className="mb-4">
           <Button onClick={() => setEdit({ open: true, kind: "wet", wet: null })}>Nieuwe wet</Button>
-        </div>
+        </ButtonRow>
 
         {wetten === null ? (
           <p className="text-sm text-muted">Laden…</p>
@@ -211,14 +212,14 @@ export function BeheerClient() {
                   <span className="font-display font-semibold text-ink">{w.naam || "(geen naam)"}</span>
                   <Tag>{w.bwbId}</Tag>
                 </div>
-                <div className="mt-3 flex flex-wrap gap-2">
+                <ButtonRow align="start" className="mt-3">
                   <Button size="sm" variant="secondary" onClick={() => setEdit({ open: true, kind: "wet", wet: w })}>
                     Bewerken
                   </Button>
                   <Button size="sm" variant="danger" onClick={() => onDeleteWet(w.bwbId)}>
                     Verwijderen
                   </Button>
-                </div>
+                </ButtonRow>
               </Card>
             ))}
           </div>
