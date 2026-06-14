@@ -38,6 +38,9 @@ services:
       - ${SECRETS_DIR:-/opt/secrets/wetsanalyse-api}:/run/secrets:ro
     networks:
       - proxy
+    # Resource-limieten: begrenzen een ontspoorde Node-server zodat één container de host niet leegtrekt.
+    mem_limit: 1g
+    pids_limit: 256
     healthcheck:
       test:
         - CMD

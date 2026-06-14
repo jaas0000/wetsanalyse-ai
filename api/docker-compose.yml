@@ -55,6 +55,9 @@ services:
     depends_on:
       mongo:
         condition: service_healthy
+    # Resource-limieten: begrenzen een ontspoorde worker zodat één container de host niet leegtrekt.
+    mem_limit: 1g
+    pids_limit: 256
     healthcheck:
       test:
         - CMD
@@ -80,6 +83,9 @@ services:
       - ${SECRETS_DIR:-/opt/secrets/wetsanalyse-api}:/run/secrets:ro
     networks:
       - proxy
+    # Ruimere limieten dan de API: Mongo houdt connectie-/achtergrondthreads aan.
+    mem_limit: 2g
+    pids_limit: 512
     healthcheck:
       test: ["CMD", "mongo", "--eval", "db.adminCommand({'ping':1})"]
       interval: 10s

@@ -5,7 +5,7 @@
 # Stel MCP_TRANSPORT=stdio in om in plaats daarvan als stdio-subproces te draaien.
 
 # ── Build-fase ────────────────────────────────────────────────────────────────
-FROM node:26-slim AS builder
+FROM node:26-slim@sha256:95a34da32a840bd9b3b09a5b773591c16923e350174b1c50e1200c75bf15eaa9 AS builder
 
 WORKDIR /app
 
@@ -18,7 +18,7 @@ COPY src ./src
 RUN npm run build
 
 # ── Runtime-fase ──────────────────────────────────────────────────────────────
-FROM node:26-slim AS runtime
+FROM node:26-slim@sha256:95a34da32a840bd9b3b09a5b773591c16923e350174b1c50e1200c75bf15eaa9 AS runtime
 
 # Build-herkomst, door CI meegegeven (docker-publish.yml). ARG geldt per stage, dus
 # hier opnieuw declareren; via ENV worden ze leesbaar voor de server (/health).

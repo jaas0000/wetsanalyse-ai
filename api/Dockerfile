@@ -5,9 +5,9 @@
 # ── Builder ───────────────────────────────────────────────────────────────────
 # uv leeft alléén in deze stage: het bouwt de .venv en blijft daarna buiten de
 # runtime-image (anders scant Trivy de uv-binary en z'n gebundelde crates mee).
-FROM python:3.12-slim AS builder
+FROM python:3.12-slim@sha256:d764629ce0ddd8c71fd371e9901efb324a95789d2315a47db7e4d27e78f1b0e9 AS builder
 
-COPY --from=ghcr.io/astral-sh/uv:0.11 /uv /bin/uv
+COPY --from=ghcr.io/astral-sh/uv:0.11@sha256:ff07b86af50d4d9391d9daf4ff89ce427bc544f9aae87057e69a1cc0aa369946 /uv /bin/uv
 
 # Forceer de systeem-Python van de base-image: dan symlinkt de .venv naar
 # /usr/local/bin/python3.12 — een pad dat óók in de identieke runtime-stage bestaat.
@@ -24,7 +24,7 @@ RUN uv sync --extra llm --frozen
 # ── Runtime ───────────────────────────────────────────────────────────────────
 # Schone base, identiek aan de builder → de venv-symlinks naar /usr/local/bin/python
 # blijven geldig. Geen uv meer; systeem-pip naar een gepatchte versie (BIO2 / ISO 27002).
-FROM python:3.12-slim AS runtime
+FROM python:3.12-slim@sha256:d764629ce0ddd8c71fd371e9901efb324a95789d2315a47db7e4d27e78f1b0e9 AS runtime
 
 RUN pip install --no-cache-dir --upgrade 'pip>=26.1'
 
