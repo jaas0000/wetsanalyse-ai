@@ -158,8 +158,10 @@ export function ReviewPanel({
       )}
 
       {algemeneWaarschuwingen.length > 0 && (
-        <div className="mb-4 rounded-md border border-gold/40 bg-gold/5 px-3 py-2 text-sm text-gold">
-          <p className="font-medium">Aandachtspunten bij deze ronde</p>
+        <div role="status" className="mb-4 rounded-md border border-gold/40 bg-gold/5 px-3 py-2 text-sm text-gold">
+          <p className="font-medium">
+            <span aria-hidden="true">⚠ </span>Aandachtspunten bij deze ronde
+          </p>
           <ul className="mt-1 list-inside list-disc space-y-0.5">
             {algemeneWaarschuwingen.map((w, i) => (
               <li key={i}>{w}</li>
@@ -192,15 +194,16 @@ export function ReviewPanel({
             </dl>
             {it.twijfel && (
               <p className="mt-2 rounded border border-gold/40 bg-gold/5 px-2 py-1 text-xs text-gold">
-                Twijfel: {it.twijfel}
+                <span aria-hidden="true">⚠ </span>Twijfel: {it.twijfel}
               </p>
             )}
             {waarschuwingenPerId[it.id]?.map((w, i) => (
               <p
                 key={i}
+                role="status"
                 className="mt-2 rounded border border-accent/40 bg-accent/5 px-2 py-1 text-xs text-accent"
               >
-                Let op: {w}
+                <span aria-hidden="true">⚠ </span>Let op: {w}
               </p>
             ))}
             <Textarea

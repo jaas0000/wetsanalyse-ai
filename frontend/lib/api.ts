@@ -23,7 +23,7 @@ import type {
   WetResolveResult,
 } from "./types";
 
-async function parseError(res: Response): Promise<ApiError> {
+export async function parseError(res: Response): Promise<ApiError> {
   let detail = res.statusText;
   try {
     const body = await res.json();
