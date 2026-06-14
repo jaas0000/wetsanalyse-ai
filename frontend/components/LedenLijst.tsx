@@ -21,7 +21,7 @@ export function LedenLijst({ leden }: { leden: Lid[] }) {
               </a>
             )}
           </div>
-          <p className="mt-1 font-display text-[15px] leading-relaxed text-ink">{l.tekst}</p>
+          <p className="mt-1 break-words font-display text-[15px] leading-relaxed text-ink">{l.tekst}</p>
         </Card>
       ))}
     </div>
