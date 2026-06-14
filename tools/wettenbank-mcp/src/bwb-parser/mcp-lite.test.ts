@@ -216,6 +216,25 @@ describe("MCP-Lite Transformation", () => {
     expect(result.mcpLite[1].sectie).toContain("Lid 2");
   });
 
+  it("maakt geen leeg ongenummerd lid van een <meta-data>-kind naast de leden (Awb 4:86)", () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<toestand bwb-id="BWBR0005537">
+  <wetgeving><wettekst>
+    <artikel>
+      <kop><nr>4:86</nr></kop>
+      <lid><lidnr>1</lidnr><al>De verplichting tot betaling van een geldsom wordt bij beschikking vastgesteld.</al></lid>
+      <lid><lidnr>2</lidnr><al>De beschikking vermeldt in ieder geval het bedrag.</al></lid>
+      <meta-data><brondata>wijzigingsinformatie</brondata></meta-data>
+    </artikel>
+  </wettekst></wetgeving>
+</toestand>`;
+    const nodes = parseBwb(xml, "BWBR0005537", "Algemene wet bestuursrecht").mcpLite;
+    // Precies twee leden (1 en 2); geen leeg ongenummerd lid uit de meta-data.
+    expect(nodes).toHaveLength(2);
+    expect(nodes.every((n) => n.tekst.trim() !== "")).toBe(true);
+    expect(nodes.map((n) => n.sectie.match(/Lid (.*)$/)?.[1])).toEqual(["1", "2"]);
+  });
+
   it("verzamelt intref/extref als verwijzingen, met tekst ongewijzigd", () => {
     const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <toestand bwb-id="BWBR0004770" inwerkingtreding="2024-01-01">

@@ -173,7 +173,13 @@ function normalizeArtikel(node: BwbNode): NormalizedArtikel {
 
     if (lidNodes.length > 0) {
       if (directeContent.length > 0) {
-        leden.push(buildLid(`${node.id}:lid:aanhef`, "", directeContent, node.metadata));
+        // Aanhef/slot naast genummerde leden alleen opnemen als die ook echt inhoud heeft.
+        // Een artikel kan een <meta-data>-kind hebben (editoriale wijzigingsmetadata, geen
+        // wettekst) dat anders een stil leeg ongenummerd lid zou opleveren (bv. Awb art. 4:86).
+        const aanhef = buildLid(`${node.id}:lid:aanhef`, "", directeContent, node.metadata);
+        if (aanhef.tekst.trim() !== "" || aanhef.blocks.length > 0) {
+          leden.push(aanhef);
+        }
       }
       for (const lid of lidNodes) {
         const lidnr = lid.metadata.lidnr ?? "";
@@ -208,7 +214,11 @@ function buildLid(
   contentChildren: BwbNode[],
   metadata: BwbMetadata,
 ): NormalizedLid {
-  const blocks: NormalizedNode[] = contentChildren.map(normalizeNode);
+  // <meta-data> is editoriale metadata (brondata, oorspronkelijke tekst, wijzigingsinfo),
+  // geen wettekst — uit de content-blokken weren zodat het geen leeg lid/blok oplevert.
+  const blocks: NormalizedNode[] = contentChildren
+    .filter((c) => c.type !== "meta-data")
+    .map(normalizeNode);
 
   const alLeaves = blocks.filter((b): b is NormalizedLeaf => b.type === "al");
   const content: ContentItem[] = alLeaves.flatMap((a) => a.content);
