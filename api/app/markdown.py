@@ -40,6 +40,20 @@ def rapport_naar_markdown(r: dict) -> str:
         L += ["", f"**Samenhang:** {r['samenhang']}"]
     L.append("")
 
+    verwijzingen = r.get("verwijzingen", [])
+    if verwijzingen:
+        L.append("## 2b. Verwijzingen")
+        rijen = []
+        for v in verwijzingen:
+            doel = v.get("doel") or {}
+            doel_tekst = doel.get("label", "") or doel.get("target", "")
+            if doel.get("target"):
+                doel_tekst = f"[{doel_tekst}](https://wetten.overheid.nl/{doel['target']})"
+            rijen.append([v.get("id", ""), v.get("functie", ""), doel_tekst,
+                          v.get("bron_lid", ""), v.get("status", ""), v.get("betekenis", "")])
+        L += _tabel(["Id", "Functie", "Doel", "Bron", "Status", "Betekenis"], rijen)
+        L.append("")
+
     L.append("## 3. Begrippen en afleidingsregels")
     L.append("### Begrippen")
     L += _tabel(

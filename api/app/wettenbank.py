@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 
 from .config import Settings
 
@@ -95,15 +96,20 @@ def map_artikel_naar_analyse_basis(artikel_data: dict) -> dict:
     """Map de MCP-artikelrespons naar de brongetrouwe basisvelden van analyse.json.
 
     Deze velden komen UIT de MCP en mogen niet door het LLM verzonnen worden.
+    `mcp_verwijzingen` is de door de MCP getagde intref/extref-lijst per lid —
+    kandidaten voor de verwijzing-inventaris (activiteit 2a).
     """
-    leden = [
-        {
-            "lid": str(l.get("lid", "")),
+    leden = []
+    mcp_verwijzingen: list[dict] = []
+    for l in (artikel_data.get("leden") or []):
+        lidnr = str(l.get("lid", ""))
+        leden.append({
+            "lid": lidnr,
             "tekst": l.get("tekst", ""),
             **({"bronreferentie": l["bronreferentie"]} if l.get("bronreferentie") else {}),
-        }
-        for l in (artikel_data.get("leden") or [])
-    ]
+        })
+        for v in (l.get("verwijzingen") or []):
+            mcp_verwijzingen.append({"bron_lid": f"lid {lidnr}" if lidnr else "", **v})
     return {
         "wet": artikel_data.get("citeertitel", ""),
         "bwbId": artikel_data.get("bwbId", ""),
@@ -112,4 +118,24 @@ def map_artikel_naar_analyse_basis(artikel_data: dict) -> dict:
         "bronreferentie": artikel_data.get("bronreferentie", ""),
         "pad": artikel_data.get("pad", ""),
         "leden": leden,
+        "mcp_verwijzingen": mcp_verwijzingen,
     }
+
+
+def parse_jci(target: str) -> tuple[str, str, str | None] | None:
+    """Haal (bwbId, artikel, lid?) uit een JCI/BWB-verwijzing-target, zodat de orchestrator
+    het verwezen artikel via wettenbank_artikel kan ophalen. Heterogeen formaat: een volledige
+    JCI (`jci1.3:c:BWBR...&artikel=..&lid=..`), of een kale BWB-id. Geeft None als er geen
+    artikel uit te halen is (dan valt er niets te fetchen).
+    """
+    if not target:
+        return None
+    m_bwb = re.search(r"BWB[RVW]\d+", target, re.IGNORECASE)
+    if not m_bwb:
+        return None
+    bwb = m_bwb.group(0)
+    m_art = re.search(r"[&?]artikel=([^&]+)", target)
+    if not m_art:
+        return None
+    m_lid = re.search(r"[&?]lid=([^&]+)", target)
+    return bwb, m_art.group(1), (m_lid.group(1) if m_lid else None)

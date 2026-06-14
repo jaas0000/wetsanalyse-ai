@@ -127,7 +127,25 @@ export interface Begrip {
   voorbeeld: string;
   kenmerken: string;
   vindplaats: string;
+  bron_verwijzing?: string;
   twijfel: string;
+}
+
+export interface VerwijzingDoel {
+  label: string;
+  target: string;
+  bwbId: string;
+}
+
+export interface Verwijzing {
+  id: string;
+  bron_lid: string;
+  soort: string; // intref | extref | natuurlijk
+  functie: string; // definitie | schakel | delegatie | intra-artikel | informatief
+  doel: VerwijzingDoel;
+  status: string; // opgehaald | gevolgd | gesignaleerd | buiten-scope-diepte
+  betekenis: string;
+  volgen?: boolean;
 }
 
 export interface Afleidingsregel {
@@ -156,6 +174,7 @@ export interface Analyse2 {
   geraadpleegde: string;
   leden: Lid[];
   markeringen: Markering[];
+  verwijzingen: Verwijzing[];
   samenhang: string;
 }
 
@@ -201,6 +220,7 @@ export interface Rapport {
   geraadpleegde: string;
   leden: Lid[];
   markeringen: Markering[];
+  verwijzingen: Verwijzing[];
   samenhang: string;
   begrippen: Begrip[];
   afleidingsregels: Afleidingsregel[];

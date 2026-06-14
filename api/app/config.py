@@ -135,6 +135,9 @@ class Settings:
         self.max_active_jobs = int(os.environ.get("WETSANALYSE_MAX_ACTIVE_JOBS", "5"))
         # Token-budget per analyse; bij overschrijding stopt de job (FoutKlasse.quota).
         self.llm_token_budget = int(os.environ.get("WETSANALYSE_LLM_TOKEN_BUDGET", "0"))
+        # Harde cap op het aantal verwezen artikelen dat per analyse wordt opgehaald (Niveau B,
+        # diepte 1). Begrenst kosten/latency van de cross-referentie-fetch-lus. 0 = niet volgen.
+        self.max_verwijzing_fetches = int(os.environ.get("WETSANALYSE_MAX_VERWIJZING_FETCHES", "6"))
 
         self.analyses_dir = Path(
             os.environ.get("WETSANALYSE_ANALYSES_DIR", str(ANALYSES_DIR))

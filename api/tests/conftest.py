@@ -22,7 +22,15 @@ ARTIKEL_DATA = {
     "artikel": "1",
     "pad": "Hoofdstuk 1 > Artikel 1",
     "bronreferentie": "jci1.3:c:BWBR9999999&artikel=1",
-    "leden": [{"lid": "1", "tekst": "De belastingplichtige dient aangifte te doen.", "bronreferentie": "jci1.3:c:BWBR9999999&artikel=1&lid=1&g=2026-01-01"}],
+    "leden": [{
+        "lid": "1",
+        "tekst": "De belastingplichtige dient aangifte te doen.",
+        "bronreferentie": "jci1.3:c:BWBR9999999&artikel=1&lid=1&g=2026-01-01",
+        "verwijzingen": [{
+            "soort": "extref", "target": "jci1.3:c:BWBR0000001&artikel=2",
+            "label": "artikel 2 van de Testdefinitiewet", "bwbIdDoel": "BWBR0000001", "extern": True,
+        }],
+    }],
 }
 
 
@@ -49,9 +57,19 @@ class FakeLLM:
         m = _LID_RE.search(user)
         lidnr, tekst = (m.group(1), m.group(2)) if m else ("1", "")
         citaat = "VERZONNEN TEKST DIE NIET IN DE WET STAAT" if self.hallucineer else tekst
+        is_inventaris = "OPDRACHT (stap 1b" in user
         is_act3 = "OPDRACHT (activiteit 3)" in user or (
             "HERZIENE versie" in user and '"begrippen"' in user
         )
+        if is_inventaris:
+            # Fase 2a: één te-volgen definitie-verwijzing met een resolvebaar target.
+            data = {"verwijzingen": [{
+                "id": "v1", "bron_lid": f"lid {lidnr}", "soort": "extref", "functie": "definitie",
+                "doel": {"label": "artikel 2 van de Testdefinitiewet",
+                         "target": "jci1.3:c:BWBR0000001&artikel=2", "bwbId": "BWBR0000001"},
+                "volgen": True,
+            }]}
+            return LLMResult(data=data, model="fake-model", provider="fake", output_strategie="prompt_and_parse")
         if is_act3:
             data = {
                 "begrippen": [{"id": "b1", "naam": "belastingplichtige", "klasse": "Rechtssubject",
@@ -66,6 +84,12 @@ class FakeLLM:
             data = {
                 "markeringen": [{"id": "m1", "formulering": citaat, "klasse": "Rechtssubject",
                                  "vindplaats": f"lid {lidnr}", "toelichting": "drager van de plicht"}],
+                "verwijzingen": [{
+                    "id": "v1", "bron_lid": f"lid {lidnr}", "soort": "extref", "functie": "definitie",
+                    "doel": {"label": "artikel 2 van de Testdefinitiewet",
+                             "target": "jci1.3:c:BWBR0000001&artikel=2", "bwbId": "BWBR0000001"},
+                    "status": "opgehaald", "betekenis": "Definieert de belastingplichtige.",
+                }],
                 "samenhang": "De belastingplichtige is plichthebbende.",
                 "type": "wet", "reikwijdte": "lid 1", "geraadpleegde": "",
             }

@@ -5,7 +5,22 @@ import { JasBadge, Tag } from "@/components/ui/Badge";
 import { LinkButton } from "@/components/ui/Button";
 import { LedenLijst } from "@/components/LedenLijst";
 import { pathSegment } from "@/lib/url";
-import type { Markering, Rapport } from "@/lib/types";
+import type { Markering, Rapport, Verwijzing } from "@/lib/types";
+
+const VERWIJZING_FUNCTIE_LABEL: Record<string, string> = {
+  definitie: "Definitie",
+  schakel: "Schakel / afwijking",
+  delegatie: "Delegatie",
+  "intra-artikel": "Intra-artikel",
+  informatief: "Informatief",
+};
+const VERWIJZING_FUNCTIE_VOLGORDE = ["definitie", "schakel", "delegatie", "intra-artikel", "informatief"];
+const VERWIJZING_STATUS_LABEL: Record<string, string> = {
+  opgehaald: "opgehaald",
+  gevolgd: "gevolgd",
+  gesignaleerd: "gesignaleerd",
+  "buiten-scope-diepte": "buiten scope",
+};
 
 function Twijfel({ tekst }: { tekst?: string }) {
   if (!tekst) return null;
@@ -120,6 +135,59 @@ export function RapportView({ rapport, projectId }: { rapport: Rapport; projectI
         </Section>
       )}
 
+      {/* Verwijzingen */}
+      {rapport.verwijzingen?.length > 0 && (
+        <Section
+          title="Verwijzingen"
+          count={rapport.verwijzingen.length}
+          subtitle="uitgaand"
+        >
+          <div className="space-y-6">
+            {groepeerVerwijzingen(rapport.verwijzingen).map(([functie, items]) => (
+              <div key={functie}>
+                <div className="mb-2 flex items-center gap-2">
+                  <Tag>{VERWIJZING_FUNCTIE_LABEL[functie] ?? functie}</Tag>
+                  <span className="font-mono text-xs text-faint">{items.length}</span>
+                </div>
+                <div className="space-y-2">
+                  {items.map((v) => (
+                    <Card key={v.id} className="p-4">
+                      <div className="flex flex-wrap items-center gap-2">
+                        {v.doel?.target ? (
+                          <a
+                            href={`https://wetten.overheid.nl/${v.doel.target}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="min-w-0 break-words font-display text-[15px] text-accent hover:underline"
+                          >
+                            {v.doel.label || v.doel.target} ↗
+                          </a>
+                        ) : (
+                          <span className="min-w-0 break-words font-display text-[15px] text-ink">
+                            {v.doel?.label || "(verwijzing)"}
+                          </span>
+                        )}
+                        <Tag>{VERWIJZING_STATUS_LABEL[v.status] ?? v.status}</Tag>
+                        {v.soort && (
+                          <span className="font-mono text-xs text-faint">
+                            {v.soort}
+                            {v.doel?.bwbId && rapport.bwbId && v.doel.bwbId !== rapport.bwbId ? " · extern" : ""}
+                          </span>
+                        )}
+                        {v.bron_lid && <span className="font-mono text-xs text-faint">{v.bron_lid}</span>}
+                      </div>
+                      {v.betekenis && (
+                        <p className="mt-2 text-sm leading-relaxed text-muted">{v.betekenis}</p>
+                      )}
+                    </Card>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </Section>
+      )}
+
       {/* Begrippen */}
       {rapport.begrippen?.length > 0 && (
         <Section title="Begrippen" count={rapport.begrippen.length} subtitle="activiteit 3">
@@ -208,6 +276,18 @@ function groepeer(markeringen: Markering[]): [string, Markering[]][] {
     map.get(k)!.push(m);
   }
   return [...map.entries()];
+}
+
+function groepeerVerwijzingen(verwijzingen: Verwijzing[]): [string, Verwijzing[]][] {
+  const map = new Map<string, Verwijzing[]>();
+  for (const v of verwijzingen) {
+    const k = v.functie || "informatief";
+    if (!map.has(k)) map.set(k, []);
+    map.get(k)!.push(v);
+  }
+  return [...map.entries()].sort(
+    (a, b) => VERWIJZING_FUNCTIE_VOLGORDE.indexOf(a[0]) - VERWIJZING_FUNCTIE_VOLGORDE.indexOf(b[0]),
+  );
 }
 
 function Reviewlog({ rapport }: { rapport: Rapport }) {

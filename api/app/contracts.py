@@ -34,6 +34,29 @@ class Markering(BaseModel):
     twijfel: str = ""
 
 
+class VerwijzingDoel(BaseModel):
+    label: str = ""
+    target: str = ""   # ruwe JCI/BWB-verwijzing (opaque), indien bekend
+    bwbId: str = ""
+
+
+class Verwijzing(BaseModel):
+    """Eén uitgaande verwijzing van de bepaling — zie references/verwijzingen-volgen.md.
+
+    Aparte as náást de markeringen (uitgaande pointers). `volgen` is de fetch-afweging:
+    de orchestrator haalt alleen te-volgen verwijzingen daadwerkelijk op (begrensd).
+    """
+
+    id: str
+    bron_lid: str = ""
+    soort: str = ""        # intref | extref | natuurlijk
+    functie: str = ""      # definitie | schakel | delegatie | intra-artikel | informatief
+    doel: VerwijzingDoel = Field(default_factory=VerwijzingDoel)
+    status: str = ""       # opgehaald | gevolgd | gesignaleerd | buiten-scope-diepte
+    betekenis: str = ""
+    volgen: bool = False    # of de orchestrator de verwezen tekst moet ophalen
+
+
 class Analyse2(BaseModel):
     wet: str = ""
     bwbId: str = ""
@@ -47,6 +70,7 @@ class Analyse2(BaseModel):
     geraadpleegde: str = ""
     leden: list[Lid] = Field(default_factory=list)
     markeringen: list[Markering] = Field(default_factory=list)
+    verwijzingen: list[Verwijzing] = Field(default_factory=list)
     samenhang: str = ""
 
 
@@ -60,6 +84,7 @@ class Begrip(BaseModel):
     voorbeeld: str = ""
     kenmerken: str = ""
     vindplaats: str = ""
+    bron_verwijzing: str = ""   # id van de verwijzing waarop het begrip steunt (bv. brondefinitie)
     twijfel: str = ""
 
 
@@ -237,6 +262,7 @@ class Rapport(BaseModel):
     geraadpleegde: str = ""
     leden: list = Field(default_factory=list)
     markeringen: list = Field(default_factory=list)
+    verwijzingen: list = Field(default_factory=list)
     samenhang: str = ""
     begrippen: list = Field(default_factory=list)
     afleidingsregels: list = Field(default_factory=list)

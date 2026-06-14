@@ -13,6 +13,7 @@ interface ReviewItem {
   id: string;
   titel: string;
   klasse?: string;
+  soort?: string;
   regels: { label: string; waarde: string }[];
   twijfel?: string;
 }
@@ -33,16 +34,28 @@ function splitsWaarschuwingen(ws: string[]): { perId: Record<string, string[]>; 
 function itemsUitAnalyse(act: "2" | "3", data: Analyse2 | Analyse3): ReviewItem[] {
   if (act === "2") {
     const a = data as Analyse2;
-    return (a.markeringen ?? []).map((m) => ({
+    const markeringen: ReviewItem[] = (a.markeringen ?? []).map((m) => ({
       id: m.id,
       titel: m.formulering || m.id,
       klasse: m.klasse,
+      soort: "markering",
       regels: [
         { label: "Vindplaats", waarde: m.vindplaats },
         { label: "Toelichting", waarde: m.toelichting },
       ],
       twijfel: m.twijfel,
     }));
+    const verwijzingen: ReviewItem[] = (a.verwijzingen ?? []).map((v) => ({
+      id: v.id,
+      titel: v.doel?.label || v.functie || v.id,
+      soort: "verwijzing",
+      regels: [
+        { label: "Functie", waarde: v.functie },
+        { label: "Status", waarde: v.status },
+        { label: "Betekenis", waarde: v.betekenis },
+      ],
+    }));
+    return [...markeringen, ...verwijzingen];
   }
   const a = data as Analyse3;
   const begrippen: ReviewItem[] = (a.begrippen ?? []).map((b) => ({
@@ -210,7 +223,10 @@ export function ReviewPanel({
             <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
               <div className="min-w-0 w-full sm:w-auto">
                 <p className="break-words font-medium text-ink">{it.titel}</p>
-                <span className="font-mono text-xs text-faint">{it.id}</span>
+                <span className="font-mono text-xs text-faint">
+                  {it.id}
+                  {it.soort === "verwijzing" ? " · verwijzing" : ""}
+                </span>
               </div>
               {it.klasse && <JasBadge klasse={it.klasse} />}
             </div>

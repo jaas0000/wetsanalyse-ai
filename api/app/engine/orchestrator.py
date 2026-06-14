@@ -32,7 +32,7 @@ from ..jobstore import IdConflict, JobStore
 from ..ratelimit import QuotaExceeded
 from ..rapport import bouw_rapport_async
 from ..validation import brongetrouwheid_check, schema_check
-from ..wettenbank import WettenbankClient, WettenbankError, map_artikel_naar_analyse_basis
+from ..wettenbank import WettenbankClient, WettenbankError, map_artikel_naar_analyse_basis, parse_jci
 from . import prompts, steps
 from .retry import met_retry
 
@@ -253,14 +253,31 @@ class WetsanalyseEngine:
 
         llm = await self._llm_for(job)
 
+        # Niveau B — verwijzing-inventaris (fase 2a) + begrensde fetch, alleen bij een VERSE
+        # act-2-generatie. Eén keer bepaald (niet per auto-correctie-poging): de opgehaalde
+        # verwezen tekst verandert niet bij hergeneratie op een brongetrouwheid-schending.
+        inventaris = opgehaald = None
+        inv_res = None
+        if feedback is None and activiteit == "2":
+            inv_res = await self._met_retry(lambda: steps.inventariseer_verwijzingen(llm, basis))
+            inventaris = inv_res.data
+            opgehaald = await self._volg_verwijzingen(basis, inventaris)
+
         async def maak():
             if feedback is not None:
                 return await steps.herzie(llm, activiteit, basis, ronde, vorige, feedback)
             if activiteit == "2":
-                return await steps.genereer_act2(llm, basis, ronde, job.analysefocus or None)
+                return await steps.genereer_act2(
+                    llm, basis, ronde, job.analysefocus or None, inventaris, opgehaald
+                )
             return await steps.genereer_act3(llm, basis, ronde, act2)
 
         analyse, prov = await self._met_retry(maak)
+        # Tel de inventaris-tokens (fase 2a) bij de act-2-ronde — anders ontbreken ze in het
+        # token-budget en de usage-aggregatie.
+        if inv_res is not None:
+            prov["tokens_in"] += inv_res.tokens_in
+            prov["tokens_out"] += inv_res.tokens_out
         pogingen = 0
         # Auto-correctie regenereert UITSLUITEND op harde brongetrouwheid-schendingen. Zachte
         # schema-fouten blokkeren per ontwerp niet en mogen geen (dure) hergeneratie triggeren;
@@ -347,6 +364,42 @@ class WetsanalyseEngine:
             backoff=self.s.transient_backoff_s,
             max_backoff=self.s.transient_max_backoff_s,
         )
+
+    async def _volg_verwijzingen(self, basis: dict, inventaris: dict) -> dict:
+        """Niveau B — haal de te-volgen verwijzingen op (diepte 1, begrensd tot de fetch-cap).
+        Een gefaalde fetch degradeert STIL: de verwijzing blijft 'gesignaleerd', de job faalt
+        nooit op een verwezen artikel. Retourneert {target: opgehaalde tekst} als act-2b-context.
+        """
+        cap = self.s.max_verwijzing_fetches
+        if cap <= 0:
+            return {}
+        opgehaald: dict[str, str] = {}
+        gezien: set[tuple] = set()
+        for v in (inventaris.get("verwijzingen") or []):
+            if len(opgehaald) >= cap:
+                break
+            if not v.get("volgen"):
+                continue
+            doel = v.get("doel") or {}
+            parsed = parse_jci(doel.get("target") or "")
+            if parsed is None:
+                continue
+            bwb, artikel, lid = parsed
+            sleutel = (bwb.upper(), artikel, lid)
+            if sleutel in gezien:
+                continue
+            gezien.add(sleutel)
+            try:
+                data = await self.wb.artikel(bwb, artikel, lid)
+            except Exception as e:  # noqa: BLE001 — best-effort; nooit de job laten falen
+                logger.info("Verwijzing-fetch %s art %s overgeslagen: %s", bwb, artikel, e)
+                continue
+            teksten = [f"Lid {l.get('lid','')}: {l.get('tekst','')}".strip()
+                       for l in (data.get("leden") or []) if l.get("tekst")]
+            if teksten:
+                label = doel.get("target") or f"{bwb} artikel {artikel}"
+                opgehaald[label] = "\n".join(teksten)
+        return opgehaald
 
     async def _basis(self, job: Job) -> dict:
         a2 = await self.store.lees_analyse(job.id, "2", 1) or {}

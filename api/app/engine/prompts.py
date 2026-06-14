@@ -27,7 +27,8 @@ def _lees_referentie(naam: str) -> str:
 
 JAS_REF = _lees_referentie("jas-klassen-referentie.md")
 BEGRIPPEN_REF = _lees_referentie("begrippen-en-afleidingsregels-opstellen.md")
-REFERENTIE_HASH = _hash(JAS_REF, BEGRIPPEN_REF)
+VERWIJZINGEN_REF = _lees_referentie("verwijzingen-volgen.md")
+REFERENTIE_HASH = _hash(JAS_REF, BEGRIPPEN_REF, VERWIJZINGEN_REF)
 
 _KLASSEN = ", ".join(sorted(GELDIGE_JAS_KLASSEN))
 _REGELTYPEN = ", ".join(sorted(GELDIGE_REGELTYPEN))
@@ -54,10 +55,43 @@ _ACT2_SCHEMA = {
         }
     ],
     "samenhang": "<korte tekst over samenhang rond rechtsbetrekking/rechtsfeit>",
+    "verwijzingen": [
+        {
+            "id": "v1",
+            "bron_lid": "lid <n>",
+            "soort": "<intref|extref|natuurlijk>",
+            "functie": "<definitie|schakel|delegatie|intra-artikel|informatief>",
+            "doel": {
+                "label": "<vindplaats van het doel>",
+                "target": "<jci-uri indien bekend>",
+                "bwbId": "<BWB-id indien bekend>",
+            },
+            "status": "<opgehaald|gevolgd|gesignaleerd|buiten-scope-diepte>",
+            "betekenis": "<wat de verwijzing toevoegt; citeer waar relevant LETTERLIJK uit de opgehaalde tekst>",
+        }
+    ],
     "type": "<wet|amvb|ministeriële regeling|...>",
     "analysefocus": "<optioneel>",
     "reikwijdte": "<welke leden geanalyseerd; wat buiten scope>",
     "geraadpleegde": "<definitie-/aanpalende artikelen>",
+}
+
+# Lichte fase-2a-uitvoer: alleen de inventaris + de fetch-afweging (volgen).
+_INVENTARIS_SCHEMA = {
+    "verwijzingen": [
+        {
+            "id": "v1",
+            "bron_lid": "lid <n>",
+            "soort": "<intref|extref|natuurlijk>",
+            "functie": "<definitie|schakel|delegatie|intra-artikel|informatief>",
+            "doel": {
+                "label": "<vindplaats van het doel>",
+                "target": "<jci1.3:c:BWB...&artikel=..[&lid=..] indien herleidbaar>",
+                "bwbId": "<BWB-id indien bekend>",
+            },
+            "volgen": True,
+        }
+    ],
 }
 
 _ACT3_SCHEMA = {
@@ -70,6 +104,7 @@ _ACT3_SCHEMA = {
             "voorbeeld": "<kort>",
             "kenmerken": "<kenmerken/relaties>",
             "vindplaats": "<art./lid>",
+            "bron_verwijzing": "<id van de definitie-verwijzing indien de definitie van elders komt, anders weglaten>",
             "twijfel": "<optioneel>",
         }
     ],
@@ -98,7 +133,67 @@ def _leden_blok(basis: dict) -> str:
     return "\n".join(regels)
 
 
-def act2_prompt(basis: dict, analysefocus: str | None) -> tuple[str, str, dict, str]:
+def _mcp_verwijzingen_blok(basis: dict) -> str:
+    kand = basis.get("mcp_verwijzingen") or []
+    if not kand:
+        return "\n\n(De MCP tagde geen expliciete verwijzingen; let zelf op natuurlijke-taalverwijzingen.)"
+    regels = [
+        "\n\nDoor de MCP getagde verwijzingen (intref/extref) — kandidaten; vul aan met "
+        "natuurlijke-taalverwijzingen die de MCP niet tagt:"
+    ]
+    for v in kand:
+        extern = " (extern)" if v.get("extern") else ""
+        regels.append(
+            f"- [{v.get('bron_lid','')}] {v.get('soort','')}{extern}: \"{v.get('label','')}\" "
+            f"→ {v.get('target','')}"
+        )
+    return "\n".join(regels)
+
+
+def act2_inventaris_prompt(basis: dict) -> tuple[str, str, dict, str]:
+    """Fase 2a — alleen de verwijzing-inventaris met de fetch-afweging (`volgen`)."""
+    user = (
+        "REFERENTIE — verwijzingen volgen:\n"
+        + VERWIJZINGEN_REF
+        + "\n\n=== WETTEKST ===\n"
+        + _leden_blok(basis)
+        + _mcp_verwijzingen_blok(basis)
+        + "\n\nOPDRACHT (stap 1b — verwijzing-inventaris): inventariseer ALLE uitgaande "
+        "verwijzingen van deze bepaling — de getagde kandidaten hierboven PLUS "
+        "natuurlijke-taalverwijzingen ('het eerste lid', een gedefinieerde term, 'van "
+        "overeenkomstige toepassing'). Classificeer elke verwijzing naar functie. Geef een "
+        "best-effort 'doel.target' als JCI-uri (jci1.3:c:<BWB-id>&artikel=<nr>[&lid=<n>]) zodat "
+        "de tekst opgehaald kan worden. Zet 'volgen' op true wanneer de verwijzing de betekenis "
+        "of werking van de focus-bepaling bepaalt (definitie/schakel/relevante delegatie), en op "
+        "false voor louter informatieve of intra-artikel-verwijzingen. Gebruik stabiele id's "
+        "(v1, v2, …). Geef UITSLUITEND het verwijzingen-veld terug."
+    )
+    return _SYSTEM, user, _INVENTARIS_SCHEMA, _hash(_SYSTEM, user)
+
+
+def _verwijzing_context(inventaris: dict | None, opgehaald: dict | None) -> str:
+    if inventaris is None:
+        return ""
+    blok = (
+        "\n\n=== VERWIJZING-INVENTARIS (stap 1b — neem over in 'verwijzingen' en maak af) ===\n"
+        + json.dumps({"verwijzingen": inventaris.get("verwijzingen", [])}, ensure_ascii=False, indent=2)
+    )
+    if opgehaald:
+        blok += (
+            "\n\n=== OPGEHAALDE TEKST VAN DE GEVOLGDE VERWIJZINGEN (brongetrouw, uit de MCP — "
+            "citeer hieruit LETTERLIJK in 'betekenis', verzin niets) ===\n"
+        )
+        for target, tekst in opgehaald.items():
+            blok += f"\n--- {target} ---\n{tekst}\n"
+    return blok
+
+
+def act2_prompt(
+    basis: dict,
+    analysefocus: str | None,
+    inventaris: dict | None = None,
+    opgehaald: dict | None = None,
+) -> tuple[str, str, dict, str]:
     # analysefocus is vrije clienttekst → expliciet als onbetrouwbare data markeren, zodat een
     # poging tot prompt-injectie ("negeer brongetrouwheid") niet als instructie wordt opgevolgd.
     focus = (
@@ -109,13 +204,20 @@ def act2_prompt(basis: dict, analysefocus: str | None) -> tuple[str, str, dict, 
     user = (
         "REFERENTIE — JAS-klassen (gebruik dit bij het classificeren):\n"
         + JAS_REF
+        + "\n\nREFERENTIE — verwijzingen volgen:\n"
+        + VERWIJZINGEN_REF
         + "\n\n=== WETTEKST OM TE ANALYSEREN ===\n"
         + _leden_blok(basis)
+        + _verwijzing_context(inventaris, opgehaald)
         + focus
         + "\n\nOPDRACHT (activiteit 2): markeer fijnmazig de relevante formuleringen (vrijwel "
         "elk lid bevat meerdere markeringen) en ken elke markering één JAS-klasse toe. Gebruik "
         "stabiele id's (m1, m2, …). Elke 'formulering' MOET een letterlijk citaat uit de "
-        "bovenstaande leden-tekst zijn. Vat de samenhang kort samen."
+        "bovenstaande leden-tekst zijn. Vat de samenhang kort samen.\n"
+        "Neem daarnaast de verwijzing-inventaris over in 'verwijzingen' (zelfde id's en functie) "
+        "en maak elke verwijzing af: schrijf 'betekenis' (citeer waar relevant LETTERLIJK uit de "
+        "opgehaalde tekst) en zet 'status' op 'opgehaald' als de tekst is meegeleverd, anders "
+        "'gesignaleerd' (of 'gevolgd' voor intra-artikel)."
     )
     return _SYSTEM, user, _ACT2_SCHEMA, _hash(_SYSTEM, user)
 
@@ -128,11 +230,15 @@ def act3_prompt(basis: dict, act2: dict) -> tuple[str, str, dict, str]:
         + _leden_blok(basis)
         + "\n\n=== GECLASSIFICEERDE MARKERINGEN (activiteit 2) ===\n"
         + json.dumps({"markeringen": act2.get("markeringen", []), "samenhang": act2.get("samenhang", "")}, ensure_ascii=False, indent=2)
+        + "\n\n=== UITGAANDE VERWIJZINGEN (activiteit 2; brondefinities staan in 'betekenis') ===\n"
+        + json.dumps({"verwijzingen": act2.get("verwijzingen", [])}, ensure_ascii=False, indent=2)
         + "\n\nOPDRACHT (activiteit 3): stel per betekenisdragend element een begrip op "
         "(definitie, voorbeeld, kenmerken/relaties, vindplaats) en leg de afleidingsregels vast "
         "(type, in-/uitvoer, parameters, voorwaarden, gestructureerde formulering). Hergebruik "
-        "brondefinities letterlijk; markeer eigen werkdefinities als [interpretatie]. Gebruik "
-        "stabiele id's (b1, r1, …). Noteer aandachtspunten als validatiepunten."
+        "brondefinities letterlijk; markeer eigen werkdefinities als [interpretatie]. Komt een "
+        "hergebruikte definitie uit een verwijzing met functie 'definitie', zet dan "
+        "'bron_verwijzing' op het id van die verwijzing. Gebruik stabiele id's (b1, r1, …). "
+        "Noteer aandachtspunten als validatiepunten."
     )
     return _SYSTEM, user, _ACT3_SCHEMA, _hash(_SYSTEM, user)
 
@@ -141,7 +247,7 @@ def revise_prompt(
     activiteit: str, basis: dict, vorige: dict, feedback: dict
 ) -> tuple[str, str, dict, str]:
     schema = _ACT2_SCHEMA if activiteit == "2" else _ACT3_SCHEMA
-    ref = JAS_REF if activiteit == "2" else BEGRIPPEN_REF
+    ref = (JAS_REF + "\n\n" + VERWIJZINGEN_REF) if activiteit == "2" else BEGRIPPEN_REF
     user = (
         "REFERENTIE:\n"
         + ref

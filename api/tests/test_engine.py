@@ -28,6 +28,64 @@ async def test_autonoom_loopt_door_tot_klaar(engine, store):
     assert job.provenance[0].model == "fake-model"
 
 
+async def test_verwijzingen_in_rapport_met_fetch(engine, store):
+    """De cross-referentie-flow: inventaris → fetch → verwijzingen in het rapport, opgehaald."""
+    job = await engine.create_job(_start_req(review=False), "test")
+    await engine.run_initial(job.id)
+
+    rapport = await store.lees_rapport(job.id)
+    assert rapport is not None
+    verwijzingen = rapport["verwijzingen"]
+    assert len(verwijzingen) == 1
+    assert verwijzingen[0]["id"] == "v1"
+    assert verwijzingen[0]["functie"] == "definitie"
+    assert verwijzingen[0]["status"] == "opgehaald"
+
+
+async def test_verwijzing_fetch_cap_nul_volgt_niet(settings, store):
+    """Met cap 0 wordt niets gevolgd: geen extra MCP-fetch, wel de inventaris in de analyse."""
+    settings.max_verwijzing_fetches = 0
+
+    class TellendeWb(FakeWettenbank):
+        def __init__(self):
+            super().__init__()
+            self.calls = 0
+
+        async def artikel(self, bwb_id, artikel, lid=None):
+            self.calls += 1
+            return await super().artikel(bwb_id, artikel, lid)
+
+    wb = TellendeWb()
+    eng = WetsanalyseEngine(settings, store, FakeLLM(), wb)
+    job = await eng.create_job(_start_req(review=False), "test")
+    await eng.run_initial(job.id)
+
+    # Alleen de focus-fetch; geen verwijzing-fetch.
+    assert wb.calls == 1
+    assert (await store.load_job(job.id)).state == JobState.klaar
+
+
+async def test_verwijzing_fetch_degradeert_zonder_jobfout(settings, store):
+    """Een gefaalde verwijzing-fetch mag de job nooit laten falen (best-effort, Niveau B)."""
+    class FocusOkVerwijzingStuk(FakeWettenbank):
+        def __init__(self):
+            super().__init__()
+            self.calls = 0
+
+        async def artikel(self, bwb_id, artikel, lid=None):
+            self.calls += 1
+            if self.calls >= 2:  # de gevolgde verwijzing faalt
+                raise WettenbankError("verwezen artikel onbereikbaar")
+            return await super().artikel(bwb_id, artikel, lid)
+
+    eng = WetsanalyseEngine(settings, store, FakeLLM(), FocusOkVerwijzingStuk())
+    job = await eng.create_job(_start_req(review=False), "test")
+    await eng.run_initial(job.id)
+
+    # Ondanks de gefaalde verwijzing-fetch loopt de analyse netjes door.
+    assert (await store.load_job(job.id)).state == JobState.klaar
+
+
 async def test_review_pauzeert_en_akkoord_vordert(engine, store):
     job = await engine.create_job(_start_req(review=True), "test")
     await engine.run_initial(job.id)
@@ -220,8 +278,8 @@ async def test_autocorrectie_negeert_zachte_schemafouten(settings, store, monkey
     job = await eng.create_job(_start_req(review=False), "test")
     await eng.run_initial(job.id)
 
-    # Eén call voor act2 + één voor act3; geen extra hergeneratie ondanks de zachte fout.
-    assert llm.calls == 2
+    # Verwijzing-inventaris (fase 2a) + act2 + act3; geen extra hergeneratie ondanks de zachte fout.
+    assert llm.calls == 3
     assert (await store.load_job(job.id)).state == JobState.klaar
 
 
@@ -246,7 +304,8 @@ async def test_transiente_mcp_fout_wordt_geretryed(settings, store):
     job = await eng.create_job(_start_req(review=False), "test")
     await eng.run_initial(job.id)
 
-    assert wb.calls == 2
+    # 1 mislukte + 1 geslaagde focus-fetch (de retry), plus 1 fetch van de gevolgde verwijzing.
+    assert wb.calls == 3
     assert (await store.load_job(job.id)).state == JobState.klaar
 
 

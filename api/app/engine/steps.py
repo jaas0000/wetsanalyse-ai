@@ -26,13 +26,17 @@ def _prov(activiteit: str, ronde: int, res: LLMResult, prompt_hash: str, basis: 
 
 
 def _merge_act2(basis: dict, out: dict) -> dict:
+    # mcp_verwijzingen is een interne hulpvariabele (kandidatenlijst voor de inventaris) en
+    # hoort niet in de opgeslagen analyse — daarom expliciet weglaten uit de basis-spread.
+    basis_schoon = {k: v for k, v in basis.items() if k != "mcp_verwijzingen"}
     return {
-        **basis,  # brongetrouw: wet, bwbId, artikel, versiedatum, bronreferentie, pad, leden
+        **basis_schoon,  # brongetrouw: wet, bwbId, artikel, versiedatum, bronreferentie, pad, leden
         "type": out.get("type", ""),
         "analysefocus": out.get("analysefocus", ""),
         "reikwijdte": out.get("reikwijdte", ""),
         "geraadpleegde": out.get("geraadpleegde", ""),
         "markeringen": out.get("markeringen", []),
+        "verwijzingen": out.get("verwijzingen", []),
         "samenhang": out.get("samenhang", ""),
     }
 
@@ -50,8 +54,24 @@ def _merge_act3(basis: dict, out: dict) -> dict:
     }
 
 
-async def genereer_act2(llm: LLMClient, basis: dict, ronde: int, analysefocus: str | None) -> tuple[dict, dict]:
-    system, user, schema, phash = prompts.act2_prompt(basis, analysefocus)
+async def inventariseer_verwijzingen(llm: LLMClient, basis: dict) -> LLMResult:
+    """Fase 2a — lichte LLM-stap die alleen de verwijzing-inventaris (+ `volgen`) oplevert.
+    Geeft de volledige LLMResult terug zodat de orchestrator de tokens bij de act-2-ronde
+    optelt (budget/usage) en de fetch-lus aanstuurt op `res.data`.
+    """
+    system, user, schema, _ = prompts.act2_inventaris_prompt(basis)
+    return await llm.complete(system, user, schema)
+
+
+async def genereer_act2(
+    llm: LLMClient,
+    basis: dict,
+    ronde: int,
+    analysefocus: str | None,
+    inventaris: dict | None = None,
+    opgehaald: dict | None = None,
+) -> tuple[dict, dict]:
+    system, user, schema, phash = prompts.act2_prompt(basis, analysefocus, inventaris, opgehaald)
     res = await llm.complete(system, user, schema)
     return _merge_act2(basis, res.data), _prov("2", ronde, res, phash, basis)
 
