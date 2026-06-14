@@ -207,8 +207,8 @@ export function ReviewPanel({
       <div className="space-y-3">
         {items?.map((it) => (
           <div key={it.id} className="rounded-lg border border-line bg-paper/50 p-4">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
+            <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
+              <div className="min-w-0 w-full sm:w-auto">
                 <p className="break-words font-medium text-ink">{it.titel}</p>
                 <span className="font-mono text-xs text-faint">{it.id}</span>
               </div>
