@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/Card";
 import { Field, Input, Textarea } from "@/components/ui/Field";
 import { createProject, isApiError, listModelProfiles, listWetten } from "@/lib/api";
 import { buildStartRequest, projectSchema } from "@/lib/projectForm";
+import { pathSegment } from "@/lib/url";
 import type { ProfileChoice, WetChoice } from "@/lib/types";
 
 const selectClass =
@@ -69,7 +70,7 @@ export function ProjectForm() {
     setBezig(true);
     try {
       const res = await createProject(body);
-      router.push(`/projecten/${res.id}`);
+      router.push(`/projecten/${pathSegment(res.id)}`);
     } catch (e) {
       if (isApiError(e)) {
         if (e.status === 429) setFout(`Te veel verzoeken. Probeer over ${e.retryAfter ?? "enkele"} s opnieuw.`);

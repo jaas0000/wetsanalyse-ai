@@ -10,6 +10,7 @@ import { ReviewPanel } from "@/components/ReviewPanel";
 import { RapportView } from "@/components/RapportView";
 import { getProject, getRapport, retryProject, deleteProject, isApiError } from "@/lib/api";
 import { isReview, isTerminal, reviewActiviteit } from "@/lib/states";
+import { pathSegment } from "@/lib/url";
 import type { Job, Rapport } from "@/lib/types";
 import { useRouter } from "next/navigation";
 
@@ -49,7 +50,7 @@ export function ProjectClient({ initieel }: { initieel: Job }) {
   // SSE: open zolang het project niet terminaal is; elke update triggert een verse job-fetch.
   useEffect(() => {
     if (isTerminal(job.state)) return;
-    const es = new EventSource(`/api/projects/${initieel.id}/events`);
+    const es = new EventSource(`/api/projects/${pathSegment(initieel.id)}/events`);
     esRef.current = es;
     es.onmessage = () => void refreshJob();
     es.addEventListener("done", () => {

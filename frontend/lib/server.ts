@@ -4,6 +4,7 @@
 
 import "server-only";
 import { apiBaseUrl, authHeader } from "./config";
+import { pathSegment } from "./url";
 import type { Job, JobSummary, Rapport } from "./types";
 
 async function serverGet<T>(path: string): Promise<T> {
@@ -24,9 +25,9 @@ export function getProjectsServer(limit = 50, offset = 0): Promise<JobSummary[]>
 }
 
 export function getProjectServer(id: string): Promise<Job> {
-  return serverGet<Job>(`/v1/projects/${encodeURIComponent(id)}`);
+  return serverGet<Job>(`/v1/projects/${pathSegment(id)}`);
 }
 
 export function getRapportServer(id: string): Promise<Rapport> {
-  return serverGet<Rapport>(`/v1/projects/${encodeURIComponent(id)}/rapport`);
+  return serverGet<Rapport>(`/v1/projects/${pathSegment(id)}/rapport`);
 }
