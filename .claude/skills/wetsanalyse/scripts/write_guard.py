@@ -47,12 +47,10 @@ def main() -> None:
         sys.exit(2)
 
     if _ANALYSE.search(file_path):
-        pad = Path(file_path)
-        try:
-            size = pad.stat().st_size
-        except OSError:
-            size = 0
-        if size > 0:
+        # Een bestaande analyse.json in werk/ is immutabel — ongeacht grootte. Ook een leeg/partieel
+        # bestand (0 bytes) mag niet stilzwijgend worden overschreven: de eerste write per ronde
+        # bestaat nog niet en is dus toegestaan, een tweede write wordt geweigerd.
+        if Path(file_path).is_file():
             print(
                 f"GEBLOKKEERD: {file_path}\n"
                 "Een bestaande analyse.json in werk/ is immutabel. "
