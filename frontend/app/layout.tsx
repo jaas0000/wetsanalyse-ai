@@ -1,25 +1,9 @@
 import type { Metadata, Viewport } from "next";
-import { Fira_Sans, Fira_Mono } from "next/font/google";
 import Image from "next/image";
 import Link from "next/link";
 import { SiteNav } from "@/components/SiteNav";
+import { sans, mono } from "./fonts";
 import "./globals.css";
-
-// Rijkshuisstijl-typografie via een vrij alternatief: Fira Sans benadert Rijksoverheid
-// Sans, Fira Mono dient voor tags/bronreferenties. Eén familie voor koppen én broodtekst.
-const sans = Fira_Sans({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-  variable: "--font-sans",
-  display: "swap",
-});
-
-const mono = Fira_Mono({
-  subsets: ["latin"],
-  weight: ["400", "500", "700"],
-  variable: "--font-mono",
-  display: "swap",
-});
 
 export const metadata: Metadata = {
   title: "Wetsanalyse | Belastingdienst",
