@@ -16,6 +16,7 @@ Gebruik:
 import argparse
 import io
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -46,6 +47,26 @@ GELDIGE_VERWIJZING_STATUS = {
 GELDIGE_VERWIJZING_SOORT = {"intref", "extref", "natuurlijk"}
 
 DELEGATIE_KLASSE = "Delegatiebevoegdheid en delegatie-invulling"
+
+# Een formulering markeert een niet altijd aaneengesloten stuk wettekst. De skill mag
+# daarbij twee citeerconventies gebruiken die de letterlijke-substring-toets breken:
+#   - beletselteken ('...' of '…') om weggelaten tussentekst te eliden;
+#   - vierkante haken ([...]) om een verduidelijking/referent in te voegen.
+# We toetsen daarom per losgesplitst fragment of het letterlijk in de wettekst staat,
+# na verwijdering van de ingevoegde haken.
+_ELLIPS = re.compile(r"\s*(?:\.\.\.|…)\s*")
+_HAKEN = re.compile(r"\[[^\]]*\]")
+
+
+def fragmenten_letterlijk(formulering: str, brontekst: str) -> bool:
+    """True als elk (op beletselteken gesplitst) fragment letterlijk in de brontekst staat.
+
+    Vierkante-haak-invoegingen worden eerst weggestript, zodat 'een [bankrekening]' op
+    'een' wordt getoetst. Lege fragmenten (bv. door een eind-beletselteken) tellen niet mee.
+    """
+    schoon = _HAKEN.sub("", formulering)
+    fragmenten = [f.strip() for f in _ELLIPS.split(schoon)]
+    return all((not f) or (f in brontekst) for f in fragmenten)
 
 
 def check_verwijzingen(data: dict) -> tuple[list[str], list[str]]:
@@ -135,7 +156,7 @@ def check_activiteit_2(data: dict) -> tuple[list[str], list[str]]:
             )
 
         formulering = (m.get("formulering") or "").strip()
-        if formulering and leden_tekst and formulering not in leden_tekst:
+        if formulering and leden_tekst and not fragmenten_letterlijk(formulering, leden_tekst):
             kort = formulering[:60] + ("..." if len(formulering) > 60 else "")
             waarschuwingen.append(
                 f"[{mid}] Formulering lijkt geen letterlijk citaat uit de wettekst: '{kort}'"

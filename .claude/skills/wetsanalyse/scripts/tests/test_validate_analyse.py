@@ -71,6 +71,26 @@ class ValidateAnalyseTest(unittest.TestCase):
         )
         self.assertEqual(res.returncode, 2)
 
+    def test_ellips_citaat_geen_waarschuwing(self):
+        # Beletselteken elideert weggelaten tussentekst — beide fragmenten staan letterlijk.
+        data = json.loads(json.dumps(GELDIG_ACT2))
+        data["leden"][0]["tekst"] = "De belastingschuldige kan niet meer dan een bankrekening bestemmen."
+        data["markeringen"][0]["formulering"] = "De belastingschuldige kan ... een bankrekening bestemmen"
+        self.assertEqual(_run(data, "2"), 0)
+
+    def test_vierkante_haken_geen_waarschuwing(self):
+        # [bankrekening] is een ingevoegde verduidelijking; getoetst wordt op 'een'.
+        data = json.loads(json.dumps(GELDIG_ACT2))
+        data["leden"][0]["tekst"] = "De belastingschuldige bestemt een bankrekening."
+        data["markeringen"][0]["formulering"] = "een [bankrekening]"
+        self.assertEqual(_run(data, "2"), 0)
+
+    def test_echt_niet_letterlijk_citaat_waarschuwt(self):
+        # Parafrase die niet in de wettekst staat → niet-blokkerende waarschuwing (exit 1).
+        data = json.loads(json.dumps(GELDIG_ACT2))
+        data["markeringen"][0]["formulering"] = "de belastingbetaler verzint iets"
+        self.assertEqual(_run(data, "2"), 1)
+
     def test_ongeldig_regeltype_act3_blokkeert(self):
         data = {
             "bronreferentie": "jci1.3:c:BWBR9999999&artikel=1",
