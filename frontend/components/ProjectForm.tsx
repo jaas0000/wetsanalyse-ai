@@ -5,14 +5,11 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { ButtonRow } from "@/components/ui/ButtonRow";
 import { Card } from "@/components/ui/Card";
-import { Field, Input, Textarea } from "@/components/ui/Field";
+import { Field, Input, Select, Textarea } from "@/components/ui/Field";
 import { createProject, isApiError, listModelProfiles, listWetten } from "@/lib/api";
 import { buildStartRequest, projectSchema } from "@/lib/projectForm";
 import { pathSegment } from "@/lib/url";
 import type { ProfileChoice, WetChoice } from "@/lib/types";
-
-const selectClass =
-  "w-full rounded-md border border-line bg-paper px-3 py-2 text-sm text-ink focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20";
 
 export function ProjectForm() {
   const router = useRouter();
@@ -94,19 +91,14 @@ export function ProjectForm() {
             error={veldFout.bwbId}
           >
             {wetten && wetten.length > 0 ? (
-              <select
-                name="bwbId"
-                value={bwbId}
-                onChange={(e) => setBwbId(e.target.value)}
-                className={selectClass}
-              >
+              <Select name="bwbId" value={bwbId} onChange={(e) => setBwbId(e.target.value)}>
                 <option value="">— kies een wet —</option>
                 {wetten.map((w) => (
                   <option key={w.bwbId} value={w.bwbId}>
                     {w.naam || w.bwbId}
                   </option>
                 ))}
-              </select>
+              </Select>
             ) : (
               // Fallback: lege catalogus → vrije BWB-id-invoer.
               <Input
@@ -124,19 +116,14 @@ export function ProjectForm() {
             error={veldFout.model_profile}
           >
             {profielen && profielen.length > 0 ? (
-              <select
-                name="model_profile"
-                value={profiel}
-                onChange={(e) => setProfiel(e.target.value)}
-                className={selectClass}
-              >
+              <Select name="model_profile" value={profiel} onChange={(e) => setProfiel(e.target.value)}>
                 {profielen.map((p) => (
                   <option key={p.name} value={p.name}>
                     {p.name}
                     {p.is_default ? " (default)" : ""}
                   </option>
                 ))}
-              </select>
+              </Select>
             ) : (
               // Fallback: geen profielen opgehaald → vrije invoer (API valt terug op de default).
               <Input
