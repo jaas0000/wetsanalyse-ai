@@ -12,6 +12,10 @@ analyse laat zien in welke stap de engine zit — niet alleen de macro-states, m
 token-verbruik, model en een retry-knop bij fout. Het draait op één `EventSource` naar een
 aggregate-SSE-route, dus de tellers lopen live mee.
 
+De home-lijst en het dashboard delen één client-side **zoek-/filter-/sorteerbalk** (status, vrije
+tekst op naam/BWB-id/artikel, wet) met **paginering**; op het dashboard zijn de statustellers
+tegelijk klikbare snelfilters. Filteren/sorteren/bladeren gebeurt bovenop de live SSE-lijst.
+
 Daarnaast een **`/beheer`-scherm** voor het LLM-beheer: de modelprofielen die de analyses aansturen
 (toevoegen/bewerken/verwijderen, default kiezen, verbinding testen), een **wet-catalogus** (BWB-id +
 naam, met "Naam ophalen" via de MCP) en een overzicht van het token-verbruik. Bij **Nieuwe analyse**

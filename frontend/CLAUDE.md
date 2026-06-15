@@ -57,7 +57,10 @@ De **harde scheidingslijn**: alles met een token is server-only.
   een `*Client.tsx` Client Component (bv. `app/projecten/[id]/ProjectClient.tsx`). `app/page.tsx`
   (home) en `app/dashboard` renderen server-side de projectlijst en delegeren naar resp.
   `ProjectenLijstClient` en `DashboardClient` — beide live via `useProjectenStream` op de
-  aggregate-route (tellers/functiefasen op het dashboard via `components/DashboardCard`).
+  aggregate-route (tellers/functiefasen op het dashboard via `components/DashboardCard`). Beide
+  delen de client-side **zoek-/filter-/sorteer-/pagineerlaag**: `lib/projectFilter.ts`
+  (`filterEnSorteer`/`distinctWetten`/`paginate`) + `components/ProjectControls.tsx` +
+  `components/Pagination.tsx`; statusgroepen via `statusBucket` in `lib/states.ts`.
 - `components/` — presentatie; `components/admin/` is het `/beheer`-scherm (achter het admin-token),
   `components/ui/` zijn de primitives. De **cross-referenties** (`Verwijzing`-type in `lib/types.ts`)
   renderen puur in `RapportView.tsx` (Verwijzingen-sectie) en `ReviewPanel.tsx` (scope-feedback per
