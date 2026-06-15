@@ -745,7 +745,8 @@ describe("zoekTermInArtikelDom", () => {
   </wettekst></wetgeving>`;
   const domVeel = domParser.parseFromString(xmlVeel, "text/xml");
 
-  it("isVolledig is altijd true bij DOM-parsing (volledige scan)", () => {
+  it("isVolledig is true wanneer de artikellijst niet wordt afgekapt", () => {
+    // 4 matchende artikelen, ruime maxResultaten → niets afgekapt.
     const result = zoekTermInArtikelDom(domVeel, parseZoekterm("termijn"));
     expect(result.isVolledig).toBe(true);
   });
@@ -760,7 +761,8 @@ describe("zoekTermInArtikelDom", () => {
     const result = zoekTermInArtikelDom(domVeel, parseZoekterm("termijn"), 2);
     expect(result.artikelen).toHaveLength(2);
     expect(result.totaalTreffers).toBe(5); // totaal van ALLE 4 gevonden artikelen
-    expect(result.isVolledig).toBe(true);
+    // 4 matchende artikelen > maxResultaten 2 → afgekapt, dus niet volledig.
+    expect(result.isVolledig).toBe(false);
   });
 
   it("maxResultaten=1 geeft eerste artikel terug", () => {
@@ -774,6 +776,35 @@ describe("zoekTermInArtikelDom", () => {
     expect(result.artikelen).toHaveLength(0);
     expect(result.totaalTreffers).toBe(0);
     expect(result.isVolledig).toBe(true);
+  });
+
+  // ── brongetrouwheid: geen fusie van aangrenzende elementtekst ────────────────
+  it("vindt een term op de grens tussen aangrenzende elementen (geen fusie)", () => {
+    // Zonder spatie-scheiding zou "…eerste lid" + "geldt…" fuseren tot "lidgeldt",
+    // waardoor de woordgebonden zoekterm "geldt" de treffer mist.
+    const xml = `<wetgeving><wettekst>
+      <artikel><kop><nr>1</nr></kop>
+        <lid><lidnr>1</lidnr><al>Dit is het eerste lid</al></lid>
+        <lid><lidnr>2</lidnr><al>geldt een afwijkende termijn</al></lid>
+      </artikel>
+    </wettekst></wetgeving>`;
+    const dom = domParser.parseFromString(xml, "text/xml");
+    const result = zoekTermInArtikelDom(dom, parseZoekterm("geldt"));
+    expect(result.totaalTreffers).toBe(1);
+    expect(result.artikelen[0]?.leden).toContain("2");
+  });
+
+  // ── dubbele artikelnummers (bijlage met herstartte nummering) ────────────────
+  it("waarschuwt wanneer hetzelfde artikelnummer meermaals voorkomt", () => {
+    const xml = `<wetgeving><wettekst>
+      <artikel><kop><nr>5</nr></kop><al>termijn hier</al></artikel>
+      <bijlage><artikel><kop><nr>5</nr></kop><al>termijn termijn daar</al></artikel></bijlage>
+    </wettekst></wetgeving>`;
+    const dom = domParser.parseFromString(xml, "text/xml");
+    const result = zoekTermInArtikelDom(dom, parseZoekterm("termijn"));
+    const art5 = result.artikelen.find((a) => a.artikel === "5");
+    expect(art5?.aantalTreffers).toBe(3); // 1 + 2 over beide exemplaren samengeteld
+    expect(art5?.waarschuwing).toMatch(/2 elementen met nummer 5/);
   });
 });
 
