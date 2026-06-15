@@ -6,6 +6,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from contextlib import asynccontextmanager
+from datetime import timezone
 
 from beanie import init_beanie
 from fastapi import FastAPI
@@ -40,7 +41,11 @@ async def lifespan(app: FastAPI):
     # Globale LLM-concurrency-rem instellen (kostenbeheersing tegen zelf-veroorzaakte rate-limits).
     from .llm import throttle
     throttle.configure(settings.llm_max_concurrency)
-    motor_client = AsyncIOMotorClient(settings.mongodb_url)
+    # tz_aware: pymongo geeft BSON-datetimes anders *naive* terug (UTC-waarde, tzinfo=None),
+    # waardoor `.isoformat()` een offset-loze string oplevert die de browser als lokale tijd
+    # leest — dat verschuift de "verstreken"-tijd op het dashboard met de tz-offset. Met
+    # tz_aware komen alle datetimes als UTC-aware terug en serialiseren ze met `+00:00`.
+    motor_client = AsyncIOMotorClient(settings.mongodb_url, tz_aware=True, tzinfo=timezone.utc)
     await init_beanie(
         database=motor_client[settings.mongodb_db],
         document_models=[Project, LlmProfile, WetCatalogus],
