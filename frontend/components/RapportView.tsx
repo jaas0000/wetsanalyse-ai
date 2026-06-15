@@ -4,7 +4,7 @@ import { Card, Section } from "@/components/ui/Card";
 import { JasBadge, Tag } from "@/components/ui/Badge";
 import { LinkButton } from "@/components/ui/Button";
 import { LedenLijst } from "@/components/LedenLijst";
-import { pathSegment } from "@/lib/url";
+import { bronHref, pathSegment, wettenOverheidHref } from "@/lib/url";
 import type { Markering, Rapport, Verwijzing } from "@/lib/types";
 
 const VERWIJZING_FUNCTIE_LABEL: Record<string, string> = {
@@ -60,16 +60,20 @@ export function RapportView({ rapport, projectId }: { rapport: Rapport; projectI
             <div className="mt-3 flex flex-wrap gap-2">
               {rapport.bwbId && <Tag>{rapport.bwbId}</Tag>}
               {rapport.versiedatum && <Tag>versie {rapport.versiedatum}</Tag>}
-              {rapport.bronreferentie && (
+              {bronHref(rapport.bronreferentie) ? (
                 <a
-                  href={rapport.bronreferentie}
+                  href={bronHref(rapport.bronreferentie)}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center rounded-md border border-line bg-paper px-2 py-0.5 font-mono text-xs text-accent hover:underline"
                 >
                   bron ↗
                 </a>
-              )}
+              ) : rapport.bronreferentie ? (
+                <span className="inline-flex items-center rounded-md border border-line bg-paper px-2 py-0.5 font-mono text-xs text-faint">
+                  {rapport.bronreferentie}
+                </span>
+              ) : null}
             </div>
           </div>
           <LinkButton href={`/api/projects/${pathSegment(projectId)}/rapport-md`} variant="secondary" className="w-full sm:w-auto">
@@ -153,15 +157,19 @@ export function RapportView({ rapport, projectId }: { rapport: Rapport; projectI
                   {items.map((v) => (
                     <Card key={v.id} className="p-4">
                       <div className="flex flex-wrap items-center gap-2">
-                        {v.doel?.target ? (
+                        {v.doel?.target && wettenOverheidHref(v.doel.target) ? (
                           <a
-                            href={`https://wetten.overheid.nl/${v.doel.target}`}
+                            href={wettenOverheidHref(v.doel.target)}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="min-w-0 break-words font-display text-[15px] text-accent hover:underline"
                           >
                             {v.doel.label || v.doel.target} ↗
                           </a>
+                        ) : v.doel?.target ? (
+                          <span className="min-w-0 break-words font-display text-[15px] text-ink">
+                            {v.doel.label || v.doel.target}
+                          </span>
                         ) : (
                           <span className="min-w-0 break-words font-display text-[15px] text-ink">
                             {v.doel?.label || "(verwijzing)"}
