@@ -24,10 +24,12 @@ inhoudelijke `references/`/`scripts/`. De samenwerkende delen:
    (MongoDB-jobstore, per-client bearer-auth). Heeft een eigen `CLAUDE.md` + `README.md` — lees die
    bij werk *in* de API. Het LLM wordt aangestuurd via **benoemde modelprofielen** (Mongo, beheerbaar
    via `/v1/admin/profiles`); de env-`LLM_*`-waarden seeden alleen het eerste default-profiel.
-5. **`frontend/`** — Next.js-webapp (BFF) bovenop de API: analyses aanmaken/reviewen en de
-   modelprofielen, de **wet-catalogus** (BWB-id + naam, selecteerbaar via dropdown bij een nieuwe
-   analyse) en het token-verbruik beheren via het **`/beheer`-scherm** (achter een apart
-   admin-token). Heeft een eigen `CLAUDE.md` + `README.md` — lees die bij werk *in* de frontend.
+5. **`frontend/`** — Next.js-webapp (BFF) bovenop de API: analyses aanmaken/reviewen, een live
+   **`/dashboard`** dat alle analyses tot op functieniveau (de engine-stap binnen een state) volgt
+   via een aggregate-SSE-stream, en de modelprofielen, de **wet-catalogus** (BWB-id + naam,
+   selecteerbaar via dropdown bij een nieuwe analyse) en het token-verbruik beheren via het
+   **`/beheer`-scherm** (achter een apart admin-token). Heeft een eigen `CLAUDE.md` + `README.md` —
+   lees die bij werk *in* de frontend.
 
 De skill is geen vervanger van de analist: de kern is interpretatiekeuzes **expliciet** maken,
 inclusief twijfel en aannames. Brongetrouwheid is niet onderhandelbaar — werk alleen met
@@ -136,4 +138,5 @@ De wetsanalyse-skill staat in `.claude/skills/wetsanalyse/`.
 `docs/` bevat de methodische onderbouwing (niet code): `handleiding.pages.md`,
 `leidraad.pages.md`, en `docs/wetsanalyse-rijk/` (hoofdstukken over JAS en het kader). Raadpleeg
 deze bij inhoudelijke vragen over de methode; de skill-`references/` zijn de operationele
-samenvatting daarvan.
+samenvatting daarvan. `docs/architectuur/wetsanalyse-architectuur.html` is een interactieve
+architectuurplaat (API · MCP · frontend tot functieniveau), in dezelfde styling als de frontend.

@@ -36,9 +36,13 @@ De **harde scheidingslijn**: alles met een token is server-only.
   injecteert het admin-token i.p.v. het client-token. `Location` wordt herschreven van
   `/v1/projects/{id}` naar de eigen `/api/projects/{id}`-route. Verzin in nieuwe routes geen eigen
   fetch-logica — leid alles via deze helper.
-- `app/api/projects/[id]/events/route.ts` — de **uitzondering**: SSE-passthrough (geen `proxy()`),
-  pipet `upstream.body` rauw door met `X-Accel-Buffering: no` en `Cache-Control: no-transform`. Bij
-  wijzigen niet bufferen — dat breekt de live voortgang (en NPM moet proxy-buffering ook uit hebben).
+- `app/api/projects/[id]/events/route.ts` + `app/api/projects/events/route.ts` — de twee
+  **uitzonderingen**: SSE-passthrough (geen `proxy()`), pipen `upstream.body` rauw door met
+  `X-Accel-Buffering: no` en `Cache-Control: no-transform`. De eerste is de per-project-stream
+  (projectdetail); de tweede is de **aggregate-stream** over álle analyses van de client die zowel
+  `/dashboard` als de projectenlijst (`/`) live houdt (upstream `GET /v1/projects/events`). Beide
+  worden via de gedeelde hook `lib/useProjectenStream.ts` geconsumeerd. Bij wijzigen niet bufferen —
+  dat breekt de live voortgang (en NPM moet proxy-buffering ook uit hebben).
 - `lib/server.ts` — server-side GET-helpers voor Server Components (rechtstreeks server→server, scheelt
   een extra self-fetch via de BFF bij de eerste render).
 - `lib/api.ts` — alle client-side fetch-helpers naar `/api/**`. Eén plek voor het foutcontract
@@ -46,9 +50,14 @@ De **harde scheidingslijn**: alles met een token is server-only.
 - `lib/types.ts` — **met de hand afgeleid van `../api/app/contracts.py`** en de bron-van-waarheid voor
   de TS-kant. Wijzigt het API-contract, werk dit bestand bij (verifieer desgewenst tegen
   `openapi-typescript http://localhost:3000/openapi.json` — zie de README). `lib/states.ts` /
-  `lib/jas.ts` zijn afgeleide presentatie-helpers (statuslabels, JAS-klasse-weergave).
+  `lib/jas.ts` / `lib/fasen.ts` zijn afgeleide presentatie-helpers (macro-statuslabels,
+  JAS-klasse-weergave, en het fijnmazige **fase**-vocabulaire dat 1-op-1 de orchestrator-fasen
+  spiegelt — verzin daar geen fasen bij; brongetrouw geldt ook in de UI).
 - `app/**/page.tsx` (Server Components) — data ophalen via `lib/server.ts`; interactie delegeren naar
-  een `*Client.tsx` Client Component (bv. `app/projecten/[id]/ProjectClient.tsx`).
+  een `*Client.tsx` Client Component (bv. `app/projecten/[id]/ProjectClient.tsx`). `app/page.tsx`
+  (home) en `app/dashboard` renderen server-side de projectlijst en delegeren naar resp.
+  `ProjectenLijstClient` en `DashboardClient` — beide live via `useProjectenStream` op de
+  aggregate-route (tellers/functiefasen op het dashboard via `components/DashboardCard`).
 - `components/` — presentatie; `components/admin/` is het `/beheer`-scherm (achter het admin-token),
   `components/ui/` zijn de primitives. De **cross-referenties** (`Verwijzing`-type in `lib/types.ts`)
   renderen puur in `RapportView.tsx` (Verwijzingen-sectie) en `ReviewPanel.tsx` (scope-feedback per
