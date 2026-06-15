@@ -90,7 +90,16 @@ def brongetrouwheid_check(data: dict, activiteit: str) -> list[str]:
             if not (m.get("vindplaats") or "").strip():
                 schendingen.append(f"[{mid}] Vindplaats ontbreekt (herleidbaarheid verplicht).")
             formulering = (m.get("formulering") or "").strip()
-            if formulering and leden_genorm and normaliseer(formulering) not in leden_genorm:
+            # Hergebruik de canonieke citaat-toets uit het skill-script (drift-fix): die
+            # respecteert beletselteken ('...'/'…') voor geelideerde tussentekst en vierkante-
+            # haak-invoegingen ([...]) — citeerconventies die een platte substring-toets breken.
+            # `normaliseer` raakt punten/beletseltekens/haken niet, dus de fragmentlogica werkt
+            # correct op de al-genormaliseerde formulering tegen de genormaliseerde leden-tekst.
+            if (
+                formulering
+                and leden_genorm
+                and not _validate.fragmenten_letterlijk(normaliseer(formulering), leden_genorm)
+            ):
                 kort = formulering[:60] + ("…" if len(formulering) > 60 else "")
                 schendingen.append(
                     f"[{mid}] Formulering is geen letterlijk citaat uit de leden-tekst: '{kort}'"
