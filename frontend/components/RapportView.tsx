@@ -1,6 +1,7 @@
 "use client";
 
 import { Card, Section } from "@/components/ui/Card";
+import { Melding } from "@/components/ui/Melding";
 import { JasBadge, Tag } from "@/components/ui/Badge";
 import { LinkButton } from "@/components/ui/Button";
 import { LedenLijst } from "@/components/LedenLijst";
@@ -25,9 +26,9 @@ const VERWIJZING_STATUS_LABEL: Record<string, string> = {
 function Twijfel({ tekst }: { tekst?: string }) {
   if (!tekst) return null;
   return (
-    <p className="mt-2 rounded border border-gold/40 bg-gold/5 px-2 py-1 text-xs text-gold">
+    <Melding type="waarschuwing" compact className="mt-2 text-xs">
       Twijfel: {tekst}
-    </p>
+    </Melding>
   );
 }
 

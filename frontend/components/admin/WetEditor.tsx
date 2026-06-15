@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/Button";
 import { ButtonRow } from "@/components/ui/ButtonRow";
 import { Card } from "@/components/ui/Card";
 import { Field, Input } from "@/components/ui/Field";
+import { Melding } from "@/components/ui/Melding";
 import { isApiError, resolveWetNaam, saveWet } from "@/lib/api";
 import type { WetOut } from "@/lib/types";
 
@@ -79,9 +80,7 @@ export function WetEditor({ wet, onDone, onCancel }: Props) {
           </Field>
         </div>
 
-        {fout && (
-          <div className="rounded-md border border-accent/30 bg-accent/5 px-3 py-2 text-sm text-accent">{fout}</div>
-        )}
+        {fout && <Melding type="fout">{fout}</Melding>}
 
         <ButtonRow className="pt-2">
           <Button type="button" variant="ghost" onClick={onCancel} disabled={bezig}>

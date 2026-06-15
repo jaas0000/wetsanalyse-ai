@@ -6,6 +6,7 @@ import { StateBadge, Tag } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { ButtonRow } from "@/components/ui/ButtonRow";
 import { Card } from "@/components/ui/Card";
+import { Melding } from "@/components/ui/Melding";
 import { StatusTimeline } from "@/components/StatusTimeline";
 import { ReviewPanel } from "@/components/ReviewPanel";
 import { RapportView } from "@/components/RapportView";
@@ -152,21 +153,19 @@ export function ProjectClient({ initieel }: { initieel: Job }) {
       {/* Waarschuwingen — in review-states toont de ReviewPanel ze (algemeen + per item), dus
           hier alleen buiten review om dubbele weergave te voorkomen. */}
       {job.waarschuwingen.length > 0 && !reviewAct && (
-        <Card className="border-gold/40 bg-gold/5 p-4">
-          <p className="text-xs font-medium uppercase tracking-wide text-gold">Waarschuwingen</p>
-          <ul className="mt-2 list-inside list-disc space-y-1 text-sm text-muted">
+        <Melding type="waarschuwing" titel="Waarschuwingen">
+          <ul className="mt-1 list-inside list-disc space-y-1 text-sm">
             {job.waarschuwingen.map((w, i) => (
               <li key={i}>{w}</li>
             ))}
           </ul>
-        </Card>
+        </Melding>
       )}
 
       {/* Fout */}
       {job.state === "fout" && job.error && (
-        <Card className="border-accent/30 bg-accent/5 p-5">
-          <p className="font-display text-lg text-accent">Analyse gestopt</p>
-          <p className="mt-1 text-sm text-ink">{job.error.bericht}</p>
+        <Melding type="fout" titel="Analyse gestopt">
+          <p className="mt-1 text-sm">{job.error.bericht}</p>
           <p className="mt-2 text-sm text-muted">{foutUitleg(job.error.klasse)}</p>
           <p className="mt-3 text-sm text-muted">
             {heeftRonde ? (
@@ -186,7 +185,7 @@ export function ProjectClient({ initieel }: { initieel: Job }) {
             <span className="font-mono">{job.error.klasse}</span>
             {job.error.ronde != null && <> · ronde {job.error.ronde}</>}
           </p>
-        </Card>
+        </Melding>
       )}
 
       {/* Hoofdinhoud per fase */}

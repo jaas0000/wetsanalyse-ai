@@ -1,6 +1,6 @@
 import { getProjectsServer } from "@/lib/server";
 import { LinkButton } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
+import { Melding } from "@/components/ui/Melding";
 import { Vormelement } from "@/components/ui/Vormelement";
 import { ProjectenLijstClient } from "./ProjectenLijstClient";
 import type { JobSummary } from "@/lib/types";
@@ -37,10 +37,10 @@ export default async function ProjectenPagina() {
       </Vormelement>
 
       {fout ? (
-        <Card className="border-fout/30 bg-fout/5 p-4 text-sm text-fout">
+        <Melding type="fout">
           De API is niet bereikbaar: <span className="font-mono">{fout}</span>. Controleer{" "}
           <span className="font-mono">API_BASE_URL</span> en het token.
-        </Card>
+        </Melding>
       ) : (
         <ProjectenLijstClient initieel={projecten} />
       )}

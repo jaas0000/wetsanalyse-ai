@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { Melding } from "@/components/ui/Melding";
 import { JasBadge } from "@/components/ui/Badge";
 import { Textarea } from "@/components/ui/Field";
 import { LedenLijst } from "@/components/LedenLijst";
@@ -186,22 +187,19 @@ export function ReviewPanel({
       </p>
 
       {laadFout && (
-        <div className="mb-4 rounded-md border border-accent/30 bg-accent/5 px-3 py-2 text-sm text-accent">
+        <Melding type="fout" className="mb-4">
           Kon de ronde niet laden: {laadFout}
-        </div>
+        </Melding>
       )}
 
       {algemeneWaarschuwingen.length > 0 && (
-        <div role="status" className="mb-4 rounded-md border border-gold/40 bg-gold/5 px-3 py-2 text-sm text-gold">
-          <p className="font-medium">
-            <span aria-hidden="true">⚠ </span>Aandachtspunten bij deze ronde
-          </p>
+        <Melding type="waarschuwing" titel="Aandachtspunten bij deze ronde" className="mb-4">
           <ul className="mt-1 list-inside list-disc space-y-0.5">
             {algemeneWaarschuwingen.map((w, i) => (
               <li key={i}>{w}</li>
             ))}
           </ul>
-        </div>
+        </Melding>
       )}
 
       {leden && leden.length > 0 && (
@@ -241,18 +239,14 @@ export function ReviewPanel({
                 ))}
             </dl>
             {it.twijfel && (
-              <p className="mt-2 rounded border border-gold/40 bg-gold/5 px-2 py-1 text-xs text-gold">
-                <span aria-hidden="true">⚠ </span>Twijfel: {it.twijfel}
-              </p>
+              <Melding type="waarschuwing" compact className="mt-2 text-xs">
+                Twijfel: {it.twijfel}
+              </Melding>
             )}
             {waarschuwingenPerId[it.id]?.map((w, i) => (
-              <p
-                key={i}
-                role="status"
-                className="mt-2 rounded border border-accent/40 bg-accent/5 px-2 py-1 text-xs text-accent"
-              >
-                <span aria-hidden="true">⚠ </span>Let op: {w}
-              </p>
+              <Melding key={i} type="waarschuwing" compact className="mt-2 text-xs">
+                Let op: {w}
+              </Melding>
             ))}
             <Textarea
               value={opmerkingen[it.id] ?? ""}
@@ -276,9 +270,9 @@ export function ReviewPanel({
       </div>
 
       {fout && (
-        <div className="mt-4 rounded-md border border-accent/30 bg-accent/5 px-3 py-2 text-sm text-accent">
+        <Melding type="fout" className="mt-4">
           {fout}
-        </div>
+        </Melding>
       )}
 
       <div className="mt-5 flex flex-col-reverse gap-3 border-t border-line pt-4 sm:flex-row sm:items-center sm:justify-between">

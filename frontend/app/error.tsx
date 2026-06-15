@@ -5,7 +5,7 @@
 
 import { useEffect } from "react";
 import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
+import { Melding } from "@/components/ui/Melding";
 
 export default function Error({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
   useEffect(() => {
@@ -14,9 +14,8 @@ export default function Error({ error, reset }: { error: Error & { digest?: stri
 
   return (
     <div className="mx-auto max-w-prose px-4 py-16">
-      <Card className="p-6">
-        <h1 className="font-display text-lg font-semibold text-lint">Er ging iets mis</h1>
-        <p className="mt-2 text-sm text-muted">
+      <Melding type="fout" titel="Er ging iets mis">
+        <p className="mt-1 text-sm text-muted">
           De pagina kon niet correct worden geladen. Probeer het opnieuw; blijft het misgaan, ververs
           dan de pagina of ga terug naar het overzicht.
         </p>
@@ -27,7 +26,7 @@ export default function Error({ error, reset }: { error: Error & { digest?: stri
             Naar overzicht
           </Button>
         </div>
-      </Card>
+      </Melding>
     </div>
   );
 }

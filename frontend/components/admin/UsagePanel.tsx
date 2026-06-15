@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Card, Section } from "@/components/ui/Card";
+import { Melding } from "@/components/ui/Melding";
 import { getUsage, isApiError } from "@/lib/api";
 import type { UsageReport } from "@/lib/types";
 
@@ -49,9 +50,7 @@ export function UsagePanel() {
         ))}
       </div>
 
-      {fout && (
-        <div className="rounded-md border border-accent/30 bg-accent/5 px-3 py-2 text-sm text-accent">{fout}</div>
-      )}
+      {fout && <Melding type="fout">{fout}</Melding>}
 
       {rapport && (
         <Card className="overflow-hidden">

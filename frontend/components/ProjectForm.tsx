@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { ButtonRow } from "@/components/ui/ButtonRow";
 import { Card } from "@/components/ui/Card";
 import { Field, Input, Select, Textarea } from "@/components/ui/Field";
+import { Melding } from "@/components/ui/Melding";
 import { createProject, isApiError, listModelProfiles, listWetten } from "@/lib/api";
 import { buildStartRequest, projectSchema } from "@/lib/projectForm";
 import { pathSegment } from "@/lib/url";
@@ -175,11 +176,7 @@ export function ProjectForm() {
           </span>
         </label>
 
-        {fout && (
-          <div className="rounded-md border border-accent/30 bg-accent/5 px-3 py-2 text-sm text-accent">
-            {fout}
-          </div>
-        )}
+        {fout && <Melding type="fout">{fout}</Melding>}
 
         <ButtonRow className="pt-2">
           <Button type="submit" disabled={bezig}>

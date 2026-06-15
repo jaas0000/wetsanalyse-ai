@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { ButtonRow } from "@/components/ui/ButtonRow";
 import { Card, Section } from "@/components/ui/Card";
+import { Melding } from "@/components/ui/Melding";
 import { Tag } from "@/components/ui/Badge";
 import {
   deleteProfile,
@@ -122,9 +123,7 @@ export function BeheerClient() {
   return (
     <div className="space-y-8">
       <Section title="Modelprofielen" count={profielen?.length} subtitle="LLM-configuratie">
-        {fout && (
-          <div className="mb-3 rounded-md border border-accent/30 bg-accent/5 px-3 py-2 text-sm text-accent">{fout}</div>
-        )}
+        {fout && <Melding type="fout" className="mb-3">{fout}</Melding>}
         <ButtonRow className="mb-4">
           <Button onClick={() => setEdit({ open: true, kind: "profile", profile: null })}>Nieuw profiel</Button>
         </ButtonRow>
@@ -157,17 +156,15 @@ export function BeheerClient() {
                   </div>
 
                   {test && test !== "bezig" && (
-                    <div
-                      className={`mt-3 rounded-md border px-3 py-2 text-xs ${
-                        test.ok
-                          ? "border-emerald-600/30 bg-emerald-600/5 text-emerald-700"
-                          : "border-accent/30 bg-accent/5 text-accent"
-                      }`}
+                    <Melding
+                      type={test.ok ? "bevestiging" : "fout"}
+                      compact
+                      className="mt-3 text-xs"
                     >
                       {test.ok
                         ? `Verbinding OK — model ${test.model} (${test.tokens_in + test.tokens_out} tokens).`
                         : `Test mislukt: ${test.detail}`}
-                    </div>
+                    </Melding>
                   )}
 
                   <ButtonRow align="start" className="mt-3">
