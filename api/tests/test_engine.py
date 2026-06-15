@@ -339,3 +339,37 @@ async def test_create_job_uitputting_werpt_idconflict(engine, store, monkeypatch
     monkeypatch.setattr(store, "insert_job", altijd_duplicate)
     with pytest.raises(IdConflict):
         await engine.create_job(_start_req(review=False), "test")
+
+
+async def test_current_fase_sequentie(engine, store):
+    """De fijnmazige fase-tikken vormen het contract dat het dashboard rendert: act2 (incl.
+    verwijzingen) → act3 (zonder verwijzingen) → rapport-bouw, eindigend op None. max_autocorrectie
+    is 0 in de testsettings, dus 'auto-correctie' komt hier niet voor."""
+    opgenomen: list[str | None] = []
+
+    async def recorder(job_id, fase, owner):
+        opgenomen.append(fase)
+        return True
+
+    store.set_current_fase = recorder
+    job = await engine.create_job(_start_req(review=False), "test")
+    await engine.run_initial(job.id)
+
+    assert opgenomen == [
+        "wettekst-ophalen", "verwijzingen-inventariseren", "verwijzingen-volgen", "llm-generatie",
+        "brongetrouwheid-check", "schema-check", "analyse-wegschrijven",
+        "llm-generatie", "brongetrouwheid-check", "schema-check", "analyse-wegschrijven",
+        "reviewlog", "aandachtspunten", "rapport-wegschrijven", None,
+    ]
+
+
+async def test_current_fase_gewist_bij_review_pauze(engine, store):
+    """Bij een review-pauze staat er geen lopende functiefase meer (het dashboard toont dan de
+    macro-state, niet een 'bevroren' fase)."""
+    job = await engine.create_job(_start_req(review=True), "test")
+    await engine.run_initial(job.id)
+
+    p = await store.load_project(job.id)
+    assert p.state == JobState.wacht_review_act2
+    assert p.current_fase is None
+    assert p.current_fase_sinds is None

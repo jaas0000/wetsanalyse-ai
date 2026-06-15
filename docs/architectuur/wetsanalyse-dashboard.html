@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wetsanalyse — Mission Control (prototype)</title>
+<style>
+  :root {
+    --bg: #0f1419;
+    --panel: #161b22;
+    --panel-2: #1c2330;
+    --panel-3: #222b39;
+    --border: #2b3340;
+    --border-soft: #232c39;
+    --tekst: #e6edf3;
+    --tekst-dim: #9aa7b4;
+    --tekst-faint: #6b7785;
+    --blauw: #4c9aff;
+    --groen: #7ee787;
+    --amber: #f0883e;
+    --paars: #bc8cff;
+    --rood: #f8716a;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background:
+      radial-gradient(1200px 600px at 80% -10%, #16202e 0, transparent 60%),
+      radial-gradient(900px 500px at -10% 110%, #181426 0, transparent 55%),
+      var(--bg);
+    color: var(--tekst);
+    font: 14px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    min-height: 100vh;
+  }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+
+  /* ---------- header ---------- */
+  header {
+    position: sticky; top: 0; z-index: 20;
+    padding: 16px 26px;
+    background: rgba(15,20,25,.72);
+    backdrop-filter: blur(14px);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 20px; flex-wrap: wrap;
+  }
+  header .brand { display: flex; align-items: center; gap: 12px; }
+  header h1 { margin: 0; font-size: 16px; font-weight: 650; letter-spacing: .2px; }
+  header .sub { color: var(--tekst-dim); font-size: 12px; margin-top: 1px; }
+  .live {
+    display: inline-flex; align-items: center; gap: 7px;
+    font-size: 11.5px; color: var(--groen); font-weight: 600;
+    padding: 4px 10px; border: 1px solid #2c4030; border-radius: 999px;
+    background: rgba(126,231,135,.07);
+  }
+  .live .pip {
+    width: 8px; height: 8px; border-radius: 50%; background: var(--groen);
+    box-shadow: 0 0 0 0 rgba(126,231,135,.6); animation: pip 1.8s infinite;
+  }
+  @keyframes pip {
+    0% { box-shadow: 0 0 0 0 rgba(126,231,135,.5); }
+    70% { box-shadow: 0 0 0 7px rgba(126,231,135,0); }
+    100% { box-shadow: 0 0 0 0 rgba(126,231,135,0); }
+  }
+  .stats { display: flex; gap: 10px; margin-left: auto; flex-wrap: wrap; }
+  .stat {
+    border: 1px solid var(--border); background: var(--panel);
+    border-radius: 12px; padding: 7px 14px; min-width: 78px;
+  }
+  .stat .n { font-size: 19px; font-weight: 700; line-height: 1.1; }
+  .stat .l { font-size: 10.5px; color: var(--tekst-dim); text-transform: uppercase; letter-spacing: .6px; }
+  .stat.run .n { color: var(--blauw); }
+  .stat.review .n { color: var(--amber); }
+  .stat.done .n { color: var(--groen); }
+  .stat.err .n { color: var(--rood); }
+
+  /* ---------- layout ---------- */
+  .wrap { padding: 22px 26px 120px; max-width: 1280px; margin: 0 auto; }
+  .grid { display: grid; gap: 16px; grid-template-columns: 1fr; }
+
+  /* ---------- analysekaart ---------- */
+  .kaart {
+    border: 1px solid var(--border); border-radius: 16px;
+    background: linear-gradient(180deg, var(--panel) 0, #13181f 100%);
+    overflow: hidden; transition: border-color .3s, box-shadow .3s;
+  }
+  .kaart.actief { border-color: #34465f; box-shadow: 0 0 0 1px rgba(76,154,255,.08), 0 10px 40px -20px rgba(76,154,255,.4); }
+  .kaart.err { border-color: #4a2b2b; }
+  .kaart-top {
+    display: flex; align-items: center; gap: 14px;
+    padding: 14px 18px;
+  }
+  .glyph {
+    width: 38px; height: 38px; border-radius: 11px; flex: none;
+    display: grid; place-items: center; font-size: 15px; font-weight: 700;
+    background: var(--panel-2); border: 1px solid var(--border); color: var(--tekst-dim);
+  }
+  .titel-blok { min-width: 0; }
+  .titel-blok .wet { font-weight: 650; font-size: 14.5px; }
+  .titel-blok .meta { color: var(--tekst-faint); font-size: 11.5px; margin-top: 1px; }
+  .badge {
+    margin-left: auto; flex: none;
+    font-size: 11.5px; font-weight: 600; padding: 5px 12px; border-radius: 999px;
+    border: 1px solid var(--border); color: var(--tekst-dim); background: var(--panel-2);
+    white-space: nowrap;
+  }
+  .badge.b-run { color: var(--blauw); border-color: #294063; background: rgba(76,154,255,.08); }
+  .badge.b-review { color: var(--amber); border-color: #4a3a22; background: rgba(240,136,62,.08); }
+  .badge.b-bouwt { color: var(--paars); border-color: #3c2f52; background: rgba(188,140,255,.08); }
+  .badge.b-done { color: var(--groen); border-color: #2c4030; background: rgba(126,231,135,.08); }
+  .badge.b-err { color: var(--rood); border-color: #4a2b2b; background: rgba(248,113,106,.08); }
+  .badge.b-queue { color: var(--tekst-dim); }
+
+  /* ---------- macro-pijplijn (de 7 stations) ---------- */
+  .pijp {
+    display: flex; align-items: flex-start; gap: 0;
+    padding: 6px 18px 16px;
+  }
+  .station { flex: 1; display: flex; flex-direction: column; align-items: center; position: relative; }
+  .station .lamp {
+    width: 16px; height: 16px; border-radius: 50%; z-index: 2;
+    background: #222b39; border: 2px solid #2f3a49;
+    transition: all .4s ease;
+  }
+  .station .naam {
+    font-size: 10px; color: var(--tekst-faint); margin-top: 8px; text-align: center;
+    letter-spacing: .2px; line-height: 1.25; max-width: 92px;
+  }
+  /* verbindingslijn tussen stations */
+  .station::before {
+    content: ""; position: absolute; top: 7px; left: -50%; width: 100%; height: 2px;
+    background: #232c39; z-index: 1;
+  }
+  .station:first-child::before { display: none; }
+  .station.klaar .lamp { background: var(--groen); border-color: var(--groen); box-shadow: 0 0 0 3px rgba(126,231,135,.12); }
+  .station.klaar::before { background: linear-gradient(90deg, var(--groen), var(--groen)); }
+  .station.klaar .naam { color: var(--tekst-dim); }
+  .station.actief .naam { color: var(--tekst); font-weight: 600; }
+  .station.actief .lamp { animation: gloei 1.6s ease-in-out infinite; }
+  .station.actief.t-blauw .lamp { background: var(--blauw); border-color: var(--blauw); }
+  .station.actief.t-amber .lamp { background: var(--amber); border-color: var(--amber); animation: none; box-shadow: 0 0 0 4px rgba(240,136,62,.16); }
+  .station.actief.t-paars .lamp { background: var(--paars); border-color: var(--paars); }
+  .station.fout .lamp { background: var(--rood); border-color: var(--rood); box-shadow: 0 0 0 4px rgba(248,113,106,.16); }
+  @keyframes gloei {
+    0%,100% { box-shadow: 0 0 0 0 rgba(76,154,255,.0), 0 0 6px 1px rgba(76,154,255,.5); }
+    50%     { box-shadow: 0 0 0 6px rgba(76,154,255,.10), 0 0 14px 3px rgba(76,154,255,.85); }
+  }
+
+  /* ---------- functieniveau-sublaag ---------- */
+  .sub {
+    border-top: 1px dashed var(--border-soft);
+    background: rgba(76,154,255,.03);
+    padding: 0 18px; max-height: 0; overflow: hidden;
+    transition: max-height .45s ease, padding .45s ease, opacity .3s;
+    opacity: 0;
+  }
+  .sub.open { max-height: 200px; padding: 14px 18px 16px; opacity: 1; }
+  .sub .kop {
+    font-size: 10.5px; text-transform: uppercase; letter-spacing: .7px;
+    color: var(--tekst-faint); margin-bottom: 11px; display: flex; align-items: center; gap: 8px;
+  }
+  .sub .kop b { color: var(--blauw); font-weight: 600; letter-spacing: .3px; text-transform: none; font-size: 11px; }
+  .fasen { display: flex; gap: 7px; flex-wrap: wrap; }
+  .fase {
+    display: inline-flex; align-items: center; gap: 7px;
+    font-size: 11.5px; padding: 5px 11px; border-radius: 8px;
+    border: 1px solid var(--border-soft); color: var(--tekst-faint);
+    background: var(--panel); transition: all .35s;
+  }
+  .fase .dot { width: 7px; height: 7px; border-radius: 50%; background: #313c4b; transition: all .35s; }
+  .fase.gedaan { color: var(--tekst-dim); }
+  .fase.gedaan .dot { background: var(--groen); }
+  .fase.bezig {
+    color: var(--tekst); border-color: #34465f; background: var(--panel-3);
+    box-shadow: 0 0 0 1px rgba(76,154,255,.12), 0 6px 18px -10px rgba(76,154,255,.6);
+  }
+  .fase.bezig .dot { background: var(--blauw); box-shadow: 0 0 8px 1px rgba(76,154,255,.9); animation: pip 1.4s infinite; }
+  .fase .teller { color: var(--blauw); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+  /* ---------- review-call-to-action ---------- */
+  .cta {
+    display: flex; align-items: center; gap: 10px;
+    padding: 11px 18px; border-top: 1px solid var(--border-soft);
+    background: rgba(240,136,62,.05); font-size: 12.5px; color: var(--amber);
+  }
+  .cta .knop {
+    margin-left: auto; font-size: 12px; font-weight: 600;
+    padding: 6px 14px; border-radius: 8px; cursor: pointer;
+    border: 1px solid #4a3a22; background: rgba(240,136,62,.12); color: #ffcf9e;
+  }
+  .cta.foutmelding { background: rgba(248,113,106,.05); color: var(--rood); }
+
+  /* ---------- event-ticker ---------- */
+  .ticker {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 15;
+    background: rgba(15,20,25,.85); backdrop-filter: blur(12px);
+    border-top: 1px solid var(--border);
+    padding: 9px 26px; display: flex; align-items: center; gap: 14px;
+  }
+  .ticker .label {
+    font-size: 10px; text-transform: uppercase; letter-spacing: .8px;
+    color: var(--tekst-faint); flex: none;
+  }
+  .ticker .log { flex: 1; min-width: 0; overflow: hidden; }
+  .ticker .regel {
+    font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    animation: inschuif .4s ease;
+  }
+  .ticker .regel .t { color: var(--tekst-faint); }
+  .ticker .regel .w { color: var(--blauw); }
+  @keyframes inschuif { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  .voetnoot { color: var(--tekst-faint); font-size: 11px; margin-left: auto; flex: none; }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <div>
+      <h1>Wetsanalyse · Mission Control</h1>
+      <div class="sub">live overzicht van alle lopende JAS-analyses — tot op functieniveau</div>
+    </div>
+  </div>
+  <span class="live"><span class="pip"></span>LIVE · prototype (mock-data)</span>
+  <div class="stats">
+    <div class="stat run"><div class="n" id="s-run">0</div><div class="l">lopend</div></div>
+    <div class="stat review"><div class="n" id="s-review">0</div><div class="l">review</div></div>
+    <div class="stat done"><div class="n" id="s-done">0</div><div class="l">klaar</div></div>
+    <div class="stat err"><div class="n" id="s-err">0</div><div class="l">fout</div></div>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="grid" id="grid"></div>
+</div>
+
+<div class="ticker">
+  <span class="label">Event-stroom</span>
+  <div class="log"><div class="regel" id="ticker-regel"><span class="t">—</span> wachten op events…</div></div>
+  <span class="voetnoot mono">aggregate-SSE · /v1/projects/events (nog te bouwen)</span>
+</div>
+
+<script>
+/* ============================================================================
+   DATAMODEL — dit is meteen het contract dat de aggregate-SSE straks levert.
+   Per analyse:
+     macro  : één van de 7 macro-stations (+ 'fout' als overlay)
+     fase   : functieniveau binnen een *-runt-station (zie FASEN), of null
+     detail : optionele teller bij de fase (poging 2/3, verwijzing 3/6, …)
+   De macro-states komen 1-op-1 uit frontend/lib/states.ts.
+   De fasen komen 1-op-1 uit api/app/engine/orchestrator.py:_genereer().
+   ========================================================================== */
+
+const MACRO = [
+  { id: "queued",       naam: "wachtrij",        kort: "queue" },
+  { id: "act2-runt",    naam: "act. 2\nmarkeren", kort: "act2",  tint: "blauw" },
+  { id: "review-act2",  naam: "review\nact. 2",  kort: "rev2",  tint: "amber" },
+  { id: "act3-runt",    naam: "act. 3\nbegrippen",kort: "act3",  tint: "blauw" },
+  { id: "review-act3",  naam: "review\nact. 3",  kort: "rev3",  tint: "amber" },
+  { id: "bouwt",        naam: "rapport\nbouwen",  kort: "bouw",  tint: "paars" },
+  { id: "klaar",        naam: "klaar",            kort: "klaar" },
+];
+const MACRO_INDEX = Object.fromEntries(MACRO.map((m, i) => [m.id, i]));
+
+// Functieniveau-fasen binnen een generatie-runt (orchestrator._genereer).
+const FASEN_RUNT = [
+  { id: "ophalen",      label: "wettekst ophalen",     bron: "_basis → MCP" },
+  { id: "inventaris",   label: "verwijzingen inventariseren", bron: "steps.inventariseer" },
+  { id: "volgen",       label: "verwijzingen volgen",  bron: "_volg_verwijzingen" },
+  { id: "llm",          label: "LLM-generatie",        bron: "steps → LiteLLM" },
+  { id: "autocorrectie",label: "auto-correctie",       bron: "brongetrouwheid-lus" },
+  { id: "brongetrouw",  label: "brongetrouwheid-check",bron: "validation (hard)" },
+  { id: "schema",       label: "schema-check",         bron: "validation (zacht)" },
+  { id: "schrijf",      label: "analyse wegschrijven", bron: "schrijf_analyse" },
+];
+// Act. 3 slaat de verwijzing-inventaris/-volglus over (alleen act. 2 is twee-fase).
+const FASEN_ACT3 = FASEN_RUNT.filter(f => !["inventaris", "volgen"].includes(f.id));
+const FASEN_BOUWT = [
+  { id: "rapportjson",  label: "rapport.json bouwen",  bron: "build_rapport_json" },
+  { id: "reviewlog",    label: "reviewlog samenvatten",bron: "_reviewlog" },
+  { id: "aandacht",     label: "aandachtspunten",      bron: "_aandachtspunten" },
+  { id: "schrijf",      label: "rapport wegschrijven", bron: "schrijf_rapport" },
+];
+
+function fasenVoor(macro) {
+  if (macro === "act2-runt") return FASEN_RUNT;
+  if (macro === "act3-runt") return FASEN_ACT3;
+  if (macro === "bouwt")     return FASEN_BOUWT;
+  return null;
+}
+
+/* ---- mock-analyses, in uiteenlopende stadia ---- */
+let analyses = [
+  { id: "p-9f2a", wet: "Wet IB 2001", artikel: "art. 3.81", bwb: "BWBR0011353", client: "belastingdienst", macro: "act2-runt", fase: "llm", detail: null, ronde: 1 },
+  { id: "p-71bd", wet: "AWR",        artikel: "art. 16",    bwb: "BWBR0002320", client: "belastingdienst", macro: "act2-runt", fase: "volgen", detail: { n: 2, van: 6 }, ronde: 1 },
+  { id: "p-3c08", wet: "WW",         artikel: "art. 7a lid 1", bwb: "BWBR0004770", client: "uwv",         macro: "review-act2", fase: null, detail: null, ronde: 2 },
+  { id: "p-a4e1", wet: "Awb",        artikel: "art. 4:13",  bwb: "BWBR0005537", client: "demo",            macro: "act3-runt", fase: "autocorrectie", detail: { n: 1, van: 2 }, ronde: 1 },
+  { id: "p-55f7", wet: "Wet WIA",    artikel: "art. 47",    bwb: "BWBR0019057", client: "uwv",             macro: "bouwt", fase: "reviewlog", detail: null, ronde: 1 },
+  { id: "p-2db9", wet: "Participatiewet", artikel: "art. 18", bwb: "BWBR0015703", client: "gemeente", macro: "klaar", fase: null, detail: null, ronde: 3 },
+  { id: "p-e7c0", wet: "Wet WOZ",    artikel: "art. 17",    bwb: "BWBR0007119", client: "demo",            macro: "act2-runt", fase: null, detail: null, ronde: 1, fout: { stap: "act2", klasse: "validatie", bericht: "brongetrouwheid faalt na auto-correctie" } },
+  { id: "p-1a3d", wet: "Vpb 1969",   artikel: "art. 8",     bwb: "BWBR0002672", client: "belastingdienst", macro: "queued", fase: null, detail: null, ronde: 0 },
+];
+
+const grid = document.getElementById("grid");
+const tikkerRegel = document.getElementById("ticker-regel");
+const GLYPH_KLEUR = { blauw: "var(--blauw)", amber: "var(--amber)", paars: "var(--paars)" };
+
+function badgeVoor(a) {
+  if (a.fout) return { cls: "b-err", txt: "FOUT · " + a.fout.klasse };
+  switch (a.macro) {
+    case "queued":      return { cls: "b-queue", txt: "in wachtrij" };
+    case "act2-runt":   return { cls: "b-run", txt: "activiteit 2 · ronde " + a.ronde };
+    case "review-act2": return { cls: "b-review", txt: "wacht op review · act. 2" };
+    case "act3-runt":   return { cls: "b-run", txt: "activiteit 3 · ronde " + a.ronde };
+    case "review-act3": return { cls: "b-review", txt: "wacht op review · act. 3" };
+    case "bouwt":       return { cls: "b-bouwt", txt: "rapport samenstellen" };
+    case "klaar":       return { cls: "b-done", txt: "klaar" };
+  }
+}
+
+function render() {
+  // statistiek
+  const telt = { run: 0, review: 0, done: 0, err: 0 };
+  analyses.forEach(a => {
+    if (a.fout) telt.err++;
+    else if (a.macro.includes("runt") || a.macro === "queued" || a.macro === "bouwt") telt.run++;
+    else if (a.macro.startsWith("review")) telt.review++;
+    else if (a.macro === "klaar") telt.done++;
+  });
+  document.getElementById("s-run").textContent = telt.run;
+  document.getElementById("s-review").textContent = telt.review;
+  document.getElementById("s-done").textContent = telt.done;
+  document.getElementById("s-err").textContent = telt.err;
+
+  grid.innerHTML = "";
+  analyses.forEach(a => grid.appendChild(kaart(a)));
+}
+
+function kaart(a) {
+  const actiefIdx = MACRO_INDEX[a.macro];
+  const isActief = !a.fout && (a.macro.includes("runt") || a.macro === "bouwt");
+  const el = document.createElement("div");
+  el.className = "kaart" + (isActief ? " actief" : "") + (a.fout ? " err" : "");
+
+  const b = badgeVoor(a);
+  const glyphKl = a.fout ? "var(--rood)" : (GLYPH_KLEUR[MACRO[actiefIdx]?.tint] || "var(--tekst-dim)");
+
+  // top
+  const top = document.createElement("div");
+  top.className = "kaart-top";
+  top.innerHTML = `
+    <div class="glyph" style="color:${glyphKl};border-color:${glyphKl}33">${a.wet.replace(/[^A-Za-z]/g,'').slice(0,2).toUpperCase()}</div>
+    <div class="titel-blok">
+      <div class="wet">${a.wet} · ${a.artikel}</div>
+      <div class="meta mono">${a.bwb} · client ${a.client} · ${a.id}</div>
+    </div>
+    <div class="badge ${b.cls}">${b.txt}</div>`;
+  el.appendChild(top);
+
+  // macro-pijplijn
+  const pijp = document.createElement("div");
+  pijp.className = "pijp";
+  MACRO.forEach((m, i) => {
+    const s = document.createElement("div");
+    let cls = "station";
+    if (a.fout && i === actiefIdx) cls += " fout";
+    else if (i < actiefIdx || a.macro === "klaar") cls += " klaar";
+    else if (i === actiefIdx && a.macro !== "klaar") cls += " actief t-" + (m.tint || "blauw");
+    s.className = cls;
+    s.innerHTML = `<div class="lamp"></div><div class="naam">${m.naam.replace(/\n/g,"<br>")}</div>`;
+    pijp.appendChild(s);
+  });
+  el.appendChild(pijp);
+
+  // functieniveau-sublaag (alleen tijdens een runt/bouwt)
+  const fasen = fasenVoor(a.macro);
+  if (fasen && !a.fout) {
+    const sub = document.createElement("div");
+    sub.className = "sub open";
+    const actieveFase = a.fase || fasen[0].id;
+    const fIdx = fasen.findIndex(f => f.id === actieveFase);
+    const huidige = fasen[fIdx] || fasen[0];
+    let chips = "";
+    fasen.forEach((f, i) => {
+      let c = "fase";
+      if (i < fIdx) c += " gedaan";
+      else if (i === fIdx) c += " bezig";
+      let teller = "";
+      if (i === fIdx && a.detail) teller = ` <span class="teller">${a.detail.n}/${a.detail.van}</span>`;
+      chips += `<span class="${c}"><span class="dot"></span>${f.label}${teller}</span>`;
+    });
+    sub.innerHTML = `
+      <div class="kop">functieniveau · <b>${huidige.bron}</b></div>
+      <div class="fasen">${chips}</div>`;
+    el.appendChild(sub);
+  }
+
+  // review- of fout-balk
+  if (a.macro.startsWith("review") && !a.fout) {
+    const cta = document.createElement("div");
+    cta.className = "cta";
+    cta.innerHTML = `▲ Wacht op jouw review — ${a.macro === "review-act2" ? "markeringen & JAS-klassen" : "begrippen & afleidingsregels"} (ronde ${a.ronde})
+      <span class="knop">Open review →</span>`;
+    el.appendChild(cta);
+  }
+  if (a.fout) {
+    const cta = document.createElement("div");
+    cta.className = "cta foutmelding";
+    cta.innerHTML = `✕ ${a.fout.bericht} <span class="knop" style="border-color:#4a2b2b;background:rgba(248,113,106,.12);color:#ffb3ae">Retry →</span>`;
+    el.appendChild(cta);
+  }
+
+  return el;
+}
+
+/* ============================================================================
+   MOCK-SIMULATOR — bootst de aggregate-SSE na: schuift analyses door hun
+   fasen en macro-states, en duwt elke transitie de event-ticker in.
+   In productie vervangt één `new EventSource("/api/projects/events")` dit blok.
+   ========================================================================== */
+function tik(wet, artikel, tekst) {
+  const t = new Date().toLocaleTimeString("nl-NL");
+  tikkerRegel.innerHTML = `<span class="t mono">${t}</span> · <span class="w">${wet} ${artikel}</span> · ${tekst}`;
+  tikkerRegel.style.animation = "none"; void tikkerRegel.offsetWidth; tikkerRegel.style.animation = "";
+}
+
+function stapVooruit(a) {
+  if (a.fout || a.macro === "klaar") return;
+  const fasen = fasenVoor(a.macro);
+  if (fasen) {
+    const idx = fasen.findIndex(f => f.id === (a.fase || fasen[0].id));
+    // tellers binnen een fase eerst laten aftellen
+    if (a.detail && a.detail.n < a.detail.van) { a.detail.n++; return; }
+    a.detail = null;
+    if (idx < fasen.length - 1) {
+      const volg = fasen[idx + 1];
+      a.fase = volg.id;
+      if (volg.id === "volgen") a.detail = { n: 1, van: 2 + Math.floor(Math.random() * 4) };
+      if (volg.id === "autocorrectie" && Math.random() < 0.5) a.detail = { n: 1, van: 2 };
+      tik(a.wet, a.artikel, "→ " + volg.label);
+      return;
+    }
+  }
+  // einde van de sublaag → volgende macro-station
+  const mi = MACRO_INDEX[a.macro];
+  const volgende = MACRO[mi + 1];
+  a.fase = null; a.detail = null;
+  a.macro = volgende.id;
+  if (a.macro.startsWith("review")) {
+    tik(a.wet, a.artikel, "wacht op review");
+  } else if (a.macro === "klaar") {
+    tik(a.wet, a.artikel, "✓ rapport klaar");
+  } else {
+    if (a.macro.includes("runt")) a.ronde = a.ronde || 1;
+    tik(a.wet, a.artikel, "start " + volgende.naam.replace(/\n/g, " "));
+  }
+}
+
+// review-states laten we niet vanzelf doorlopen (wachten op de "analist");
+// simuleer af en toe een akkoord zodat de plaat blijft bewegen.
+function simuleerReviewAkkoord() {
+  const wachtend = analyses.filter(a => a.macro.startsWith("review") && !a.fout);
+  if (wachtend.length && Math.random() < 0.4) {
+    const a = wachtend[Math.floor(Math.random() * wachtend.length)];
+    tik(a.wet, a.artikel, "review akkoord — door naar volgende activiteit");
+    stapVooruit(a);
+  }
+}
+
+setInterval(() => {
+  const lopend = analyses.filter(a => (a.macro.includes("runt") || a.macro === "bouwt") && !a.fout);
+  if (lopend.length) {
+    const a = lopend[Math.floor(Math.random() * lopend.length)];
+    stapVooruit(a);
+  }
+  simuleerReviewAkkoord();
+  render();
+}, 1400);
+
+render();
+</script>
+</body>
+</html>

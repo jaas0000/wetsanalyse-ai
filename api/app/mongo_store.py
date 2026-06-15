@@ -80,6 +80,19 @@ class MongoStore:
         )
         return res.matched_count == 1
 
+    async def set_current_fase(self, job_id: str, fase: str | None, owner: str) -> bool:
+        """Observerende, owner-fenced single-field update voor het live dashboard. Schrijft
+        UITSLUITEND current_fase (+ _sinds) — nooit `updated`, `state`, owner of lease. Zo laten de
+        fijnmazige fase-tikken de homepage-sortering (op `updated`) en de state-machine ongemoeid.
+        Owner-fenced net als save_job (filter {slug, owner}): een verloren/verkeerde owner → geen
+        match → False. Best-effort aan de aanroepkant: een False breekt de fase niet af."""
+        coll = Project.get_motor_collection()
+        res = await coll.update_one(
+            {"slug": job_id, "owner": owner},
+            {"$set": {"current_fase": fase, "current_fase_sinds": _utcnow() if fase else None}},
+        )
+        return res.matched_count == 1
+
     async def insert_job(self, job: Job) -> None:
         """Maak altijd een nieuw project-document aan (nooit bijwerken). Werpt
         DuplicateKeyError als de slug al bestaat — de aanroeper handelt de race af."""

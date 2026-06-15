@@ -41,6 +41,12 @@ class Project(Document):
     state: JobState = JobState.queued
     current_activiteit: Literal["2", "3"] | None = None
     current_ronde: int = 0
+    # Observerend, voor het live dashboard: de fijnmazige fase BINNEN een runt/bouwt-state
+    # (bijv. "llm-generatie", "verwijzingen-volgen"). Bewust géén state-machine-veld — alleen
+    # via MongoStore.set_current_fase geschreven (zie _STATE_FIELDS in mongo_store.py), zodat
+    # fase-tikken de state-CAS en de updated-sortering niet raken. None buiten een runt/bouwt.
+    current_fase: str | None = None
+    current_fase_sinds: datetime | None = None
     waarschuwingen: list[str] = Field(default_factory=list)
     error: JobFout | None = None
     provenance: list[RondeProvenance] = Field(default_factory=list)
