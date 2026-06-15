@@ -13,7 +13,12 @@ export type ZoekInput =
   | { patronen: RegExp[]; operator: "EN" | "OF" };
 
 export interface ZoekTermResultaat {
-  artikelen: { artikel: string; aantalTreffers: number; leden: string[] }[];
+  artikelen: {
+    artikel: string;
+    aantalTreffers: number;
+    leden: string[];
+    waarschuwing?: string;
+  }[];
   totaalTreffers: number;
   isVolledig: boolean;
 }
@@ -74,6 +79,10 @@ export function zoekTermInArtikelDom(
     string,
     { count: number; leden: Set<string>; matchedPatterns: Set<number> }
   >();
+  // Hoe vaak elk artikelnummer voorkomt — een bijlage kan de nummering herstarten,
+  // waardoor treffers van twee verschillende plekken anders ongemerkt op één
+  // nummer worden samengevoegd (vgl. de waarschuwing in wettenbank_artikel).
+  const voorkomens = new Map<string, number>();
 
   const articles: DomElement[] = [
     ...Array.from(doc.getElementsByTagName("artikel")),
@@ -83,6 +92,7 @@ export function zoekTermInArtikelDom(
   for (const art of articles) {
     const nr = getElText(art.getElementsByTagName("kop").item(0), "nr");
     if (!nr) continue;
+    voorkomens.set(nr, (voorkomens.get(nr) ?? 0) + 1);
 
     const entry = tellers.get(nr) ?? {
       count: 0,
@@ -120,15 +130,23 @@ export function zoekTermInArtikelDom(
         ? matchedPatterns.size === patronen.length
         : matchedPatterns.size > 0
     )
-    .map(([artikel, { count, leden }]) => ({
-      artikel,
-      aantalTreffers: count,
-      leden: Array.from(leden).sort((a, b) => {
-        const nA = parseFloat(a), nB = parseFloat(b);
-        if (!isNaN(nA) && !isNaN(nB)) return nA - nB;
-        return a.localeCompare(b);
-      }),
-    }))
+    .map(([artikel, { count, leden }]) => {
+      const aantal = voorkomens.get(artikel) ?? 1;
+      return {
+        artikel,
+        aantalTreffers: count,
+        leden: Array.from(leden).sort((a, b) => {
+          const nA = parseFloat(a), nB = parseFloat(b);
+          if (!isNaN(nA) && !isNaN(nB)) return nA - nB;
+          return a.localeCompare(b);
+        }),
+        ...(aantal > 1 && {
+          waarschuwing:
+            `Er zijn ${aantal} elementen met nummer ${artikel} (bijv. ook in een ` +
+            `bijlage); de treffers en leden zijn over alle exemplaren samengeteld.`,
+        }),
+      };
+    })
     .sort((a, b) => {
       const nA = parseFloat(a.artikel), nB = parseFloat(b.artikel);
       if (!isNaN(nA) && !isNaN(nB)) return nA - nB;
@@ -136,9 +154,12 @@ export function zoekTermInArtikelDom(
     });
 
   const totaalTreffers = alleArtikelen.reduce((s, t) => s + t.aantalTreffers, 0);
+  // isVolledig=false ⇒ de artikellijst is na maxResultaten afgekapt; de consument
+  // weet dan dat er méér matchende artikelen waren dan teruggegeven.
+  const isVolledig = alleArtikelen.length <= maxResultaten;
   return {
     artikelen: alleArtikelen.slice(0, maxResultaten),
     totaalTreffers,
-    isVolledig: true, // DOM-parsing scant altijd het volledige document
+    isVolledig,
   };
 }

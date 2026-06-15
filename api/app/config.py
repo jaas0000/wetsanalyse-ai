@@ -97,7 +97,10 @@ class Settings:
         self.mongodb_db = os.environ.get("MONGODB_DB", "wetsanalyse")
 
         # --- CORS ---
-        raw_origins = os.environ.get("CORS_ORIGINS", "*")
+        # Default leeg = geen cross-origin browser-toegang (veilig). De BFF/clients praten
+        # server→server met een bearer-token en worden niet door CORS geraakt; zet
+        # CORS_ORIGINS alleen als een browser-origin rechtstreeks de API moet aanspreken.
+        raw_origins = os.environ.get("CORS_ORIGINS", "")
         self.cors_origins: list[str] = [o.strip() for o in raw_origins.split(",") if o.strip()]
 
         # --- Build-herkomst (door CI meegegeven; zichtbaar op /health) ---
@@ -131,6 +134,10 @@ class Settings:
         # Per-client request-rate op de muterende endpoints.
         self.rate_limit_max = int(os.environ.get("WETSANALYSE_RATE_LIMIT_MAX", "30"))
         self.rate_limit_window_s = float(os.environ.get("WETSANALYSE_RATE_LIMIT_WINDOW", "60"))
+        # Aparte, krappe rate-limit op de admin-verbindingstest: die doet een echte (betaalde)
+        # LLM-call en zit alleen achter het admin-token — een gelekt token mag geen kosten stapelen.
+        self.admin_test_rate_max = int(os.environ.get("WETSANALYSE_ADMIN_TEST_RATE_MAX", "10"))
+        self.admin_test_rate_window_s = float(os.environ.get("WETSANALYSE_ADMIN_TEST_RATE_WINDOW", "60"))
         # Max gelijktijdig lopende (niet-terminale) analyses per client.
         self.max_active_jobs = int(os.environ.get("WETSANALYSE_MAX_ACTIVE_JOBS", "5"))
         # Token-budget per analyse; bij overschrijding stopt de job (FoutKlasse.quota).

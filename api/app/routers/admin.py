@@ -20,6 +20,8 @@ POST   /v1/admin/wetten/{bwbId}/resolve   — stel de officiële citeertitel voo
 
 from __future__ import annotations
 
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
@@ -27,9 +29,12 @@ from .. import profiles, usage, wetten
 from ..auth import require_admin
 from ..llm.litellm_client import build_llm_client
 from ..llm_profile import LlmProfile
+from ..ratelimit import rate_limited_admin_test
 from ..secrets_crypto import SecretsCryptoError, crypto_beschikbaar
 from ..wet_catalog import WetCatalogus
 from ..wettenbank import WettenbankError
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/admin", tags=["admin"], dependencies=[Depends(require_admin)])
 
@@ -147,7 +152,11 @@ async def maak_default(name: str):
     return _to_out(p)
 
 
-@router.post("/profiles/{name}/test", response_model=TestResult)
+@router.post(
+    "/profiles/{name}/test",
+    response_model=TestResult,
+    dependencies=[Depends(rate_limited_admin_test)],
+)
 async def test_profiel(name: str):
     if await profiles.get_profile(name) is None:
         raise HTTPException(status_code=404, detail=f"Onbekend profiel: {name}")
@@ -162,11 +171,15 @@ async def test_profiel(name: str):
         )
     except SecretsCryptoError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:  # noqa: BLE001 — toon de fout, lek geen secrets
-        detail = f"{type(e).__name__}: {e}"
-        if cfg and cfg.api_key:
-            detail = detail.replace(cfg.api_key, "***")  # key niet in de respons echoën
-        return TestResult(ok=False, model=cfg.model if cfg else "", detail=detail)
+    except Exception as e:  # noqa: BLE001 — geef een gesaniteerde melding, lek geen requestdetails
+        # De ruwe provider-exceptie kan endpoint-URL's, headers of (delen van) de key
+        # bevatten; die hoort in het server-log, niet in de API-respons.
+        logger.warning("Verbindingstest profiel %r mislukt: %s: %s", name, type(e).__name__, e)
+        return TestResult(
+            ok=False,
+            model=cfg.model if cfg else "",
+            detail="Verbinding met de modelprovider mislukt — zie het server-log voor details.",
+        )
     return TestResult(ok=True, model=res.model, tokens_in=res.tokens_in, tokens_out=res.tokens_out)
 
 

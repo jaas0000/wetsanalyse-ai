@@ -16,7 +16,7 @@ from collections import defaultdict, deque
 
 from fastapi import Depends, HTTPException, status
 
-from .auth import require_client
+from .auth import require_admin, require_client
 from .config import get_settings
 
 _hits: dict[str, deque[float]] = defaultdict(deque)
@@ -52,3 +52,17 @@ def rate_limited_client(client_id: str = Depends(require_client)) -> str:
             headers={"Retry-After": str(int(s.rate_limit_window_s))},
         )
     return client_id
+
+
+def rate_limited_admin_test(admin_id: str = Depends(require_admin)) -> str:
+    """Als require_admin, maar met een krappe rate limit op de verbindingstest (betaalde LLM-call)."""
+    s = get_settings()
+    if s.admin_test_rate_max > 0 and not _allow(
+        f"admin-test:{admin_id}", s.admin_test_rate_max, s.admin_test_rate_window_s
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Te veel verbindingstests; probeer later opnieuw.",
+            headers={"Retry-After": str(int(s.admin_test_rate_window_s))},
+        )
+    return admin_id

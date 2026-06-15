@@ -186,17 +186,25 @@ export function verzamelArtikelnummers(el) {
     })(el);
     return nummers;
 }
+// Nummering-/kopelementen horen niet in de zoektekst: een los lidnummer ("1") zou
+// als zoekbaar woord meetellen en, erger, aan de tekst van het volgende element
+// vastplakken.
+const SKIP_TAGS_VOOR_ZOEK = new Set(["kop", "nr", "lidnr", "li.nr"]);
 export function extractTextForSearch(el) {
     if (el.nodeType === 3)
         return el.nodeValue ?? "";
     if (el.nodeType !== 1)
         return "";
     const elem = el;
-    if (elem.tagName === "kop")
+    if (SKIP_TAGS_VOOR_ZOEK.has(elem.tagName))
         return "";
+    // Scheid de tekst van aangrenzende kinderen met een spatie, zodat er een
+    // woordgrens (\b) ontstaat tussen bv. twee <al>'s of een <lidnr> en het
+    // volgende <al>. Zonder scheiding fuseert "…eerste lid" + "geldt…" tot
+    // "lidgeldt" en mist een woordgebonden zoekterm de treffer.
     let text = "";
     for (let i = 0; i < elem.childNodes.length; i++) {
-        text += extractTextForSearch(elem.childNodes.item(i));
+        text += extractTextForSearch(elem.childNodes.item(i)) + " ";
     }
     return text;
 }

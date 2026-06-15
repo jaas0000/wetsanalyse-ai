@@ -238,7 +238,10 @@ Symptoom → oorzaak:
 ## Misbruik-/kostenbeheersing
 
 Knoppen via env (0 = uit): `WETSANALYSE_RATE_LIMIT_MAX`/`_WINDOW` (per-client request-rate op de
-muterende endpoints → 429), `WETSANALYSE_MAX_ACTIVE_JOBS` (max gelijktijdig lopende analyses per
+muterende endpoints → 429), `WETSANALYSE_ADMIN_TEST_RATE_MAX`/`_WINDOW` (aparte, krappe limiet op
+`POST /v1/admin/profiles/{name}/test` → 429; die doet een betaalde LLM-call achter alleen het
+admin-token. De testfout is bovendien gesaniteerd: een vaste melding in de respons, de ruwe
+provider-fout alleen in het server-log), `WETSANALYSE_MAX_ACTIVE_JOBS` (max gelijktijdig lopende analyses per
 client → 429), `WETSANALYSE_LLM_TOKEN_BUDGET` (token-plafond per analyse → job naar `fout`,
 `FoutKlasse.quota`), `WETSANALYSE_LLM_MAX_CONCURRENCY` (globaal plafond op gelijktijdige LLM-calls,
 default 4 — de echte rem tegen provider-rate-limits), `WETSANALYSE_LLM_TIMEOUT_S` (harde wandklok-

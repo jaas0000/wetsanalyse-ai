@@ -145,6 +145,7 @@ export const ZoektermOutputSchema = z.object({
         pad: z.string().optional(), // alleen bij includeerTekst=true
         tekst: z.string().optional(), // alleen bij includeerTekst=true
         formaat: z.enum(["plain", "markdown"]).optional(),
+        waarschuwing: z.string().optional(), // nr komt meermaals voor (bijlage); treffers samengeteld
     })),
 });
 // Eén uitgaande verwijzing (intref/extref) bij een lid — zie VerwijzingRef in bwb-parser.
