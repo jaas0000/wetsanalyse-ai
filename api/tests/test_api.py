@@ -136,3 +136,40 @@ async def test_tenant_isolatie(client):
         assert (await client.get(path)).status_code == 404, path
     assert (await client.post("/v1/projects/andermans-art1/retry")).status_code == 404
     assert (await client.delete("/v1/projects/andermans-art1")).status_code == 404
+
+
+async def test_aggregate_events_route_geregistreerd(client):
+    """`/v1/projects/events` is een eigen route (vóór /{project_id}), niet opgeslokt als project-id."""
+    schema = (await client.get("/openapi.json")).json()
+    assert "/v1/projects/events" in schema["paths"]
+    assert "get" in schema["paths"]["/v1/projects/events"]
+
+
+async def test_dashboard_poll_scoping_diff_en_removed(store):
+    """De aggregate-poll-helper: client-scoping (geen tenant-lek), diff (alleen wijzigingen) en
+    removed-signaal bij verwijdering. Getest zonder de oneindige SSE-stream."""
+    from app.contracts import Job, JobState
+    from app.routers.projects import _dashboard_poll
+
+    await store.save_job(Job(id="a1", state=JobState.act2_runt, bwbId="BWBR1", artikel="1",
+                             client_id="c1", model_profile="prof-x"))
+    await store.save_job(Job(id="a2", state=JobState.klaar, bwbId="BWBR2", artikel="2", client_id="c1"))
+    await store.save_job(Job(id="b1", state=JobState.klaar, bwbId="BWBR3", artikel="3", client_id="andere"))
+
+    frames, seen = await _dashboard_poll(store, "c1", {})
+    blob = "".join(frames)
+    assert "a1" in blob and "a2" in blob
+    assert "b1" not in blob  # andere tenant lekt niet
+    for veld in ("current_fase", "model_profile", "tokens_in", "tokens_out", "created"):
+        assert veld in blob, veld
+    assert set(seen) == {"a1", "a2"}
+
+    # Tweede poll, niets gewijzigd → geen frames.
+    frames2, seen2 = await _dashboard_poll(store, "c1", seen)
+    assert frames2 == []
+
+    # Verwijder a2 → removed-frame, en a2 uit de momentopname.
+    await store.delete_project("a2")
+    frames3, seen3 = await _dashboard_poll(store, "c1", seen2)
+    assert any("event: removed" in f and "a2" in f for f in frames3)
+    assert "a2" not in seen3

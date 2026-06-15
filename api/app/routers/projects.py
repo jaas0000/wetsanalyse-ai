@@ -13,6 +13,7 @@ GET    /v1/projects/{id}/rapport        — rapport JSON
 GET    /v1/projects/{id}/rapport.md     — rapport Markdown
 GET    /v1/projects/{id}/ronde/{act}/{n} — analyse-JSON van één ronde
 GET    /v1/projects/{id}/events         — SSE state-updates (max 10 min)
+GET    /v1/projects/events              — SSE geaggregeerde dashboard-updates (alle eigen projecten)
 """
 
 from __future__ import annotations
@@ -76,9 +77,84 @@ async def lijst_projecten(
         JobSummary(
             id=p.slug, naam=p.naam, state=p.state,
             bwbId=p.bwbId, artikel=p.artikel, updated=p.updated.isoformat(),
+            current_fase=p.current_fase, model_profile=p.model_profile,
+            tokens_in=sum(r.tokens_in for r in p.provenance),
+            tokens_out=sum(r.tokens_out for r in p.provenance),
         )
         for p in projects
     ]
+
+
+def _dashboard_payload(p) -> dict:
+    """Compacte, JSON-klare momentopname van één project voor het live dashboard. Telt de tokens
+    uit de provenance op (zelfde bron als usage.py) en plat de fout uit tot drie velden. JobState/
+    FoutKlasse zijn str-enums, dus direct json-serialiseerbaar."""
+    return {
+        "id": p.slug,
+        "naam": p.naam,
+        "bwbId": p.bwbId,
+        "artikel": p.artikel,
+        "state": p.state,
+        "current_activiteit": p.current_activiteit,
+        "current_ronde": p.current_ronde,
+        "current_fase": p.current_fase,
+        "current_fase_sinds": p.current_fase_sinds.isoformat() if p.current_fase_sinds else None,
+        "created": p.created.isoformat(),
+        "updated": p.updated.isoformat(),
+        "model_profile": p.model_profile,
+        "tokens_in": sum(r.tokens_in for r in p.provenance),
+        "tokens_out": sum(r.tokens_out for r in p.provenance),
+        "error": (
+            {"stap": p.error.stap, "klasse": p.error.klasse, "bericht": p.error.bericht}
+            if p.error else None
+        ),
+    }
+
+
+async def _dashboard_poll(
+    store: JobStore, client_id: str, seen: dict[str, dict]
+) -> tuple[list[str], dict[str, dict]]:
+    """Eén poll-ronde: vergelijk de huidige projecten van de client met de vorige momentopname `seen`
+    en geef (a) de te-emitten SSE-frames en (b) de bijgewerkte `seen` terug. Alleen gewijzigde
+    projecten krijgen een `data:`-frame; verdwenen (verwijderde) projecten een `event: removed`.
+    Apart van de stream-lus gehouden zodat dit zonder oneindige SSE getest kan worden."""
+    projects = await store.list_projects(client_id, limit=100)
+    huidige = {p.slug for p in projects}
+    frames: list[str] = []
+    nieuw: dict[str, dict] = {}
+    for p in projects:
+        payload = _dashboard_payload(p)
+        nieuw[p.slug] = payload
+        if seen.get(p.slug) != payload:
+            frames.append(f"data: {json.dumps(payload)}\n\n")
+    for verdwenen in seen.keys() - huidige:
+        frames.append(f"event: removed\ndata: {json.dumps({'id': verdwenen})}\n\n")
+    return frames, nieuw
+
+
+@router.get("/events")
+async def alle_project_events(request: Request, client_id: str = Depends(require_client)):
+    """SSE — geaggregeerde state-/fase-updates van ALLE projecten van deze client, voor het live
+    dashboard. Eén poll-lus (elke 5s, max ~10 min; EventSource herverbindt daarna automatisch) i.p.v.
+    één stream per project; per project alleen `data:` bij een gewijzigde momentopname. LET OP: deze
+    route staat bewust vóór `/{project_id}`, anders vangt die path-param het pad 'events'."""
+    store = get_store()
+
+    async def stream():
+        seen: dict[str, dict] = {}
+        for _ in range(120):
+            if await request.is_disconnected():
+                return
+            frames, seen = await _dashboard_poll(store, client_id, seen)
+            for f in frames:
+                yield f
+            await asyncio.sleep(5)
+
+    return StreamingResponse(
+        stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @router.get("/{project_id}", response_model=Job)
@@ -182,6 +258,7 @@ async def project_events(project_id: str, request: Request, client_id: str = Dep
                 "state": p.state,
                 "current_activiteit": p.current_activiteit,
                 "current_ronde": p.current_ronde,
+                "current_fase": p.current_fase,
             }
             if current != seen:
                 yield f"data: {json.dumps(current)}\n\n"

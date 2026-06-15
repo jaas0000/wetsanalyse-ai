@@ -58,6 +58,11 @@ export interface JobSummary {
   bwbId: string;
   artikel: string;
   updated: string;
+  // Verrijking voor de eerste (SSR-)render van het dashboard; daarna live via de aggregate-SSE.
+  current_fase: string | null;
+  model_profile: string;
+  tokens_in: number;
+  tokens_out: number;
 }
 
 export interface JobFout {
@@ -315,6 +320,29 @@ export interface SSEUpdate {
   state: JobState;
   current_activiteit: Activiteit | null;
   current_ronde: number;
+  current_fase: string | null;
+}
+
+/**
+ * Eén project-momentopname uit de geaggregeerde dashboard-SSE (`/api/projects/events`).
+ * Spiegelt `_dashboard_payload` in api/app/routers/projects.py.
+ */
+export interface DashboardUpdate {
+  id: string;
+  naam: string;
+  bwbId: string;
+  artikel: string;
+  state: JobState;
+  current_activiteit: Activiteit | null;
+  current_ronde: number;
+  current_fase: string | null;
+  current_fase_sinds: string | null;
+  created: string;
+  updated: string;
+  model_profile: string;
+  tokens_in: number;
+  tokens_out: number;
+  error: { stap: string; klasse: FoutKlasse; bericht: string } | null;
 }
 
 // --- API-fout doorgegeven door de BFF ---------------------------------------

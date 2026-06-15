@@ -237,6 +237,12 @@ class JobSummary(BaseModel):
     bwbId: str = ""
     artikel: str = ""
     updated: str = ""
+    # Voor de eerste (SSR-)render van het live dashboard, zodat de kaart meteen compleet is i.p.v.
+    # pas na de eerste SSE-tick. Daarna verrijkt de aggregate-SSE deze velden live.
+    current_fase: str | None = None
+    model_profile: str = ""
+    tokens_in: int = 0
+    tokens_out: int = 0
 
 
 class FeedbackAccepted(BaseModel):

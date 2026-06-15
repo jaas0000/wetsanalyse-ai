@@ -1,0 +1,279 @@
+{
+  "wet": "Invorderingswet 1990",
+  "bwbId": "BWBR0004770",
+  "artikel": "7a",
+  "versiedatum": "2026-01-01",
+  "bronreferentie": "jci1.3:c:BWBR0004770&artikel=7a&g=2026-01-01",
+  "type": "wet",
+  "pad": "Hoofdstuk I Algemene bepalingen > Artikel 7a",
+  "analysefocus": "Artikel 7a, eerste lid — de verplichting dat uitbetaling van inkomstenbelasting aan de belastingschuldige uitsluitend plaatsvindt op één, op zijn naam staande, door hem daartoe bestemde bankrekening (de 'een-bankrekeningnummer'-maatregel), die tevens geldt voor de uitbetaling van voorschotten en tegemoetkomingen onder de Awir.",
+  "reikwijdte": "Alleen artikel 7a, lid 1. Lid 2 (terugval als geen rekening is bestemd), lid 3 (overeenkomstige toepassing op andere uit te betalen bedragen) en lid 4 (ministeriele-regeling-uitzondering op lid 1) vallen buiten scope; lid 4 wordt als delegatie/uitzondering bij de validatiepunten gesignaleerd.",
+  "geraadpleegde": "Invorderingswet 1990 art. 2 lid 1 onder k (definitie 'belastingschuldige') en onder m (definitie 'belastingaanslag'); art. 4:89 lid 1 Algemene wet bestuursrecht (de afgeweken hoofdregel); art. 25 Algemene wet inkomensafhankelijke regelingen (spiegelbepaling voorschotten/tegemoetkomingen).",
+  "leden": [
+    {
+      "lid": "1",
+      "tekst": "In afwijking van artikel 4:89, eerste lid, van de Algemene wet bestuursrecht vindt uitbetaling aan de belastingschuldige van inkomstenbelasting uitsluitend plaats op een daartoe door de belastingschuldige bestemde bankrekening die op naam staat van de belastingschuldige. De belastingschuldige kan niet meer dan een bankrekening bestemmen voor de uitbetaling van inkomstenbelasting en voor de in artikel 25 van de Algemene wet inkomensafhankelijke regelingen bedoelde uitbetaling van de hem toekomende voorschotten en tegemoetkomingen."
+    }
+  ],
+  "markeringen": [
+    {
+      "id": "m1",
+      "formulering": "de belastingschuldige",
+      "klasse": "Rechtssubject",
+      "vindplaats": "lid 1",
+      "toelichting": "Drager van het recht op uitbetaling en bevoegd tot het bestemmen van de bankrekening. Gedefinieerd in art. 2 lid 1 onder k: 'degene te wiens naam de belastingaanslag is gesteld' (zie verwijzing v3). De plichthebbende tegenpartij (de ontvanger) is in lid 1 niet letterlijk genoemd, maar volgt uit het stelsel van de wet (vgl. lid 2)."
+    },
+    {
+      "id": "m2",
+      "formulering": "vindt uitbetaling aan de belastingschuldige van inkomstenbelasting ... plaats",
+      "klasse": "Rechtsbetrekking",
+      "vindplaats": "lid 1",
+      "toelichting": "Betalingsverhouding: de belastingschuldige heeft recht op uitbetaling van (terug te geven) inkomstenbelasting; de ontvanger heeft de plicht die uit te betalen. De plichthebbende is impliciet (passieve formulering 'vindt ... plaats'); lid 2 expliciteert de ontvanger als betaler."
+    },
+    {
+      "id": "m3",
+      "formulering": "inkomstenbelasting",
+      "klasse": "Rechtsobject",
+      "vindplaats": "lid 1",
+      "toelichting": "Voorwerp van de uitbetaling: het aan de belastingschuldige uit te betalen (terug te geven) bedrag aan inkomstenbelasting. Inkomstenbelasting is een rijksbelasting (art. 2 lid 1 onder a)."
+    },
+    {
+      "id": "m4",
+      "formulering": "een daartoe door de belastingschuldige bestemde bankrekening",
+      "klasse": "Rechtsobject",
+      "vindplaats": "lid 1",
+      "toelichting": "Het voorwerp waarop de uitbetaling uitsluitend mag plaatsvinden: de door de belastingschuldige bestemde bankrekening."
+    },
+    {
+      "id": "m5",
+      "formulering": "die op naam staat van de belastingschuldige",
+      "klasse": "Voorwaarde",
+      "vindplaats": "lid 1",
+      "toelichting": "Tenaamstellingseis aan de bankrekening: de uitbetaling is alleen rechtmatig als de bestemde rekening op naam van de belastingschuldige zelf staat. Naast de bestemming (m7) een tweede, cumulatieve eis aan de rekening."
+    },
+    {
+      "id": "m6",
+      "formulering": "uitsluitend",
+      "klasse": "Operator",
+      "vindplaats": "lid 1",
+      "toelichting": "Beperkende/exclusieve operator: uitbetaling mag alleen (en op geen andere wijze) op de bestemde, op naam staande bankrekening plaatsvinden."
+    },
+    {
+      "id": "m7",
+      "formulering": "De belastingschuldige kan ... een bankrekening bestemmen",
+      "klasse": "Rechtsfeit",
+      "vindplaats": "lid 1",
+      "toelichting": "Rechtshandeling: de belastingschuldige wijst (bestemt) een bankrekening aan voor de uitbetaling. Dit bestemmen is de voorwaarde die de betalingsverhouding (m2) op een concrete rekening laat neerslaan."
+    },
+    {
+      "id": "m8",
+      "formulering": "niet meer dan een bankrekening",
+      "klasse": "Voorwaarde",
+      "vindplaats": "lid 1",
+      "toelichting": "Kwantitatieve beperking: de belastingschuldige mag ten hoogste een rekening bestemmen. Kern van de 'een-bankrekeningnummer'-maatregel."
+    },
+    {
+      "id": "m9",
+      "formulering": "niet meer dan",
+      "klasse": "Operator",
+      "vindplaats": "lid 1",
+      "toelichting": "Vergelijkingsoperator (ten hoogste / kleiner dan of gelijk aan) op het aantal te bestemmen bankrekeningen."
+    },
+    {
+      "id": "m10",
+      "formulering": "een [bankrekening]",
+      "klasse": "Parameter en parameterwaarde",
+      "vindplaats": "lid 1",
+      "toelichting": "Vaste, voor iedere belastingschuldige gelijke bovengrens aan het aantal te bestemmen bankrekeningen: maximaal 1. Telwoord 'een' (niet het lidwoord)."
+    },
+    {
+      "id": "m11",
+      "formulering": "de hem toekomende voorschotten en tegemoetkomingen",
+      "klasse": "Rechtsobject",
+      "vindplaats": "lid 1",
+      "toelichting": "Tweede categorie uit te betalen bedragen die onder dezelfde ene bankrekening valt: de voorschotten en tegemoetkomingen, bedoeld in art. 25 Awir (zie verwijzing v2). 'Hem' verwijst naar de belastingschuldige."
+    },
+    {
+      "id": "m12",
+      "formulering": "voor de uitbetaling van inkomstenbelasting en voor de in artikel 25 ... bedoelde uitbetaling",
+      "klasse": "Operator",
+      "vindplaats": "lid 1",
+      "toelichting": "Logische conjunctie ('en'): dezelfde ene bestemde rekening geldt zowel voor de uitbetaling van inkomstenbelasting als voor de uitbetaling van voorschotten en tegemoetkomingen. De maatregel koppelt beide geldstromen aan een rekening."
+    }
+  ],
+  "verwijzingen": [
+    {
+      "id": "v1",
+      "bron_lid": "lid 1",
+      "soort": "extref",
+      "functie": "schakel",
+      "doel": {
+        "label": "artikel 4:89, eerste lid, van de Algemene wet bestuursrecht",
+        "target": "jci1.3:c:BWBR0005537&artikel=4:89",
+        "bwbId": "BWBR0005537"
+      },
+      "status": "opgehaald",
+      "betekenis": "De afgeweken hoofdregel. Art. 4:89 lid 1 Awb: 'Tenzij bij wettelijk voorschrift anders is bepaald, geschiedt betaling door bijschrijving op een daartoe door de schuldeiser bestemde bankrekening.' Art. 7a lid 1 is die afwijking en scherpt de hoofdregel aan met drie extra eisen: de rekening moet op naam van de belastingschuldige staan, er mag maar een rekening worden bestemd, en die geldt tevens voor Awir-uitbetalingen."
+    },
+    {
+      "id": "v2",
+      "bron_lid": "lid 1",
+      "soort": "extref",
+      "functie": "informatief",
+      "doel": {
+        "label": "artikel 25 van de Algemene wet inkomensafhankelijke regelingen",
+        "target": "jci1.3:c:BWBR0018472&artikel=25",
+        "bwbId": "BWBR0018472"
+      },
+      "status": "opgehaald",
+      "betekenis": "Spiegelbepaling: art. 25 Awir legt voor Dienst Toeslagen dezelfde een-rekeningplicht op voor de uitbetaling van voorschotten en tegemoetkomingen, en bepaalt dat die ene rekening tevens voor inkomstenbelasting geldt. Bepaalt de reikwijdte van 'voorschotten en tegemoetkomingen' in lid 1: het zijn de via art. 25 Awir uit te betalen bedragen. Opgehaald omdat het de werking (scope van de ene rekening) van de focus-bepaling mede bepaalt."
+    },
+    {
+      "id": "v3",
+      "bron_lid": "lid 1",
+      "soort": "natuurlijk",
+      "functie": "definitie",
+      "doel": {
+        "label": "artikel 2, eerste lid, onder k, Invorderingswet 1990 (begrip 'belastingschuldige')",
+        "target": "jci1.3:c:BWBR0004770&artikel=2",
+        "bwbId": "BWBR0004770"
+      },
+      "status": "opgehaald",
+      "betekenis": "Brondefinitie van de gebruikte term 'belastingschuldige': 'degene te wiens naam de belastingaanslag is gesteld' (art. 2 lid 1 onder k). Bepaalt wie rechthebbende/bevoegde is in lid 1. Niet als tekstlink in lid 1 getagd (gedefinieerde term), daarom soort 'natuurlijk'."
+    }
+  ],
+  "samenhang": "De centrale rechtsbetrekking (m2) is de betalingsverhouding waarin de belastingschuldige (m1, rechthebbende) recht heeft op uitbetaling van inkomstenbelasting (m3, rechtsobject) en de ontvanger (impliciete plichthebbende) die uitbetaalt. Lid 1 normeert niet of, maar uitsluitend (m6) de wijze waarop: de uitbetaling mag alleen op een door de belastingschuldige bestemde (m7, rechtsfeit) bankrekening (m4, rechtsobject) die op zijn naam staat (m5, voorwaarde). Daaroverheen legt de tweede zin een kwantitatieve grens: ten hoogste (m9) een (m10, parameter = max. 1) te bestemmen bankrekening (m8, voorwaarde), die en (m12, operator) voor de inkomstenbelasting en voor de voorschotten en tegemoetkomingen (m11, rechtsobject) uit art. 25 Awir geldt. De afwijking van art. 4:89 lid 1 Awb (v1) en de koppeling aan art. 25 Awir (v2) bepalen samen de werking; art. 2 lid 1 onder k (v3) bepaalt de betekenis van de belastingschuldige.",
+  "begrippen": [
+    {
+      "id": "b1",
+      "naam": "belastingschuldige",
+      "klasse": "Rechtssubject",
+      "definitie": "Degene te wiens naam de belastingaanslag is gesteld (art. 2, eerste lid, onder k, Invorderingswet 1990).",
+      "voorbeeld": "Een natuurlijk persoon aan wie een (voorlopige) aanslag inkomstenbelasting is opgelegd met een aan hem terug te geven bedrag.",
+      "kenmerken": "Brondefinitie (art. 2 lid 1 onder k). Rechthebbende van de uitbetalingsverhouding (b3); tevens degene die de bankrekening bestemt (b7) en op wiens naam die rekening moet staan (b5).",
+      "vindplaats": "art. 7a lid 1; definitie art. 2 lid 1 onder k",
+      "bron_verwijzing": "v3",
+      "twijfel": ""
+    },
+    {
+      "id": "b2",
+      "naam": "ontvanger",
+      "klasse": "Rechtssubject",
+      "definitie": "[afgeleid] De functionaris die met de invordering en uitbetaling van rijksbelastingen is belast en als zodanig bij ministeriele regeling is aangewezen (vgl. art. 2 lid 1 onder i Invorderingswet 1990).",
+      "voorbeeld": "De ontvanger van de Belastingdienst die een teruggaaf inkomstenbelasting uitbetaalt.",
+      "kenmerken": "Plichthebbende van de uitbetalingsverhouding (b3). Niet letterlijk in lid 1 genoemd; afgeleid uit het stelsel (lid 2 noemt de ontvanger als betaler).",
+      "vindplaats": "art. 7a lid 1 (impliciet); vgl. art. 7a lid 2 en art. 2 lid 1 onder i",
+      "twijfel": "De plichthebbende is in lid 1 impliciet (passieve formulering 'vindt uitbetaling ... plaats'). Aanname dat dit de ontvanger is; juridisch te bevestigen."
+    },
+    {
+      "id": "b3",
+      "naam": "uitbetaling van inkomstenbelasting",
+      "klasse": "Rechtsbetrekking",
+      "definitie": "[interpretatie] De betalingsverhouding waarin de ontvanger gehouden is een aan de belastingschuldige terug te geven bedrag aan inkomstenbelasting aan hem uit te betalen.",
+      "voorbeeld": "Na een aanslag met een teruggaaf van EUR 800 ontstaat de plicht dat bedrag aan de belastingschuldige uit te betalen.",
+      "kenmerken": "Rechthebbende = belastingschuldige (b1); plichthebbende = ontvanger (b2); rechtsobject = uit te betalen inkomstenbelasting (b4); komt tot stand door een aanslag/teruggaaf met een terug te geven bedrag. Lid 1 normeert niet het ontstaan, maar uitsluitend de wijze van nakoming: betaling alleen op de bestemde rekening (b5).",
+      "vindplaats": "art. 7a lid 1",
+      "twijfel": "Eigen begrip; geen wettelijke definitie van de uitbetalingsverhouding zelf."
+    },
+    {
+      "id": "b4",
+      "naam": "uit te betalen inkomstenbelasting",
+      "klasse": "Rechtsobject",
+      "definitie": "[interpretatie] Het aan de belastingschuldige terug te geven bedrag aan inkomstenbelasting waarop de uitbetaling betrekking heeft.",
+      "voorbeeld": "Een teruggaaf inkomstenbelasting die uit de aanslag voortvloeit.",
+      "kenmerken": "Voorwerp van de uitbetalingsverhouding (b3). Inkomstenbelasting is een rijksbelasting (art. 2 lid 1 onder a).",
+      "vindplaats": "art. 7a lid 1",
+      "twijfel": ""
+    },
+    {
+      "id": "b5",
+      "naam": "bestemde bankrekening",
+      "klasse": "Rechtsobject",
+      "definitie": "[interpretatie] De door de belastingschuldige aangewezen bankrekening waarop de uitbetaling uitsluitend plaatsvindt en die op naam van de belastingschuldige moet staan.",
+      "voorbeeld": "Een betaalrekening op naam van de belastingschuldige die hij bij de Belastingdienst heeft opgegeven voor teruggaven.",
+      "kenmerken": "Voorwerp waarop b3 wordt nagekomen. Twee cumulatieve eisen: (1) door de belastingschuldige bestemd (b7) en (2) op zijn naam (voorwaarde m5). Er kan ten hoogste een rekening worden bestemd (regel r2), die zowel voor inkomstenbelasting als voor de voorschotten en tegemoetkomingen (b6) geldt.",
+      "vindplaats": "art. 7a lid 1",
+      "twijfel": "Uitvoeringsvraag bij en/of-rekeningen, derden-/bewindrekeningen en curatele: wanneer staat een rekening 'op naam van' de belastingschuldige?"
+    },
+    {
+      "id": "b6",
+      "naam": "voorschotten en tegemoetkomingen",
+      "klasse": "Rechtsobject",
+      "definitie": "De aan de belanghebbende toekomende voorschotten en tegemoetkomingen waarvan de uitbetaling door Dienst Toeslagen is geregeld in artikel 25 van de Algemene wet inkomensafhankelijke regelingen.",
+      "voorbeeld": "Een voorschot huurtoeslag of een definitief vastgestelde zorgtoeslag.",
+      "kenmerken": "Tweede categorie uit te betalen bedragen die op dezelfde ene bestemde bankrekening (b5) moet plaatsvinden. Koppelt de uitbetalingen van de Belastingdienst (inkomstenbelasting) en Dienst Toeslagen (toeslagen) aan een rekening.",
+      "vindplaats": "art. 7a lid 1; art. 25 Awir",
+      "bron_verwijzing": "v2",
+      "twijfel": ""
+    },
+    {
+      "id": "b7",
+      "naam": "bestemmen van een bankrekening",
+      "klasse": "Rechtsfeit",
+      "definitie": "[interpretatie] De rechtshandeling waarmee de belastingschuldige een bankrekening aanwijst voor de uitbetaling van inkomstenbelasting (en van zijn voorschotten en tegemoetkomingen).",
+      "voorbeeld": "De belastingschuldige geeft via Mijn Belastingdienst een rekeningnummer op als rekening voor teruggaven.",
+      "kenmerken": "Bevoegdheid van de belastingschuldige (b1); resulteert in de bestemde bankrekening (b5). Beperkt tot ten hoogste een rekening (regel r2), gedeeld over inkomstenbelasting en Awir-uitbetalingen.",
+      "vindplaats": "art. 7a lid 1",
+      "twijfel": ""
+    }
+  ],
+  "afleidingsregels": [
+    {
+      "id": "r1",
+      "naam": "rechtmatige uitbetaling van inkomstenbelasting",
+      "type": "beslisregel",
+      "uitvoervariabele": "uitbetaling_is_rechtmatig (ja/nee)",
+      "invoervariabelen": "rekening_van_uitbetaling; is_door_belastingschuldige_bestemd (ja/nee); staat_op_naam_van_belastingschuldige (ja/nee)",
+      "parameters": "geen",
+      "voorwaarden": "Cumulatief (EN): de uitbetaling vindt plaats op een bankrekening; die rekening is door de belastingschuldige bestemd; en die rekening staat op naam van de belastingschuldige.",
+      "formulering": "uitbetaling_is_rechtmatig (beslisregel) :=\n    uitbetaling_vindt_plaats_op = bestemde_bankrekening\n    EN is_door_belastingschuldige_bestemd = ja\n    EN staat_op_naam_van_belastingschuldige = ja",
+      "vindplaats": "art. 7a lid 1, eerste volzin",
+      "twijfel": "Geldt 'in afwijking van' art. 4:89 lid 1 Awb (v1). In bij ministeriele regeling aangewezen gevallen kan van lid 1 worden afgeweken (lid 4) - dan kan een andere rekening rechtmatig zijn; die uitzonderingsgevallen zijn niet meegeanalyseerd."
+    },
+    {
+      "id": "r2",
+      "naam": "toelaatbaarheid bestemming bankrekening (een-rekening-grens)",
+      "type": "beslisregel",
+      "uitvoervariabele": "bestemming_toegestaan (ja/nee)",
+      "invoervariabelen": "aantal_reeds_door_belastingschuldige_bestemde_bankrekeningen (voor inkomstenbelasting en Awir-voorschotten/tegemoetkomingen samen)",
+      "parameters": "max_aantal_bankrekeningen = 1 (vast, gelijk voor iedere belastingschuldige)",
+      "voorwaarden": "Het totaal aantal door de belastingschuldige bestemde bankrekeningen - over de uitbetaling van inkomstenbelasting en de uitbetaling van voorschotten en tegemoetkomingen (art. 25 Awir) tezamen - mag niet meer dan max_aantal_bankrekeningen bedragen.",
+      "formulering": "bestemming_toegestaan (beslisregel) :=\n    aantal_bestemde_bankrekeningen(inkomstenbelasting EN voorschotten_en_tegemoetkomingen) <= max_aantal_bankrekeningen[1]",
+      "vindplaats": "art. 7a lid 1, tweede volzin; art. 25 Awir",
+      "twijfel": "De grens van een rekening wordt gedeeld met de uitbetalingsstroom van Dienst Toeslagen (art. 25 Awir): hetzelfde rekeningnummer geldt voor Belastingdienst en Toeslagen. De samentelling over beide stromen is een uitvoeringskoppeling die validatie verdient."
+    }
+  ],
+  "validatiepunten": [
+    "Plichthebbende impliciet: lid 1 noemt de betaler niet; aangenomen is de ontvanger (b2), afgeleid uit lid 2 en art. 2 lid 1 onder i. Juridisch bevestigen.",
+    "Delegatie/uitzondering (lid 4, buiten scope): bij ministeriele regeling kunnen gevallen worden aangewezen waarin van lid 1 wordt afgeweken (o.a. de Uitvoeringsregeling Invorderingswet 1990). Die gedelegeerde regeling is niet meegeanalyseerd - aparte analyse vereist; bepaalt wanneer een andere/extra rekening toch is toegestaan.",
+    "Spiegelbepaling art. 25 Awir (v2): de een-rekeningplicht is gedeeld tussen Belastingdienst (inkomstenbelasting) en Dienst Toeslagen (voorschotten/tegemoetkomingen). De samentelling van bestemde rekeningen over beide stromen (regel r2) en de gegevensuitwisseling daarachter zijn een uitvoeringskoppeling die multidisciplinaire validatie vraagt.",
+    "Open uitvoeringsnorm 'op naam staat van de belastingschuldige' (b5, m5): hoe te beoordelen bij en/of-rekeningen, derden-/kwaliteitsrekeningen, bewind, curatele of overlijden? Beleidsmatig in te vullen.",
+    "Terugval bij ontbrekende bestemming (lid 2, buiten scope): als geen rekening is bestemd, betaalt de ontvanger op een op naam van de belastingschuldige staande rekening. Relevant voor het volledige uitbetalingsbeeld maar hier niet geanalyseerd.",
+    "Interpretatie m10: 'een bankrekening' gelezen als telwoord (parameter, maximum = 1), niet als onbepaald lidwoord. Bevestigen."
+  ],
+  "reviewlog": {
+    "activiteit2": {
+      "samenvatting": "1 ronde — direct akkoord, geen wijzigingen. De analist ging akkoord met de 12 markeringen en de 3 verwijzingen zonder per-item- of algemene opmerkingen.",
+      "rondes": [
+        {
+          "ronde": 1,
+          "items": {},
+          "algemeen": "",
+          "status": "akkoord"
+        }
+      ]
+    },
+    "activiteit3": {
+      "samenvatting": "1 ronde — direct akkoord, geen wijzigingen. De analist ging akkoord met de 7 begrippen en 2 afleidingsregels zonder per-item- of algemene opmerkingen.",
+      "rondes": [
+        {
+          "ronde": 1,
+          "items": {},
+          "algemeen": "",
+          "status": "akkoord"
+        }
+      ]
+    }
+  },
+  "aandachtspunten": "Interpretatiekeuzes en impliciete elementen: (1) De plichthebbende is in lid 1 niet genoemd; de uitbetalingsverhouding (b3) en haar plichthebbende, de ontvanger (b2), zijn afgeleid uit het stelsel (lid 2; art. 2 lid 1 onder i) en als interpretatie gemarkeerd — juridisch te bevestigen. (2) 'een bankrekening' is gelezen als telwoord (parameter, maximum = 1), niet als onbepaald lidwoord.\n\nOpenstaande delegatie (buiten scope): Lid 4 staat toe dat bij ministeriele regeling gevallen worden aangewezen waarin van lid 1 wordt afgeweken (o.a. de Uitvoeringsregeling Invorderingswet 1990). Die gedelegeerde regeling is niet meegeanalyseerd en bepaalt wanneer een andere of extra rekening toch is toegestaan — een aparte analyse is vereist en regel r1 is op dat punt onvolledig.\n\nUitvoeringskoppeling Belastingdienst/Toeslagen: De een-rekeningplicht is via art. 25 Awir (verwijzing v2, spiegelbepaling) gedeeld met Dienst Toeslagen; dezelfde ene rekening geldt voor inkomstenbelasting en voor voorschotten/tegemoetkomingen. Regel r2 modelleert dit als een gedeelde teller over beide uitbetalingsstromen; de samentelling en de gegevensuitwisseling daarachter vragen multidisciplinaire validatie.\n\nOpen uitvoeringsnorm: 'op naam staat van de belastingschuldige' (b5, markering m5) behoeft beleidsmatige invulling bij en/of-rekeningen, derden-/kwaliteitsrekeningen, bewind, curatele en overlijden.\n\nBuiten scope maar relevant voor het volledige beeld: lid 2 (terugval als geen rekening is bestemd: de ontvanger betaalt op een op naam van de belastingschuldige staande rekening) en lid 3 (overeenkomstige toepassing op andere door de ontvanger uit te betalen bedragen)."
+}

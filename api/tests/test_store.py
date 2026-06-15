@@ -138,3 +138,25 @@ async def test_claim_overschrijft_geen_owner_via_save_job(store):
     na = await store.load_project("c4")
     assert na.owner == "worker-a"
     assert na.lease_until == voor.lease_until
+
+
+async def test_set_current_fase_fenced_zonder_updated_bump(store):
+    """De observerende fase-tik is owner-fenced en raakt `updated` (de homepage-sortering) niet."""
+    await store.save_job(Job(id="f1", bwbId="X", artikel="1", state=JobState.queued))
+    await store.claim("f1", {JobState.queued}, JobState.act2_runt, "worker-a", 120)
+    updated_voor = (await store.load_project("f1")).updated
+
+    assert await store.set_current_fase("f1", "llm-generatie", "worker-a") is True
+    p = await store.load_project("f1")
+    assert p.current_fase == "llm-generatie"
+    assert p.current_fase_sinds is not None
+    assert p.updated == updated_voor  # géén updated-bump
+
+    # Verkeerde/verloren owner → geen match, geen clobber.
+    assert await store.set_current_fase("f1", "schema-check", "worker-b") is False
+    assert (await store.load_project("f1")).current_fase == "llm-generatie"
+
+    # Wissen (None) bij overgang naar review/terminal.
+    assert await store.set_current_fase("f1", None, "worker-a") is True
+    p = await store.load_project("f1")
+    assert p.current_fase is None and p.current_fase_sinds is None
