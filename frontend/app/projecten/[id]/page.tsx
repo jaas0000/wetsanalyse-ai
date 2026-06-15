@@ -30,7 +30,7 @@ export default async function ProjectDetailPagina({ params }: Props) {
             ? "Dit project bestaat niet (meer) of hoort bij een andere client."
             : `De API gaf een fout (${foutStatus}).`}
         </p>
-        <Link href="/" className="mt-4 inline-block text-sm text-accent hover:underline">
+        <Link href="/" className="mt-4 inline-block text-sm text-link hover:underline">
           ← Terug naar projecten
         </Link>
       </Card>

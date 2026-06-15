@@ -16,7 +16,7 @@ export default async function DashboardPagina() {
 
   if (fout) {
     return (
-      <Card className="border-accent/30 bg-accent/5 p-4 text-sm text-accent">
+      <Card className="border-fout/30 bg-fout/5 p-4 text-sm text-fout">
         De API is niet bereikbaar: <span className="font-mono">{fout}</span>. Controleer{" "}
         <span className="font-mono">API_BASE_URL</span> en het token.
       </Card>

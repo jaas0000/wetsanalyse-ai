@@ -11,17 +11,18 @@ export function Field({ label, hint, required, error, children }: FieldProps) {
     <label className="block">
       <span className="mb-1 flex items-baseline gap-1.5 text-sm font-medium text-ink">
         {label}
-        {required && <span className="text-accent">*</span>}
+        {required && <span className="text-fout">*</span>}
         {hint && <span className="ml-auto text-xs font-normal text-faint">{hint}</span>}
       </span>
       {children}
-      {error && <span className="mt-1 block text-xs text-accent">{error}</span>}
+      {error && <span className="mt-1 block text-xs text-fout">{error}</span>}
     </label>
   );
 }
 
+// Rijkshuisstijl: formulierveld min. hoogte 48px, lichte radius, lintblauwe focus-ring.
 const inputBase =
-  "w-full rounded-md border border-line bg-paper px-3 py-2 text-sm text-ink placeholder:text-faint focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20";
+  "w-full min-h-[48px] rounded-field border border-line bg-paper px-3 py-2 text-sm text-ink placeholder:text-faint focus:border-lint focus:outline-none focus:ring-2 focus:ring-lint/30";
 
 export function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
   return <input {...props} className={`${inputBase} ${props.className ?? ""}`} />;

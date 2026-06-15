@@ -37,7 +37,7 @@ export function StatusTimeline({ job }: { job: Job }) {
             <span
               className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-xs ${
                 klaar
-                  ? "border-transparent bg-[#3a7a3a] text-paper"
+                  ? "border-transparent bg-succes text-paper"
                   : actief
                     ? "border-accent bg-accent/10 text-accent"
                     : "border-line bg-paper text-faint"

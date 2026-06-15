@@ -15,7 +15,7 @@ export default function Error({ error, reset }: { error: Error & { digest?: stri
   return (
     <div className="mx-auto max-w-prose px-4 py-16">
       <Card className="p-6">
-        <h1 className="font-display text-lg font-semibold text-ink">Er ging iets mis</h1>
+        <h1 className="font-display text-lg font-semibold text-lint">Er ging iets mis</h1>
         <p className="mt-2 text-sm text-muted">
           De pagina kon niet correct worden geladen. Probeer het opnieuw; blijft het misgaan, ververs
           dan de pagina of ga terug naar het overzicht.

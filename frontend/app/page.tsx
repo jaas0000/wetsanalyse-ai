@@ -1,6 +1,7 @@
 import { getProjectsServer } from "@/lib/server";
 import { LinkButton } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { Vormelement } from "@/components/ui/Vormelement";
 import { ProjectenLijstClient } from "./ProjectenLijstClient";
 import type { JobSummary } from "@/lib/types";
 
@@ -17,21 +18,26 @@ export default async function ProjectenPagina() {
 
   return (
     <div className="animate-rise space-y-8">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h1 className="font-display text-3xl font-semibold text-ink">Analyses</h1>
-          <p className="mt-1 max-w-prose text-sm text-muted">
-            Elke analyse duidt één wetsartikel (of lid) brongetrouw volgens het Juridisch
-            Analyseschema: markeren &amp; classificeren, daarna begrippen &amp; afleidingsregels.
-          </p>
+      <Vormelement className="px-6 py-8 sm:px-10 sm:py-10">
+        <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+          <div className="max-w-prose">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-paper/70">
+              Juridisch Analyseschema
+            </p>
+            <h1 className="mt-2 font-display text-3xl font-semibold text-paper">Analyses</h1>
+            <p className="mt-2 text-sm text-paper/85">
+              Elke analyse duidt één wetsartikel (of lid) brongetrouw volgens het Juridisch
+              Analyseschema: markeren &amp; classificeren, daarna begrippen &amp; afleidingsregels.
+            </p>
+          </div>
+          <LinkButton href="/nieuw" variant="secondary" className="w-full sm:w-auto sm:self-start">
+            Nieuwe analyse
+          </LinkButton>
         </div>
-        <LinkButton href="/nieuw" className="w-full sm:w-auto sm:self-start">
-          Nieuwe analyse
-        </LinkButton>
-      </div>
+      </Vormelement>
 
       {fout ? (
-        <Card className="border-accent/30 bg-accent/5 p-4 text-sm text-accent">
+        <Card className="border-fout/30 bg-fout/5 p-4 text-sm text-fout">
           De API is niet bereikbaar: <span className="font-mono">{fout}</span>. Controleer{" "}
           <span className="font-mono">API_BASE_URL</span> en het token.
         </Card>

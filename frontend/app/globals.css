@@ -3,16 +3,26 @@
 @tailwind utilities;
 
 :root {
-  /* Warm-neutraal "archief/perkament"-palet met logo-blauw accent — geen generieke AI-tinten. */
-  --paper: 246 243 236; /* #F6F3EC */
-  --surface: 252 250 245; /* #FCFAF5 */
-  --ink: 28 26 23; /* #1C1A17 */
-  --muted: 92 86 76; /* #5C564C */
-  --faint: 138 131 119; /* #8A8377 */
-  --line: 222 216 204; /* #DED8CC */
-  --accent: 1 104 155; /* #01689b logo-blauw (Rijksoverheid) */
-  --accent-soft: 0 123 199; /* #007BC7 hemelblauw (lichter, voor hover) */
-  --gold: 161 124 56; /* #A17C38 */
+  /* Rijkshuisstijl: witte achtergrond, lintblauw (#154273) als dragende kleur,
+     hemelblauw (#01689B) voor links. Tokennamen zijn behouden t.b.v. de bestaande
+     componenten; alleen de waarden zijn naar de Rijkshuisstijl gezet. */
+  --paper: 255 255 255; /* #FFFFFF — pagina-achtergrond */
+  --surface: 245 246 248; /* #F5F6F8 — cards/secties (lichtgrijs) */
+  --ink: 26 26 26; /* #1A1A1A — broodtekst (≥ 4,5:1 op wit) */
+  --lint: 21 66 115; /* #154273 — lintblauw: koppen + primaire merkkleur */
+  --muted: 74 90 110; /* #4A5A6E — secundaire tekst */
+  --faint: 107 118 133; /* #6B7685 — tertiaire tekst/hints */
+  --line: 209 214 221; /* #D1D6DD — borders/lijnen */
+  --accent: 21 66 115; /* #154273 — primaire acties/buttons/focus (= lintblauw) */
+  --accent-soft: 0 123 199; /* #007BC7 — hover (lichter blauw) */
+  --link: 1 104 155; /* #01689B — tekstlinks */
+  --communicatiekleur: 21 66 115; /* default = lintblauw; later Belastingdienst-stijlvakkleur */
+  --gold: 142 70 0; /* #8E4600 — aandacht/review/twijfel (toegankelijke donker-oranje) */
+  /* Functionele kleuren (Rijkshuisstijl) */
+  --succes: 57 135 12; /* #39870C */
+  --waarschuwing: 225 112 0; /* #E17000 */
+  --fout: 213 43 30; /* #D52B1E */
+  --info: 0 123 199; /* #007BC7 */
 }
 
 * {
@@ -22,35 +32,43 @@
 html {
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+  /* Responsieve typografie volgens de Rijkshuisstijl: 100% desktop, 90% tablet,
+     80% mobiel. Eén hefboom: schaalt alle rem-gebaseerde tekst en spacing mee. */
+  font-size: 100%;
+}
+
+@media (max-width: 1023px) {
+  html {
+    font-size: 90%;
+  }
+}
+
+@media (max-width: 639px) {
+  html {
+    font-size: 80%;
+  }
 }
 
 body {
   background-color: rgb(var(--paper));
   color: rgb(var(--ink));
-  font-family: var(--font-body), system-ui, sans-serif;
-}
-
-/* Subtiele perkament-textuur: een fijn, bijna onzichtbaar grein over de achtergrond. */
-body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-  opacity: 0.5;
-  background-image: radial-gradient(rgb(var(--line) / 0.35) 0.5px, transparent 0.5px);
-  background-size: 22px 22px;
+  font-family: var(--font-sans), system-ui, sans-serif;
 }
 
 h1,
 h2,
 h3 {
-  font-family: var(--font-display), Georgia, serif;
+  font-family: var(--font-sans), system-ui, sans-serif;
+  color: rgb(var(--lint));
   letter-spacing: -0.01em;
 }
 
+a {
+  color: rgb(var(--link));
+}
+
 ::selection {
-  background: rgb(var(--accent) / 0.16);
+  background: rgb(var(--lint) / 0.16);
 }
 
 /* Dunne, smaakvolle scrollbar. */

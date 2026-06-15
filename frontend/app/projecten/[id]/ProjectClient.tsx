@@ -112,10 +112,10 @@ export function ProjectClient({ initieel }: { initieel: Job }) {
       {/* Kop */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <Link href="/" className="text-xs text-faint hover:text-accent">
+          <Link href="/" className="text-xs text-faint hover:text-link">
             ← Projecten
           </Link>
-          <h1 className="mt-1 font-display text-2xl font-semibold text-ink">
+          <h1 className="mt-1 font-display text-2xl font-semibold text-lint">
             {job.id}
           </h1>
           <div className="mt-2 flex flex-wrap items-center gap-2">
