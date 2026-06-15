@@ -40,7 +40,8 @@ export async function proxy(path: string, init: ProxyInit = {}): Promise<Respons
     const v = upstream.headers.get(h);
     if (v) headers.set(h, h === "location" ? rewriteLocation(v) : v);
   }
-  return new Response(upstream.body, {
+  const buf = await upstream.arrayBuffer();
+  return new Response(buf.byteLength ? buf : null, {
     status: upstream.status,
     headers,
   });

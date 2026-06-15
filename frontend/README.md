@@ -6,12 +6,6 @@ het eindrapport — inclusief de **cross-referenties** (een Verwijzingen-sectie 
 functie met status en `wetten.overheid.nl`-links, en per-verwijzing scope-feedback in de
 activiteit-2 review).
 
-Daarbovenop een live **`/dashboard`** ("mission control"): één overzicht van álle analyses dat per
-analyse laat zien in welke stap de engine zit — niet alleen de macro-states, maar tot op
-**functieniveau** (LLM-generatie, verwijzingen volgen, brongetrouwheid-check), met verstreken tijd,
-token-verbruik, model en een retry-knop bij fout. Het draait op één `EventSource` naar een
-aggregate-SSE-route, dus de tellers lopen live mee.
-
 Daarnaast een **`/beheer`-scherm** voor het LLM-beheer: de modelprofielen die de analyses aansturen
 (toevoegen/bewerken/verwijderen, default kiezen, verbinding testen), een **wet-catalogus** (BWB-id +
 naam, met "Naam ophalen" via de MCP) en een overzicht van het token-verbruik. Bij **Nieuwe analyse**

@@ -146,11 +146,8 @@ async def alle_project_events(request: Request, client_id: str = Depends(require
             if await request.is_disconnected():
                 return
             frames, seen = await _dashboard_poll(store, client_id, seen)
-            if frames:
-                for f in frames:
-                    yield f
-            else:
-                yield ": keep-alive\n\n"
+            for f in frames:
+                yield f
             await asyncio.sleep(5)
 
     return StreamingResponse(
@@ -266,8 +263,6 @@ async def project_events(project_id: str, request: Request, client_id: str = Dep
             if current != seen:
                 yield f"data: {json.dumps(current)}\n\n"
                 seen = current
-            else:
-                yield ": keep-alive\n\n"
             if p.state in TERMINAL_STATES:
                 yield "event: done\ndata: {}\n\n"
                 return

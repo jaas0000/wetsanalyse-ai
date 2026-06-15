@@ -25,8 +25,7 @@ Alle analyse-endpoints zijn client-gescopet (alleen je eigen analyses) en versio
 |---------|-----|--------------|
 | `POST` | `/v1/projects` | Start een nieuwe analyse (async, 202 + `Location`) |
 | `GET` | `/v1/projects?limit=&offset=` | Lijst van je analyses (gepagineerd) |
-| `GET` | `/v1/projects/{id}` | Status en voortgang van een job (incl. fijnmazige `current_fase`) |
-| `GET` | `/v1/projects/events` | Aggregate SSE-stream over **al** je analyses (diff-emit + `removed`) — voedt het dashboard |
+| `GET` | `/v1/projects/{id}` | Status en voortgang van een job |
 | `DELETE` | `/v1/projects/{id}` | Verwijder (terminal of `wacht-op-review-*`; lopend → 409) |
 | `POST` | `/v1/projects/{id}/feedback` | Geef reviewfeedback (alleen in `wacht-op-review-*`) |
 | `POST` | `/v1/projects/{id}/retry` | Herstart een job in `fout`-state |
@@ -95,9 +94,7 @@ optioneel LLM-token-budget per analyse, en een globale rem op gelijktijdige LLM-
 voor de `Retry-After`-header. Zie `CLAUDE.md` §Misbruik-/kostenbeheersing.
 
 Job-states: `queued` → `act2-runt` → `wacht-op-review-act2` → `act3-runt` →
-`wacht-op-review-act3` → `klaar` (of `fout` bij elke stap). Binnen een `*-runt`/`bouwt`-state geeft
-een **observerend** `current_fase`-veld de fijnmazige functiestap (bv. `llm-generatie`,
-`verwijzingen-volgen`, `brongetrouwheid-check`) — los van de state-machine, puur voor live voortgang.
+`wacht-op-review-act3` → `klaar` (of `fout` bij elke stap).
 
 ## Snel starten (lokaal)
 
