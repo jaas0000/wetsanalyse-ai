@@ -5,34 +5,64 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Wetsanalyse — Architectuurplaat (API · MCP · Frontend)</title>
 <script src="https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Hanken+Grotesk:wght@400;500;600;700&family=Spline+Sans+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg: #0f1419;
-    --panel: #161b22;
-    --panel-2: #1c2330;
-    --border: #2b3340;
-    --tekst: #e6edf3;
-    --tekst-dim: #9aa7b4;
-    --accent: #4c9aff;
-    --accent-2: #7ee787;
-    --warn: #f0883e;
+    /* Warm-neutraal "archief/perkament"-palet — gelijk aan de frontend (globals.css). */
+    --bg: #F6F3EC;        /* paper   */
+    --panel: #FCFAF5;     /* surface */
+    --panel-2: #EFE9DC;   /* iets dieper perkament (knoppen/hover) */
+    --border: #DED8CC;    /* line    */
+    --tekst: #1C1A17;     /* ink     */
+    --tekst-dim: #5C564C; /* muted   */
+    --accent: #01689b;    /* logo-blauw (Rijksoverheid) */
+    --accent-2: #A17C38;  /* gold    */
+    --warn: #a01b1b;      /* signaalrood (fout) */
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; }
   body {
     background: var(--bg);
     color: var(--tekst);
-    font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font: 15px/1.5 "Hanken Grotesk", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
     display: flex;
     flex-direction: column;
     height: 100vh;
+  }
+  /* Subtiele perkament-textuur over de hele achtergrond (gelijk aan de frontend). */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    opacity: 0.5;
+    background-image: radial-gradient(rgba(222, 216, 204, 0.35) 0.5px, transparent 0.5px);
+    background-size: 22px 22px;
+  }
+  ::selection { background: rgba(1, 104, 155, 0.16); }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb {
+    background: rgba(138, 131, 119, 0.45);
+    border-radius: 999px;
+    border: 2px solid var(--bg);
   }
   header {
     padding: 14px 20px 0;
     border-bottom: 1px solid var(--border);
     background: var(--panel);
   }
-  header h1 { margin: 0 0 4px; font-size: 18px; font-weight: 650; }
+  header h1 {
+    margin: 0 0 4px;
+    font-family: "Fraunces", Georgia, serif;
+    font-size: 20px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
   header p { margin: 0 0 12px; color: var(--tekst-dim); font-size: 13px; }
   nav { display: flex; gap: 4px; flex-wrap: wrap; }
   nav button {
@@ -93,7 +123,7 @@
     position: relative;
     cursor: grab;
     background:
-      radial-gradient(circle at 1px 1px, #20262f 1px, transparent 0);
+      radial-gradient(circle at 1px 1px, rgba(222, 216, 204, 0.7) 1px, transparent 0);
     background-size: 22px 22px;
   }
   .viewport.dragging { cursor: grabbing; }
@@ -116,6 +146,7 @@
     padding: 1px 5px;
     border-radius: 4px;
     color: var(--tekst);
+    font-family: "Spline Sans Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
   }
   .err { color: var(--warn); padding: 20px; font-family: monospace; white-space: pre-wrap; }
 </style>
@@ -123,7 +154,7 @@
 <body>
 <header>
   <h1>Wetsanalyse — architectuurplaat</h1>
-  <p>Drie samenwerkende onderdelen tot functieniveau. Labels verwijzen naar <code style="background:#1c2330;padding:1px 4px;border-radius:4px">bestand:functie</code>. Klik een tab; scroll = zoom, sleep = pan.</p>
+  <p>Drie samenwerkende onderdelen tot functieniveau. Labels verwijzen naar <code style="background:var(--panel-2);padding:1px 4px;border-radius:4px;font-family:'Spline Sans Mono',ui-monospace,monospace">bestand:functie</code>. Klik een tab; scroll = zoom, sleep = pan.</p>
   <nav id="tabs">
     <button data-tab="overzicht" class="active">Systeemoverzicht</button>
     <button data-tab="api">API-detail</button>
@@ -143,10 +174,10 @@
     </div>
     <div class="viewport"><div class="canvas"><div class="mermaid" id="m-overzicht">
 flowchart LR
-  classDef ext fill:#3a2a1a,stroke:#f0883e,color:#f7d9b8;
-  classDef store fill:#1a2a1f,stroke:#7ee787,color:#cdeccb;
-  classDef sys fill:#1a2230,stroke:#4c9aff,color:#cfe0fb;
-  classDef user fill:#241a2e,stroke:#bc8cff,color:#e3d3f7;
+  classDef ext fill:#F3ECDC,stroke:#A17C38,color:#6b531f;
+  classDef store fill:#E3EEE3,stroke:#5E8A60,color:#2f5230;
+  classDef sys fill:#E3EDF3,stroke:#01689b,color:#14425c;
+  classDef user fill:#EAE6F0,stroke:#8A6FB0,color:#473a5e;
 
   U["👤 Analist<br/>(browser)"]:::user
 
@@ -200,10 +231,10 @@ flowchart LR
     </div>
     <div class="viewport"><div class="canvas"><div class="mermaid" id="m-api">
 flowchart TB
-  classDef router fill:#1a2230,stroke:#4c9aff,color:#cfe0fb;
-  classDef eng fill:#241a2e,stroke:#bc8cff,color:#e3d3f7;
-  classDef io fill:#1a2a1f,stroke:#7ee787,color:#cdeccb;
-  classDef cross fill:#2a2218,stroke:#f0883e,color:#f7d9b8;
+  classDef router fill:#E3EDF3,stroke:#01689b,color:#14425c;
+  classDef eng fill:#EAE6F0,stroke:#8A6FB0,color:#473a5e;
+  classDef io fill:#E3EEE3,stroke:#5E8A60,color:#2f5230;
+  classDef cross fill:#F3ECDC,stroke:#A17C38,color:#6b531f;
 
   subgraph R["Routers (auth.py: require_client / require_admin)"]
     direction LR
@@ -278,11 +309,11 @@ flowchart TB
     </div>
     <div class="viewport"><div class="canvas"><div class="mermaid" id="m-mcp">
 flowchart TB
-  classDef trans fill:#1a2230,stroke:#4c9aff,color:#cfe0fb;
-  classDef tool fill:#241a2e,stroke:#bc8cff,color:#e3d3f7;
-  classDef client fill:#1a2a1f,stroke:#7ee787,color:#cdeccb;
-  classDef parse fill:#2a2218,stroke:#f0883e,color:#f7d9b8;
-  classDef ext fill:#3a2a1a,stroke:#f0883e,color:#f7d9b8;
+  classDef trans fill:#E3EDF3,stroke:#01689b,color:#14425c;
+  classDef tool fill:#EAE6F0,stroke:#8A6FB0,color:#473a5e;
+  classDef client fill:#E3EEE3,stroke:#5E8A60,color:#2f5230;
+  classDef parse fill:#F3ECDC,stroke:#A17C38,color:#6b531f;
+  classDef ext fill:#F3ECDC,stroke:#A17C38,color:#6b531f;
 
   subgraph T["Transport / server"]
     direction TB
@@ -365,11 +396,11 @@ flowchart TB
     </div>
     <div class="viewport"><div class="canvas"><div class="mermaid" id="m-frontend">
 flowchart TB
-  classDef page fill:#1a2230,stroke:#4c9aff,color:#cfe0fb;
-  classDef comp fill:#241a2e,stroke:#bc8cff,color:#e3d3f7;
-  classDef bff fill:#1a2a1f,stroke:#7ee787,color:#cdeccb;
-  classDef lib fill:#2a2218,stroke:#f0883e,color:#f7d9b8;
-  classDef ext fill:#3a2a1a,stroke:#f0883e,color:#f7d9b8;
+  classDef page fill:#E3EDF3,stroke:#01689b,color:#14425c;
+  classDef comp fill:#EAE6F0,stroke:#8A6FB0,color:#473a5e;
+  classDef bff fill:#E3EEE3,stroke:#5E8A60,color:#2f5230;
+  classDef lib fill:#F3ECDC,stroke:#A17C38,color:#6b531f;
+  classDef ext fill:#F3ECDC,stroke:#A17C38,color:#6b531f;
 
   subgraph PG["Pages · Server Components (SSR)"]
     direction LR
@@ -486,14 +517,31 @@ stateDiagram-v2
 <script>
   mermaid.initialize({
     startOnLoad: false,
-    theme: 'dark',
+    theme: 'base',
     securityLevel: 'loose',
     flowchart: { curve: 'basis', nodeSpacing: 45, rankSpacing: 55, htmlLabels: true },
     themeVariables: {
-      fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+      fontFamily: '"Spline Sans Mono", ui-monospace, SFMono-Regular, Menlo, monospace',
       fontSize: '13px',
-      lineColor: '#5a6776',
-      mainBkg: '#1c2330'
+      lineColor: '#8A8377',
+      textColor: '#1C1A17',
+      background: 'transparent',
+      mainBkg: '#FCFAF5',
+      primaryColor: '#E3EDF3',
+      primaryBorderColor: '#01689b',
+      primaryTextColor: '#14425c',
+      secondaryColor: '#F3ECDC',
+      tertiaryColor: '#FCFAF5',
+      // Subgraph-/clusterkaders in perkament-tint.
+      clusterBkg: 'rgba(246, 243, 236, 0.55)',
+      clusterBorder: '#DED8CC',
+      titleColor: '#1C1A17',
+      nodeBorder: '#DED8CC',
+      edgeLabelBackground: '#F6F3EC',
+      // Notities (state-diagram) in gedempte goud-tint.
+      noteBkgColor: '#F3ECDC',
+      noteBorderColor: '#A17C38',
+      noteTextColor: '#6b531f'
     }
   });
 
