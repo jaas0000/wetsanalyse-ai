@@ -48,6 +48,9 @@ services:
       LLM_CONFIG_SECRET_FILE: /run/secrets/llm_config_secret
       MONGODB_URL_FILE: /run/secrets/mongodb_url
       MONGODB_DB: wetsanalyse
+      # Cross-origin browser-toegang: leeg = uit (default). De BFF praat server→server en heeft
+      # dit niet nodig; zet alleen als een browser-origin de API rechtstreeks moet aanroepen.
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
     volumes:
       - ${SECRETS_DIR:-/opt/secrets/wetsanalyse-api}:/run/secrets:ro
     networks:

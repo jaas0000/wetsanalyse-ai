@@ -205,8 +205,9 @@ async def test_default_blijft_uniek_na_meerdere_wissels(admin_client):
     assert [p["name"] for p in lijst if p["is_default"]] == ["c"]
 
 
-async def test_test_route_redigeert_api_key(admin_client, monkeypatch):
-    """De verbindingstest toont de fout, maar echoot de geconfigureerde API-key niet terug."""
+async def test_test_route_lekt_geen_requestdetails(admin_client, monkeypatch):
+    """De verbindingstest geeft een vaste, gesaniteerde melding — geen ruwe provider-fout
+    (die endpoint-URL's/headers/key-fragmenten kan bevatten) en zeker niet de key zelf."""
     await admin_client.put(
         "/v1/admin/profiles/snel", headers=_H, json={"model": "gpt-x", "api_key": "sk-supersecret-123"}
     )
@@ -216,15 +217,47 @@ async def test_test_route_redigeert_api_key(admin_client, monkeypatch):
             pass
 
         async def complete(self, *a, **kw):
-            raise RuntimeError("auth geweigerd met key sk-supersecret-123")
+            raise RuntimeError("auth geweigerd met key sk-supersecret-123 op https://intern.example/v1")
 
     monkeypatch.setattr("app.routers.admin.build_llm_client", lambda cfg: BoomClient())
     r = await admin_client.post("/v1/admin/profiles/snel/test", headers=_H)
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["ok"] is False
+    # Noch de key, noch de ruwe exceptietekst/URL mag lekken.
     assert "sk-supersecret-123" not in r.text
-    assert "***" in body["detail"]
+    assert "auth geweigerd" not in r.text
+    assert "intern.example" not in r.text
+    assert "server-log" in body["detail"]
+
+
+async def test_test_route_rate_limited(admin_client, monkeypatch):
+    """Herhaalde verbindingstests lopen tegen de krappe admin-test-limiet (429)."""
+    _fresh_settings(
+        monkeypatch,
+        WETSANALYSE_ADMIN_TOKENS="adm:admin-token",
+        WETSANALYSE_AUTH_REQUIRED="0",
+        WETSANALYSE_ADMIN_TEST_RATE_MAX="2",
+        WETSANALYSE_ADMIN_TEST_RATE_WINDOW="60",
+    )
+    await admin_client.put("/v1/admin/profiles/snel", headers=_H, json={"model": "gpt-x"})
+
+    class OkClient:
+        def __init__(self, *a, **kw):
+            pass
+
+        async def complete(self, *a, **kw):
+            class R:
+                model, tokens_in, tokens_out = "gpt-x", 1, 1
+            return R()
+
+    monkeypatch.setattr("app.routers.admin.build_llm_client", lambda cfg: OkClient())
+    codes = [
+        (await admin_client.post("/v1/admin/profiles/snel/test", headers=_H)).status_code
+        for _ in range(3)
+    ]
+    assert codes[:2] == [200, 200]
+    assert codes[2] == 429
 
 
 async def test_catalog_profiles_zonder_admin(admin_client):
