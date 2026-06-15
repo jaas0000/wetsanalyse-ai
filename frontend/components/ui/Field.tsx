@@ -31,3 +31,7 @@ export function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
 export function Textarea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
   return <textarea {...props} className={`${inputBase} resize-y ${props.className ?? ""}`} />;
 }
+
+export function Select(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
+  return <select {...props} className={`${inputBase} cursor-pointer ${props.className ?? ""}`} />;
+}

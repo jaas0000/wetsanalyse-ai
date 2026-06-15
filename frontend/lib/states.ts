@@ -38,6 +38,16 @@ export function isTerminal(state: JobState): boolean {
   return TERMINAL_STATES.includes(state);
 }
 
+/** Macro-statusgroepen voor tellers en filters (gelijk aan de dashboard-indeling). */
+export type StatusBucket = "lopend" | "review" | "klaar" | "fout";
+
+export function statusBucket(state: JobState, error?: unknown): StatusBucket {
+  if (state === "fout" || error) return "fout";
+  if (isReview(state)) return "review";
+  if (state === "klaar") return "klaar";
+  return "lopend";
+}
+
 /** Welke activiteit hoort bij een review-state? */
 export function reviewActiviteit(state: JobState): "2" | "3" | null {
   if (state === "wacht-op-review-act2") return "2";
