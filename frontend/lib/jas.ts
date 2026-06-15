@@ -17,22 +17,24 @@ export const JAS_KLASSEN = [
   "Brondefinitie",
 ] as const;
 
-// Tailwind-klassen per JAS-klasse (achtergrond + tekst + rand). Onderling onderscheidende,
-// op lintblauw afgestemde koele tinten (Rijkshuisstijl); donkere tekst ≥ 4,5:1 op de tint.
+// Tailwind-klassen per JAS-klasse (achtergrond + tekst + rand). De achtergrondkleuren zijn
+// de exacte labelkleuren uit de officiële JAS-tabel (docs/wa-table.png), per pixel gesampled;
+// de rand is dezelfde kleur ~22% donkerder. Tekst is text-ink (#1A1A1A, ≥ 5,4:1 op elke tint).
+// Samengevoegde klassen nemen de hoofdkleur uit de tabel (Variabele / Parameter / Delegatiebevoegdheid).
 const KLASSE_STYLE: Record<string, string> = {
-  Rechtssubject: "bg-[#e7eef5] text-[#154273] border-[#bcd2e6]",
-  Rechtsobject: "bg-[#e2f0ef] text-[#1c5450] border-[#b4d8d3]",
-  Rechtsbetrekking: "bg-[#eae9f3] text-[#3b3a6e] border-[#c8c6e3]",
-  Rechtsfeit: "bg-[#fbe7e5] text-[#8e2018] border-[#f0bcb6]",
-  Voorwaarde: "bg-[#e6f0e0] text-[#2c6608] border-[#bcd9a8]",
-  Afleidingsregel: "bg-[#e4eef2] text-[#1f4a5a] border-[#bcd6e0]",
-  "Variabele en variabelewaarde": "bg-[#f6ecde] text-[#7a4d00] border-[#e6cfa8]",
-  "Parameter en parameterwaarde": "bg-[#f0e9f2] text-[#5a3a5e] border-[#ddc8e0]",
-  Operator: "bg-[#efe9e0] text-[#5e4a2a] border-[#d8ccb4]",
-  Tijdsaanduiding: "bg-[#e2eff2] text-[#1c5260] border-[#b4d8e0]",
-  Plaatsaanduiding: "bg-[#eaf0e0] text-[#4a5a1f] border-[#d0dcb0]",
-  "Delegatiebevoegdheid en delegatie-invulling": "bg-[#f3e7ee] text-[#6e2a4a] border-[#e3bcd0]",
-  Brondefinitie: "bg-[#e9ebf2] text-[#353f5e] border-[#c8cce0]",
+  Rechtssubject: "bg-[#d8eaf7] text-ink border-[#a8b6c0]",
+  Rechtsobject: "bg-[#b2c3e3] text-ink border-[#8a98b1]",
+  Rechtsbetrekking: "bg-[#90a2d0] text-ink border-[#707ea2]",
+  Rechtsfeit: "bg-[#bad8f1] text-ink border-[#91a8bb]",
+  Voorwaarde: "bg-[#b7d8cd] text-ink border-[#8ea89f]",
+  Afleidingsregel: "bg-[#d47479] text-ink border-[#a55a5e]",
+  "Variabele en variabelewaarde": "bg-[#f5dc5e] text-ink border-[#bfab49]",
+  "Parameter en parameterwaarde": "bg-[#e6b8bb] text-ink border-[#b38f91]",
+  Operator: "bg-[#d7e8e2] text-ink border-[#a7b4b0]",
+  Tijdsaanduiding: "bg-[#cbb8d6] text-ink border-[#9e8fa6]",
+  Plaatsaanduiding: "bg-[#e6d3e5] text-ink border-[#b3a4b2]",
+  "Delegatiebevoegdheid en delegatie-invulling": "bg-[#b0b1b2] text-ink border-[#898a8a]",
+  Brondefinitie: "bg-[#edefef] text-ink border-[#b8baba]",
 };
 
 const NEUTRAAL = "bg-surface text-muted border-line";
