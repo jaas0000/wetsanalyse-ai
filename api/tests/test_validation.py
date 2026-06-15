@@ -32,6 +32,39 @@ def test_brongetrouwheid_citaat_normalisatie():
     assert any("letterlijk citaat" in s for s in schend)
 
 
+def test_brongetrouwheid_citeerconventies_beletsel_en_haken():
+    # Echte casus: art. 7a lid 1 Invorderingswet 1990. De skill mag beletselteken (...) voor
+    # geelideerde tussentekst en vierkante haken ([...]) voor een invoeging gebruiken; de harde
+    # check moet die — net als de zachte skill-check — als letterlijk citaat accepteren.
+    leden = [{"lid": "1", "tekst": (
+        "In afwijking van artikel 4:89, eerste lid, van de Algemene wet bestuursrecht vindt "
+        "uitbetaling aan de belastingschuldige van inkomstenbelasting uitsluitend plaats op een "
+        "daartoe door de belastingschuldige bestemde bankrekening. De belastingschuldige kan niet "
+        "meer dan een bankrekening bestemmen voor de uitbetaling van inkomstenbelasting en voor de "
+        "in artikel 25 van de Algemene wet inkomensafhankelijke regelingen bedoelde uitbetaling."
+    )}]
+
+    def _check(formulering):
+        return brongetrouwheid_check(
+            {"bronreferentie": "jci:x", "leden": leden,
+             "markeringen": [{"id": "m1", "formulering": formulering, "vindplaats": "lid 1"}]},
+            "2",
+        )
+
+    # beletselteken (vgl. m11/m12): geelideerde tussentekst
+    assert _check(
+        "voor de uitbetaling van inkomstenbelasting en voor de in artikel 25 ... bedoelde uitbetaling"
+    ) == []
+    # vierkante-haak-invoeging (vgl. m10): toetst op 'een'
+    assert _check("een [bankrekening]") == []
+    # beletselteken mét normalisatie-ruis: typografische quote + dubbele spatie rond '…'
+    assert _check("vindt uitbetaling  …  uitsluitend plaats") == []
+
+    # echte parafrase (vgl. m6): woorden uit het midden weggelaten ZONDER beletselteken
+    schend = _check("vindt uitsluitend plaats")
+    assert any("letterlijk citaat" in s for s in schend)
+
+
 def test_brongetrouwheid_bronreferentie_en_vindplaats_verplicht():
     schend = brongetrouwheid_check({"leden": [], "markeringen": [{"id": "m1", "formulering": ""}]}, "2")
     assert any("Bronreferentie" in s for s in schend)
