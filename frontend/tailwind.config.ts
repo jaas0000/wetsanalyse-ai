@@ -12,17 +12,31 @@ const config: Config = {
         paper: "rgb(var(--paper) / <alpha-value>)",
         surface: "rgb(var(--surface) / <alpha-value>)",
         ink: "rgb(var(--ink) / <alpha-value>)",
+        lint: "rgb(var(--lint) / <alpha-value>)",
         muted: "rgb(var(--muted) / <alpha-value>)",
         faint: "rgb(var(--faint) / <alpha-value>)",
         line: "rgb(var(--line) / <alpha-value>)",
         accent: "rgb(var(--accent) / <alpha-value>)",
         "accent-soft": "rgb(var(--accent-soft) / <alpha-value>)",
+        link: "rgb(var(--link) / <alpha-value>)",
+        communicatiekleur: "rgb(var(--communicatiekleur) / <alpha-value>)",
         gold: "rgb(var(--gold) / <alpha-value>)",
+        succes: "rgb(var(--succes) / <alpha-value>)",
+        waarschuwing: "rgb(var(--waarschuwing) / <alpha-value>)",
+        fout: "rgb(var(--fout) / <alpha-value>)",
+        info: "rgb(var(--info) / <alpha-value>)",
       },
       fontFamily: {
-        display: ["var(--font-display)", "Georgia", "serif"],
-        sans: ["var(--font-body)", "system-ui", "sans-serif"],
+        display: ["var(--font-sans)", "system-ui", "sans-serif"],
+        sans: ["var(--font-sans)", "system-ui", "sans-serif"],
         mono: ["var(--font-mono)", "ui-monospace", "monospace"],
+      },
+      borderRadius: {
+        // Rijkshuisstijl: button ≈ 10% van de hoogte (48px), formulierveld ≈ 5%.
+        button: "5px",
+        field: "3px",
+        // Vormelement: één grote afgeronde hoek als signatuur (RH-radius-stap).
+        vorm: "32px",
       },
       maxWidth: {
         prose: "72ch",

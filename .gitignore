@@ -17,6 +17,10 @@ api/.venv/
 # Machine-specifieke Claude Code config met secrets (tokens, paden)
 .claude/settings.local.json
 
+# Lokaal geïnstalleerde voorbeeld-skill (niet onderdeel van de repo)
+.claude/skills/frontend-design/
+skills-lock.json
+
 # Secrets en runtime-data van de API (.env.example blijft wél gecommit als template)
 .env
 .env.local

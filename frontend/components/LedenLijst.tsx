@@ -18,7 +18,7 @@ export function LedenLijst({ leden }: { leden: Lid[] }) {
                 href={href}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="font-mono text-xs text-accent hover:underline"
+                className="font-mono text-xs text-link hover:underline"
               >
                 bron ↗
               </a>

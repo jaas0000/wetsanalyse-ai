@@ -176,7 +176,7 @@ export function ReviewPanel({
   return (
     <Card className="p-6">
       <div className="mb-1 flex items-baseline justify-between gap-3">
-        <h2 className="font-display text-lg font-semibold text-ink">{titel}</h2>
+        <h2 className="font-display text-lg font-semibold text-lint">{titel}</h2>
         <span className="font-mono text-xs text-faint">ronde {ronde}</span>
       </div>
       <p className="mb-5 max-w-prose text-sm text-muted">

@@ -1,37 +1,32 @@
 import type { Metadata, Viewport } from "next";
-import { Fraunces, Hanken_Grotesk, Spline_Sans_Mono } from "next/font/google";
+import { Fira_Sans, Fira_Mono } from "next/font/google";
+import Image from "next/image";
 import Link from "next/link";
 import { SiteNav } from "@/components/SiteNav";
 import "./globals.css";
 
-const display = Fraunces({
-  subsets: ["latin"],
-  weight: ["400", "500", "600"],
-  style: ["normal", "italic"],
-  variable: "--font-display",
-  display: "swap",
-});
-
-const body = Hanken_Grotesk({
+// Rijkshuisstijl-typografie via een vrij alternatief: Fira Sans benadert Rijksoverheid
+// Sans, Fira Mono dient voor tags/bronreferenties. Eén familie voor koppen én broodtekst.
+const sans = Fira_Sans({
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
-  variable: "--font-body",
+  variable: "--font-sans",
   display: "swap",
 });
 
-const mono = Spline_Sans_Mono({
+const mono = Fira_Mono({
   subsets: ["latin"],
-  weight: ["400", "500"],
+  weight: ["400", "500", "700"],
   variable: "--font-mono",
   display: "swap",
 });
 
 export const metadata: Metadata = {
-  title: "Wetsanalyse",
+  title: "Wetsanalyse | Belastingdienst",
   description:
     "Gestructureerd, brongetrouw en traceerbaar duiden van Nederlandse wet- en regelgeving (JAS).",
   manifest: "/manifest.webmanifest",
-  applicationName: "Wetsanalyse",
+  applicationName: "Wetsanalyse | Belastingdienst",
   appleWebApp: { capable: true, title: "Wetsanalyse", statusBarStyle: "default" },
   icons: {
     icon: [
@@ -47,30 +42,59 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#01689b",
+  themeColor: "#154273",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="nl" className={`${display.variable} ${body.variable} ${mono.variable}`}>
+    <html lang="nl" className={`${sans.variable} ${mono.variable}`}>
       <body className="min-h-screen">
-        <header className="relative z-30 border-b border-line/80 bg-surface/70 backdrop-blur-sm">
-          <div className="relative mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
-            <Link href="/" className="group flex items-baseline gap-3">
-              <span className="font-display text-xl font-semibold tracking-tight text-ink">
+        <header className="relative z-30">
+          {/* Logobalk (Rijkshuisstijl): het LINT staat altijd op de horizontale middenas,
+              bovenaan op een witte achtergrond, met het woordmerk rechts ernaast; géén andere
+              elementen in de balk. Lintbreedte 50px desktop, schaalt naar 45/40px (tablet/mobiel)
+              via de root-font-size (100/90/80). Het lint zit op 25/275 van de logobreedte, dus
+              we verschuiven het logo links 1,5625rem (= halve lintbreedte) ná left-1/2, zodat het
+              lintmidden samenvalt met het balkmidden. De max-breedte voorkomt overflow op smalle
+              schermen. Verticale marge = 0,5 lintbreedte (1,5625rem). */}
+          <div className="border-b border-line bg-paper">
+            <div className="mx-auto max-w-6xl px-6">
+              <Link
+                href="/"
+                aria-label="Belastingdienst, naar startpagina"
+                className="relative left-1/2 block w-fit max-w-[calc(50%+1.5625rem)] -translate-x-[1.5625rem] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-lint"
+              >
+                <Image
+                  src="/belastingdienst-logo.svg"
+                  alt="Belastingdienst"
+                  width={275}
+                  height={125}
+                  priority
+                  unoptimized
+                  className="block h-auto w-[17.1875rem] max-w-full"
+                />
+              </Link>
+            </div>
+          </div>
+          {/* Navigatiebalk — onder de logobalk (Rijkshuisstijl: geen navigatie in/boven het lint).
+              De applicatienaam "Wetsanalyse" hoort hier, niet in de logobalk. */}
+          <div className="relative border-b border-line bg-paper">
+            <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-6">
+              <Link
+                href="/"
+                className="shrink-0 py-3 text-sm font-semibold text-lint focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-lint"
+              >
                 Wetsanalyse
-              </span>
-              <span className="hidden text-xs uppercase tracking-[0.2em] text-faint sm:inline">
-                JAS · brongetrouw
-              </span>
-            </Link>
-            <SiteNav />
+              </Link>
+              <SiteNav />
+            </div>
           </div>
         </header>
         <main className="mx-auto max-w-6xl px-6 py-10">{children}</main>
         <footer className="mx-auto max-w-6xl px-6 pb-10 pt-4 text-xs text-faint">
-          Methode Wetsanalyse (Ausems, Bulles &amp; Lokin) · Juridisch Analyseschema · brongetrouw
-          herleidbaar naar artikel, lid en bronreferentie.
+          <span className="font-medium text-muted">Belastingdienst</span> · Methode Wetsanalyse
+          (Ausems, Bulles &amp; Lokin) · Juridisch Analyseschema · brongetrouw herleidbaar naar
+          artikel, lid en bronreferentie.
         </footer>
       </body>
     </html>

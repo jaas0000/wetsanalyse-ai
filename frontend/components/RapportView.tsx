@@ -50,7 +50,7 @@ export function RapportView({ rapport, projectId }: { rapport: Rapport; projectI
       <Card className="p-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <h2 className="font-display text-2xl font-semibold text-ink">
+            <h2 className="font-display text-2xl font-semibold text-lint">
               {rapport.wet || "Wetsanalyse"}
             </h2>
             <p className="mt-1 text-sm text-muted">
@@ -65,7 +65,7 @@ export function RapportView({ rapport, projectId }: { rapport: Rapport; projectI
                   href={bronHref(rapport.bronreferentie)}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center rounded-md border border-line bg-paper px-2 py-0.5 font-mono text-xs text-accent hover:underline"
+                  className="inline-flex items-center rounded-md border border-line bg-paper px-2 py-0.5 font-mono text-xs text-link hover:underline"
                 >
                   bron ↗
                 </a>
@@ -162,7 +162,7 @@ export function RapportView({ rapport, projectId }: { rapport: Rapport; projectI
                             href={wettenOverheidHref(v.doel.target)}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="min-w-0 break-words font-display text-[15px] text-accent hover:underline"
+                            className="min-w-0 break-words font-display text-[15px] text-link hover:underline"
                           >
                             {v.doel.label || v.doel.target} ↗
                           </a>

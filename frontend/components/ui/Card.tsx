@@ -6,11 +6,7 @@ export function Card({
   className?: string;
 }) {
   return (
-    <div
-      className={`rounded-xl border border-line bg-surface/80 shadow-[0_1px_2px_rgba(28,26,23,0.03)] ${className}`}
-    >
-      {children}
-    </div>
+    <div className={`rounded-button border border-line bg-surface ${className}`}>{children}</div>
   );
 }
 
@@ -30,7 +26,7 @@ export function Section({
   return (
     <section className={`animate-rise ${className}`}>
       <div className="mb-4 flex items-baseline gap-3 border-b border-line pb-2">
-        <h2 className="font-display text-lg font-semibold text-ink">{title}</h2>
+        <h2 className="font-display text-lg font-semibold text-lint">{title}</h2>
         {typeof count === "number" && (
           <span className="font-mono text-xs text-faint">{count}</span>
         )}

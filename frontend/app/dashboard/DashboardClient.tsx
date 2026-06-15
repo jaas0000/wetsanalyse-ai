@@ -43,7 +43,7 @@ export function DashboardClient({ initieel }: { initieel: JobSummary[] }) {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <div className="flex items-center gap-3">
-            <h1 className="font-display text-3xl font-semibold text-ink">Dashboard</h1>
+            <h1 className="font-display text-3xl font-semibold text-lint">Dashboard</h1>
             <span
               className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium ${
                 verbonden ? "border-[#3a7a3a]/40 bg-[#3a7a3a]/5 text-[#3a7a3a]" : "border-line text-faint"
@@ -63,7 +63,7 @@ export function DashboardClient({ initieel }: { initieel: JobSummary[] }) {
             ["lopend", tel.lopend, "text-accent"],
             ["review", tel.review, "text-gold"],
             ["klaar", tel.klaar, "text-[#3a7a3a]"],
-            ["fout", tel.fout, "text-accent"],
+            ["fout", tel.fout, "text-fout"],
           ] as const).map(([label, n, kleur]) => (
             <div key={label} className="rounded-xl border border-line bg-surface px-3.5 py-2 text-center">
               <div className={`text-lg font-semibold leading-none ${kleur}`}>{n}</div>

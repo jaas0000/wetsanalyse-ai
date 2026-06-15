@@ -17,24 +17,25 @@ export const JAS_KLASSEN = [
   "Brondefinitie",
 ] as const;
 
-// Tailwind-klassen per JAS-klasse (achtergrond + tekst + rand). Gedempte, archief-achtige tinten.
+// Tailwind-klassen per JAS-klasse (achtergrond + tekst + rand). Onderling onderscheidende,
+// op lintblauw afgestemde koele tinten (Rijkshuisstijl); donkere tekst ≥ 4,5:1 op de tint.
 const KLASSE_STYLE: Record<string, string> = {
-  Rechtssubject: "bg-[#e7eef0] text-[#274a52] border-[#bcd2d7]",
-  Rechtsobject: "bg-[#efeae0] text-[#5a4a2a] border-[#d8ccb0]",
-  Rechtsbetrekking: "bg-[#eae6f0] text-[#473a5e] border-[#cdc2dd]",
-  Rechtsfeit: "bg-[#f0e7e7] text-[#6b3030] border-[#dcc2c2]",
-  Voorwaarde: "bg-[#e8efe6] text-[#3a522f] border-[#c8dcc0]",
-  Afleidingsregel: "bg-[#e6edf0] text-[#2f4a5a] border-[#c0d2dc]",
-  "Variabele en variabelewaarde": "bg-[#f0ece4] text-[#574a35] border-[#dad0bf]",
-  "Parameter en parameterwaarde": "bg-[#ece8f0] text-[#4a3f5e] border-[#d2c8dd]",
-  Operator: "bg-[#f0eae6] text-[#5e4435] border-[#ddccc0]",
-  Tijdsaanduiding: "bg-[#e6eff0] text-[#2f5258] border-[#c0d8dc]",
-  Plaatsaanduiding: "bg-[#eaf0e6] text-[#3f5230] border-[#cedcc0]",
-  "Delegatiebevoegdheid en delegatie-invulling": "bg-[#f0e8ea] text-[#5e3542] border-[#ddc4cc]",
-  Brondefinitie: "bg-[#e7e9f0] text-[#393f5e] border-[#c4c9dd]",
+  Rechtssubject: "bg-[#e7eef5] text-[#154273] border-[#bcd2e6]",
+  Rechtsobject: "bg-[#e2f0ef] text-[#1c5450] border-[#b4d8d3]",
+  Rechtsbetrekking: "bg-[#eae9f3] text-[#3b3a6e] border-[#c8c6e3]",
+  Rechtsfeit: "bg-[#fbe7e5] text-[#8e2018] border-[#f0bcb6]",
+  Voorwaarde: "bg-[#e6f0e0] text-[#2c6608] border-[#bcd9a8]",
+  Afleidingsregel: "bg-[#e4eef2] text-[#1f4a5a] border-[#bcd6e0]",
+  "Variabele en variabelewaarde": "bg-[#f6ecde] text-[#7a4d00] border-[#e6cfa8]",
+  "Parameter en parameterwaarde": "bg-[#f0e9f2] text-[#5a3a5e] border-[#ddc8e0]",
+  Operator: "bg-[#efe9e0] text-[#5e4a2a] border-[#d8ccb4]",
+  Tijdsaanduiding: "bg-[#e2eff2] text-[#1c5260] border-[#b4d8e0]",
+  Plaatsaanduiding: "bg-[#eaf0e0] text-[#4a5a1f] border-[#d0dcb0]",
+  "Delegatiebevoegdheid en delegatie-invulling": "bg-[#f3e7ee] text-[#6e2a4a] border-[#e3bcd0]",
+  Brondefinitie: "bg-[#e9ebf2] text-[#353f5e] border-[#c8cce0]",
 };
 
-const NEUTRAAL = "bg-faint text-muted border-line";
+const NEUTRAAL = "bg-surface text-muted border-line";
 
 export function jasStyle(klasse: string): string {
   return KLASSE_STYLE[klasse?.trim()] ?? NEUTRAAL;

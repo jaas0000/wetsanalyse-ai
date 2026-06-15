@@ -55,7 +55,7 @@ export function WetEditor({ wet, onDone, onCancel }: Props) {
   return (
     <Card className="p-6">
       <form onSubmit={onSubmit} className="space-y-5">
-        <h3 className="font-display text-lg font-semibold text-ink">
+        <h3 className="font-display text-lg font-semibold text-lint">
           {nieuw ? "Nieuwe wet" : `Wet bewerken — ${wet?.bwbId}`}
         </h3>
 
