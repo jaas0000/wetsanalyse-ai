@@ -17,6 +17,8 @@ disk-interoperabiliteit met de lokale skill staat op de roadmap, niet in de huid
 
 - `config.py` — env-config + projectpaden (PROJECT_ROOT = repo-root).
 - `contracts.py` — Pydantic-modellen (1-op-1 met `references/review-checkpoints.md`) + `Job`/state machine.
+  `JobSummary` draagt ook de observerende `current_fase`(`_sinds`) + telemetrie, zodat het dashboard al
+  bij de eerste render compleet is zonder per-job na te laden.
 - `auth.py` — per-client bearer-tokens (erft het MCP-patroon; fail-closed; constant-tijd).
   `require_admin` is een aparte, altijd-verplichte bearer voor `/v1/admin/*` (LLM-beheer).
 - `llm_profile.py` — Beanie `LlmProfile`-document (benoemde modelprofielen in Mongo; vervangt de
@@ -28,8 +30,14 @@ disk-interoperabiliteit met de lokale skill staat op de roadmap, niet in de huid
 - `jobstore.py` — `JobStore`-Protocol (opslag-abstractie) + `IdConflict`. `mongo_store.py` —
   de Beanie/MongoDB-implementatie: gerichte `$set`-writes, **ronde-immutabiliteit**, client-scoping,
   en de **Mongo state-CAS** (`claim`/`verleng_lease`/`lijst_verlopen_running`/`markeer_lease_loze_running`).
+  `set_current_fase()` is een **owner-fenced** `$set` dat alléén het observerende `current_fase`(`_sinds`)
+  bijwerkt en `updated`, `state` en `lease` ongemoeid laat (geen state-CAS, geen lease-bump).
 - `project.py` — het Beanie `Project`-document (state + embedded rondes/feedback/rapport; `owner`/
   `lease_until` voor de concurrency-claim, alleen door `claim`/heartbeat beheerd — nooit via `save_job`).
+  Daarnaast twee **observerende** velden — `current_fase` + `current_fase_sinds` — die de fijnmazige
+  functiestap binnen een `*-runt`/`bouwt`-state tonen (bv. `llm-generatie`, `verwijzingen-volgen`,
+  `brongetrouwheid-check`). Dit is **geen** state-machine-veld: het staat los van de state-CAS en heeft
+  geen control-flow-effect; bij review/terminal/fout gaat het op `None`.
 - `wettenbank.py` — MCP-client; lege/fout-respons → `WettenbankError` (nooit doorgaan met lege context).
 - `validation.py` — **zacht** (skill-`check_activiteit_2/3`, schema) vs **hard** (brongetrouwheid: citaat
   letterlijk in leden-tekst na normalisatie, `vindplaats`/`bronreferentie` verplicht).
@@ -44,9 +52,15 @@ disk-interoperabiliteit met de lokale skill staat op de roadmap, niet in de huid
   **Activiteit 2 is twee-fase** voor de cross-referenties: een verwijzing-inventaris
   (`steps.inventariseer_verwijzingen` / `prompts.act2_inventaris_prompt`) → begrensde fetch-lus
   (`orchestrator._volg_verwijzingen` + `wettenbank.parse_jci`) → de volledige act-2 met de
-  opgehaalde verwezen tekst als context (zie §Roadmap → Cross-referenties).
+  opgehaalde verwezen tekst als context (zie §Roadmap → Cross-referenties). `_set_fase()` schrijft
+  best-effort de observerende `current_fase` weg op breekpunten in `_genereer()`/`_bouw_rapport()`
+  (geen control-flow-effect; faalt stil) en wist 'm bij review/terminal/fout.
 - `routers/projects.py` + `main.py` — de kanonieke resource onder **`/v1/projects`** (client-gescopet,
-  `response_model`s, paginatie, SSE), `/health` (liveness), `/ready` (alleen booleans).
+  `response_model`s, paginatie, SSE), `/health` (liveness), `/ready` (alleen booleans). De per-project
+  SSE (`/{id}/events`) is verrijkt met `current_fase`; daarnaast is er een **aggregate-stream**
+  `GET /v1/projects/events` (client-gescopet, één diff-emit per gewijzigd project + `removed`-events)
+  die het live dashboard voedt. Die route is **bewust vóór `/{project_id}`** geregistreerd zodat
+  `events` niet als project-id wordt opgevat; `_dashboard_poll` zit apart voor testbaarheid.
 - `wet_catalog.py` — Beanie `WetCatalogus`-document (BWB-id + leesbare naam). `wetten.py` — service
   eroverheen: CRUD + `resolve_naam` (officiële citeertitel via `wettenbank_structuur`). De catalogus
   is een **gemak voor de UI-dropdown, niet dwingend**: de orchestrator dwingt geen lidmaatschap af en
