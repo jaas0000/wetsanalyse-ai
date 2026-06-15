@@ -21,7 +21,7 @@ export default function GlobalError({ error, reset }: { error: Error & { digest?
           {error.digest && <p style={{ fontFamily: "monospace", fontSize: "0.75rem", color: "#8A8377" }}>Referentie: {error.digest}</p>}
           <button
             onClick={() => reset()}
-            style={{ marginTop: "1rem", padding: "0.5rem 1rem", borderRadius: "0.375rem", border: "none", background: "#7A2E2E", color: "#F6F3EC", cursor: "pointer" }}
+            style={{ marginTop: "1rem", padding: "0.5rem 1rem", borderRadius: "0.375rem", border: "none", background: "#01689b", color: "#F6F3EC", cursor: "pointer" }}
           >
             Opnieuw proberen
           </button>

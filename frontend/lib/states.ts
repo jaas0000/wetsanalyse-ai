@@ -20,7 +20,7 @@ export const STATE_STYLE: Record<JobState, string> = {
   "wacht-op-review-act3": "bg-[#f3ecdc] text-[#6b531f] border-[#e0cfa0]",
   bouwt: "bg-[#eae6f0] text-[#473a5e] border-[#cdc2dd]",
   klaar: "bg-[#e3eee3] text-[#2f5230] border-[#bcd9bc]",
-  fout: "bg-[#f3e3e3] text-[#7a2e2e] border-[#e0bcbc]",
+  fout: "bg-[#f7e6e6] text-[#a01b1b] border-[#e3bcbc]",
 };
 
 export const RUNNING_STATES: JobState[] = ["queued", "act2-runt", "act3-runt", "bouwt"];

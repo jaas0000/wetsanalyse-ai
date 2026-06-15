@@ -3,15 +3,15 @@
 @tailwind utilities;
 
 :root {
-  /* Warm-neutraal "archief/perkament"-palet met bordeaux accent — geen generieke AI-tinten. */
+  /* Warm-neutraal "archief/perkament"-palet met logo-blauw accent — geen generieke AI-tinten. */
   --paper: 246 243 236; /* #F6F3EC */
   --surface: 252 250 245; /* #FCFAF5 */
   --ink: 28 26 23; /* #1C1A17 */
   --muted: 92 86 76; /* #5C564C */
   --faint: 138 131 119; /* #8A8377 */
   --line: 222 216 204; /* #DED8CC */
-  --accent: 122 46 46; /* #7A2E2E bordeaux */
-  --accent-soft: 158 78 78; /* #9E4E4E */
+  --accent: 1 104 155; /* #01689b logo-blauw (Rijksoverheid) */
+  --accent-soft: 0 123 199; /* #007BC7 hemelblauw (lichter, voor hover) */
   --gold: 161 124 56; /* #A17C38 */
 }
 
