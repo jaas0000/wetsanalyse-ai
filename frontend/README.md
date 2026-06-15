@@ -32,6 +32,21 @@ BFF doet dat server-side en pipet de stream door).
 Browser ──/api/**──► Next.js (BFF, injecteert token) ──/v1/**──► wetsanalyse-api:3000
 ```
 
+## Vormgeving — Rijkshuisstijl (Belastingdienst)
+
+De app volgt de **Rijkshuisstijl** in het **Belastingdienst-stijlvak**: lintblauw `#154273` +
+hemelblauw `#007bc7` op een witte achtergrond, een gecentreerde logobalk met het officiële
+Belastingdienst-logo (het lint op de horizontale middenas), en **Fira Sans/Mono** als vrij
+alternatief voor Rijksoverheid Sans, met responsive typografie (100/90/80% op desktop/tablet/mobiel).
+
+Alle design tokens staan centraal — CSS-variabelen in `app/globals.css` → Tailwind in
+`tailwind.config.ts` — en de primitives in `components/ui/` (48px-knoppen/velden, platte cards,
+`Vormelement`-signatuur). De **JAS-klassekleuren** (`lib/jas.ts`) zijn de exacte labelkleuren uit
+de officiële JAS-tabel `docs/wa-table.png`; de job-state-kleuren staan in `lib/states.ts`.
+
+> Kleur en typografie lopen via de tokens — geen losse hex-waarden in componenten. Het officiële
+> logo-asset (`public/belastingdienst-logo.svg`) blijft ongewijzigd.
+
 ## Lokaal draaien
 
 Vereist een draaiende API (zie [`../api/CLAUDE.md`](../api/CLAUDE.md)) — lokaal of het publieke

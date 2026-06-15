@@ -63,6 +63,13 @@ De **harde scheidingslijn**: alles met een token is server-only.
   renderen puur in `RapportView.tsx` (Verwijzingen-sectie) en `ReviewPanel.tsx` (scope-feedback per
   verwijzing, via het bestaande per-id-feedbackmechanisme) uit de bestaande `/rapport`- en
   `/ronde`-data — er is **geen nieuwe BFF-route** voor nodig.
+- **Vormgeving (Rijkshuisstijl, Belastingdienst-stijlvak)** — alle design tokens centraal:
+  CSS-variabelen in `app/globals.css` → Tailwind in `tailwind.config.ts` (lintblauw `#154273` +
+  hemelblauw `#007bc7` op wit, Fira Sans/Mono als vrij alternatief voor Rijksoverheid Sans,
+  responsive 100/90/80 via root-font-size). `components/ui/` zijn de primitives (48px-knoppen/velden,
+  platte cards, gecentreerde logobalk met het officiële `public/belastingdienst-logo.svg`,
+  `Vormelement`-signatuur). De JAS-klassekleuren in `lib/jas.ts` zijn de **exacte labelkleuren uit
+  `docs/wa-table.png`**; job-state-kleuren in `lib/states.ts`.
 
 ## Regels (niet aan tornen)
 
@@ -80,6 +87,10 @@ De **harde scheidingslijn**: alles met een token is server-only.
 - **Geen vrije model-string of dwingende wet-lijst in de UI.** Het modelprofiel kies je uit de live
   `/api/profiles`-dropdown; de wet-dropdown (`/api/wetten`) is een gemak — is de catalogus leeg, dan
   val je terug op vrije BWB-id-invoer. De API blijft elke geldige BWB-id accepteren.
+- **Huisstijl via tokens, niet hardcoded.** Kleur en typografie lopen via de tokens in
+  `app/globals.css` + `tailwind.config.ts` (en `lib/jas.ts`/`lib/states.ts` voor de badges) — strooi
+  geen losse hex-waarden door componenten. Het officiële logo-asset (`public/belastingdienst-logo.svg`)
+  blijft ongewijzigd; de JAS-klassekleuren komen exact uit `docs/wa-table.png`.
 
 ## Commando's
 
