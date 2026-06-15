@@ -67,6 +67,16 @@ def schema_check(data: dict, activiteit: str) -> tuple[list[str], list[str]]:
 
 _WS = re.compile(r"\s+")
 _QUOTES = str.maketrans({"‘": "'", "’": "'", "“": '"', "”": '"', "«": '"', "»": '"'})
+# De MCP levert de lid-tekst met intref/extref als inline-Markdown-link ([label](jci-target));
+# de frontend rendert daaruit de klikbare verwijzing. Een markering citeert echter het zichtbare
+# label, niet de link-syntax — dus vóór de citaat-vergelijking vervangen we [label](target) door
+# het label. (Alleen bij vergelijken: de opgeslagen lid-tekst houdt de markup voor de UI.)
+_MD_LINK = re.compile(r"\[([^\]]+)\]\([^)]*\)")
+
+
+def _strip_md_links(tekst: str) -> str:
+    """Vervang inline-Markdown-links [label](target) door hun zichtbare label."""
+    return _MD_LINK.sub(r"\1", tekst)
 
 
 def normaliseer(tekst: str) -> str:
@@ -83,7 +93,7 @@ def brongetrouwheid_check(data: dict, activiteit: str) -> list[str]:
 
     if activiteit == "2":
         leden_genorm = normaliseer(
-            " ".join((lid.get("tekst") or "") for lid in (data.get("leden") or []))
+            _strip_md_links(" ".join((lid.get("tekst") or "") for lid in (data.get("leden") or [])))
         )
         for m in data.get("markeringen") or []:
             mid = m.get("id", "?")

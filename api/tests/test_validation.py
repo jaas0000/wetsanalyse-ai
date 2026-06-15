@@ -65,6 +65,36 @@ def test_brongetrouwheid_citeerconventies_beletsel_en_haken():
     assert any("letterlijk citaat" in s for s in schend)
 
 
+def test_brongetrouwheid_markering_over_verwijzing_link():
+    # De MCP levert de lid-tekst met intref/extref als inline-Markdown-link. Een markering
+    # citeert het zichtbare label; de check moet dat als letterlijk citaat accepteren.
+    leden = [{"lid": "1", "tekst": (
+        "In afwijking van [artikel 4:89, eerste lid, van de Algemene wet bestuursrecht]"
+        "(jci1.3:c:BWBR0005537&artikel=4:89) vindt uitbetaling aan de belastingschuldige van "
+        "inkomstenbelasting uitsluitend plaats op een daartoe door de belastingschuldige bestemde "
+        "bankrekening. De belastingschuldige kan niet meer dan één bankrekening bestemmen voor de "
+        "in [artikel 25 van de Algemene wet inkomensafhankelijke regelingen]"
+        "(jci1.3:c:BWBR0018472&artikel=25) bedoelde uitbetaling."
+    )}]
+
+    def _check(formulering):
+        return brongetrouwheid_check(
+            {"bronreferentie": "jci:x", "leden": leden,
+             "markeringen": [{"id": "m1", "formulering": formulering, "vindplaats": "lid 1"}]},
+            "2",
+        )
+
+    # markering loopt over de eerste link heen (vgl. m1)
+    assert _check("In afwijking van artikel 4:89, eerste lid, van de Algemene wet bestuursrecht") == []
+    # markering loopt over de tweede link heen (vgl. m10)
+    assert _check(
+        "in artikel 25 van de Algemene wet inkomensafhankelijke regelingen bedoelde uitbetaling"
+    ) == []
+    # genuine parafrase (vgl. m4: woorden uit het midden weggelaten zonder beletselteken) → schending
+    schend = _check("vindt uitsluitend plaats op een daartoe door de belastingschuldige bestemde bankrekening")
+    assert any("letterlijk citaat" in s for s in schend)
+
+
 def test_brongetrouwheid_bronreferentie_en_vindplaats_verplicht():
     schend = brongetrouwheid_check({"leden": [], "markeringen": [{"id": "m1", "formulering": ""}]}, "2")
     assert any("Bronreferentie" in s for s in schend)
