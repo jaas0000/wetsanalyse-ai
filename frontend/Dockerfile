@@ -39,9 +39,8 @@ RUN apt-get update \
     && apt-get upgrade -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
-# CVE-2026-53655: tar@7.5.15 in npm's eigen node_modules; forceert tar@>=7.5.16.
-RUN npm --prefix /usr/local/lib/node_modules/npm install tar@^7.5.16 \
-    && npm cache clean --force
+# CVE-2026-53655: tar@7.5.15 gebundeld door npm zelf; upgrade npm zodat tar@>=7.5.16 meegaat.
+RUN npm install -g npm@11.17.0 && npm cache clean --force
 
 # Non-root + OpenShift-proof: lid van groep 0 i.p.v. een eigen gid. OpenShift restricted-v2 draait
 # met een WILLEKEURIGE UID + gid 0, dus de bestanden zijn groep-root-eigendom met groep=gebruiker-
