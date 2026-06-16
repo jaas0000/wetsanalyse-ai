@@ -74,6 +74,8 @@ jobs:
 
       - name: Sla de bundel op als workflow-artifact
         uses: actions/upload-artifact@v4
+        env:
+          FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
         with:
           name: ${{ steps.pkg.outputs.name }}
           path: ${{ steps.pkg.outputs.name }}
