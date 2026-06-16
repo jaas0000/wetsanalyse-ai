@@ -21,8 +21,8 @@ inhoudelijke `references/`/`scripts/`. De samenwerkende delen:
    De map heet naar de BWB-id in kleine letters: `<bwbid>-art<nr>[-lidN]` (bijv.
    `bwbr0004770-art9-lid2`), gelijk aan de bestandsnaam die de rapportgenerator afleidt.
 4. **`api/`** — headless FastAPI-backend die dezelfde JAS-werkstroom als async REST-API aanbiedt
-   (MongoDB-jobstore, per-client bearer-auth). Heeft een eigen `CLAUDE.md` + `README.md` — lees die
-   bij werk *in* de API. Het LLM wordt aangestuurd via **benoemde modelprofielen** (Mongo, beheerbaar
+   (PostgreSQL-jobstore, per-client bearer-auth). Heeft een eigen `CLAUDE.md` + `README.md` — lees die
+   bij werk *in* de API. Het LLM wordt aangestuurd via **benoemde modelprofielen** (in de database, beheerbaar
    via `/v1/admin/profiles`); de env-`LLM_*`-waarden seeden alleen het eerste default-profiel.
 5. **`frontend/`** — Next.js-webapp (BFF) bovenop de API: analyses aanmaken/reviewen, een live
    **`/dashboard`** dat alle analyses tot op functieniveau (de engine-stap binnen een state) volgt

@@ -33,7 +33,7 @@ from sqlalchemy.pool import StaticPool
 # JSONB op Postgres (indexeerbaar, efficiënt), gewone JSON op SQLite (tests).
 _JSON = JSON().with_variant(JSONB(), "postgresql")
 # Tijdzone-bewust opslaan; op Postgres = timestamptz. SQLite kent geen tz → normaliseer bij lezen
-# (zie aware()), zodat .isoformat() altijd een offset (UTC) draagt — net als de oude tz_aware-Mongo.
+# (zie aware()), zodat .isoformat() altijd een offset (UTC) draagt.
 _DT = DateTime(timezone=True)
 
 metadata = MetaData()
@@ -157,7 +157,7 @@ async def create_all() -> None:
 def aware(dt: datetime | None) -> datetime | None:
     """Normaliseer een uit de DB gelezen datetime naar UTC-aware. SQLite geeft naïeve datetimes
     terug (geen tz-opslag); Postgres geeft al aware terug. Zo serialiseert .isoformat() altijd met
-    offset en leest de browser de tijd niet als lokale tijd (vgl. de oude tz_aware-Mongo-client)."""
+    offset en leest de browser de tijd niet als lokale tijd."""
     if dt is None:
         return None
     return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt

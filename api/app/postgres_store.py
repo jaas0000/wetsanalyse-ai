@@ -1,6 +1,6 @@
 """Async PostgreSQL-jobstore via SQLAlchemy Core — de concrete JobStore-implementatie (zie jobstore.py).
 
-Vervangt de eerdere Beanie/MongoDB-store. De mechanismen zijn 1-op-1 overgezet:
+De mechanismen:
   - atomaire state-CAS (`claim`/`verleng_lease`/`set_current_fase`) → één `UPDATE ... WHERE ... RETURNING`;
   - owner-fencing → een extra `owner = :owner` in de WHERE;
   - ronde-immutabiliteit → een aparte `rondes`-tabel met (project, activiteit, ronde) als sleutel;
@@ -151,7 +151,7 @@ class PostgresStore:
 
     async def create_project(self, project: Project) -> None:
         """Maak een volledig project-document aan (incl. naam/omschrijving). Werpt IdConflict bij
-        een dubbele slug. Vervangt de directe Beanie-insert in de orchestrator."""
+        een dubbele slug."""
         now = db.utcnow()
         try:
             async with db.get_engine().begin() as conn:
@@ -373,7 +373,7 @@ class PostgresStore:
                 update(db.projects).where(db.projects.c.slug == job_id)
                 .values(rapport=rapport, updated=db.utcnow())
             )
-        # Mongo-pariteit: stil zwijgen als het project niet bestaat (geen exception).
+        # Stil zwijgen als het project niet bestaat (geen exception).
         _ = res
 
     async def lees_rapport(self, job_id: str) -> dict | None:

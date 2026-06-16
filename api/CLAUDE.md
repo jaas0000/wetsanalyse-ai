@@ -69,7 +69,8 @@ disk-interoperabiliteit met de lokale skill staat op de roadmap, niet in de huid
   geregistreerd zodat `events` niet als project-id wordt opgevat; `_dashboard_poll` zit apart voor
   testbaarheid. Beide SSE-loops sturen bij een stille poll een `: keep-alive`-heartbeat, anders breekt
   de undici-fetch in de Next.js-BFF de stream met `UND_ERR_BODY_TIMEOUT`.
-- `wet_catalog.py` — Beanie `WetCatalogus`-document (BWB-id + leesbare naam). `wetten.py` — service
+- `wet_catalog.py` — `WetCatalogus`-domeinmodel (Pydantic, persistentie via de store; BWB-id +
+  leesbare naam). `wetten.py` — service
   eroverheen: CRUD + `resolve_naam` (officiële citeertitel via `wettenbank_structuur`). De catalogus
   is een **gemak voor de UI-dropdown, niet dwingend**: de orchestrator dwingt geen lidmaatschap af en
   een willekeurige BWB-id blijft geldig. De wet-naam in het rapport komt los hiervan uit de MCP.

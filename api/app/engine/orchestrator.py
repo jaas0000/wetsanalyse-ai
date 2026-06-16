@@ -431,7 +431,7 @@ class WetsanalyseEngine:
             raise LeaseVerloren(job.id)
 
     async def _set_fase(self, job: Job, fase: str | None) -> None:
-        """Observerende fase-tik voor het live dashboard (zie MongoStore.set_current_fase). Strikt
+        """Observerende fase-tik voor het live dashboard (zie PostgresStore.set_current_fase). Strikt
         BEST-EFFORT: een verloren lease (False) of welke fout dan ook breekt de analyse NIET af en
         verandert de control-flow niet — de fase is puur diagnostisch. De canonieke fase-strings
         worden 1-op-1 gespiegeld in frontend/lib/fasen.ts."""

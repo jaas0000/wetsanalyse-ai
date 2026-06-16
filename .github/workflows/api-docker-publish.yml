@@ -65,8 +65,6 @@ jobs:
       LLM_API_BASE: ${{ vars.LLM_API_BASE }}
       LLM_API_VERSION: ${{ vars.LLM_API_VERSION }}
       SECRETS_DIR: ${{ vars.SECRETS_DIR }}
-      MONGODB_URL: ${{ vars.MONGODB_URL }}
-      MONGODB_DB: ${{ vars.MONGODB_DB }}
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
 
@@ -156,21 +154,17 @@ jobs:
             --arg base "${LLM_API_BASE:-}" \
             --arg ver "${LLM_API_VERSION:-}" \
             --arg secrets_dir "${SECRETS_DIR:-/volume1/docker/secrets/wetsanalyse-api}" \
-            --arg mongodb_url "${MONGODB_URL:-mongodb://mongo:27017}" \
-            --arg mongodb_db "${MONGODB_DB:-wetsanalyse}" \
             '{stackFileContent:$compose,
               env:[{name:"PROXY_NETWORK",value:$net},
                    {name:"LLM_PROVIDER",value:$prov},
                    {name:"LLM_MODEL",value:$model},
                    {name:"LLM_API_BASE",value:$base},
                    {name:"LLM_API_VERSION",value:$ver},
-                   {name:"SECRETS_DIR",value:$secrets_dir},
-                   {name:"MONGODB_URL",value:$mongodb_url},
-                   {name:"MONGODB_DB",value:$mongodb_db}],
+                   {name:"SECRETS_DIR",value:$secrets_dir}],
               pullImage:true, prune:false}')
           # Idempotente redeploy. Portainers in-place recreate (pullImage:true) kan transient
           # struikelen op een daemon-race — "removal of container … is already in progress" —
-          # en geeft dan HTTP 500, wat de stack half-applied achterlaat (mongo blijft `Created`).
+          # en geeft dan HTTP 500, wat de stack half-applied achterlaat (postgres blijft `Created`).
           # Een 5xx is per definitie tijdelijk: de removal voltooit en een herhaalde PUT laat
           # Compose schoon convergeren. Daarom tot 3 pogingen met oplopende backoff. Alleen 4xx
           # (config/auth) is hard fout; 2xx breekt direct af; een curl-timeout draait mogelijk

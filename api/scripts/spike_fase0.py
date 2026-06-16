@@ -32,7 +32,7 @@ async def main() -> int:
 
     settings = get_settings()
     wb = WettenbankClient(settings)
-    # Spike draait standalone (geen Mongo-profielen): bouw de client uit de env-config.
+    # Spike draait standalone (geen DB-profielen): bouw de client uit de env-config.
     llm = build_llm_client(_config_uit_env(settings))
 
     print(f"→ Ophalen {bwb_id} art. {artikel}" + (f" lid {lid}" if lid else "") + " via MCP …")

@@ -1,4 +1,4 @@
-"""Versleuteling-at-rest voor secrets die via de admin-UI in Mongo belanden (de LLM-API-key).
+"""Versleuteling-at-rest voor secrets die via de admin-UI in de database belanden (de LLM-API-key).
 
 Symmetrisch (Fernet/AES-128-CBC + HMAC) met één master key uit een Docker-secret —
 hetzelfde *_FILE-patroon als de rest van de config (zie `config._read_secret`). De master key

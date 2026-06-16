@@ -1,4 +1,4 @@
-"""Dependency-wiring. MongoStore is altijd beschikbaar; de engine vereist LLM-config
+"""Dependency-wiring. De jobstore is altijd beschikbaar; de engine vereist LLM-config
 en wordt lui gebouwd zodat read/serve zonder LiteLLM draait."""
 
 from __future__ import annotations
@@ -44,6 +44,6 @@ def get_engine():
     from .engine.orchestrator import WetsanalyseEngine
 
     settings = get_settings()
-    # Geen vaste LLM-client meer: de engine resolveert per analyse het modelprofiel (Mongo) en
+    # Geen vaste LLM-client meer: de engine resolveert per analyse het modelprofiel (uit de store) en
     # bouwt de adapter dan pas. Zo pakt het runtime-beheer (admin-UI) wijzigingen direct op.
     return WetsanalyseEngine(settings, get_store(), None, WettenbankClient(settings))

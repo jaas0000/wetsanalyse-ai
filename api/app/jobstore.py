@@ -30,7 +30,7 @@ class JobStore(Protocol):
     async def load_job(self, job_id: str) -> Job | None: ...
     async def list_jobs(self, client_id: str | None = None) -> list[Job]: ...
 
-    # --- concurrency (Mongo state-CAS; vervangt de in-process lock) ---
+    # --- concurrency (state-CAS; vervangt de in-process lock) ---
     async def claim(
         self, job_id: str, van: set[JobState], naar: JobState, owner: str, lease_s: int,
         *, vereist_verlopen_lease: bool = False,
