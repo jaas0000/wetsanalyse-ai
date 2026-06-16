@@ -1,0 +1,7 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Component
+
+# Kustomize-component: voegt het CloudNativePG-cluster + de geplande backup toe aan een overlay
+# (`components: [../../components/postgres-cnpg]`). Zo deelt de beproeving/managed-prod één definitie.
+resources:
+  - cluster.yaml

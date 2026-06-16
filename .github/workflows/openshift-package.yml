@@ -1,0 +1,83 @@
+# Levert het OpenShift-deploypakket op (GA bouwt/levert alleen — de uitrol gebeurt buiten GA met
+# `oc apply -k`/GitOps). Bij een versietag pint dit de Kustomize-images op die tag, valideert het
+# élke overlay met `kustomize build`, en koppelt de bundel aan de GitHub-release. Spiegelt het
+# image-spoor (api/frontend/mcp-docker-publish.yml) dat de images naar GHCR pusht.
+#
+# Het Portainer/Synology-spoor blijft ongemoeid (dat redeployt vanuit de image-workflows).
+
+name: openshift-package
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Image-tag om op te pinnen (bv. v1.2.3 of latest)"
+        required: true
+        default: "latest"
+
+env:
+  KUSTOMIZE_VERSION: "5.4.3"
+  OWNER: ${{ github.repository_owner }}
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # nodig om de bundel aan de release te koppelen
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+
+      - name: Bepaal versie
+        id: v
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            echo "version=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=${{ github.event.inputs.version }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Installeer kustomize ${{ env.KUSTOMIZE_VERSION }}
+        run: |
+          curl -fsSL -o kustomize.tar.gz \
+            "https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv${KUSTOMIZE_VERSION}/kustomize_v${KUSTOMIZE_VERSION}_linux_amd64.tar.gz"
+          tar -xzf kustomize.tar.gz
+          sudo install -m 0755 kustomize /usr/local/bin/kustomize
+          kustomize version
+
+      - name: Pin de images op de versie-tag
+        working-directory: deploy/openshift/base
+        run: |
+          V="${{ steps.v.outputs.version }}"
+          kustomize edit set image \
+            "ghcr.io/${OWNER}/wetsanalyse-api=ghcr.io/${OWNER}/wetsanalyse-api:${V}" \
+            "ghcr.io/${OWNER}/wetsanalyse-frontend=ghcr.io/${OWNER}/wetsanalyse-frontend:${V}" \
+            "ghcr.io/${OWNER}/wettenbank-mcp=ghcr.io/${OWNER}/wettenbank-mcp:${V}"
+
+      - name: Valideer + render alle overlays (kustomize build)
+        run: |
+          mkdir -p rendered
+          for overlay in local beproeving managed-prod; do
+            echo "::group::kustomize build $overlay"
+            kustomize build "deploy/openshift/overlays/${overlay}" > "rendered/${overlay}.yaml"
+            echo "::endgroup::"
+          done
+
+      - name: Bundel het pakket
+        id: pkg
+        run: |
+          V="${{ steps.v.outputs.version }}"
+          NAME="wetsanalyse-openshift-${V}.tar.gz"
+          tar -czf "${NAME}" deploy/openshift rendered
+          echo "name=${NAME}" >> "$GITHUB_OUTPUT"
+
+      - name: Koppel de bundel aan de release (alleen bij een tag)
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Maak de release aan als hij nog niet bestaat (een kale tag-push maakt er geen).
+          gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1 \
+            || gh release create "${GITHUB_REF_NAME}" --generate-notes --title "${GITHUB_REF_NAME}"
+          gh release upload "${GITHUB_REF_NAME}" "${{ steps.pkg.outputs.name }}" --clobber

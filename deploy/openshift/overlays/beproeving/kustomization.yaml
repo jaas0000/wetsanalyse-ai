@@ -1,0 +1,34 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Beproevings-cluster (eigen on-prem cluster). CloudNativePG voor de database; secrets worden buiten
+# Kustomize aangemaakt (zie INSTALL.md). Vul LLM_MODEL/LLM_API_BASE hieronder in en de CNPG-S3-
+# placeholders in components/postgres-cnpg/cluster.yaml (of patch ze hier).
+namespace: wetsanalyse-beproeving
+
+resources:
+  - ../../base
+
+components:
+  - ../../components/postgres-cnpg
+
+patches:
+  - target:
+      kind: ConfigMap
+      name: wetsanalyse-api-config
+    patch: |-
+      - op: replace
+        path: /data/LLM_MODEL
+        value: "claude-sonnet-4-6"
+      - op: replace
+        path: /data/LLM_API_BASE
+        value: "https://CHANGEME.services.ai.azure.com"
+  # Beproeving draait krapper dan productie: één database-instance.
+  - target:
+      group: postgresql.cnpg.io
+      kind: Cluster
+      name: wetsanalyse-db
+    patch: |-
+      - op: replace
+        path: /spec/instances
+        value: 1

@@ -1,0 +1,40 @@
+# Horizontale autoscaling op CPU/geheugen. De API is veilig horizontaal schaalbaar (atomaire
+# state-CAS + lease/reaper); let op: de in-process LLM-concurrency-rem en rate-limit schalen
+# lineair mee met het aantal replica's (zie api/CLAUDE.md → Misbruik-/kostenbeheersing).
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: wetsanalyse-api
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: wetsanalyse-api
+  minReplicas: 2
+  maxReplicas: 6
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: wetsanalyse-frontend
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: wetsanalyse-frontend
+  minReplicas: 2
+  maxReplicas: 4
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70

@@ -1,0 +1,30 @@
+# PodDisruptionBudgets: houd minstens één replica beschikbaar tijdens node-drains/upgrades.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: wetsanalyse-api
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: wetsanalyse-api
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: wetsanalyse-frontend
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: wetsanalyse-frontend
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: wettenbank-mcp
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: wettenbank-mcp

@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: wetsanalyse-api-config
+  labels:
+    app.kubernetes.io/part-of: wetsanalyse
+data:
+  # Niet-geheime LLM-config (de geheime sleutel staat in de api-secrets). Overschrijf per omgeving
+  # via een overlay-patch of `configMapGenerator`. LLM_MODEL is verplicht (anders weigert /ready).
+  WETSANALYSE_AUTH_REQUIRED: "1"
+  WETTENBANK_MCP_URL: "http://wettenbank-mcp:3000/mcp"
+  LLM_PROVIDER: "azure_ai"
+  LLM_MODEL: ""
+  LLM_API_BASE: ""
+  LLM_OUTPUT_STRATEGY: "prompt_and_parse"

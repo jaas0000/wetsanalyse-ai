@@ -1,0 +1,95 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wettenbank-mcp
+  labels:
+    app.kubernetes.io/name: wettenbank-mcp
+    app.kubernetes.io/part-of: wetsanalyse
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: wettenbank-mcp
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: wettenbank-mcp
+        app.kubernetes.io/part-of: wetsanalyse
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: mcp
+          image: ghcr.io/palmw01/wettenbank-mcp:latest
+          ports:
+            - containerPort: 3000
+          env:
+            - name: MCP_TRANSPORT
+              value: http
+            - name: PORT
+              value: "3000"
+            # Alleen de interne service-hostnaam toelaten (DNS-rebinding-bescherming). Voeg een
+            # publieke Route-host toe als de MCP ook extern bereikbaar moet zijn.
+            - name: MCP_ALLOWED_HOSTS
+              value: wettenbank-mcp
+            - name: MCP_AUTH_TOKENS_FILE
+              value: /run/secrets/mcp_auth_tokens
+            - name: HOME
+              value: /tmp
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: secrets
+              mountPath: /run/secrets
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 15
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            timeoutSeconds: 10
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 1Gi
+      volumes:
+        - name: secrets
+          secret:
+            secretName: wettenbank-mcp-secrets
+            defaultMode: 0440
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: wettenbank-mcp
+  labels:
+    app.kubernetes.io/name: wettenbank-mcp
+    app.kubernetes.io/part-of: wetsanalyse
+spec:
+  selector:
+    app.kubernetes.io/name: wettenbank-mcp
+  ports:
+    - port: 3000
+      targetPort: 3000

@@ -1,0 +1,70 @@
+# Kale PostgreSQL voor de learn-/CRC-cluster (géén CNPG-operator nodig). Bewust simpel: één
+# instance, een PVC, geen backups. Aanname: een permissieve SCC (op CRC/learn ben je doorgaans
+# cluster-admin). Productie (beproeving/managed-prod) gebruikt in plaats hiervan CloudNativePG.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: wetsanalyse-db-data
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wetsanalyse-db
+  labels:
+    app.kubernetes.io/name: wetsanalyse-db
+    app.kubernetes.io/part-of: wetsanalyse
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: wetsanalyse-db
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: wetsanalyse-db
+        app.kubernetes.io/part-of: wetsanalyse
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16
+          env:
+            - name: POSTGRES_USER
+              value: wetsanalyse
+            - name: POSTGRES_PASSWORD
+              value: wetsanalyse
+            - name: POSTGRES_DB
+              value: wetsanalyse
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          ports:
+            - containerPort: 5432
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "wetsanalyse", "-d", "wetsanalyse"]
+            initialDelaySeconds: 5
+            periodSeconds: 10
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: wetsanalyse-db-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: wetsanalyse-db-rw
+  labels:
+    app.kubernetes.io/part-of: wetsanalyse
+spec:
+  selector:
+    app.kubernetes.io/name: wetsanalyse-db
+  ports:
+    - port: 5432
+      targetPort: 5432
