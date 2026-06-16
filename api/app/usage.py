@@ -1,22 +1,22 @@
 """Token-verbruik-aggregatie over de `provenance` van alle projecten.
 
-Read-only: er is geen aparte tracking-laag nodig. Elke `Project.provenance[]` bevat per ronde
-het feitelijk gebruikte model/provider en `tokens_in`/`tokens_out` (zie contracts.RondeProvenance),
-gevuld vanuit het LLMResult in engine/steps. We aggregeren dat met één Mongo-pipeline.
+Read-only: er is geen aparte tracking-laag nodig. Elke project-`provenance[]` bevat per ronde het
+feitelijk gebruikte model/provider en `tokens_in`/`tokens_out` (zie contracts.RondeProvenance),
+gevuld vanuit het LLMResult in engine/steps. We laden de provenance-kolommen en aggregeren in
+Python — portable over de DB-backend heen en ruim voldoende voor dit datavolume.
 """
 
 from __future__ import annotations
 
-from .project import Project
+from sqlalchemy import select
 
-# Toegestane groepeer-sleutels → het veld waarop gegroepeerd wordt. `model`/`provider` zitten op
-# de provenance-ronde; `model_profile`/`client_id` op het project-document.
-_GROUP_VELDEN = {
-    "model": "$provenance.model",
-    "provider": "$provenance.provider",
-    "model_profile": "$model_profile",
-    "client_id": "$client_id",
-}
+from . import db
+
+# Toegestane groepeer-sleutels → waar de waarde vandaan komt. `model`/`provider` zitten op de
+# provenance-ronde; `model_profile`/`client_id` op het project zelf.
+_PROV_VELDEN = {"model", "provider"}
+_PROJECT_VELDEN = {"model_profile", "client_id"}
+_GROUP_VELDEN = _PROV_VELDEN | _PROJECT_VELDEN
 
 
 async def usage_report(
@@ -30,39 +30,44 @@ async def usage_report(
     if group_by not in _GROUP_VELDEN:
         raise ValueError(f"Onbekende group_by: {group_by!r} (kies uit {sorted(_GROUP_VELDEN)})")
 
-    pipeline: list[dict] = [{"$unwind": "$provenance"}]
-    tijd_match: dict = {}
-    if van:
-        tijd_match["$gte"] = van
-    if tot:
-        tijd_match["$lt"] = tot
-    if tijd_match:
-        pipeline.append({"$match": {"provenance.tijdstip": tijd_match}})
+    async with db.get_engine().connect() as conn:
+        rijen = (await conn.execute(select(
+            db.projects.c.slug,
+            db.projects.c.model_profile,
+            db.projects.c.client_id,
+            db.projects.c.provenance,
+        ))).mappings().all()
 
-    pipeline += [
+    # sleutel → {tokens_in, tokens_out, rondes, analyses(set van slugs)}
+    groepen: dict[str, dict] = {}
+    for rij in rijen:
+        project_sleutel = rij[group_by] if group_by in _PROJECT_VELDEN else None
+        for prov in rij["provenance"] or []:
+            tijdstip = prov.get("tijdstip", "")
+            if van and tijdstip < van:
+                continue
+            if tot and tijdstip >= tot:
+                continue
+            sleutel = project_sleutel if group_by in _PROJECT_VELDEN else (prov.get(group_by) or "")
+            g = groepen.setdefault(
+                sleutel or "", {"tokens_in": 0, "tokens_out": 0, "rondes": 0, "analyses": set()}
+            )
+            g["tokens_in"] += prov.get("tokens_in", 0) or 0
+            g["tokens_out"] += prov.get("tokens_out", 0) or 0
+            g["rondes"] += 1
+            g["analyses"].add(rij["slug"])
+
+    rows = [
         {
-            "$group": {
-                "_id": _GROUP_VELDEN[group_by],
-                "tokens_in": {"$sum": "$provenance.tokens_in"},
-                "tokens_out": {"$sum": "$provenance.tokens_out"},
-                "rondes": {"$sum": 1},
-                "analyses": {"$addToSet": "$_id"},
-            }
-        },
-        {
-            "$project": {
-                "_id": 0,
-                "sleutel": {"$ifNull": ["$_id", ""]},
-                "tokens_in": 1,
-                "tokens_out": 1,
-                "rondes": 1,
-                "analyses": {"$size": "$analyses"},
-            }
-        },
-        {"$sort": {"tokens_in": -1}},
+            "sleutel": sleutel,
+            "tokens_in": g["tokens_in"],
+            "tokens_out": g["tokens_out"],
+            "rondes": g["rondes"],
+            "analyses": len(g["analyses"]),
+        }
+        for sleutel, g in groepen.items()
     ]
-
-    rows = await Project.aggregate(pipeline).to_list()
+    rows.sort(key=lambda r: r["tokens_in"], reverse=True)
     totaal = {
         "tokens_in": sum(r["tokens_in"] for r in rows),
         "tokens_out": sum(r["tokens_out"] for r in rows),

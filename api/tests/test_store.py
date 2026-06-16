@@ -1,14 +1,24 @@
 from datetime import datetime, timedelta, timezone
 
 import pytest
+from sqlalchemy import update
 
+from app import db
 from app.contracts import Feedback, Job, JobState
-from app.project import Project
+
+
+async def _set_lease(slug: str, owner: str | None, lease_until) -> None:
+    """Test-helper: zet owner/lease_until direct (claim zet altijd een verse, toekomstige lease)."""
+    async with db.get_engine().begin() as conn:
+        await conn.execute(
+            update(db.projects).where(db.projects.c.slug == slug)
+            .values(owner=owner, lease_until=lease_until)
+        )
 
 
 async def test_id_afleiding_en_collisie(store):
     assert await store.afgeleid_id("BWBR0004770", "9", "2") == "bwbr0004770-art9-lid2"
-    await Project(slug="bwbr0004770-art9-lid2").insert()
+    await store.save_job(Job(id="bwbr0004770-art9-lid2", bwbId="BWBR0004770", artikel="9", lid="2"))
     assert await store.afgeleid_id("BWBR0004770", "9", "2") == "bwbr0004770-art9-lid2-2"
 
 
@@ -37,7 +47,7 @@ async def test_feedback_roundtrip(store):
     assert result.items == {"m1": "fout"}
 
 
-async def test_mongostore_voldoet_aan_jobstore(store):
+async def test_postgresstore_voldoet_aan_jobstore(store):
     from app.jobstore import JobStore
     assert isinstance(store, JobStore)
 
@@ -76,7 +86,7 @@ async def test_schrijfpaden_falen_netjes_zonder_project(store):
         await store.schrijf_feedback("bestaat-niet", "2", 1, fb)
 
 
-# --- concurrency: Mongo state-CAS (claim/lease) ---
+# --- concurrency: state-CAS (claim/lease) ---
 
 async def test_claim_eenmalig(store):
     """De eerste claim wint; een tweede claim ziet de al-gewijzigde state → None (geen dubbele pickup)."""
@@ -93,15 +103,12 @@ async def test_claim_eenmalig(store):
 async def test_claim_alleen_verlopen_lease(store):
     """vereist_verlopen_lease=True claimt een verse lease NIET, een verlopen lease wel (reaper)."""
     await store.save_job(Job(id="c2", bwbId="X", artikel="1", state=JobState.act2_runt))
-    p = await store.load_project("c2")
-    p.owner, p.lease_until = "worker-a", datetime.now(timezone.utc) + timedelta(seconds=120)
-    await p.save()
+    await _set_lease("c2", "worker-a", datetime.now(timezone.utc) + timedelta(seconds=120))
     # Verse lease → reaper-claim mist.
     assert await store.claim("c2", {JobState.act2_runt}, JobState.fout, "reaper", 120,
                              vereist_verlopen_lease=True) is None
     # Lease in het verleden → reaper-claim slaagt.
-    p.lease_until = datetime.now(timezone.utc) - timedelta(seconds=1)
-    await p.save()
+    await _set_lease("c2", "worker-a", datetime.now(timezone.utc) - timedelta(seconds=1))
     geclaimd = await store.claim("c2", {JobState.act2_runt}, JobState.fout, "reaper", 120,
                                  vereist_verlopen_lease=True)
     assert geclaimd is not None and geclaimd.state == JobState.fout
@@ -119,9 +126,12 @@ async def test_lijst_verlopen_running(store):
     """Alleen runt-jobs met een verlopen lease komen in de reaper-lijst."""
     verleden = datetime.now(timezone.utc) - timedelta(seconds=1)
     toekomst = datetime.now(timezone.utc) + timedelta(seconds=120)
-    await Project(slug="r-verlopen", state=JobState.act2_runt, lease_until=verleden).insert()
-    await Project(slug="r-vers", state=JobState.act3_runt, lease_until=toekomst).insert()
-    await Project(slug="r-review", state=JobState.wacht_review_act2, lease_until=verleden).insert()
+    await store.save_job(Job(id="r-verlopen", bwbId="X", artikel="1", state=JobState.act2_runt))
+    await _set_lease("r-verlopen", "w", verleden)
+    await store.save_job(Job(id="r-vers", bwbId="X", artikel="1", state=JobState.act3_runt))
+    await _set_lease("r-vers", "w", toekomst)
+    await store.save_job(Job(id="r-review", bwbId="X", artikel="1", state=JobState.wacht_review_act2))
+    await _set_lease("r-review", "w", verleden)
     ids = await store.lijst_verlopen_running()
     assert ids == ["r-verlopen"]
 

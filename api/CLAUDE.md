@@ -9,8 +9,9 @@ bron; deze service is een parallelle harness over dezelfde references/scripts).
 
 De **orchestrator bezit de review-lus en de state**; het **LLM doet per stap één begrensde taak**
 ("geef JSON conform schema"). **Stap 1 (ophalen) is deterministisch via de MCP** — geen LLM-tool-
-calling. De **jobstore is MongoDB**: één `Project`-document per analyse met alle artefacten
-embedded (rondes, feedback, rapport). De API schrijft *niet* naar de `analyses/<id>/werk/`-disk; de
+calling. De **jobstore is PostgreSQL** (SQLAlchemy async/asyncpg): één `projects`-rij per analyse met de
+state + telemetrie en het `rapport` (JSONB-kolom); de immutabele analyse-rondes + feedback staan in een
+aparte `rondes`-tabel. De API schrijft *niet* naar de `analyses/<id>/werk/`-disk; de
 disk-interoperabiliteit met de lokale skill staat op de roadmap, niet in de huidige flow.
 
 ## Architectuur (app/)
@@ -21,19 +22,24 @@ disk-interoperabiliteit met de lokale skill staat op de roadmap, niet in de huid
   bij de eerste render compleet is zonder per-job na te laden.
 - `auth.py` — per-client bearer-tokens (erft het MCP-patroon; fail-closed; constant-tijd).
   `require_admin` is een aparte, altijd-verplichte bearer voor `/v1/admin/*` (LLM-beheer).
-- `llm_profile.py` — Beanie `LlmProfile`-document (benoemde modelprofielen in Mongo; vervangt de
+- `llm_profile.py` — `LlmProfile`-domeinmodel (Pydantic; benoemde modelprofielen in de DB; vervangt de
   vroegere hardcoded `Settings.model_profiles`). `profiles.py` — service eroverheen: CRUD,
   default-beheer, `resolve_config` (profiel → `LlmConfig`, ontsleutelt de key, env-fallback) en
   `ensure_seeded` (seedt bij eerste start één default-profiel uit de env). `secrets_crypto.py` —
   Fernet-versleuteling-at-rest van de API-key (master key uit `LLM_CONFIG_SECRET(_FILE)`).
   `usage.py` — read-only token-verbruik-aggregatie over `provenance`.
-- `jobstore.py` — `JobStore`-Protocol (opslag-abstractie) + `IdConflict`. `mongo_store.py` —
-  de Beanie/MongoDB-implementatie: gerichte `$set`-writes, **ronde-immutabiliteit**, client-scoping,
-  en de **Mongo state-CAS** (`claim`/`verleng_lease`/`lijst_verlopen_running`/`markeer_lease_loze_running`).
-  `set_current_fase()` is een **owner-fenced** `$set` dat alléén het observerende `current_fase`(`_sinds`)
-  bijwerkt en `updated`, `state` en `lease` ongemoeid laat (geen state-CAS, geen lease-bump).
-- `project.py` — het Beanie `Project`-document (state + embedded rondes/feedback/rapport; `owner`/
-  `lease_until` voor de concurrency-claim, alleen door `claim`/heartbeat beheerd — nooit via `save_job`).
+- `db.py` — async SQLAlchemy-Core laag: engine-beheer + de tabeldefinities (`projects`, `rondes`,
+  `llm_profiles`, `wet_catalogus`). Portable types (`JSON`→`JSONB` op Postgres, `JSON` op SQLite-tests),
+  tz-aware datetimes (`aware()` normaliseert het naïeve SQLite-resultaat naar UTC).
+- `jobstore.py` — `JobStore`-Protocol (opslag-abstractie) + `IdConflict`. `postgres_store.py` —
+  de SQLAlchemy/PostgreSQL-implementatie: gerichte kolom-writes, **ronde-immutabiliteit**, client-scoping,
+  en de **state-CAS** (`claim`/`verleng_lease`/`lijst_verlopen_running`/`markeer_lease_loze_running`) via
+  één atomair `UPDATE … RETURNING`. `set_current_fase()` is een **owner-fenced** update dat alléén het
+  observerende `current_fase`(`_sinds`) bijwerkt en `updated`, `state` en `lease` ongemoeid laat (geen
+  state-CAS, geen lease-bump).
+- `project.py` — het `Project`-domeinmodel (Pydantic; state + telemetrie + `rapport`; de rondes/feedback
+  leven in de aparte `rondes`-tabel; `owner`/`lease_until` voor de concurrency-claim, alleen door
+  `claim`/heartbeat beheerd — nooit via `save_job`).
   Daarnaast twee **observerende** velden — `current_fase` + `current_fase_sinds` — die de fijnmazige
   functiestap binnen een `*-runt`/`bouwt`-state tonen (bv. `llm-generatie`, `verwijzingen-volgen`,
   `brongetrouwheid-check`). Dit is **geen** state-machine-veld: het staat los van de state-CAS en heeft
@@ -134,19 +140,21 @@ uv run pytest -q               # unit-tests (fakes; geen netwerk)
 uv run --env-file .env --extra llm python scripts/spike_fase0.py BWBR0004770 9 1
 ```
 
-**Geen vrije model-string vanuit de client**: kies een `model_profile` (benoemd, beheerd in Mongo via
+**Geen vrije model-string vanuit de client**: kies een `model_profile` (benoemd, beheerd in de DB via
 `/v1/admin/profiles` of het `/beheer`-scherm in de frontend); het feitelijk gebruikte model wordt per
-ronde in de `provenance` van het `Project`-document vastgelegd (audit). De env-`LLM_*`-waarden seeden
+ronde in de `provenance` van de `projects`-rij vastgelegd (audit). De env-`LLM_*`-waarden seeden
 alleen het eerste default-profiel en blijven de fallback-key.
 
-Lokaal heb je ook een **MongoDB** nodig (de jobstore). Snel: `docker run -d -p 27017:27017 mongo:4.4`
-en laat `MONGODB_URL` op de default `mongodb://localhost:27017` staan (lokaal zonder auth).
+Lokaal heb je ook een **PostgreSQL** nodig (de jobstore). Snel:
+`docker run -d -p 5432:5432 -e POSTGRES_USER=wetsanalyse -e POSTGRES_PASSWORD=wetsanalyse -e POSTGRES_DB=wetsanalyse postgres:16`
+en zet `DATABASE_URL=postgresql+asyncpg://wetsanalyse:wetsanalyse@localhost:5432/wetsanalyse`. De
+tabellen worden bij de start aangemaakt (`db.create_all` in de lifespan).
 
 ### Lokaal met Docker
 
 Maak `api/docker-compose.override.yml` aan (gitignored) om de secrets-mount naar `./secrets` te
 verwijzen in plaats van het productiepad. Voor lokaal draaien heb je naast `llm_api_key`,
-`wettenbank_token` en `api_tokens` ook `mongodb_url`, `mongo_root_username` en `mongo_root_password`
+`wettenbank_token` en `api_tokens` ook `database_url`, `postgres_user` en `postgres_password`
 in `./secrets` nodig (zie de productie-stappen hieronder). Voor het LLM-beheer bovendien
 `admin_tokens` en `llm_config_secret` — ontbreken die, dan boot de API gewoon, maar geeft
 `/v1/admin/*` 401 (geen admin-tokens) en kun je geen API-key via de UI opslaan (geen master key):
@@ -156,24 +164,24 @@ services:
   wetsanalyse-api:
     volumes:
       - ./secrets:/run/secrets:ro
-  mongo:
+  postgres:
     volumes:
       - ./secrets:/run/secrets:ro
 ```
 
 Daarna: `docker compose up --build` vanuit `api/`. Er is geen `analyses/`-volume meer — de jobstore
-is MongoDB.
+is PostgreSQL.
 
 ## Deployment
 
 Docker-image + Portainer-stack achter NPM, net als de MCP (`docker-compose.yml`). De dienst is
-**horizontaal schaalbaar**: state-transities lopen via een atomaire **Mongo state-CAS** (`store.claim`),
-dus `--workers >1` en `deploy.replicas >1` zijn veilig. Een geclaimde job draagt een `owner` +
-`lease_until`; de owner houdt de lease vers (heartbeat) en schrijft fenced (alleen zolang hij de job
-bezit), en een periodieke **reaper** ruimt jobs met een verlopen lease op (crashende worker → job
-naar `fout`, herstelbaar via `retry`). Knoppen: `WETSANALYSE_LEASE_S` (default 120) en
+**horizontaal schaalbaar**: state-transities lopen via een atomaire **state-CAS** (`store.claim`, één
+`UPDATE … RETURNING`), dus `--workers >1` en `deploy.replicas >1` zijn veilig. Een geclaimde job draagt
+een `owner` + `lease_until`; de owner houdt de lease vers (heartbeat) en schrijft fenced (alleen zolang
+hij de job bezit), en een periodieke **reaper** ruimt jobs met een verlopen lease op (crashende worker →
+job naar `fout`, herstelbaar via `retry`). Knoppen: `WETSANALYSE_LEASE_S` (default 120) en
 `WETSANALYSE_REAPER_INTERVAL_S` (default 60; 0 = uit). Kies de lease ruim langer dan de langste
-realistische staptijd. De containers draaien **non-root** en **MongoDB draait met authenticatie**. Alle secrets (LLM-key, tokens, Mongo-credentials, connection string) staan
+realistische staptijd. De containers draaien **non-root** en **PostgreSQL draait met authenticatie**. Alle secrets (LLM-key, tokens, DB-credentials, connection string) staan
 als bestanden op de host (`*_FILE`-patroon) — nooit als plain env var in de container of Portainer-UI.
 Build vanaf de **projectroot**: `docker build -f api/Dockerfile -t wetsanalyse-api .` (de image heeft de
 skill-`references/scripts` nodig). `POST /v1/projects` is async (202 + polling) — nooit synchroon achter
@@ -181,7 +189,7 @@ NPM's ~60s timeout.
 
 ### Secrets op de host (eenmalig, vóór de eerste stack-start)
 
-De stack mount één host-map op `/run/secrets` in zowel de **api**- als de **mongo**-container. Het pad
+De stack mount één host-map op `/run/secrets` in zowel de **api**- als de **postgres**-container. Het pad
 komt uit de **GitHub Actions repo-variabele `SECRETS_DIR`** (Settings → Variables → Actions); de CI
 geeft die door aan Portainer, dat `${SECRETS_DIR}` in de compose invult. **Staat de variabele leeg,
 dan gebruikt de CI een default-pad en mount je de verkeerde map** → secrets onvindbaar (zie
@@ -204,52 +212,43 @@ echo -n "admin:adm-tok"                                   | sudo tee "$SECRETS_D
 python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())" \
     | sudo tee "$SECRETS_DIR/llm_config_secret" > /dev/null
 
-# MongoDB-auth: root-credentials + de connection string die de API gebruikt.
+# PostgreSQL-auth: credentials + de connection string die de API gebruikt.
 # Hex-wachtwoord = URL-veilig (geen +/=/ die je in de connection string moet escapen).
-MONGO_USER=wetsanalyse
-MONGO_PASS="$(openssl rand -hex 24)"
-echo -n "$MONGO_USER" | sudo tee "$SECRETS_DIR/mongo_root_username" > /dev/null
-echo -n "$MONGO_PASS" | sudo tee "$SECRETS_DIR/mongo_root_password" > /dev/null
-echo -n "mongodb://$MONGO_USER:$MONGO_PASS@mongo:27017/?authSource=admin" \
-    | sudo tee "$SECRETS_DIR/mongodb_url" > /dev/null
+PG_USER=wetsanalyse
+PG_PASS="$(openssl rand -hex 24)"
+echo -n "$PG_USER" | sudo tee "$SECRETS_DIR/postgres_user" > /dev/null
+echo -n "$PG_PASS" | sudo tee "$SECRETS_DIR/postgres_password" > /dev/null
+echo -n "postgresql+asyncpg://$PG_USER:$PG_PASS@postgres:5432/wetsanalyse" \
+    | sudo tee "$SECRETS_DIR/database_url" > /dev/null
 
-# BELANGRIJK: de containers draaien non-root (mongo uid 999, api uid 10001). De bestanden zijn
+# BELANGRIJK: de containers draaien non-root (postgres uid 999, api uid 10001). De bestanden zijn
 # eigendom van je host-user, dus de container-users lezen ze alleen via de "other"-bit. Gebruik
-# 644 (NIET 600 — dat geeft "Permission denied" in de container en mongo start niet).
+# 644 (NIET 600 — dat geeft "Permission denied" in de container en postgres start niet).
 sudo chmod 755 "$SECRETS_DIR"
 sudo chmod 644 "$SECRETS_DIR"/*
 ```
 
-**Mongo-volume.** De mongo-image maakt de root-user alleen aan bij een *lege* `/data/db`. Een schone
-start is het simpelst: bestaat het `wetsanalyse-api_wetsanalyse_mongo`-volume al, verwijder het
-(`docker rm -f wetsanalyse-mongo && docker volume rm wetsanalyse-api_wetsanalyse_mongo`) zodat de
-nieuwe stack vers initialiseert mét auth. Wil je *bestaande data* behouden, maak dan eerst handmatig
-de user aan op de nog-draaiende auth-loze mongo:
-`docker exec wetsanalyse-mongo mongo admin --eval "db.createUser({user:'wetsanalyse', pwd:'<pass>', roles:[{role:'root',db:'admin'}]})"`.
+**Postgres-volume.** De postgres-image initialiseert de user/db alleen bij een *lege* data-dir. Een
+schone start is het simpelst: bestaat het `wetsanalyse-api_wetsanalyse_postgres`-volume al en wil je
+verse credentials, verwijder het dan
+(`docker rm -f wetsanalyse-postgres && docker volume rm wetsanalyse-api_wetsanalyse_postgres`). Wil je
+*bestaande data* behouden, laat dan de credentials (en daarmee de `database_url`-secret) ongewijzigd.
 
-Rotatie: pas het bestand aan en herstart (`docker restart wetsanalyse-api`); voor het Mongo-wachtwoord
-ook de user in Mongo bijwerken. CI stuurt geen geheime waarden naar Portainer — alleen niet-geheime
-config (`LLM_MODEL`, `LLM_PROVIDER`, e.d.) en de niet-geheime `SECRETS_DIR`/`MONGODB_DB`.
-
-**Mongo-versie (handmatige migratie, géén blinde bump).** De compose pint `mongo:4.4`, dat
-end-of-life is (sinds feb. 2022). Upgraden is wenselijk maar **niet** door simpelweg de tag te
-verhogen: MongoDB leest geen datafiles van twee of meer majors terug, dus een sprong 4.4 → 7.0/8.0
-laat de container crashen op het bestaande `wetsanalyse_mongo`-volume. Migreer sequentieel
-(4.4 → 5.0 → 6.0 → 7.0), per stap met `db.adminCommand({setFeatureCompatibilityVersion: "<major>"})`
-vóór de volgende stap; of, bij een lege/wegwerpbare jobstore, verwijder het volume en start vers op de
-nieuwe versie (zie "Mongo-volume" hierboven). Plan dit als losse onderhoudsactie, los van een
-code-deploy.
+Rotatie: pas het bestand aan en herstart (`docker restart wetsanalyse-api`); voor het Postgres-wachtwoord
+ook de rol in Postgres bijwerken (`ALTER ROLE wetsanalyse WITH PASSWORD '…'`) én de `database_url`-secret.
+CI stuurt geen geheime waarden naar Portainer — alleen niet-geheime config (`LLM_MODEL`, `LLM_PROVIDER`, e.d.)
+en de niet-geheime `SECRETS_DIR`.
 
 ### Troubleshooting deploy
 
 Symptoom → oorzaak:
-- **API-log: `ServerSelectionTimeoutError: localhost:27017`** — de `mongodb_url`-secret werd niet
-  gelezen (config viel terug op de default). Vrijwel altijd: `/run/secrets` wijst naar de verkeerde
+- **API-log: kan niet verbinden met `localhost:5432` / `OperationalError`** — de `database_url`-secret werd
+  niet gelezen (config viel terug op de default). Vrijwel altijd: `/run/secrets` wijst naar de verkeerde
   map → check `vars.SECRETS_DIR` en `docker inspect wetsanalyse-api --format '{{json .Mounts}}'`.
-- **Mongo-log: `/run/secrets/mongo_root_username: Permission denied`, container `unhealthy`** —
+- **Postgres-log: `/run/secrets/postgres_password: Permission denied`, container `unhealthy`** —
   secret-bestanden niet leesbaar voor uid 999/10001 → `sudo chmod 644` op de host (zie boven).
 - **Portainer stack-update HTTP 500** — meestal een container die niet start (een van bovenstaande);
-  kijk in de containerlogs (`docker logs wetsanalyse-mongo` / `wetsanalyse-api`), niet alleen in de CI.
+  kijk in de containerlogs (`docker logs wetsanalyse-postgres` / `wetsanalyse-api`), niet alleen in de CI.
 
 ## Misbruik-/kostenbeheersing
 

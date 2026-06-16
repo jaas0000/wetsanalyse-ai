@@ -15,15 +15,16 @@
 #
 # Secrets leven als bestanden op de host in SECRETS_DIR en worden via *_FILE-variabelen
 # doorgegeven (nooit als plain env var in de container of Portainer-UI):
-#   llm_api_key, wettenbank_token, api_tokens, mongodb_url,
-#   mongo_root_username, mongo_root_password,
+#   llm_api_key, wettenbank_token, api_tokens, database_url,
+#   postgres_user, postgres_password,
 #   admin_tokens (bearer voor /v1/admin/*), llm_config_secret (Fernet-key voor API-key-opslag).
-# Zie api/CLAUDE.md §"Secrets op de host" voor provisioning + de migratie van een BESTAANDE
-# (nog auth-loze) Mongo-volume — auth aanzetten op bestaande data vereist handmatige stappen.
+# Zie api/CLAUDE.md §"Secrets op de host" voor provisioning. De `database_url`-secret heeft de
+# vorm postgresql+asyncpg://<user>:<pass>@postgres:5432/wetsanalyse en gebruikt dezelfde
+# credentials als postgres_user/postgres_password.
 
-# Horizontaal schaalbaar: het concurrency-model is een atomaire Mongo state-CAS (geen in-process
-# lock meer), dus `deploy.replicas > 1` is veilig. Elke replica/worker krijgt een eigen owner-id;
-# een lease + reaper ruimt jobs van een gecrashte replica op. Stel evt. WETSANALYSE_LEASE_S /
+# Horizontaal schaalbaar: het concurrency-model is een atomaire state-CAS (geen in-process lock),
+# dus `deploy.replicas > 1` is veilig. Elke replica/worker krijgt een eigen owner-id; een lease +
+# reaper ruimt jobs van een gecrashte replica op. Stel evt. WETSANALYSE_LEASE_S /
 # WETSANALYSE_REAPER_INTERVAL_S in.
 services:
   wetsanalyse-api:
@@ -46,8 +47,7 @@ services:
       LLM_OUTPUT_STRATEGY: ${LLM_OUTPUT_STRATEGY:-prompt_and_parse}
       # Master key voor versleuteling-at-rest van via de admin-UI opgeslagen API-keys.
       LLM_CONFIG_SECRET_FILE: /run/secrets/llm_config_secret
-      MONGODB_URL_FILE: /run/secrets/mongodb_url
-      MONGODB_DB: wetsanalyse
+      DATABASE_URL_FILE: /run/secrets/database_url
       # Cross-origin browser-toegang: leeg = uit (default). De BFF praat server→server en heeft
       # dit niet nodig; zet alleen als een browser-origin de API rechtstreeks moet aanroepen.
       CORS_ORIGINS: ${CORS_ORIGINS:-}
@@ -56,7 +56,7 @@ services:
     networks:
       - proxy
     depends_on:
-      mongo:
+      postgres:
         condition: service_healthy
     # Resource-limieten: begrenzen een ontspoorde worker zodat één container de host niet leegtrekt.
     mem_limit: 1g
@@ -72,32 +72,32 @@ services:
       retries: 3
       start_period: 15s
 
-  mongo:
-    image: mongo:4.4
-    container_name: wetsanalyse-mongo
+  postgres:
+    image: postgres:16
+    container_name: wetsanalyse-postgres
     restart: unless-stopped
-    # Authenticatie aan: de root-credentials komen uit secret-bestanden (niet als plain env).
-    # De API verbindt met dezelfde credentials via MONGODB_URL (secret).
+    # De credentials komen uit secret-bestanden (niet als plain env). De API verbindt met
+    # dezelfde credentials via de DATABASE_URL-secret (host = `postgres`, db = wetsanalyse).
     environment:
-      MONGO_INITDB_ROOT_USERNAME_FILE: /run/secrets/mongo_root_username
-      MONGO_INITDB_ROOT_PASSWORD_FILE: /run/secrets/mongo_root_password
+      POSTGRES_USER_FILE: /run/secrets/postgres_user
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+      POSTGRES_DB: wetsanalyse
     volumes:
-      - wetsanalyse_mongo:/data/db
+      - wetsanalyse_postgres:/var/lib/postgresql/data
       - ${SECRETS_DIR:-/opt/secrets/wetsanalyse-api}:/run/secrets:ro
     networks:
       - proxy
-    # Ruimere limieten dan de API: Mongo houdt connectie-/achtergrondthreads aan.
     mem_limit: 2g
     pids_limit: 512
     healthcheck:
-      test: ["CMD", "mongo", "--eval", "db.adminCommand({'ping':1})"]
+      test: ["CMD-SHELL", "pg_isready -U \"$$(cat /run/secrets/postgres_user)\" -d wetsanalyse"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 10s
 
 volumes:
-  wetsanalyse_mongo:
+  wetsanalyse_postgres:
 
 networks:
   proxy:

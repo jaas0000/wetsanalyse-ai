@@ -15,7 +15,7 @@ een webapp of Teams-client.
 | **wettenbank-MCP** | Databron — haalt actuele wettekst op; wordt intern aangeroepen door de API |
 | **wetsanalyse-skill** | Inhoudelijke referentie — de API hergebruikt exact dezelfde `references/` en `scripts/` |
 | **wetsanalyse-api** *(deze map)* | HTTP-harness — biedt de werkstroom aan als async REST-API |
-| **MongoDB** | Jobstore — één document per analyse (state + embedded rondes/feedback/rapport) |
+| **PostgreSQL** | Jobstore — `projects`-rij per analyse (state + telemetrie + rapport) + aparte `rondes`-tabel |
 
 ## Endpoints
 
@@ -37,7 +37,7 @@ Alle analyse-endpoints zijn client-gescopet (alleen je eigen analyses) en versio
 | `GET` | `/v1/profiles` | Keuzelijst modelprofielen (alleen naam + default; client-auth, geen geheimen) |
 | `GET` | `/v1/wetten` | Keuzelijst wetten (BWB-id + naam; client-auth) voor de dropdown |
 | `GET` | `/health` | Liveness check |
-| `GET` | `/ready` | Readiness check (booleans: auth, LLM, MCP, MongoDB geconfigureerd) |
+| `GET` | `/ready` | Readiness check (booleans: auth, LLM, MCP, database geconfigureerd) |
 
 Admin-endpoints (LLM-beheer) achter een **apart admin-token**, onder `/v1/admin`:
 
@@ -58,7 +58,7 @@ Swagger-UI beschikbaar op `/docs`.
 
 ## Model-profielen (welk LLM)
 
-De LLM-configuratie leeft in **benoemde modelprofielen** in MongoDB, niet in losse env-vars:
+De LLM-configuratie leeft in **benoemde modelprofielen** in de database, niet in losse env-vars:
 provider, model, endpoint, temperatuur en een versleutelde API-key. Beheer ze via de admin-endpoints
 hierboven of het `/beheer`-scherm in de [frontend](../frontend). Een analyse kiest een profiel op naam
 (`model_profile` in het verzoek; governance: geen vrije model-string), en de engine bouwt per analyse
@@ -115,8 +115,9 @@ mkdir api\secrets
 
 # 2. .env aanmaken (kopieer .env.example en vul in)
 
-# 3. MongoDB draaien (de jobstore) — lokaal zonder auth
-docker run -d -p 27017:27017 --name wetsanalyse-mongo-lokaal mongo:4.4
+# 3. PostgreSQL draaien (de jobstore)
+docker run -d -p 5432:5432 --name wetsanalyse-postgres-lokaal \
+  -e POSTGRES_USER=wetsanalyse -e POSTGRES_PASSWORD=wetsanalyse -e POSTGRES_DB=wetsanalyse postgres:16
 
 # 4. Server starten (--env-file is verplicht)
 cd api
@@ -124,7 +125,8 @@ uv sync --extra llm --extra dev
 uv run --env-file .env uvicorn app.main:app --reload --port 3000
 ```
 
-Lokaal staat `MONGODB_URL` op de default `mongodb://localhost:27017` (geen auth nodig).
+Zet `DATABASE_URL=postgresql+asyncpg://wetsanalyse:wetsanalyse@localhost:5432/wetsanalyse` in `.env`;
+de tabellen worden bij de start aangemaakt.
 
 Zie `CLAUDE.md` voor de volledige opstapinstructies, Azure AI Foundry-config en
 productie-deployment via Docker/Portainer.

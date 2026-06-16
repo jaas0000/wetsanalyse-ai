@@ -1,7 +1,7 @@
 """Rapportbouw — twee varianten:
 
   bouw_rapport(werk, ...)      — filesystem-variant voor de lokale skill-flow
-  bouw_rapport_async(store, ..) — MongoDB-variant voor de API (geen filesystem-afhankelijkheid)
+  bouw_rapport_async(store, ..) — store-variant voor de API (geen filesystem-afhankelijkheid)
 
 We roepen het script NIET als subprocess of via main() aan: dat doet sys.exit() bij fouten en
 zou de FastAPI-worker killen.
@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING
 from .validation import _load_skill_module
 
 if TYPE_CHECKING:
-    from .mongo_store import MongoStore
+    from .jobstore import JobStore
 
 _build = _load_skill_module("build_rapport_json")
 laatste_ronde = _build.laatste_ronde
@@ -76,13 +76,13 @@ def bouw_rapport(
 
 
 async def bouw_rapport_async(
-    store: "MongoStore",
+    store: "JobStore",
     job_id: str,
     reviewlog_act2: str = "",
     reviewlog_act3: str = "",
     aandachtspunten: str = "",
 ) -> dict:
-    """Rapportbouw direct uit MongoDB — gebruikt door de API-orchestrator."""
+    """Rapportbouw direct uit de jobstore — gebruikt door de API-orchestrator."""
     n2 = await store.hoogste_ronde(job_id, "2")
     n3 = await store.hoogste_ronde(job_id, "3")
     a2 = await store.lees_analyse(job_id, "2", n2) or {}

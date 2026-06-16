@@ -39,17 +39,20 @@ RUN apt-get update \
     && apt-get upgrade -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
-# Non-root gebruiker (uid 10002, naast api=10001 en mongo=999).
-RUN groupadd --system --gid 10002 nodeapp \
-    && useradd --system --uid 10002 --gid nodeapp nodeapp
+# Non-root + OpenShift-proof: lid van groep 0 i.p.v. een eigen gid. OpenShift restricted-v2 draait
+# met een WILLEKEURIGE UID + gid 0, dus de bestanden zijn groep-root-eigendom met groep=gebruiker-
+# rechten en de toegewezen UID kan lezen/uitvoeren. USER 10002 blijft de default (compose).
+RUN useradd --no-create-home --uid 10002 --gid 0 nodeapp
 
 # Standalone-server + statische assets. .next/static en public worden niet door de
-# standalone-tracer meegekopieerd, dus expliciet plaatsen.
-COPY --from=builder --chown=nodeapp:nodeapp /app/.next/standalone ./
-COPY --from=builder --chown=nodeapp:nodeapp /app/.next/static ./.next/static
-COPY --from=builder --chown=nodeapp:nodeapp /app/public ./public
+# standalone-tracer meegekopieerd, dus expliciet plaatsen. Groep-root-eigendom + g=u.
+COPY --from=builder --chown=10002:0 /app/.next/standalone ./
+COPY --from=builder --chown=10002:0 /app/.next/static ./.next/static
+COPY --from=builder --chown=10002:0 /app/public ./public
+RUN chgrp -R 0 /app && chmod -R g=u /app
 
-USER nodeapp
+ENV HOME=/tmp
+USER 10002
 
 EXPOSE 3000
 

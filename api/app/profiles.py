@@ -1,4 +1,4 @@
-"""Service-laag over de LLM-modelprofielen in MongoDB.
+"""Service-laag over de LLM-modelprofielen in de database.
 
 Verantwoordelijkheden:
   - CRUD + default-beheer voor `LlmProfile` (gebruikt door de admin-router).
@@ -12,9 +12,12 @@ De plaintext-API-key blijft binnen deze laag (en de adapter); admin-responses to
 
 from __future__ import annotations
 
+from sqlalchemy import delete, func, insert, select, update
+
+from . import db
 from .config import Settings, get_settings
 from .llm.base import LlmConfig
-from .llm_profile import LlmProfile
+from .llm_profile import LlmProfile, _utcnow
 from .secrets_crypto import decrypt, encrypt
 
 
@@ -22,24 +25,59 @@ class ProfileError(ValueError):
     """Ongeldige profiel-operatie (onbekend profiel, laatste/default verwijderen, e.d.)."""
 
 
+def _row_to_profile(row) -> LlmProfile:
+    m = dict(row)
+    return LlmProfile(
+        name=m["name"],
+        provider=m["provider"],
+        model=m["model"] or "",
+        api_base=m["api_base"] or "",
+        api_version=m["api_version"],
+        output_strategy=m["output_strategy"],
+        temperature=m["temperature"],
+        enc_api_key=m["enc_api_key"],
+        is_default=m["is_default"],
+        updated_by=m["updated_by"] or "",
+        created=db.aware(m["created"]),
+        updated=db.aware(m["updated"]),
+    )
+
+
 # --- lezen ---------------------------------------------------------------------
 
 async def list_profiles() -> list[LlmProfile]:
-    return await LlmProfile.find_all().sort("name").to_list()
+    async with db.get_engine().connect() as conn:
+        rows = (await conn.execute(
+            select(db.llm_profiles).order_by(db.llm_profiles.c.name)
+        )).mappings().all()
+    return [_row_to_profile(r) for r in rows]
 
 
 async def get_profile(name: str) -> LlmProfile | None:
-    return await LlmProfile.find_one(LlmProfile.name == name)
+    async with db.get_engine().connect() as conn:
+        row = (await conn.execute(
+            select(db.llm_profiles).where(db.llm_profiles.c.name == name)
+        )).mappings().first()
+    return _row_to_profile(row) if row is not None else None
 
 
 async def get_default() -> LlmProfile | None:
-    return await LlmProfile.find_one(LlmProfile.is_default == True)  # noqa: E712
+    async with db.get_engine().connect() as conn:
+        row = (await conn.execute(
+            select(db.llm_profiles).where(db.llm_profiles.c.is_default.is_(True))
+        )).mappings().first()
+    return _row_to_profile(row) if row is not None else None
 
 
 async def ensure_exists(name: str) -> None:
     """Werp ProfileError als het profiel niet bestaat (voor request-validatie → 400)."""
     if await get_profile(name) is None:
         raise ProfileError(f"Onbekend model_profile: {name!r}")
+
+
+async def _count() -> int:
+    async with db.get_engine().connect() as conn:
+        return (await conn.execute(select(func.count()).select_from(db.llm_profiles))).scalar() or 0
 
 
 # --- resolutie naar een LlmConfig ----------------------------------------------
@@ -95,8 +133,6 @@ async def upsert_profile(
     """Maak of werk een profiel bij. Een veld dat `None` is blijft ongewijzigd (PATCH-semantiek).
     Een leeg/None `api_key` laat de bestaande versleutelde key staan; vullen vervangt 'm
     (versleuteld). Het allereerste profiel wordt automatisch default."""
-    from .llm_profile import _utcnow
-
     profile = await get_profile(name)
     is_new = profile is None
     if profile is None:
@@ -121,12 +157,30 @@ async def upsert_profile(
     profile.updated = _utcnow()
 
     # Eerste profiel is altijd default; expliciet default zetten wist eerst elke andere default.
-    geen_profielen = is_new and await LlmProfile.find_all().count() == 0
+    geen_profielen = is_new and await _count() == 0
     if is_default or geen_profielen:
-        await _clear_default()
         profile.is_default = True
 
-    await profile.save()
+    async with db.get_engine().begin() as conn:
+        if profile.is_default:
+            await conn.execute(
+                update(db.llm_profiles).where(db.llm_profiles.c.is_default.is_(True))
+                .values(is_default=False)
+            )
+        waarden = dict(
+            provider=profile.provider, model=profile.model, api_base=profile.api_base,
+            api_version=profile.api_version, output_strategy=profile.output_strategy,
+            temperature=profile.temperature, enc_api_key=profile.enc_api_key,
+            is_default=profile.is_default, updated_by=profile.updated_by, updated=profile.updated,
+        )
+        if is_new:
+            await conn.execute(insert(db.llm_profiles).values(
+                name=profile.name, created=profile.created, **waarden
+            ))
+        else:
+            await conn.execute(
+                update(db.llm_profiles).where(db.llm_profiles.c.name == name).values(**waarden)
+            )
     return profile
 
 
@@ -134,10 +188,16 @@ async def set_default(name: str) -> LlmProfile:
     profile = await get_profile(name)
     if profile is None:
         raise ProfileError(f"Onbekend model_profile: {name!r}")
-    await _clear_default()
+    async with db.get_engine().begin() as conn:
+        await conn.execute(
+            update(db.llm_profiles).where(db.llm_profiles.c.is_default.is_(True))
+            .values(is_default=False)
+        )
+        await conn.execute(
+            update(db.llm_profiles).where(db.llm_profiles.c.name == name)
+            .values(is_default=True, updated=_utcnow())
+        )
     profile.is_default = True
-    profile.touch()
-    await profile.save()
     return profile
 
 
@@ -147,33 +207,30 @@ async def delete_profile(name: str) -> None:
         raise ProfileError(f"Onbekend model_profile: {name!r}")
     if profile.is_default:
         raise ProfileError("Kan het default-profiel niet verwijderen; wijs eerst een ander aan.")
-    await profile.delete()
-
-
-async def _clear_default() -> None:
-    # Eén bulk-update i.p.v. document-voor-document opslaan: zet elke huidige default in één
-    # DB-operatie uit, zodat twee gelijktijdige default-wissels geen dubbele default achterlaten.
-    await LlmProfile.find(LlmProfile.is_default == True).update(  # noqa: E712
-        {"$set": {"is_default": False}}
-    )
+    async with db.get_engine().begin() as conn:
+        await conn.execute(delete(db.llm_profiles).where(db.llm_profiles.c.name == name))
 
 
 # --- seeding -------------------------------------------------------------------
 
 async def ensure_seeded(settings: Settings | None = None) -> None:
     """Seed bij de eerste start één default-profiel uit de env-waarden (idempotent)."""
-    if await LlmProfile.find_all().count() > 0:
+    if await _count() > 0:
         return
     s = settings or get_settings()
-    await LlmProfile(
-        name=s.default_model_profile,
-        provider=s.llm_provider,
-        model=s.llm_model,
-        api_base=s.llm_api_base,
-        api_version=s.llm_api_version,
-        output_strategy=s.llm_output_strategy,
-        temperature=s.llm_temperature,
-        # Geen enc_api_key: resolve_config valt terug op de env/secret-key.
-        is_default=True,
-        updated_by="seed",
-    ).insert()
+    now = _utcnow()
+    async with db.get_engine().begin() as conn:
+        await conn.execute(insert(db.llm_profiles).values(
+            name=s.default_model_profile,
+            provider=s.llm_provider,
+            model=s.llm_model,
+            api_base=s.llm_api_base,
+            api_version=s.llm_api_version,
+            output_strategy=s.llm_output_strategy,
+            temperature=s.llm_temperature,
+            # Geen enc_api_key: resolve_config valt terug op de env/secret-key.
+            is_default=True,
+            updated_by="seed",
+            created=now,
+            updated=now,
+        ))

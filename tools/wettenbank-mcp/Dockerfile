@@ -52,7 +52,12 @@ COPY --from=builder /app/dist ./dist
 # Node de keten compleet, zonder TLS-verificatie uit te zetten. Zie certs/-bestand.
 COPY certs ./certs
 
-# Draai als de non-root `node`-gebruiker uit de base image.
+# Non-root + OpenShift-proof: maak /app groep-root-eigendom met groep=gebruiker-rechten, zodat de
+# door OpenShift toegewezen WILLEKEURIGE UID (lid van groep 0) de code/certs kan lezen. HOME=/tmp
+# (read_only root-fs + tmpfs/emptyDir). USER node (uid 1000) blijft de default voor compose;
+# OpenShift overschrijft 'm met de namespace-UID.
+RUN chgrp -R 0 /app && chmod -R g=u /app
+ENV HOME=/tmp
 USER node
 
 EXPOSE 3000

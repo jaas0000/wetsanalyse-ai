@@ -1,0 +1,84 @@
+# Namespace-scoped microsegmentatie: default-deny ingress + expliciete allows. Egress blijft open
+# (de API/MCP moeten naar externe upstreams: Azure AI, overheid.nl). LET OP: de namespaceSelector-
+# label van de router (`policy-group.network.openshift.io/ingress`) kan per cluster verschillen —
+# controleer met `oc get ns openshift-ingress --show-labels` en pas zo nodig aan.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+spec:
+  podSelector: {}
+  policyTypes: ["Ingress"]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-router-to-frontend
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: wetsanalyse-frontend
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              policy-group.network.openshift.io/ingress: ""
+      ports:
+        - protocol: TCP
+          port: 3000
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-frontend-to-api
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: wetsanalyse-api
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: wetsanalyse-frontend
+      ports:
+        - protocol: TCP
+          port: 3000
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-api-to-mcp
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: wettenbank-mcp
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: wetsanalyse-api
+      ports:
+        - protocol: TCP
+          port: 3000
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-api-to-db
+spec:
+  # CNPG labelt zijn pods met cnpg.io/cluster: <clusternaam>.
+  podSelector:
+    matchLabels:
+      cnpg.io/cluster: wetsanalyse-db
+  policyTypes: ["Ingress"]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: wetsanalyse-api
+      ports:
+        - protocol: TCP
+          port: 5432

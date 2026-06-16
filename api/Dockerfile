@@ -46,14 +46,21 @@ ENV PATH="/app/api/.venv/bin:$PATH" \
 
 EXPOSE 3000
 
-# Non-root: de service schrijft niet naar de filesystem (jobstore = MongoDB); read-only code volstaat.
-RUN useradd --create-home --uid 10001 appuser
-USER appuser
+# Non-root + OpenShift-proof: de service schrijft niet naar de filesystem (jobstore = PostgreSQL).
+# OpenShift restricted-v2 draait de container met een WILLEKEURIGE UID + gid 0 (niet per se 10001),
+# dus maken we /app groep-root-eigendom met groep=gebruiker-rechten — de toegewezen UID (lid van
+# groep 0) kan dan lezen/uitvoeren. HOME=/tmp zodat eventuele home-caches naar een schrijfbare
+# (emptyDir/tmpfs) plek gaan i.p.v. een niet-schrijfbare root-fs. USER 10001 blijft de default
+# (compose); OpenShift overschrijft 'm met de namespace-UID.
+RUN useradd --no-create-home --uid 10001 --gid 0 appuser \
+    && chgrp -R 0 /app && chmod -R g=u /app
+ENV HOME=/tmp
+USER 10001
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:3000/health').status==200 else 1)"
 
-# Conservatieve default van één worker. Het concurrency-model is een atomaire Mongo state-CAS
-# (geen in-process lock meer), dus `--workers >1` en meerdere replica's zijn veilig — verhoog dit
+# Conservatieve default van één worker. Het concurrency-model is een atomaire state-CAS
+# (geen in-process lock), dus `--workers >1` en meerdere replica's zijn veilig — verhoog dit
 # gerust voor horizontaal schalen (elke worker krijgt een eigen owner-id + reaper).
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "3000", "--workers", "1"]

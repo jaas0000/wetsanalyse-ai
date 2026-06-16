@@ -85,16 +85,18 @@ class Settings:
         self.llm_config_secret = _read_secret("LLM_CONFIG_SECRET")
 
         # Benoemde profielen → geen vrije model-string vanuit de client (governance).
-        # De profielen leven in MongoDB (beheerbaar via /v1/admin/profiles); de env-waarden
+        # De profielen leven in de database (beheerbaar via /v1/admin/profiles); de env-waarden
         # hierboven seeden bij de eerste start één default-profiel (zie app/profiles.py) en
         # blijven de fallback wanneer een profiel geen eigen API-key heeft.
         self.default_model_profile = os.environ.get("LLM_DEFAULT_PROFILE", "azure-sonnet")
 
-        # --- MongoDB ---
-        # Connection string via secret (MONGODB_URL_FILE) zodat ingebedde credentials niet als
-        # plain env in de container/Portainer-UI staan; valt terug op MONGODB_URL voor lokaal.
-        self.mongodb_url = _read_secret("MONGODB_URL") or "mongodb://localhost:27017"
-        self.mongodb_db = os.environ.get("MONGODB_DB", "wetsanalyse")
+        # --- Database (PostgreSQL via SQLAlchemy async; asyncpg-driver) ---
+        # Connection string via secret (DATABASE_URL_FILE) zodat ingebedde credentials niet als
+        # plain env in de container staan; valt terug op DATABASE_URL voor lokaal. In productie
+        # levert de CloudNativePG-operator deze secret aan. Vorm: postgresql+asyncpg://user:pw@host:5432/db
+        self.database_url = (
+            _read_secret("DATABASE_URL") or "postgresql+asyncpg://localhost:5432/wetsanalyse"
+        )
 
         # --- CORS ---
         # Default leeg = geen cross-origin browser-toegang (veilig). De BFF/clients praten
@@ -122,7 +124,7 @@ class Settings:
         # 0 = uit. Voorkomt dat veel gelijktijdige analyses samen tegen de provider-quota knallen.
         self.llm_max_concurrency = int(os.environ.get("WETSANALYSE_LLM_MAX_CONCURRENCY", "4"))
 
-        # --- Concurrency (Mongo state-CAS, horizontaal schalen) ---
+        # --- Concurrency (state-CAS, horizontaal schalen) ---
         # Een claim op een job is geldig voor lease_s; de owner verlengt 'm via een heartbeat.
         # Verloopt de lease (worker weg/gecrasht), dan mag de reaper de job opruimen. Kies ruim
         # langer dan de langste realistische stap; de heartbeat tikt op lease_s/2. Reaper-interval

@@ -1,4 +1,4 @@
-"""Beanie Document voor een wet in de selecteerbare catalogus (BWB-id + leesbare naam).
+"""Domeinmodel voor een wet in de selecteerbare catalogus (plain Pydantic; persistentie via de store).
 
 De catalogus is een gemak voor de UI: het analyseformulier toont een dropdown van geregistreerde
 wetten zodat je geen rauwe BWB-id hoeft in te typen. Hij is *niet* dwingend — een willekeurige
@@ -12,16 +12,14 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from beanie import Document
-from pydantic import Field
-from pymongo import ASCENDING, IndexModel
+from pydantic import BaseModel, Field
 
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
-class WetCatalogus(Document):
+class WetCatalogus(BaseModel):
     bwbId: str
     naam: str = ""
 
@@ -31,9 +29,3 @@ class WetCatalogus(Document):
 
     def touch(self) -> None:
         self.updated = _utcnow()
-
-    class Settings:
-        name = "wet_catalogus"
-        indexes = [
-            IndexModel([("bwbId", ASCENDING)], unique=True),
-        ]
