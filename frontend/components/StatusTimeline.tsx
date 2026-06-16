@@ -60,6 +60,6 @@ export function StatusTimeline({ job }: { job: Job }) {
 
 function Spinner() {
   return (
-    <span className="block h-3 w-3 animate-spin rounded-full border-[1.5px] border-accent border-t-transparent" />
+    <span className="block h-3 w-3 animate-spin motion-reduce:animate-none rounded-full border-[1.5px] border-accent border-t-transparent motion-reduce:border-t-accent motion-reduce:opacity-60" />
   );
 }
