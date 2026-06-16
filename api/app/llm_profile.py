@@ -1,6 +1,6 @@
-"""Beanie Document voor een benoemd LLM-modelprofiel.
+"""Domeinmodel voor een benoemd LLM-modelprofiel (plain Pydantic; persistentie via de store).
 
-Profielen vervangen de vroegere hardcoded `Settings.model_profiles`: ze leven in MongoDB en
+Profielen vervangen de vroegere hardcoded `Settings.model_profiles`: ze leven in de database en
 zijn beheerbaar via /v1/admin/profiles (geen redeploy nodig). De client kiest een profiel op
 naam (governance: geen vrije model-string); het gekozen profiel stuurt het feitelijke model
 aan (zie app/profiles.py → app/engine/orchestrator.py).
@@ -13,16 +13,14 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from beanie import Document
-from pydantic import Field
-from pymongo import ASCENDING, IndexModel
+from pydantic import BaseModel, Field
 
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
-class LlmProfile(Document):
+class LlmProfile(BaseModel):
     name: str
     provider: str = "azure_ai"
     model: str = ""
@@ -40,9 +38,3 @@ class LlmProfile(Document):
 
     def touch(self) -> None:
         self.updated = _utcnow()
-
-    class Settings:
-        name = "llm_profiles"
-        indexes = [
-            IndexModel([("name", ASCENDING)], unique=True),
-        ]

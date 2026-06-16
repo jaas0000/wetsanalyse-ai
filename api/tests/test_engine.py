@@ -2,9 +2,11 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from app.contracts import Feedback, JobState, StartRequest
+from sqlalchemy import update
+
+from app import db
+from app.contracts import Feedback, Job, JobState, StartRequest
 from app.engine.orchestrator import WetsanalyseEngine
-from app.project import Project
 from app.wettenbank import WettenbankError
 
 from conftest import FakeLLM, FakeWettenbank
@@ -12,6 +14,15 @@ from conftest import FakeLLM, FakeWettenbank
 
 def _start_req(review: bool) -> StartRequest:
     return StartRequest(bwbId="BWBR9999999", artikel="1", review=review)
+
+
+async def _set_lease(slug: str, owner: str | None, lease_until) -> None:
+    """Test-helper: zet owner/lease_until direct (save_job beheert die velden bewust niet)."""
+    async with db.get_engine().begin() as conn:
+        await conn.execute(
+            update(db.projects).where(db.projects.c.slug == slug)
+            .values(owner=owner, lease_until=lease_until)
+        )
 
 
 async def test_autonoom_loopt_door_tot_klaar(engine, store):
@@ -194,10 +205,10 @@ async def test_reaper_ruimt_verlopen_lease_op(engine, store):
     een verse lease blijft ongemoeid."""
     verleden = datetime.now(timezone.utc) - timedelta(seconds=1)
     toekomst = datetime.now(timezone.utc) + timedelta(seconds=120)
-    await Project(slug="verweesd", state=JobState.act3_runt, current_activiteit="3",
-                  owner="dode-worker", lease_until=verleden).insert()
-    await Project(slug="levend", state=JobState.act2_runt,
-                  owner="levende-worker", lease_until=toekomst).insert()
+    await store.save_job(Job(id="verweesd", state=JobState.act3_runt, current_activiteit="3"))
+    await _set_lease("verweesd", "dode-worker", verleden)
+    await store.save_job(Job(id="levend", state=JobState.act2_runt))
+    await _set_lease("levend", "levende-worker", toekomst)
 
     await engine.reap_once()
 
@@ -210,7 +221,7 @@ async def test_reaper_ruimt_verlopen_lease_op(engine, store):
 async def test_reconcile_markeert_lease_loze_runtjob(engine, store):
     """Migratie-vangnet: een runt-job zónder lease (pre-upgrade) wordt door reconcile gemarkeerd
     en daarna door de reaper opgeruimd — hij hangt dus niet eeuwig."""
-    await Project(slug="pre-upgrade", state=JobState.act2_runt).insert()  # geen owner/lease
+    await store.save_job(Job(id="pre-upgrade", state=JobState.act2_runt))  # geen owner/lease
     await engine.reconcile_startup()
     await engine.reap_once()
     assert (await store.load_job("pre-upgrade")).state == JobState.fout
@@ -310,8 +321,8 @@ async def test_transiente_mcp_fout_wordt_geretryed(settings, store):
 
 
 async def test_create_job_retryt_bij_duplicate(engine, store, monkeypatch):
-    """Een DuplicateKeyError (gelijktijdige identieke aanmaak) leidt tot een nieuwe poging."""
-    from pymongo.errors import DuplicateKeyError
+    """Een IdConflict (gelijktijdige identieke aanmaak) leidt tot een nieuwe poging."""
+    from app.jobstore import IdConflict
 
     echt_insert = store.insert_job
     pogingen = {"n": 0}
@@ -319,7 +330,7 @@ async def test_create_job_retryt_bij_duplicate(engine, store, monkeypatch):
     async def flaky_insert(job):
         pogingen["n"] += 1
         if pogingen["n"] == 1:
-            raise DuplicateKeyError("E11000 duplicate key")
+            raise IdConflict("slug bestaat al")
         await echt_insert(job)
 
     monkeypatch.setattr(store, "insert_job", flaky_insert)
@@ -329,12 +340,10 @@ async def test_create_job_retryt_bij_duplicate(engine, store, monkeypatch):
 
 
 async def test_create_job_uitputting_werpt_idconflict(engine, store, monkeypatch):
-    from pymongo.errors import DuplicateKeyError
-
     from app.jobstore import IdConflict
 
     async def altijd_duplicate(job):
-        raise DuplicateKeyError("E11000 duplicate key")
+        raise IdConflict("slug bestaat al")
 
     monkeypatch.setattr(store, "insert_job", altijd_duplicate)
     with pytest.raises(IdConflict):

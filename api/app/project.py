@@ -1,7 +1,9 @@
-"""Beanie Document voor een analyse-project — alle artefacten embedded.
+"""Domeinmodel voor een analyse-project (plain Pydantic; persistentie via app/db.py + de store).
 
-Één document per project bevat de state-machine én alle gegenereerde artefacten
-(rondes, rapport). De 16MB BSON-limiet is ruim voor wetsartikelen.
+Eén project draagt de state-machine + de afgeleide telemetrie. De gegenereerde artefacten
+(rondes, feedback) staan in de aparte `rondes`-tabel en het eindrapport in een JSON-kolom; de
+store vult `rapport` bij het laden en laat `rondes` leeg (consumenten lezen rondes uitsluitend via
+de store-methoden, nooit via dit attribuut).
 """
 
 from __future__ import annotations
@@ -9,8 +11,6 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Literal
 
-from beanie import Document
-from pymongo import ASCENDING, DESCENDING, IndexModel
 from pydantic import BaseModel, Field
 
 from .contracts import JobFout, JobState, RondeProvenance
@@ -25,7 +25,7 @@ class RondeData(BaseModel):
     feedback: dict | None = None
 
 
-class Project(Document):
+class Project(BaseModel):
     slug: str
     naam: str = ""
     omschrijving: str = ""
@@ -43,17 +43,17 @@ class Project(Document):
     current_ronde: int = 0
     # Observerend, voor het live dashboard: de fijnmazige fase BINNEN een runt/bouwt-state
     # (bijv. "llm-generatie", "verwijzingen-volgen"). Bewust géén state-machine-veld — alleen
-    # via MongoStore.set_current_fase geschreven (zie _STATE_FIELDS in mongo_store.py), zodat
-    # fase-tikken de state-CAS en de updated-sortering niet raken. None buiten een runt/bouwt.
+    # via store.set_current_fase geschreven, zodat fase-tikken de state-CAS en de
+    # updated-sortering niet raken. None buiten een runt/bouwt.
     current_fase: str | None = None
     current_fase_sinds: datetime | None = None
     waarschuwingen: list[str] = Field(default_factory=list)
     error: JobFout | None = None
     provenance: list[RondeProvenance] = Field(default_factory=list)
 
-    # Concurrency: alleen beheerd via MongoStore.claim() en de lease-heartbeat — NOOIT via
-    # save_job (zie _STATE_FIELDS). owner = per-proces id van de worker die de job verwerkt;
-    # lease_until = tot wanneer die claim geldig is (verloopt → de reaper mag de job opruimen).
+    # Concurrency: alleen beheerd via store.claim() en de lease-heartbeat — NOOIT via save_job.
+    # owner = per-proces id van de worker die de job verwerkt; lease_until = tot wanneer die
+    # claim geldig is (verloopt → de reaper mag de job opruimen).
     owner: str | None = None
     lease_until: datetime | None = None
 
@@ -86,13 +86,3 @@ class Project(Document):
             created=self.created.isoformat(),
             updated=self.updated.isoformat(),
         )
-
-    class Settings:
-        name = "projects"
-        indexes = [
-            IndexModel([("slug", ASCENDING)], unique=True),
-            IndexModel([("state", ASCENDING)]),
-            IndexModel([("updated", DESCENDING)]),
-            # Reaper-query: runt-jobs met een verlopen lease.
-            IndexModel([("state", ASCENDING), ("lease_until", ASCENDING)]),
-        ]

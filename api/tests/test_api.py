@@ -1,15 +1,11 @@
-"""API-integratie-tests — geen engine/LLM, wel MongoDB (mongomock-motor)."""
+"""API-integratie-tests — geen engine/LLM, wel een database (in-memory SQLite)."""
 
 from __future__ import annotations
 
-import mongomock_motor
 import pytest
-from beanie import init_beanie
 from httpx import ASGITransport, AsyncClient
 
 from app.contracts import Job, JobState
-from app.mongo_store import MongoStore
-from app.project import Project
 
 
 @pytest.fixture
@@ -18,16 +14,17 @@ async def client(monkeypatch):
 
     from app.config import get_settings
     from app.deps import get_store
-    from app import ratelimit
+    from app import db, ratelimit
+    from app.postgres_store import PostgresStore
     get_settings.cache_clear()
     get_store.cache_clear()
     ratelimit.reset()  # globale rate-limit-staat niet laten lekken tussen tests
 
-    mock_mongo = mongomock_motor.AsyncMongoMockClient()
-    await init_beanie(database=mock_mongo["test"], document_models=[Project])
+    db.init_engine("sqlite+aiosqlite://")
+    await db.create_all()
 
     settings = get_settings()
-    store = MongoStore(settings)
+    store = PostgresStore(settings)
 
     rapport = {
         "wet": "Testwet", "artikel": "1", "leden": [], "markeringen": [],
@@ -43,16 +40,13 @@ async def client(monkeypatch):
     await store.save_job(Job(id="andermans-art1", state=JobState.klaar, bwbId="BWBR3", artikel="1", client_id="andere-client"))
     await store.schrijf_rapport("andermans-art1", rapport)
 
-    # Patch de lifespan zodat hij geen echte MongoDB-verbinding probeert op te zetten.
-    import app.main as main_module
-    monkeypatch.setattr(main_module, "AsyncIOMotorClient", lambda *a, **kw: mock_mongo)
-
     from app.main import app
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         yield ac
 
     get_settings.cache_clear()
     get_store.cache_clear()
+    await db.dispose_engine()
 
 
 async def test_health(client):

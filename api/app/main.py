@@ -6,20 +6,14 @@ from __future__ import annotations
 import asyncio
 import logging
 from contextlib import asynccontextmanager
-from datetime import timezone
 
-from beanie import init_beanie
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from motor.motor_asyncio import AsyncIOMotorClient
 
-from . import __version__
+from . import __version__, db
 from .config import get_settings
-from .deps import get_engine, get_store
-from .llm_profile import LlmProfile
-from .project import Project
+from .deps import get_engine
 from .routers import admin, catalog, projects
-from .wet_catalog import WetCatalogus
 
 logger = logging.getLogger(__name__)
 
@@ -41,15 +35,10 @@ async def lifespan(app: FastAPI):
     # Globale LLM-concurrency-rem instellen (kostenbeheersing tegen zelf-veroorzaakte rate-limits).
     from .llm import throttle
     throttle.configure(settings.llm_max_concurrency)
-    # tz_aware: pymongo geeft BSON-datetimes anders *naive* terug (UTC-waarde, tzinfo=None),
-    # waardoor `.isoformat()` een offset-loze string oplevert die de browser als lokale tijd
-    # leest — dat verschuift de "verstreken"-tijd op het dashboard met de tz-offset. Met
-    # tz_aware komen alle datetimes als UTC-aware terug en serialiseren ze met `+00:00`.
-    motor_client = AsyncIOMotorClient(settings.mongodb_url, tz_aware=True, tzinfo=timezone.utc)
-    await init_beanie(
-        database=motor_client[settings.mongodb_db],
-        document_models=[Project, LlmProfile, WetCatalogus],
-    )
+    # Async SQLAlchemy-engine + tabellen. In productie zou een migratietool (Alembic) het schema
+    # beheren; voor de beproevingsfase volstaat create_all (idempotent: alleen ontbrekende tabellen).
+    db.init_engine(settings.database_url)
+    await db.create_all()
     try:
         from . import profiles
 
@@ -70,7 +59,7 @@ async def lifespan(app: FastAPI):
             await reaper_task
         except asyncio.CancelledError:
             pass
-    motor_client.close()
+    await db.dispose_engine()
 
 
 app = FastAPI(
@@ -112,5 +101,5 @@ async def ready():
         "auth_geconfigureerd": bool(s.client_tokens) or not s.auth_required,
         "mcp_geconfigureerd": bool(s.mcp_url),
         "llm_model_gezet": bool(s.llm_model),
-        "mongodb_geconfigureerd": bool(s.mongodb_url),
+        "database_geconfigureerd": bool(s.database_url),
     }

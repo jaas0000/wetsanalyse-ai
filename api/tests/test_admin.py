@@ -2,14 +2,8 @@
 
 from __future__ import annotations
 
-import mongomock_motor
 import pytest
-from beanie import init_beanie
 from httpx import ASGITransport, AsyncClient
-
-from app.llm_profile import LlmProfile
-from app.project import Project
-from app.wet_catalog import WetCatalogus
 
 
 def _fresh_settings(monkeypatch, **env):
@@ -29,9 +23,14 @@ def _fresh_settings(monkeypatch, **env):
 
 @pytest.fixture
 async def db():
-    client = mongomock_motor.AsyncMongoMockClient()
-    await init_beanie(database=client["test"], document_models=[Project, LlmProfile, WetCatalogus])
-    return client
+    from app import db as _db
+
+    _db.init_engine("sqlite+aiosqlite://")
+    await _db.create_all()
+    try:
+        yield _db
+    finally:
+        await _db.dispose_engine()
 
 
 # --- crypto --------------------------------------------------------------------
@@ -111,17 +110,20 @@ async def test_default_wisselen_en_niet_verwijderen(monkeypatch, db):
 # --- usage ---------------------------------------------------------------------
 
 async def test_usage_aggregatie(monkeypatch, db):
-    _fresh_settings(monkeypatch)
+    s = _fresh_settings(monkeypatch)
     from app import usage
+    from app.contracts import Job, RondeProvenance
+    from app.postgres_store import PostgresStore
 
     def prov(model, ti, to):
-        return {
-            "activiteit": "2", "ronde": 1, "model": model, "provider": "p",
-            "tokens_in": ti, "tokens_out": to, "tijdstip": "2026-06-01T00:00:00",
-        }
+        return RondeProvenance(
+            activiteit="2", ronde=1, model=model, provider="p",
+            tokens_in=ti, tokens_out=to, tijdstip="2026-06-01T00:00:00",
+        )
 
-    await Project(slug="p1", model_profile="snel", provenance=[prov("m1", 10, 5), prov("m1", 20, 10)]).insert()
-    await Project(slug="p2", model_profile="snel", provenance=[prov("m2", 1, 1)]).insert()
+    store = PostgresStore(s)
+    await store.save_job(Job(id="p1", model_profile="snel", provenance=[prov("m1", 10, 5), prov("m1", 20, 10)]))
+    await store.save_job(Job(id="p2", model_profile="snel", provenance=[prov("m2", 1, 1)]))
 
     rapport = await usage.usage_report(group_by="model")
     per_model = {r["sleutel"]: r for r in rapport["rows"]}
@@ -142,21 +144,19 @@ async def admin_client(monkeypatch):
     _fresh_settings(monkeypatch, WETSANALYSE_ADMIN_TOKENS="adm:admin-token", WETSANALYSE_AUTH_REQUIRED="0")
 
     from app.deps import get_store
-    from app import ratelimit
+    from app import db, ratelimit
     get_store.cache_clear()
     ratelimit.reset()
 
-    mock_mongo = mongomock_motor.AsyncMongoMockClient()
-    await init_beanie(database=mock_mongo["test"], document_models=[Project, LlmProfile, WetCatalogus])
-
-    import app.main as main_module
-    monkeypatch.setattr(main_module, "AsyncIOMotorClient", lambda *a, **kw: mock_mongo)
+    db.init_engine("sqlite+aiosqlite://")
+    await db.create_all()
 
     from app.main import app
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         yield ac
 
     get_store.cache_clear()
+    await db.dispose_engine()
 
 
 _H = {"Authorization": "Bearer admin-token"}

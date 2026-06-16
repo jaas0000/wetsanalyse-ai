@@ -109,14 +109,16 @@ def settings(tmp_path) -> Settings:
 
 @pytest.fixture
 async def store(settings):
-    import mongomock_motor
-    from beanie import init_beanie
-    from app.mongo_store import MongoStore
-    from app.project import Project
+    from app import db
+    from app.postgres_store import PostgresStore
 
-    client = mongomock_motor.AsyncMongoMockClient()
-    await init_beanie(database=client["test"], document_models=[Project])
-    return MongoStore(settings)
+    # In-memory SQLite (StaticPool → één gedeelde DB) met portable SQL — zelfde codepad als Postgres.
+    db.init_engine("sqlite+aiosqlite://")
+    await db.create_all()
+    try:
+        yield PostgresStore(settings)
+    finally:
+        await db.dispose_engine()
 
 
 @pytest.fixture

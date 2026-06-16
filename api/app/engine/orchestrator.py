@@ -5,8 +5,8 @@ Driehoek van garanties:
   - ZACHTE schema-fouten blokkeren niet; ze gaan als waarschuwing mee naar het checkpoint
     (review:true) of worden gelogd (review:false).
   - Auto-correctie is GEEN ronde: her-genereren binnen één ronde, vóór het wegschrijven.
-De jobstore is MongoDB (gedeeld). State-transities worden geserialiseerd met een atomaire
-**Mongo state-CAS** (`store.claim`): alleen de transitie NAAR een runt-state hoeft atomair,
+De jobstore is PostgreSQL (gedeeld). State-transities worden geserialiseerd met een atomaire
+**state-CAS** (`store.claim`, één UPDATE … RETURNING): alleen de transitie NAAR een runt-state hoeft atomair,
 de runt-state zelf is daarna de 'claimed'-marker zodat geen tweede worker dezelfde job oppakt.
 Dit vervangt de vroegere in-process asyncio-lock en maakt de dienst **horizontaal schaalbaar**
 (>1 worker/replica). Een geclaimde job draagt een `owner` + `lease_until`; de owner houdt de
@@ -67,9 +67,7 @@ class WetsanalyseEngine:
     # --- publieke API -----------------------------------------------------
 
     async def create_project(self, req: StartRequest, client_id: str):
-        """Maak een Project-document aan zonder de analyse te starten."""
-        from pymongo.errors import DuplicateKeyError
-
+        """Maak een Project aan zonder de analyse te starten."""
         from ..project import Project as ProjectDoc
         if not req.bwbId:
             raise ValueError("bwbId is verplicht in v1 (wet-only resolutie is roadmap).")
@@ -78,7 +76,7 @@ class WetsanalyseEngine:
         await self._check_active_quota(client_id)
         naam = req.naam or f"Art. {req.artikel}{f' lid {req.lid}' if req.lid else ''}"
         # Begrensde retry: twee gelijktijdige identieke POSTs kunnen dezelfde vrije slug zien;
-        # de unique index laat er één winnen, de ander leidt een nieuwe slug af.
+        # de unieke sleutel laat er één winnen, de ander leidt een nieuwe slug af (IdConflict).
         for _ in range(5):
             slug = await self.store.afgeleid_id(req.bwbId, req.artikel, req.lid)
             project = ProjectDoc(
@@ -94,15 +92,13 @@ class WetsanalyseEngine:
                 client_id=client_id,
             )
             try:
-                await project.insert()
+                await self.store.create_project(project)
                 return project
-            except DuplicateKeyError:
+            except IdConflict:
                 continue
         raise IdConflict("Kon geen uniek project-id reserveren; probeer opnieuw.")
 
     async def create_job(self, req: StartRequest, client_id: str) -> Job:
-        from pymongo.errors import DuplicateKeyError
-
         if not req.bwbId:
             raise ValueError("bwbId is verplicht in v1 (wet-only resolutie is roadmap).")
         if req.model_profile:
@@ -126,7 +122,7 @@ class WetsanalyseEngine:
             try:
                 await self.store.insert_job(job)
                 return job
-            except DuplicateKeyError:
+            except IdConflict:
                 continue
         raise IdConflict("Kon geen uniek analyse-id reserveren; probeer opnieuw.")
 
