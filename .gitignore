@@ -21,6 +21,9 @@ api/.venv/
 .claude/skills/frontend-design/
 skills-lock.json
 
+# Lokaal-only: omgezette markdown van het Wetsanalyse-boek (Boom, auteursrecht — niet in de repo)
+docs/wetsanalyse-boek.md
+
 # Secrets en runtime-data van de API (.env.example blijft wél gecommit als template)
 .env
 .env.local
