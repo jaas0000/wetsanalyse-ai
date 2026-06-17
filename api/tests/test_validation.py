@@ -38,6 +38,24 @@ def test_brongetrouwheid_citaat_normalisatie():
     assert any("letterlijk citaat" in s for s in schend)
 
 
+def test_brongetrouwheid_citaat_unicode_nfc_nfd():
+    """Visueel identieke tekst in verschillende unicode-composities (compose e-acute U+00E9 vs
+    decompose e + combining acute U+0065 U+0301) moet als letterlijk citaat gelden -- anders
+    faalt een terechte markering de HARD-check. Escapes zijn expliciet zodat de toets de
+    NFC-normalisatie echt uitoefent (een editor zou anders een vorm afdwingen)."""
+    nfc = "Het pr\u00e9-advies"
+    nfd = "Het pre\u0301-advies"
+    assert nfc != nfd  # bytes verschillen; visueel identiek
+    # Bronlid decompose, markering compose.
+    bron_nfd = _a2([{"lid": "1", "tekst": nfd + " van de commissie."}],
+                   [{"id": "m1", "formulering": nfc, "vindplaats": "lid 1"}])
+    assert brongetrouwheid_check(bron_nfd, "2") == []
+    # En omgekeerd: bronlid compose, markering decompose.
+    bron_nfc = _a2([{"lid": "1", "tekst": nfc + " van de commissie."}],
+                   [{"id": "m1", "formulering": nfd, "vindplaats": "lid 1"}])
+    assert brongetrouwheid_check(bron_nfc, "2") == []
+
+
 def test_brongetrouwheid_citeerconventies_beletsel_en_haken():
     # Echte casus: art. 7a lid 1 Invorderingswet 1990. De skill mag beletselteken (...) voor
     # geelideerde tussentekst en vierkante haken ([...]) voor een invoeging gebruiken; de harde

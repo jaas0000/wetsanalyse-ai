@@ -59,10 +59,9 @@ export function ProjectClient({ initieel }: { initieel: Job }) {
       void refreshJob();
       es.close();
     });
-    es.onerror = () => {
-      // Browser probeert vanzelf te herverbinden; sluit alleen als we klaar zijn.
-      if (isTerminal(job.state)) es.close();
-    };
+    // Bij een streamfout laten we de browser vanzelf herverbinden; het sluiten zodra de analyse
+    // terminaal is, doet het aparte effect hieronder (dat de actuele job.state ziet). Hier géén
+    // job.state-check: die zou de stale waarde uit deze closure lezen.
     return () => es.close();
     // We heropenen bewust niet bij elke state-wijziging: één stream volstaat tot terminaal.
     // eslint-disable-next-line react-hooks/exhaustive-deps

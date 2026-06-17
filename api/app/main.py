@@ -12,7 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from . import __version__, db
 from .config import get_settings
-from .deps import get_engine
+from .deps import drain_tasks, get_engine
 from .routers import admin, catalog, projects
 
 logger = logging.getLogger(__name__)
@@ -62,6 +62,8 @@ async def lifespan(app: FastAPI):
             await reaper_task
         except asyncio.CancelledError:
             pass
+    # Lopende achtergrond-analyses netjes afronden/annuleren vóór de engine sluit.
+    await drain_tasks()
     await db.dispose_engine()
 
 

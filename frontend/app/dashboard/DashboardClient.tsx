@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { DashboardCard } from "@/components/DashboardCard";
 import { Card } from "@/components/ui/Card";
 import { Button, LinkButton } from "@/components/ui/Button";
@@ -30,21 +30,17 @@ const TELLERS = [
 
 export function DashboardClient({ initieel }: { initieel: JobSummary[] }) {
   const { items, verbonden } = useProjectenStream(initieel);
-  const [now, setNow] = useState(() => Date.now());
 
-  // Lokale klok voor 'verstreken tijd' — puur weergave, geen netwerk.
-  useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(t);
-  }, []);
-
-  const all = [...items.values()];
+  // De 'verstreken tijd'-klok tikt per kaart (DashboardCard), niet hier — zo herberekent dit
+  // dashboard niet elke seconde de afleidingen hieronder. Memoïseer ze bovendien zodat ze alleen
+  // herrekenen bij echte data-/filterwijzigingen.
+  const all = useMemo(() => [...items.values()], [items]);
   const [filters, setFilters] = useState<ProjectFilters>(DASHBOARD_DEFAULTS);
   const [page, setPage] = useState(1);
   useEffect(() => setPage(1), [filters]);
 
-  const wetten = distinctWetten(all);
-  const gefilterd = filterEnSorteer(all, filters);
+  const wetten = useMemo(() => distinctWetten(all), [all]);
+  const gefilterd = useMemo(() => filterEnSorteer(all, filters), [all, filters]);
   const { items: lijst, page: huidige, totalPages, total } = paginate(gefilterd, page, PAGE_SIZE);
   useEffect(() => {
     if (page !== huidige) setPage(huidige);
@@ -130,7 +126,7 @@ export function DashboardClient({ initieel }: { initieel: JobSummary[] }) {
             <>
               <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
                 {lijst.map((u) => (
-                  <DashboardCard key={u.id} u={u} now={now} />
+                  <DashboardCard key={u.id} u={u} />
                 ))}
               </div>
               <Pagination

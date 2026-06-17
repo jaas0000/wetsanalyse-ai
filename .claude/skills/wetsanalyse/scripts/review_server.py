@@ -106,9 +106,18 @@ class ReviewHandler(BaseHTTPRequestHandler):
                        "application/json; charset=utf-8")
             return
         self._feedback_out.parent.mkdir(parents=True, exist_ok=True)
-        self._feedback_out.write_text(
-            json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
+        # Atomisch schrijven via tijdelijk bestand (zelfde patroon als rapport_server.py): een
+        # crash mid-write laat geen getrunceerde feedback.json achter.
+        tmp_pad = self._feedback_out.with_suffix(".json.tmp")
+        try:
+            tmp_pad.write_text(
+                json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+            os.replace(tmp_pad, self._feedback_out)
+        except OSError as e:
+            self._send(500, json.dumps({"ok": False, "error": str(e)}).encode("utf-8"),
+                       "application/json; charset=utf-8")
+            return
         self._send(200, b'{"ok":true}', "application/json; charset=utf-8")
 
 
