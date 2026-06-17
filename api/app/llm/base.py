@@ -31,6 +31,8 @@ class LlmConfig:
     temperature: float = 0.0
     # Wandklok-timeout per call in seconden (0 = uit) — doorgegeven aan de provider-call.
     timeout: float = 0.0
+    # Harde cap op prompt-tokens (0 = auto-afleiden uit het model; onbekend → geen limiet).
+    max_prompt_tokens: int = 0
 
 
 @dataclass
@@ -46,6 +48,13 @@ class LLMResult:
 
 class LLMError(RuntimeError):
     """Het LLM leverde geen bruikbare/parseerbare JSON na een reparatiepoging."""
+
+
+class PromptTooLargeError(LLMError):
+    """De prompt overschrijdt het context window (pre-flight of provider-`ContextWindowExceeded`).
+
+    Erft van LLMError → de orchestrator mapt 'm naar een terminale `fout` (FoutKlasse.llm) met een
+    leesbaar bericht. Bewust NIET-transiënt: retryen lost een te grote prompt niet op."""
 
 
 @runtime_checkable

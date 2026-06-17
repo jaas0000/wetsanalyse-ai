@@ -1,8 +1,11 @@
-"""LLM-kostenrem: globale concurrency-limiter (throttle) + slimmere transient-retry (Retry-After)."""
+"""LLM-kostenrem: globale concurrency-limiter (throttle) + slimmere transient-retry (Retry-After)
++ de pre-flight prompt-token-guard en de afgeslankte act-3-prompt (context-window)."""
 
 import asyncio
 
-from app.engine.retry import met_retry, retry_after_seconds
+import pytest
+
+from app.engine.retry import is_transient, met_retry, retry_after_seconds
 from app.llm import throttle
 
 
@@ -105,3 +108,57 @@ async def test_met_retry_plafonneert_backoff(monkeypatch):
         pass
     # Exponentiële backoff (100, 200, …) wordt geplafonneerd op 10 + max 25% jitter.
     assert all(s <= 12.5 for s in slaapjes)
+
+
+# --- #3 context-window: afgeslankte act-3-prompt + pre-flight token-guard ---
+
+def test_act3_prompt_bevat_geen_volledige_leden():
+    """Act-3 werkt op de markeringen, niet op de volledige wettekst — dat houdt de
+    werkgebied-brede prompt binnen het context window."""
+    from app.engine.prompts import act3_prompt
+
+    context = {
+        "werkgebied": {"naam": "WG"},
+        "bronnen": [{
+            "bron_id": "br1", "label": "Wet X art. 1", "bwbId": "BWBR1", "artikel": "1",
+            "leden": [{"lid": "1", "tekst": "UNIEKE_LEDEN_TEKST_XYZ hoort niet in de act-3-prompt"}],
+            "markeringen": [{"id": "m1", "bron_id": "br1", "formulering": "MARKERING_ABC",
+                             "klasse": "Rechtssubject", "vindplaats": "lid 1"}],
+            "verwijzingen": [],
+        }],
+    }
+    _system, user, _schema, _h = act3_prompt(context)
+    assert "UNIEKE_LEDEN_TEKST_XYZ" not in user   # volledige leden-tekst is eruit
+    assert "MARKERING_ABC" in user                # markeringen blijven de basis
+    assert "br1" in user                          # bron-index aanwezig voor vindplaatsen
+
+
+def test_prompt_guard_werpt_bij_overschrijding():
+    from app.llm.base import LlmConfig, PromptTooLargeError
+    from app.llm.litellm_client import LiteLLMClient
+
+    client = LiteLLMClient(LlmConfig(model="gpt-test", max_prompt_tokens=10))
+    with pytest.raises(PromptTooLargeError):
+        # ~250 tokens via de chars/4-fallback ≫ cap 10.
+        client._guard_prompt([{"role": "user", "content": "x" * 1000}])
+
+
+def test_prompt_guard_laat_klein_door_en_noop_zonder_limiet():
+    from app.llm.base import LlmConfig
+    from app.llm.litellm_client import LiteLLMClient
+
+    # Onder de cap → geen fout.
+    LiteLLMClient(LlmConfig(model="gpt-test", max_prompt_tokens=100000))._guard_prompt(
+        [{"role": "user", "content": "kort"}]
+    )
+    # Geen cap + onbekend model → geen afleidbare limiet → geen fout, ongeacht grootte.
+    LiteLLMClient(LlmConfig(model="onbekend-model-zzz", max_prompt_tokens=0))._guard_prompt(
+        [{"role": "user", "content": "x" * 100000}]
+    )
+
+
+def test_prompt_too_large_niet_transient():
+    from app.llm.base import PromptTooLargeError
+
+    # Niet-transiënt → wordt door met_retry niet 5× herhaald.
+    assert is_transient(PromptTooLargeError("te groot")) is False

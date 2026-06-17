@@ -269,8 +269,13 @@ provider-fout alleen in het server-log), `WETSANALYSE_MAX_ACTIVE_JOBS` (max geli
 client → 429), `WETSANALYSE_LLM_TOKEN_BUDGET` (token-plafond per analyse → job naar `fout`,
 `FoutKlasse.quota`), `WETSANALYSE_LLM_MAX_CONCURRENCY` (globaal plafond op gelijktijdige LLM-calls,
 default 4 — de echte rem tegen provider-rate-limits), `WETSANALYSE_LLM_TIMEOUT_S` (harde wandklok-
-timeout per LLM-call, default 120; 0 = uit — voorkomt dat een hangende provider-verbinding een
-worker langer vasthoudt dan de lease), `WETSANALYSE_MAX_VERWIJZING_FETCHES` (cap op het aantal
+timeout per LLM-call, **default 300**; 0 = uit — een hele act-2/act-3-ronde kan bij een traag
+provider-model >2 min duren, vandaar ruimer dan de oude 120; veilig t.o.v. de lease omdat de
+heartbeat die mid-call ververst), `WETSANALYSE_LLM_MAX_PROMPT_TOKENS` (harde cap op prompt-tokens
+per call; 0 = auto-afleiden uit het model, onbekend model → geen limiet — bij overschrijding faalt
+de call met een duidelijke `PromptTooLargeError` i.p.v. een rauwe 400; act-3 stuurt bewust geen
+volledige wettekst meer mee, alleen de markeringen, om binnen het context window te blijven),
+`WETSANALYSE_MAX_VERWIJZING_FETCHES` (cap op het aantal
 verwezen artikelen dat per analyse wordt opgehaald in de cross-referentie-fetch-lus, default 6;
 0 = niet volgen). Een 429 wordt bovendien geretryed met respect
 voor de `Retry-After`-header (`WETSANALYSE_TRANSIENT_MAX_RETRIES`/`_BACKOFF`/`_MAX_BACKOFF`). Let op

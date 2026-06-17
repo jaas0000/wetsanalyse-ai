@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import json
 
-from .base import LlmConfig, LLMError, LLMResult, parse_json_strict
+from .base import LlmConfig, LLMError, LLMResult, PromptTooLargeError, parse_json_strict
 from .throttle import llm_slot
 
 _REPAREER = (
@@ -48,6 +48,40 @@ class LiteLLMClient:
             kw["response_format"] = {"type": "json_object"}
         return kw
 
+    def _prompt_limiet(self) -> int | None:
+        """Max prompt-tokens: de expliciete cap, anders auto uit het model (95% van de
+        max_input_tokens). Onbekend model → None (geen limiet, geen vals-positief)."""
+        if self.c.max_prompt_tokens > 0:
+            return self.c.max_prompt_tokens
+        try:
+            import litellm
+            info = litellm.get_model_info(self._model_ref())
+            mx = info.get("max_input_tokens") if info else None
+            if mx:
+                return int(mx * 0.95)
+        except Exception:  # noqa: BLE001 — onbekend model/uitval → geen limiet afdwingen
+            pass
+        return None
+
+    def _tel_tokens(self, messages: list[dict]) -> int:
+        """Model-bewuste token-telling; valt terug op een grove heuristiek (chars/4)."""
+        try:
+            import litellm
+            return litellm.token_counter(model=self._model_ref(), messages=messages)
+        except Exception:  # noqa: BLE001
+            return sum(len(m.get("content", "")) for m in messages) // 4
+
+    def _guard_prompt(self, messages: list[dict]) -> None:
+        lim = self._prompt_limiet()
+        if lim is None:
+            return
+        n = self._tel_tokens(messages)
+        if n > lim:
+            raise PromptTooLargeError(
+                f"Prompt ~{n} tokens > limiet {lim} voor model {self.c.model}; verklein het "
+                "werkgebied (minder bronnen) of kies een modelprofiel met een groter context window."
+            )
+
     async def complete(self, system: str, user: str, schema: dict | None = None) -> LLMResult:
         import litellm
 
@@ -62,25 +96,37 @@ class LiteLLMClient:
             {"role": "user", "content": user + schema_hint},
         ]
 
+        # Pre-flight: faal snel en duidelijk als de prompt het context window overschrijdt,
+        # i.p.v. een rauwe provider-400 (en zonder die zinloos te retryen).
+        self._guard_prompt(messages)
+
         # Eén completion (incl. de evt. repareer-retry) telt als één concurrency-slot: zo houdt de
         # globale rem het aantal gelijktijdige LLM-calls onder het plafond, ongeacht de repair.
-        async with llm_slot():
-            resp = await litellm.acompletion(model=self._model_ref(), messages=messages, **self._kwargs())
-            tekst = resp.choices[0].message.content or ""
-            usage = getattr(resp, "usage", None)
-
-            try:
-                data = parse_json_strict(tekst)
-            except json.JSONDecodeError:
-                # Eén gerichte repareer-retry.
-                messages.append({"role": "assistant", "content": tekst})
-                messages.append({"role": "user", "content": _REPAREER})
+        try:
+            async with llm_slot():
                 resp = await litellm.acompletion(model=self._model_ref(), messages=messages, **self._kwargs())
                 tekst = resp.choices[0].message.content or ""
+                usage = getattr(resp, "usage", None)
+
                 try:
                     data = parse_json_strict(tekst)
-                except json.JSONDecodeError as e:
-                    raise LLMError(f"Geen geldige JSON na reparatie: {e}") from e
+                except json.JSONDecodeError:
+                    # Eén gerichte repareer-retry.
+                    messages.append({"role": "assistant", "content": tekst})
+                    messages.append({"role": "user", "content": _REPAREER})
+                    resp = await litellm.acompletion(model=self._model_ref(), messages=messages, **self._kwargs())
+                    tekst = resp.choices[0].message.content or ""
+                    try:
+                        data = parse_json_strict(tekst)
+                    except json.JSONDecodeError as e:
+                        raise LLMError(f"Geen geldige JSON na reparatie: {e}") from e
+        except Exception as e:  # noqa: BLE001 — vertaal een provider-context-overflow naar een duidelijke fout
+            if type(e).__name__ == "ContextWindowExceededError":
+                raise PromptTooLargeError(
+                    f"Context window overschreden voor model {self.c.model}; verklein het werkgebied "
+                    "(minder bronnen) of kies een modelprofiel met een groter context window."
+                ) from e
+            raise
 
         return LLMResult(
             data=data,

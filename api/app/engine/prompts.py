@@ -275,13 +275,15 @@ def act2_prompt(
 def act3_prompt(context: dict) -> tuple[str, str, dict, str]:
     """Werkgebied-breed: één gedeelde begrippenlijst + afleidingsregels over álle bronnen.
     `context` is de act-2-aggregaat ({werkgebied, bronnen[...]})."""
+    # Géén volledige leden-tekst in act-3: begrippen worden uit de (al geclassificeerde)
+    # markeringen gebouwd — die dragen de letterlijke formulering al, en de act-3-
+    # brongetrouwheid-check toetst alleen vindplaatsen, geen citaat. Dat houdt de
+    # werkgebied-brede prompt binnen het context window naarmate er meer bronnen bijkomen.
     user = (
         "REFERENTIE — begrippen en afleidingsregels opstellen:\n"
         + BEGRIPPEN_REF
-        + "\n\n=== WETTEKST VAN ALLE BRONNEN IN HET WERKGEBIED ===\n"
-        + _bronnen_blok(context)
         + "\n\n" + _bron_index_blok(context)
-        + "\n\n=== GECLASSIFICEERDE MARKERINGEN (activiteit 2, alle bronnen) ===\n"
+        + "\n\n=== GECLASSIFICEERDE MARKERINGEN (activiteit 2, alle bronnen — basis voor de begrippen) ===\n"
         + json.dumps(_verzamel(context, "markeringen"), ensure_ascii=False, indent=2)
         + "\n\n=== UITGAANDE VERWIJZINGEN (activiteit 2; brondefinities staan in 'betekenis') ===\n"
         + json.dumps(_verzamel(context, "verwijzingen"), ensure_ascii=False, indent=2)
@@ -304,12 +306,22 @@ def act3_prompt(context: dict) -> tuple[str, str, dict, str]:
     return _SYSTEM, user, _ACT3_SCHEMA, _hash(_SYSTEM, user)
 
 
+def _zonder_leden(analyse: dict) -> dict:
+    """Kopie van een act-2-analyse zonder de leden-tekst per bron — voor de revise-prompt, waar de
+    leden al via `_bronnen_blok` worden meegegeven (anders staan ze dubbel in de prompt)."""
+    return {
+        **analyse,
+        "bronnen": [{k: v for k, v in b.items() if k != "leden"} for b in (analyse.get("bronnen") or [])],
+    }
+
+
 def revise_prompt(
     activiteit: str, context: dict, vorige: dict, feedback: dict
 ) -> tuple[str, str, dict, str]:
     if activiteit == "2":
         schema = _ACT2_REVISE_SCHEMA
         wettekst = "\n\n=== WETTEKST VAN ALLE BRONNEN ===\n" + _bronnen_blok(context)
+        vorige = _zonder_leden(vorige)   # leden staan al in `wettekst` → niet dubbel dumpen
         ref = JAS_REF + "\n\n" + VERWIJZINGEN_REF
         extra = (
             "\n\nOPDRACHT: lever per bron de HERZIENE markeringen/verwijzingen/samenhang terug "
