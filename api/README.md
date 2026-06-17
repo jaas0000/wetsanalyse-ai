@@ -101,7 +101,11 @@ default 6; een gefaalde fetch degradeert stil en laat de job nooit falen), waarn
 Grenzen: per-client rate limit en een max aantal gelijktijdige analyses (beide → `429`), een
 optioneel LLM-token-budget per analyse, en een globale rem op gelijktijdige LLM-calls
 (`WETSANALYSE_LLM_MAX_CONCURRENCY`) tegen provider-rate-limits — een 429 wordt geretryed met respect
-voor de `Retry-After`-header. Zie `CLAUDE.md` §Misbruik-/kostenbeheersing.
+voor de `Retry-After`-header. Per-call wandklok-timeout via `WETSANALYSE_LLM_TIMEOUT_S` (default 300;
+een hele ronde kan bij een traag model >2 min duren). Context-window: act-3 stuurt alleen de
+markeringen mee (geen volledige wettekst), en `WETSANALYSE_LLM_MAX_PROMPT_TOKENS` capt de prompt
+(0 = auto uit het model) → duidelijke `PromptTooLargeError` i.p.v. een rauwe 400. Zie `CLAUDE.md`
+§Misbruik-/kostenbeheersing.
 
 Job-states: `queued` → `act2-runt` → `wacht-op-review-act2` → `act3-runt` →
 `wacht-op-review-act3` → `klaar` (of `fout` bij elke stap). Binnen een `*-runt`/`bouwt`-state geeft

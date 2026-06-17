@@ -92,6 +92,7 @@ def _config_uit_env(s: Settings) -> LlmConfig:
         output_strategy=s.llm_output_strategy,
         temperature=s.llm_temperature,
         timeout=s.llm_timeout_s,
+        max_prompt_tokens=s.llm_max_prompt_tokens,
     )
 
 
@@ -112,6 +113,7 @@ async def resolve_config(name: str | None, settings: Settings | None = None) -> 
         output_strategy=profile.output_strategy,
         temperature=profile.temperature,
         timeout=s.llm_timeout_s,
+        max_prompt_tokens=s.llm_max_prompt_tokens,
     )
 
 
