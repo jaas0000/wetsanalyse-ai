@@ -107,13 +107,23 @@ def bron_titel(b: dict) -> str:
     return b.get("bron_id", "bron")
 
 
+def lid_suffix(label: str, lid) -> str:
+    """Lid-suffix voor een vindplaats. Normaliseert de lid-waarde (strip een eventuele
+    `lid `-prefix, zodat zowel "1" als "lid 1" op "1" uitkomt) en laat de suffix weg als het
+    bron-label het lid al bevat (bron op lid-niveau) of als er geen lid is (lid-loos artikel)."""
+    s = re.sub(r"^\s*lid\s+", "", str(lid or "").strip(), flags=re.IGNORECASE)
+    if not s or label.rstrip().lower().endswith(f"lid {s}".lower()):
+        return ""
+    return f" lid {s}"
+
+
 def vindplaats_text(vps, bron_label: dict) -> str:
     if not isinstance(vps, list) or not vps:
         return ""
     delen = []
     for vp in vps:
         lbl = bron_label.get(vp.get("bron_id"), vp.get("bron_id", ""))
-        delen.append(lbl + (f" lid {vp['lid']}" if vp.get("lid") else ""))
+        delen.append(lbl + lid_suffix(lbl, vp.get("lid")))
     return "; ".join(d for d in delen if d)
 
 

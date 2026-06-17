@@ -19,6 +19,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import rapport_server  # noqa: E402
+import render_rapport  # noqa: E402
 import review_server  # noqa: E402
 
 PROBE = "ZZPROBE"  # uniek baken zodat de assertie los staat van template-inhoud
@@ -96,6 +97,37 @@ class FeedbackWriteTest(unittest.TestCase):
                 srv.shutdown()
                 srv.server_close()
                 t.join(timeout=5)
+
+
+class VindplaatsTextTest(unittest.TestCase):
+    """De vindplaats-weergave mag geen dubbele `lid lid`-prefix geven en het lid niet
+    herhalen als het bron-label het al bevat. Geldt identiek voor beide renderers."""
+
+    LABELS = {
+        "br1": "Leidraad Invordering 2008 art. 9.5",   # bron op artikel-niveau
+        "br2": "Invorderingswet 1990 art. 9 lid 1",    # bron op lid-niveau
+        "br3": "Leidraad Invordering 2008 art. 7a",    # lid-loos artikel
+    }
+
+    def _check(self, fn):
+        # Kaal nummer → netjes aangeplakt.
+        self.assertEqual(fn([{"bron_id": "br1", "lid": "1"}], self.LABELS),
+                         "Leidraad Invordering 2008 art. 9.5 lid 1")
+        # Geprefixte waarde "lid 1" → geen "lid lid 1".
+        self.assertEqual(fn([{"bron_id": "br1", "lid": "lid 1"}], self.LABELS),
+                         "Leidraad Invordering 2008 art. 9.5 lid 1")
+        # Bron op lid-niveau → lid niet herhaald.
+        self.assertEqual(fn([{"bron_id": "br2", "lid": "lid 1"}], self.LABELS),
+                         "Invorderingswet 1990 art. 9 lid 1")
+        # Lid-loos artikel → geen suffix.
+        self.assertEqual(fn([{"bron_id": "br3", "lid": ""}], self.LABELS),
+                         "Leidraad Invordering 2008 art. 7a")
+
+    def test_rapport_server_vindplaats(self):
+        self._check(rapport_server.vindplaats_text)
+
+    def test_render_rapport_vindplaats(self):
+        self._check(render_rapport.vindplaats_text)
 
 
 if __name__ == "__main__":

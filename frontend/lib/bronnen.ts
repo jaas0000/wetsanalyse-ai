@@ -27,6 +27,17 @@ export function bronLabelMap(bronnen: (Bron | BronRef)[] | undefined): Record<st
   return map;
 }
 
+/**
+ * Lid-suffix voor een vindplaats. Normaliseert de lid-waarde (een eventuele `lid `-prefix
+ * wordt gestript, zodat zowel `"1"` als `"lid 1"` op `"1"` uitkomt) en laat de suffix weg als
+ * het bron-label het lid al bevat (bron op lid-niveau) of als er geen lid is (lid-loos artikel).
+ */
+function lidSuffix(label: string, lid?: string | null): string {
+  const s = (lid ?? "").trim().replace(/^lid\s+/i, "");
+  if (!s || label.trimEnd().toLowerCase().endsWith(`lid ${s}`.toLowerCase())) return "";
+  return ` lid ${s}`;
+}
+
 /** Render een vindplaatsen-lijst als "Label lid n; Label lid m" met de bron-labels. */
 export function vindplaatsText(
   vps: Vindplaats[] | undefined,
@@ -34,7 +45,10 @@ export function vindplaatsText(
 ): string {
   if (!vps || !vps.length) return "";
   return vps
-    .map((vp) => `${labels[vp.bron_id] || vp.bron_id}${vp.lid ? ` lid ${vp.lid}` : ""}`)
+    .map((vp) => {
+      const label = labels[vp.bron_id] || vp.bron_id;
+      return `${label}${lidSuffix(label, vp.lid)}`;
+    })
     .filter(Boolean)
     .join("; ");
 }

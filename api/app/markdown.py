@@ -3,6 +3,18 @@ HTML-viewer blijft de rijke presentatie. Spiegelt de sectie-indeling van rapport
 
 from __future__ import annotations
 
+import re
+
+
+def _lid_suffix(label: str, lid) -> str:
+    """Lid-suffix voor een vindplaats. Normaliseert de lid-waarde (strip een eventuele
+    `lid `-prefix, zodat zowel "1" als "lid 1" op "1" uitkomt) en laat de suffix weg als het
+    bron-label het lid al bevat (bron op lid-niveau) of als er geen lid is (lid-loos artikel)."""
+    s = re.sub(r"^\s*lid\s+", "", str(lid or "").strip(), flags=re.IGNORECASE)
+    if not s or label.rstrip().lower().endswith(f"lid {s}".lower()):
+        return ""
+    return f" lid {s}"
+
 
 def _tabel(headers: list[str], rijen: list[list[str]]) -> list[str]:
     out = ["| " + " | ".join(headers) + " |", "| " + " | ".join("---" for _ in headers) + " |"]
@@ -26,7 +38,7 @@ def _vindplaats(vps, bron_label: dict) -> str:
     delen = []
     for vp in vps:
         lbl = bron_label.get(vp.get("bron_id"), vp.get("bron_id", ""))
-        delen.append(lbl + (f" lid {vp['lid']}" if vp.get("lid") else ""))
+        delen.append(lbl + _lid_suffix(lbl, vp.get("lid")))
     return "; ".join(d for d in delen if d)
 
 
