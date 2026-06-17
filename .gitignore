@@ -27,6 +27,9 @@ docs/wetsanalyse-boek.md
 # Bron-PDF van de WetsTaal-handreiking (omgezet naar docs/WetsTaal.md)
 docs/WetsTaal.pdf
 
+# Lokaal-only: Regelspraak-werkmateriaal (niet in de repo)
+docs/regelspraak/
+
 # Secrets en runtime-data van de API (.env.example blijft wél gecommit als template)
 .env
 .env.local
