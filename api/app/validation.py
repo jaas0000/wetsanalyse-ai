@@ -12,6 +12,7 @@ from __future__ import annotations
 import importlib.util
 import re
 import sys
+import unicodedata
 from pathlib import Path
 
 from .config import SKILL_SCRIPTS
@@ -80,8 +81,10 @@ def _strip_md_links(tekst: str) -> str:
 
 
 def normaliseer(tekst: str) -> str:
-    """Normaliseer whitespace + typografische quotes zodat echte citaten niet vals-positief zijn."""
-    return _WS.sub(" ", tekst.translate(_QUOTES)).strip().lower()
+    """Normaliseer unicode-compositie (NFC) + whitespace + typografische quotes, zodat echte
+    citaten niet vals-positief zijn. NFC voorkomt dat een composé 'é' (U+00E9) en een
+    decomposé 'e'+combining-accent (U+0065 U+0301) — visueel identiek — als ongelijk gelden."""
+    return _WS.sub(" ", unicodedata.normalize("NFC", tekst).translate(_QUOTES)).strip().lower()
 
 
 def brongetrouwheid_check(data: dict, activiteit: str) -> list[str]:

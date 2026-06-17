@@ -23,6 +23,7 @@ import io
 import json
 import re
 import sys
+import unicodedata
 from pathlib import Path
 
 GELDIGE_JAS_KLASSEN = {
@@ -68,7 +69,13 @@ def fragmenten_letterlijk(formulering: str, brontekst: str) -> bool:
 
     Vierkante-haak-invoegingen worden eerst weggestript, zodat 'een [bankrekening]' op
     'een' wordt getoetst. Lege fragmenten (bv. door een eind-beletselteken) tellen niet mee.
+
+    Beide kanten worden eerst naar unicode-NFC genormaliseerd: zonder dat zouden een composé
+    'é' (U+00E9) en een decomposé 'e'+combining-accent (U+0065 U+0301) — visueel identiek —
+    als ongelijk gelden en een terecht citaat ten onrechte de toets laten falen.
     """
+    formulering = unicodedata.normalize("NFC", formulering)
+    brontekst = unicodedata.normalize("NFC", brontekst)
     schoon = _HAKEN.sub("", formulering)
     fragmenten = [f.strip() for f in _ELLIPS.split(schoon)]
     return all((not f) or (f in brontekst) for f in fragmenten)

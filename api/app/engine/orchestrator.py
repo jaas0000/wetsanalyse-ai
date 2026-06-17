@@ -23,13 +23,12 @@ from uuid import uuid4
 from ..config import Settings
 from ..contracts import (
     FoutKlasse, Job, JobFout, JobState, RondeProvenance,
-    REVIEW_STATES, RUNNING_STATES, TERMINAL_STATES, StartRequest,
+    REVIEW_STATES, RUNNING_STATES, StartRequest,
 )
 from ..llm.base import LLMClient, LLMError
 from ..llm.litellm_client import build_llm_client
 from .. import profiles
 from ..jobstore import IdConflict, JobStore
-from ..ratelimit import QuotaExceeded
 from ..rapport import bouw_rapport_async
 from ..validation import brongetrouwheid_check, schema_check
 from ..wettenbank import WettenbankClient, WettenbankError, map_artikel_naar_bron_basis, parse_jci
@@ -87,7 +86,6 @@ class WetsanalyseEngine:
         self._valideer_bronnen(req)
         if req.model_profile:
             await profiles.ensure_exists(req.model_profile)
-        await self._check_active_quota(client_id)
         # Begrensde retry: twee gelijktijdige identieke POSTs kunnen dezelfde vrije slug zien;
         # de unieke sleutel laat er één winnen, de ander leidt een nieuwe slug af (IdConflict).
         for _ in range(5):
@@ -103,7 +101,7 @@ class WetsanalyseEngine:
                 client_id=client_id,
             )
             try:
-                await self.store.create_project(project)
+                await self.store.create_project(project, max_active=self.s.max_active_jobs)
                 return project
             except IdConflict:
                 continue
@@ -113,7 +111,6 @@ class WetsanalyseEngine:
         self._valideer_bronnen(req)
         if req.model_profile:
             await profiles.ensure_exists(req.model_profile)
-        await self._check_active_quota(client_id)
         # Begrensde retry tegen de gelijktijdige-aanmaak-race (zie create_project). insert_job
         # maakt altijd een nieuw document, zodat de tweede POST geen bestaand project overschrijft.
         for _ in range(5):
@@ -129,7 +126,7 @@ class WetsanalyseEngine:
                 client_id=client_id,
             )
             try:
-                await self.store.insert_job(job)
+                await self.store.insert_job(job, max_active=self.s.max_active_jobs)
                 return job
             except IdConflict:
                 continue
@@ -403,17 +400,6 @@ class WetsanalyseEngine:
         return "\n".join(f"- {p}" for p in punten) if punten else ""
 
     # --- helpers ----------------------------------------------------------
-
-    async def _check_active_quota(self, client_id: str) -> None:
-        """Weiger een nieuwe analyse als de client al te veel lopende (niet-terminale) heeft."""
-        if self.s.max_active_jobs <= 0:
-            return
-        jobs = await self.store.list_jobs(client_id)
-        actief = sum(1 for j in jobs if j.state not in TERMINAL_STATES)
-        if actief >= self.s.max_active_jobs:
-            raise QuotaExceeded(
-                f"Te veel lopende analyses (max {self.s.max_active_jobs}); wacht tot er één klaar is."
-            )
 
     async def _met_retry(self, maak):
         """Bounded retry op transiënte LLM/MCP-fouten met de geconfigureerde knoppen."""

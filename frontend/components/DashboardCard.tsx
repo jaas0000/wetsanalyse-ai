@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { memo, useEffect, useState } from "react";
 import Link from "next/link";
 import { Card } from "@/components/ui/Card";
 import { StateBadge } from "@/components/ui/Badge";
@@ -63,12 +63,23 @@ function initialen(naam: string, bwbId: string): string {
   return (bron.slice(0, 2) || "??").toUpperCase();
 }
 
-export function DashboardCard({ u, now }: { u: DashboardUpdate; now: number }) {
+export const DashboardCard = memo(function DashboardCard({ u }: { u: DashboardUpdate }) {
   const [bezig, setBezig] = useState(false);
   const isFout = u.state === "fout" || !!u.error;
   const idx = stationIndex(u.state);
   const foutIdx = u.current_activiteit === "3" ? 3 : 1; // waar de analyse stokte
   const actief = !isFout && (u.state.endsWith("runt") || u.state === "bouwt");
+
+  // Lokale 'verstreken tijd'-klok per kaart i.p.v. één gedeelde tik in het dashboard: zo
+  // herberekent het dashboard niet elke seconde de filter/sorteer/pagineer-pijplijn, en tikken
+  // alleen niet-afgeronde analyses (een klaar/fout-kaart bevriest z'n verstreken-tijd).
+  const levend = !isFout && u.state !== "klaar";
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!levend) return;
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [levend]);
 
   const fasen = fasenVoor(u.state);
   const faseIdx = u.current_fase ? fasen.indexOf(u.current_fase) : -1;
@@ -222,4 +233,4 @@ export function DashboardCard({ u, now }: { u: DashboardUpdate; now: number }) {
       )}
     </Card>
   );
-}
+});

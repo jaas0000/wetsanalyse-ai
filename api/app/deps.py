@@ -34,6 +34,24 @@ def schedule(coro) -> None:
     task.add_done_callback(_on_done)
 
 
+async def drain_tasks(timeout: float = 10.0) -> None:
+    """Bij een nette shutdown: annuleer en wacht kort op nog lopende achtergrond-analyses i.p.v.
+    ze hard af te kappen. Best-effort — een geannuleerde analyse laat zijn lease verlopen en wordt
+    door de reaper hersteld (job → fout, herstelbaar via retry). De timeout voorkomt dat een
+    hangende taak de shutdown blokkeert."""
+    taken = [t for t in _tasks if not t.done()]
+    if not taken:
+        return
+    for t in taken:
+        t.cancel()
+    try:
+        await asyncio.wait_for(
+            asyncio.gather(*taken, return_exceptions=True), timeout
+        )
+    except asyncio.TimeoutError:
+        logger.warning("Niet alle achtergrondtaken stopten binnen %ss bij shutdown.", timeout)
+
+
 @lru_cache
 def get_store() -> JobStore:
     return PostgresStore(get_settings())

@@ -19,6 +19,7 @@ from sqlalchemy import (
     Column,
     DateTime,
     Float,
+    Index,
     Integer,
     MetaData,
     PrimaryKeyConstraint,
@@ -68,6 +69,10 @@ projects = Table(
     Column("created", _DT, nullable=False),
     Column("updated", _DT, nullable=False),
     Column("rapport", _JSON, nullable=True),
+    # Hot-path indexen: list_projects filtert op client_id + sorteert op updated DESC;
+    # reaper/quota scannen op state. Zonder deze is dat een seq scan zodra de tabel groeit.
+    Index("ix_projects_client_id_updated", "client_id", "updated"),
+    Index("ix_projects_state", "state"),
 )
 
 # Immutabele analyse-ronde per (project, activiteit, ronde) + de bijbehorende review-feedback.
@@ -185,6 +190,16 @@ async def reconcile_schema() -> None:
         for legacy in ("bwbId", "artikel", "lid"):
             if legacy in bestaande:
                 await conn.exec_driver_sql(f'ALTER TABLE projects DROP COLUMN "{legacy}"')
+        # Hot-path indexen op een bestaande tabel: create_all maakt indexen alleen mee bij een
+        # verse tabel, dus voor een bestaande prod-DB hier idempotent toevoegen. IF NOT EXISTS
+        # werkt op zowel PostgreSQL als SQLite, dus ook veilig ná create_all in de tests.
+        await conn.exec_driver_sql(
+            "CREATE INDEX IF NOT EXISTS ix_projects_client_id_updated "
+            "ON projects (client_id, updated)"
+        )
+        await conn.exec_driver_sql(
+            "CREATE INDEX IF NOT EXISTS ix_projects_state ON projects (state)"
+        )
 
 
 def aware(dt: datetime | None) -> datetime | None:

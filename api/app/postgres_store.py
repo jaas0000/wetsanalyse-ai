@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 
-from sqlalchemy import delete, func, insert, select, update
+from sqlalchemy import delete, func, insert, select, text, update
 from sqlalchemy.exc import IntegrityError
 
 from . import db
@@ -23,6 +23,7 @@ import re
 
 from .contracts import (
     Analyse2, Analyse3, BronInput, Feedback, Job, JobState, RUNNING_STATES, RondeProvenance,
+    TERMINAL_STATES,
 )
 from .jobstore import IdConflict
 from .project import Project, RondeData
@@ -137,24 +138,52 @@ class PostgresStore:
             )
         return res.rowcount == 1
 
-    async def insert_job(self, job: Job) -> None:
+    async def _handhaaf_active_quota(self, conn, client_id: str, max_active: int) -> None:
+        """ATOMAIRE per-client grens op niet-terminale analyses, bínnen de insert-transactie.
+        Vervangt een check-dan-insert (TOCTOU): op Postgres serialiseert een advisory xact-lock
+        gelijktijdige aanmaak per client (auto-release bij commit/rollback), zodat de telling onder
+        READ COMMITTED niet ontdubbelt. Op SQLite (tests) is geen lock nodig — writes zijn al
+        geserialiseerd. Goedkope COUNT i.p.v. het laden+deserialiseren van alle projecten."""
+        if max_active <= 0:
+            return
+        from .ratelimit import QuotaExceeded
+        if db.get_engine().url.get_backend_name() == "postgresql":
+            await conn.execute(
+                text("SELECT pg_advisory_xact_lock(hashtext(:k))"),
+                {"k": f"actieve-jobs:{client_id}"},
+            )
+        actief = (await conn.execute(
+            select(func.count()).select_from(db.projects).where(
+                db.projects.c.client_id == client_id,
+                db.projects.c.state.notin_([s.value for s in TERMINAL_STATES]),
+            )
+        )).scalar_one()
+        if actief >= max_active:
+            raise QuotaExceeded(
+                f"Te veel lopende analyses (max {max_active}); wacht tot er één klaar is."
+            )
+
+    async def insert_job(self, job: Job, *, max_active: int = 0) -> None:
         """Maak altijd een nieuw project-document aan (nooit bijwerken). Werpt IdConflict als de
-        slug al bestaat — de aanroeper handelt de race af."""
+        slug al bestaat — de aanroeper handelt de race af. Met `max_active`>0 wordt de per-client
+        grens op niet-terminale analyses atomair in dezelfde transactie afgedwongen (QuotaExceeded)."""
         now = db.utcnow()
         try:
             async with db.get_engine().begin() as conn:
+                await self._handhaaf_active_quota(conn, job.client_id, max_active)
                 await conn.execute(insert(db.projects).values(
                     slug=job.id, created=now, updated=now, **_state_values(job)
                 ))
         except IntegrityError:
             raise IdConflict(f"slug bestaat al: {job.id}")
 
-    async def create_project(self, project: Project) -> None:
+    async def create_project(self, project: Project, *, max_active: int = 0) -> None:
         """Maak een volledig project-document aan (incl. naam/omschrijving). Werpt IdConflict bij
-        een dubbele slug."""
+        een dubbele slug. Met `max_active`>0 geldt dezelfde atomaire per-client grens als insert_job."""
         now = db.utcnow()
         try:
             async with db.get_engine().begin() as conn:
+                await self._handhaaf_active_quota(conn, project.client_id, max_active)
                 await conn.execute(insert(db.projects).values(
                     slug=project.slug,
                     naam=project.naam,

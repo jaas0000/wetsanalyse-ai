@@ -327,11 +327,11 @@ async def test_create_job_retryt_bij_duplicate(engine, store, monkeypatch):
     echt_insert = store.insert_job
     pogingen = {"n": 0}
 
-    async def flaky_insert(job):
+    async def flaky_insert(job, **kw):
         pogingen["n"] += 1
         if pogingen["n"] == 1:
             raise IdConflict("slug bestaat al")
-        await echt_insert(job)
+        await echt_insert(job, **kw)
 
     monkeypatch.setattr(store, "insert_job", flaky_insert)
     job = await engine.create_job(_start_req(review=False), "test")
@@ -342,7 +342,7 @@ async def test_create_job_retryt_bij_duplicate(engine, store, monkeypatch):
 async def test_create_job_uitputting_werpt_idconflict(engine, store, monkeypatch):
     from app.jobstore import IdConflict
 
-    async def altijd_duplicate(job):
+    async def altijd_duplicate(job, **kw):
         raise IdConflict("slug bestaat al")
 
     monkeypatch.setattr(store, "insert_job", altijd_duplicate)
