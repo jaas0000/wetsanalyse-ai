@@ -25,6 +25,7 @@ from sqlalchemy import (
     String,
     Table,
     Text,
+    inspect,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
@@ -151,6 +152,39 @@ async def create_all() -> None:
     """Maak de tabellen aan (tests + beproevingsfase; productie kan dit later via Alembic doen)."""
     async with get_engine().begin() as conn:
         await conn.run_sync(metadata.create_all)
+
+
+async def reconcile_schema() -> None:
+    """Idempotente schema-bijwerking voor de werkgebied/bronnen-overgang.
+
+    `create_all` maakt alleen ONTBREKENDE tabellen; het migreert geen kolommen van een
+    bestaande tabel. De `projects`-tabel ging van scalar `bwbId/artikel/lid` naar één
+    `bronnen` JSON-kolom. Bij een bestaande tabel (zonder Alembic) brengen we het schema hier
+    in lijn: voeg `bronnen` toe en laat de legacy-kolommen vallen. Veilig, want er is geen
+    data om te bewaren; op een verse DB (kolom al aanwezig) is dit een no-op."""
+    engine = get_engine()
+
+    def _kolommen(sync_conn):
+        insp = inspect(sync_conn)
+        if not insp.has_table("projects"):
+            return None
+        return {c["name"] for c in insp.get_columns("projects")}
+
+    async with engine.begin() as conn:
+        bestaande = await conn.run_sync(_kolommen)
+        if bestaande is None:
+            return  # tabel bestaat (nog) niet; create_all maakt 'm met het juiste schema
+        is_pg = engine.url.get_backend_name() == "postgresql"
+        if "bronnen" not in bestaande:
+            typ = "JSONB" if is_pg else "JSON"
+            default = "'[]'::jsonb" if is_pg else "'[]'"
+            await conn.exec_driver_sql(
+                f"ALTER TABLE projects ADD COLUMN bronnen {typ} NOT NULL DEFAULT {default}"
+            )
+        # Legacy scalar-kolommen opruimen (case-sensitief → quoten).
+        for legacy in ("bwbId", "artikel", "lid"):
+            if legacy in bestaande:
+                await conn.exec_driver_sql(f'ALTER TABLE projects DROP COLUMN "{legacy}"')
 
 
 def aware(dt: datetime | None) -> datetime | None:

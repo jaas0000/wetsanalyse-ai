@@ -39,6 +39,9 @@ async def lifespan(app: FastAPI):
     # beheren; voor de beproevingsfase volstaat create_all (idempotent: alleen ontbrekende tabellen).
     db.init_engine(settings.database_url)
     await db.create_all()
+    # Breng een bestaande projects-tabel in lijn met het werkgebied/bronnen-schema (create_all
+    # migreert geen kolommen). Idempotent; no-op op een verse DB.
+    await db.reconcile_schema()
     try:
         from . import profiles
 
