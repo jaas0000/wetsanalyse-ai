@@ -26,8 +26,9 @@ export default async function ProjectenPagina() {
             </p>
             <h1 className="mt-2 font-display text-3xl font-semibold text-paper">Analyses</h1>
             <p className="mt-2 text-sm text-paper/85">
-              Elke analyse duidt één wetsartikel (of lid) brongetrouw volgens het Juridisch
-              Analyseschema: markeren &amp; classificeren, daarna begrippen &amp; afleidingsregels.
+              Elke analyse duidt een werkgebied — één of meer bronnen (wetsartikel of lid) —
+              brongetrouw volgens het Juridisch Analyseschema: markeren &amp; classificeren,
+              daarna begrippen &amp; afleidingsregels.
             </p>
           </div>
           <LinkButton href="/nieuw" variant="secondary" className="w-full sm:w-auto sm:self-start">
