@@ -56,8 +56,8 @@ export function ProjectenLijstClient({ initieel }: { initieel: JobSummary[] }) {
       <Card className="flex flex-col items-center gap-3 px-6 py-16 text-center">
         <p className="font-display text-lg text-ink">Nog geen analyses</p>
         <p className="max-w-md text-sm text-muted">
-          Start je eerste analyse: kies een BWB-id en een artikel, en de orchestrator haalt de
-          actuele wettekst op en begeleidt je door de review-lus.
+          Start je eerste analyse: kies een wet en één of meer artikelen voor je werkgebied. De
+          orchestrator haalt de actuele wettekst op en begeleidt je door de review-lus.
         </p>
         <LinkButton href="/nieuw" className="mt-2 w-full sm:w-auto">
           Eerste analyse starten
