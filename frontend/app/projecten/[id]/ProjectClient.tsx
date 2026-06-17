@@ -38,6 +38,8 @@ export function ProjectClient({ initieel }: { initieel: Job }) {
   const router = useRouter();
   const [job, setJob] = useState<Job>(initieel);
   const [rapport, setRapport] = useState<Rapport | null>(null);
+  const [rapportFout, setRapportFout] = useState<string | null>(null);
+  const [rapportBezig, setRapportBezig] = useState(false);
   const [actie, setActie] = useState<string | null>(null);
   const esRef = useRef<EventSource | null>(null);
 
@@ -72,12 +74,27 @@ export function ProjectClient({ initieel }: { initieel: Job }) {
     if (isTerminal(job.state)) esRef.current?.close();
   }, [job.state]);
 
-  // Rapport ophalen zodra klaar.
-  useEffect(() => {
-    if (job.state === "klaar" && !rapport) {
-      getRapport(initieel.id).then(setRapport).catch(() => undefined);
+  // Rapport ophalen zodra klaar. Een mislukte fetch wordt zichtbaar gemaakt (niet stil ingeslikt),
+  // zodat de pagina niet eindeloos op "Rapport laden…" blijft staan bij bv. een tijdelijke storing.
+  const laadRapport = useCallback(async () => {
+    setRapportBezig(true);
+    setRapportFout(null);
+    try {
+      setRapport(await getRapport(initieel.id));
+    } catch (e) {
+      setRapportFout(isApiError(e) ? e.detail : (e as Error).message);
+    } finally {
+      setRapportBezig(false);
     }
-  }, [job.state, rapport, initieel.id]);
+  }, [initieel.id]);
+
+  useEffect(() => {
+    // Guards op fout/bezig voorkomen een herhaal-loop: na een fout blijft het bij die ene poging
+    // tot de gebruiker op "Opnieuw proberen" klikt.
+    if (job.state === "klaar" && !rapport && !rapportFout && !rapportBezig) {
+      void laadRapport();
+    }
+  }, [job.state, rapport, rapportFout, rapportBezig, laadRapport]);
 
   async function onRetry() {
     setActie("retry");
@@ -195,6 +212,18 @@ export function ProjectClient({ initieel }: { initieel: Job }) {
       {job.state === "klaar" ? (
         rapport ? (
           <RapportView rapport={rapport} projectId={job.id} />
+        ) : rapportFout ? (
+          <Melding type="fout" titel="Rapport kon niet worden geladen">
+            <p className="mt-1 text-sm">{rapportFout}</p>
+            <p className="mt-2 text-sm text-muted">
+              De analyse is klaar; alleen het ophalen van het rapport mislukte (vaak tijdelijk).
+            </p>
+            <div className="mt-3">
+              <Button variant="secondary" onClick={() => void laadRapport()} disabled={rapportBezig}>
+                {rapportBezig ? "Bezig…" : "Opnieuw proberen"}
+              </Button>
+            </div>
+          </Melding>
         ) : (
           <Card className="p-6 text-sm text-muted">Rapport laden…</Card>
         )
