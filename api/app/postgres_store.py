@@ -19,7 +19,11 @@ from sqlalchemy.exc import IntegrityError
 
 from . import db
 from .config import Settings
-from .contracts import Analyse2, Analyse3, Feedback, Job, JobState, RUNNING_STATES, RondeProvenance
+import re
+
+from .contracts import (
+    Analyse2, Analyse3, BronInput, Feedback, Job, JobState, RUNNING_STATES, RondeProvenance,
+)
 from .jobstore import IdConflict
 from .project import Project, RondeData
 
@@ -27,7 +31,7 @@ from .project import Project, RondeData
 # door claim()/verleng_lease() beheerd, zodat een stale Job-snapshot de lease nooit kan overschrijven.
 _STATE_FIELDS = (
     "state", "current_activiteit", "current_ronde", "waarschuwingen",
-    "error", "provenance", "bwbId", "artikel", "lid", "review",
+    "error", "provenance", "bronnen", "review",
     "model_profile", "analysefocus", "client_id",
 )
 
@@ -55,9 +59,7 @@ def _row_to_project(row) -> Project:
         slug=m["slug"],
         naam=m["naam"] or "",
         omschrijving=m["omschrijving"] or "",
-        bwbId=m["bwbId"] or "",
-        artikel=m["artikel"] or "",
-        lid=m["lid"],
+        bronnen=[BronInput(**b) for b in (m["bronnen"] or [])],
         analysefocus=m["analysefocus"] or "",
         review=m["review"],
         model_profile=m["model_profile"] or "",
@@ -84,10 +86,8 @@ class PostgresStore:
 
     # --- id-afleiding ---
 
-    async def afgeleid_id(self, bwb_id: str, artikel: str, lid: str | None) -> str:
-        basis = f"{bwb_id.lower()}-art{artikel.lower().replace(' ', '')}"
-        if lid:
-            basis += f"-lid{lid}"
+    async def afgeleid_id(self, seed: str) -> str:
+        basis = re.sub(r"[^a-z0-9]+", "-", (seed or "").lower()).strip("-") or "werkgebied"
         kandidaat, n = basis, 1
         async with db.get_engine().connect() as conn:
             while True:
@@ -159,9 +159,7 @@ class PostgresStore:
                     slug=project.slug,
                     naam=project.naam,
                     omschrijving=project.omschrijving,
-                    bwbId=project.bwbId,
-                    artikel=project.artikel,
-                    lid=project.lid,
+                    bronnen=[b.model_dump() for b in project.bronnen],
                     analysefocus=project.analysefocus,
                     review=project.review,
                     model_profile=project.model_profile,

@@ -6,13 +6,21 @@ from app.validation import (
 )
 
 
+def _a2(leden, markeringen, bronref="jci:x"):
+    """Bouw een act-2-analyse (werkgebied met één bron) rond leden + markeringen."""
+    return {"werkgebied": {"naam": "test"}, "bronnen": [{
+        "bron_id": "br1", "label": "Testwet art. 1", "bronreferentie": bronref,
+        "leden": leden, "markeringen": markeringen, "verwijzingen": [],
+    }]}
+
+
 def test_jas_klassen_canoniek():
     assert "Rechtssubject" in GELDIGE_JAS_KLASSEN
     assert len(GELDIGE_JAS_KLASSEN) == 13
 
 
 def test_schema_check_delegatie_ongeldige_klasse():
-    data = {"bronreferentie": "jci:x", "leden": [], "markeringen": [{"id": "m1", "klasse": "Verzonnen"}]}
+    data = _a2([], [{"id": "m1", "bron_id": "br1", "klasse": "Verzonnen"}])
     fouten, _ = schema_check(data, "2")
     assert any("Ongeldige JAS-klasse" in f for f in fouten)
 
@@ -20,14 +28,12 @@ def test_schema_check_delegatie_ongeldige_klasse():
 def test_brongetrouwheid_citaat_normalisatie():
     leden = [{"lid": "1", "tekst": "De  belastingplichtige doet “aangifte”."}]
     # zelfde citaat met rechte quotes en enkele spatie → moet als letterlijk gelden
-    ok = {"bronreferentie": "jci:x", "leden": leden,
-          "markeringen": [{"id": "m1", "formulering": 'De belastingplichtige doet "aangifte".',
-                           "vindplaats": "lid 1"}]}
+    ok = _a2(leden, [{"id": "m1", "formulering": 'De belastingplichtige doet "aangifte".',
+                      "vindplaats": "lid 1"}])
     assert brongetrouwheid_check(ok, "2") == []
 
-    verzonnen = {"bronreferentie": "jci:x", "leden": leden,
-                 "markeringen": [{"id": "m1", "formulering": "iets dat er niet staat",
-                                  "vindplaats": "lid 1"}]}
+    verzonnen = _a2(leden, [{"id": "m1", "formulering": "iets dat er niet staat",
+                             "vindplaats": "lid 1"}])
     schend = brongetrouwheid_check(verzonnen, "2")
     assert any("letterlijk citaat" in s for s in schend)
 
@@ -46,9 +52,7 @@ def test_brongetrouwheid_citeerconventies_beletsel_en_haken():
 
     def _check(formulering):
         return brongetrouwheid_check(
-            {"bronreferentie": "jci:x", "leden": leden,
-             "markeringen": [{"id": "m1", "formulering": formulering, "vindplaats": "lid 1"}]},
-            "2",
+            _a2(leden, [{"id": "m1", "formulering": formulering, "vindplaats": "lid 1"}]), "2",
         )
 
     # beletselteken (vgl. m11/m12): geelideerde tussentekst
@@ -79,9 +83,7 @@ def test_brongetrouwheid_markering_over_verwijzing_link():
 
     def _check(formulering):
         return brongetrouwheid_check(
-            {"bronreferentie": "jci:x", "leden": leden,
-             "markeringen": [{"id": "m1", "formulering": formulering, "vindplaats": "lid 1"}]},
-            "2",
+            _a2(leden, [{"id": "m1", "formulering": formulering, "vindplaats": "lid 1"}]), "2",
         )
 
     # markering loopt over de eerste link heen (vgl. m1)
@@ -96,7 +98,9 @@ def test_brongetrouwheid_markering_over_verwijzing_link():
 
 
 def test_brongetrouwheid_bronreferentie_en_vindplaats_verplicht():
-    schend = brongetrouwheid_check({"leden": [], "markeringen": [{"id": "m1", "formulering": ""}]}, "2")
+    schend = brongetrouwheid_check(
+        _a2([], [{"id": "m1", "formulering": ""}], bronref=""), "2",
+    )
     assert any("Bronreferentie" in s for s in schend)
     assert any("Vindplaats" in s for s in schend)
 
@@ -110,12 +114,10 @@ def test_schema_check_filtert_overlap_met_hard():
 
     Zo verschijnt per concern nog precies één melding in de review i.p.v. twee bijna-gelijke.
     """
-    data = {
-        "bronreferentie": "jci:x",
-        "leden": [{"lid": "1", "tekst": "De belastingplichtige doet aangifte."}],
-        "markeringen": [{"id": "m1", "klasse": "Rechtssubject",
-                         "formulering": "iets dat er niet staat"}],  # geen citaat + geen vindplaats
-    }
+    data = _a2(
+        [{"lid": "1", "tekst": "De belastingplichtige doet aangifte."}],
+        [{"id": "m1", "klasse": "Rechtssubject", "formulering": "iets dat er niet staat"}],
+    )
     _, waarschuwingen = schema_check(data, "2")
     assert not any("letterlijk citaat" in w for w in waarschuwingen)
     assert not any("vindplaats" in w for w in waarschuwingen)
@@ -127,7 +129,8 @@ def test_schema_check_filtert_overlap_met_hard():
 
 
 def test_schema_check_act3_filtert_vindplaats():
-    data = {"bronreferentie": "jci:x",
-            "begrippen": [{"id": "b1", "naam": "x", "klasse": "Rechtssubject", "definitie": "y"}]}
+    data = {"werkgebied": {"naam": "test"}, "bronnen": [{"bron_id": "br1", "label": "x"}],
+            "begrippen": [{"id": "b1", "naam": "x", "klasse": "Rechtssubject", "definitie": "y",
+                           "vindplaatsen": [{"bron_id": "br1", "lid": "1"}]}]}
     _, waarschuwingen = schema_check(data, "3")
-    assert not any("vindplaats" in w for w in waarschuwingen)
+    assert not any("vindplaats" in w.lower() for w in waarschuwingen)

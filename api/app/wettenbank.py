@@ -122,6 +122,20 @@ def map_artikel_naar_analyse_basis(artikel_data: dict) -> dict:
     }
 
 
+def map_artikel_naar_bron_basis(
+    artikel_data: dict, bron_id: str, lid: str | None = None, label: str = ""
+) -> dict:
+    """Als map_artikel_naar_analyse_basis, maar voor één **bron** in het werkgebied: voegt
+    `bron_id`, `label` en `lid` toe. Het `label` is leesbaar (bv. "Zvw art. 43 lid 2"); valt
+    terug op een afleiding uit citeertitel/artikel/lid."""
+    basis = map_artikel_naar_analyse_basis(artikel_data)
+    if not label:
+        wet = basis["wet"] or basis["bwbId"]
+        lid_str = f" lid {lid}" if lid else ""
+        label = f"{wet} art. {basis['artikel']}{lid_str}".strip()
+    return {"bron_id": bron_id, "label": label, "lid": lid, **basis}
+
+
 def parse_jci(target: str) -> tuple[str, str, str | None] | None:
     """Haal (bwbId, artikel, lid?) uit een JCI/BWB-verwijzing-target, zodat de orchestrator
     het verwezen artikel via wettenbank_artikel kan ophalen. Heterogeen formaat: een volledige

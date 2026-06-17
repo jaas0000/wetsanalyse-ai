@@ -58,38 +58,48 @@ class FakeLLM:
         lidnr, tekst = (m.group(1), m.group(2)) if m else ("1", "")
         citaat = "VERZONNEN TEKST DIE NIET IN DE WET STAAT" if self.hallucineer else tekst
         is_inventaris = "OPDRACHT (stap 1b" in user
-        is_act3 = "OPDRACHT (activiteit 3)" in user or (
-            "HERZIENE versie" in user and '"begrippen"' in user
-        )
+        is_act3 = "begrippenlijst" in user        # act-3 vers én revise (BEGRIPPEN_REF)
+        is_revise_act2 = "per bron de HERZIENE" in user
+
+        markeringen = [{"id": "m1", "formulering": citaat, "klasse": "Rechtssubject",
+                        "vindplaats": f"lid {lidnr}", "toelichting": "drager van de plicht"}]
+        verwijzingen = [{
+            "id": "v1", "bron_lid": f"lid {lidnr}", "soort": "extref", "functie": "definitie",
+            "doel": {"label": "artikel 2 van de Testdefinitiewet",
+                     "target": "jci1.3:c:BWBR0000001&artikel=2", "bwbId": "BWBR0000001"},
+            "status": "opgehaald", "betekenis": "Definieert de belastingplichtige.",
+        }]
+
         if is_inventaris:
-            # Fase 2a: één te-volgen definitie-verwijzing met een resolvebaar target.
+            # Fase 2a (per bron): één te-volgen definitie-verwijzing met een resolvebaar target.
             data = {"verwijzingen": [{
                 "id": "v1", "bron_lid": f"lid {lidnr}", "soort": "extref", "functie": "definitie",
                 "doel": {"label": "artikel 2 van de Testdefinitiewet",
                          "target": "jci1.3:c:BWBR0000001&artikel=2", "bwbId": "BWBR0000001"},
                 "volgen": True,
             }]}
-            return LLMResult(data=data, model="fake-model", provider="fake", output_strategie="prompt_and_parse")
-        if is_act3:
+        elif is_act3:
+            # Werkgebied-brede begrippenlijst met cross-bron vindplaatsen.
             data = {
                 "begrippen": [{"id": "b1", "naam": "belastingplichtige", "klasse": "Rechtssubject",
                                "definitie": "[interpretatie] degene die aangifte moet doen",
-                               "vindplaats": f"lid {lidnr}"}],
+                               "vindplaatsen": [{"bron_id": "br1", "lid": lidnr}]}],
                 "afleidingsregels": [{"id": "r1", "naam": "aangifteplicht", "type": "beslisregel",
                                       "formulering": "ALS belastingplichtig DAN aangifteplicht",
-                                      "vindplaats": f"lid {lidnr}"}],
+                                      "vindplaatsen": [{"bron_id": "br1", "lid": lidnr}]}],
                 "validatiepunten": ["Open norm: 'aangifte' niet gedefinieerd in dit artikel."],
             }
+        elif is_revise_act2:
+            # Revise act-2: per bron de herziene markeringen/verwijzingen (werkgebied-vorm).
+            data = {"bronnen": [{
+                "bron_id": "br1", "reikwijdte": "lid 1", "geraadpleegde": "",
+                "markeringen": markeringen, "verwijzingen": verwijzingen,
+                "samenhang": "De belastingplichtige is plichthebbende.",
+            }]}
         else:
+            # Verse act-2 per bron: het LLM levert per bron de platte markeringen/verwijzingen.
             data = {
-                "markeringen": [{"id": "m1", "formulering": citaat, "klasse": "Rechtssubject",
-                                 "vindplaats": f"lid {lidnr}", "toelichting": "drager van de plicht"}],
-                "verwijzingen": [{
-                    "id": "v1", "bron_lid": f"lid {lidnr}", "soort": "extref", "functie": "definitie",
-                    "doel": {"label": "artikel 2 van de Testdefinitiewet",
-                             "target": "jci1.3:c:BWBR0000001&artikel=2", "bwbId": "BWBR0000001"},
-                    "status": "opgehaald", "betekenis": "Definieert de belastingplichtige.",
-                }],
+                "markeringen": markeringen, "verwijzingen": verwijzingen,
                 "samenhang": "De belastingplichtige is plichthebbende.",
                 "type": "wet", "reikwijdte": "lid 1", "geraadpleegde": "",
             }

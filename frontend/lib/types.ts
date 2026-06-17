@@ -18,14 +18,18 @@ export type FoutKlasse = "mcp" | "llm" | "validatie" | "intern" | "quota";
 
 // --- Requests ---------------------------------------------------------------
 
-export interface StartRequest {
+/** Eén bron-keuze (wet+artikel+lid) bij het aanmaken van een werkgebied-analyse. */
+export interface BronInput {
   bwbId?: string | null;
-  wet?: string | null;
   artikel: string;
   lid?: string | null;
+}
+
+export interface StartRequest {
+  bronnen: BronInput[];
   naam?: string;
   omschrijving?: string;
-  analysefocus?: string | null;
+  analysefocus?: string | null; // hoofdvraag
   review: boolean;
   model_profile?: string | null;
 }
@@ -55,8 +59,7 @@ export interface JobSummary {
   id: string;
   naam: string;
   state: JobState;
-  bwbId: string;
-  artikel: string;
+  bronnen: BronInput[];
   updated: string;
   // Verrijking voor de eerste (SSR-)render van het dashboard; daarna live via de aggregate-SSE.
   current_fase: string | null;
@@ -91,9 +94,8 @@ export interface RondeProvenance {
 export interface Job {
   id: string;
   state: JobState;
-  bwbId: string;
-  artikel: string;
-  lid: string | null;
+  naam: string;
+  bronnen: BronInput[];
   review: boolean;
   model_profile: string;
   analysefocus: string;
@@ -109,6 +111,30 @@ export interface Job {
 
 // --- Analyse-artefacten (per ronde) -----------------------------------------
 
+/** Het werkgebied (kennisdomein) — de afbakening waarbinnen de analyse plaatsvindt. */
+export interface Werkgebied {
+  naam: string;
+  hoofdvraag: string;
+  omschrijving: string;
+  scoping: string;
+  analysefocus?: string;
+}
+
+/** Absolute, cross-bron vindplaats. */
+export interface Vindplaats {
+  bron_id: string;
+  lid: string;
+}
+
+/** Lichte bron-index (bron_id → leesbaar label) die activiteit 3 meedraagt. */
+export interface BronRef {
+  bron_id: string;
+  label: string;
+  bwbId: string;
+  artikel: string;
+  lid: string | null;
+}
+
 export interface Lid {
   lid: string;
   tekst: string;
@@ -117,21 +143,25 @@ export interface Lid {
 
 export interface Markering {
   id: string;
+  bron_id: string;
   formulering: string;
   klasse: string;
-  vindplaats: string;
+  vindplaats: string; // lid-relatief binnen de bron
   toelichting: string;
   twijfel: string;
 }
 
 export interface Begrip {
   id: string;
-  naam: string;
+  naam: string; // voorkeursterm
+  synoniemen: string[];
   klasse: string;
   definitie: string;
+  grondformulering: string;
   voorbeeld: string;
   kenmerken: string;
-  vindplaats: string;
+  vindplaatsen: Vindplaats[];
+  verwijst_naar_begrippen: string[];
   bron_verwijzing?: string;
   twijfel: string;
 }
@@ -144,6 +174,7 @@ export interface VerwijzingDoel {
 
 export interface Verwijzing {
   id: string;
+  bron_id: string;
   bron_lid: string;
   soort: string; // intref | extref | natuurlijk
   functie: string; // definitie | schakel | delegatie | intra-artikel | informatief
@@ -162,19 +193,22 @@ export interface Afleidingsregel {
   parameters: string;
   voorwaarden: string;
   formulering: string;
-  vindplaats: string;
+  vindplaatsen: Vindplaats[];
   twijfel: string;
 }
 
-export interface Analyse2 {
+/** Eén bron in het werkgebied: een (bwbId, artikel, lid?)-eenheid met haar act-2-uitkomst. */
+export interface Bron {
+  bron_id: string;
+  label: string;
   wet: string;
   bwbId: string;
   artikel: string;
+  lid: string | null;
   versiedatum: string;
   bronreferentie: string;
   type: string;
   pad: string;
-  analysefocus: string;
   reikwijdte: string;
   geraadpleegde: string;
   leden: Lid[];
@@ -183,12 +217,15 @@ export interface Analyse2 {
   samenhang: string;
 }
 
+export interface Analyse2 {
+  werkgebied: Werkgebied;
+  analysefocus: string;
+  bronnen: Bron[];
+}
+
 export interface Analyse3 {
-  wet: string;
-  bwbId: string;
-  artikel: string;
-  versiedatum: string;
-  bronreferentie: string;
+  werkgebied: Werkgebied;
+  bronnen: BronRef[];
   begrippen: Begrip[];
   afleidingsregels: Afleidingsregel[];
   validatiepunten: string[];
@@ -213,20 +250,8 @@ export interface Reviewlog {
 }
 
 export interface Rapport {
-  wet: string;
-  bwbId: string;
-  artikel: string;
-  versiedatum: string;
-  bronreferentie: string;
-  type: string;
-  pad: string;
-  analysefocus: string;
-  reikwijdte: string;
-  geraadpleegde: string;
-  leden: Lid[];
-  markeringen: Markering[];
-  verwijzingen: Verwijzing[];
-  samenhang: string;
+  werkgebied: Werkgebied;
+  bronnen: Bron[];
   begrippen: Begrip[];
   afleidingsregels: Afleidingsregel[];
   validatiepunten: string[];
@@ -330,8 +355,7 @@ export interface SSEUpdate {
 export interface DashboardUpdate {
   id: string;
   naam: string;
-  bwbId: string;
-  artikel: string;
+  bronnen: BronInput[];
   state: JobState;
   current_activiteit: Activiteit | null;
   current_ronde: number;

@@ -17,9 +17,12 @@ inhoudelijke `references/`/`scripts/`. De samenwerkende delen:
    markeren + classificeren in JAS-klassen; activiteit 3: begrippen + afleidingsregels) en een
    `rapport.json` oplevert die via een HTML-viewer wordt gepresenteerd. Markdown is beschikbaar
    als afgeleid exportformaat. De skill *gebruikt* de MCP als bron.
-3. **`analyses/`** — output: per analyse een map met het eindrapport en de `werk/`-tussenbestanden.
-   De map heet naar de BWB-id in kleine letters: `<bwbid>-art<nr>[-lidN]` (bijv.
-   `bwbr0004770-art9-lid2`), gelijk aan de bestandsnaam die de rapportgenerator afleidt.
+3. **`analyses/`** — output: per **werkgebied** een map met het eindrapport en de
+   `werk/`-tussenbestanden. De analyse-eenheid is het werkgebied (kennisdomein) met **meerdere
+   bronnen** (een bron = `bwbId`+`artikel`+`lid?`), niet één artikel: activiteit 2 markeert per bron,
+   activiteit 3 levert één gedeelde, ontdubbelde begrippenlijst over alle bronnen heen. De map heet
+   naar de werkgebied-naam (kebab-case); bij ontbreken valt ze terug op de eerste bron
+   (`<bwbid>-art<nr>[-lidN]`).
 4. **`api/`** — headless FastAPI-backend die dezelfde JAS-werkstroom als async REST-API aanbiedt
    (PostgreSQL-jobstore, per-client bearer-auth). Heeft een eigen `CLAUDE.md` + `README.md` — lees die
    bij werk *in* de API. Het LLM wordt aangestuurd via **benoemde modelprofielen** (in de database, beheerbaar
@@ -122,9 +125,12 @@ kernstructuur die meerdere bestanden raakt:
 
 Inhoudelijke regels die je moet kennen voordat je classificeert of begrippen opstelt:
 `references/jas-klassen-referentie.md` (de dertien JAS-klassen — verzin er geen),
-`references/begrippen-en-afleidingsregels-opstellen.md` en `references/verwijzingen-volgen.md`
-(het volg-beleid voor cross-referenties: functies, diepte/relevantie-grens, bounded delegaties).
-Voorbeeld-output (met `rapport.json`) staat in `analyses/bwbr0004770-art9-lid2/`.
+`references/begrippen-en-afleidingsregels-opstellen.md` (incl. werkgebied-breed hergebruik en
+ontdubbeling — homoniemen splitsen, synoniemen samenvoegen) en `references/verwijzingen-volgen.md`
+(het volg-beleid voor cross-referenties: functies, diepte/relevantie-grens, bounded delegaties;
+een gevolgde delegatie/definitie kan promoveren tot een eigen bron in het werkgebied). Het
+datacontract van `analyse.json`/`rapport.json` (werkgebied + bronnen) staat in
+`references/review-checkpoints.md`.
 
 Komt een analyse onbetrouwbaar uit (verzonnen tekst, niet-bestaande klasse, overgeslagen
 review, niet-convergerende lus — géén gewone review-feedback), dan is

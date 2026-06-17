@@ -98,12 +98,15 @@ _ACT3_SCHEMA = {
     "begrippen": [
         {
             "id": "b1",
-            "naam": "<begripsnaam>",
+            "naam": "<voorkeursterm — uniek per werkgebied>",
+            "synoniemen": ["<alternatieve term met dezelfde betekenis>"],
             "klasse": "<JAS-klasse>",
             "definitie": "<brondefinitie of [interpretatie]>",
+            "grondformulering": "<letterlijke wetformulering; bij homoniemen herleidbaar splitsen>",
             "voorbeeld": "<kort>",
             "kenmerken": "<kenmerken/relaties>",
-            "vindplaats": "<art./lid>",
+            "vindplaatsen": [{"bron_id": "br1", "lid": "<n>"}],
+            "verwijst_naar_begrippen": ["<begrip-id dat in de omschrijving wordt gebruikt>"],
             "bron_verwijzing": "<id van de definitie-verwijzing indien de definitie van elders komt, anders weglaten>",
             "twijfel": "<optioneel>",
         }
@@ -118,11 +121,26 @@ _ACT3_SCHEMA = {
             "parameters": "...",
             "voorwaarden": "...",
             "formulering": "<gestructureerde pseudo met expliciete operatoren>",
-            "vindplaats": "<art./lid>",
+            "vindplaatsen": [{"bron_id": "br1", "lid": "<n>"}],
             "twijfel": "<optioneel>",
         }
     ],
     "validatiepunten": ["<aandachtspunt voor multidisciplinaire validatie>"],
+}
+
+# Revise act-2: het LLM levert per bron de herziene markeringen/verwijzingen terug; de
+# brongetrouwe leden-tekst wordt in de merge opnieuw uit de basis gelegd (niet door het LLM).
+_ACT2_REVISE_SCHEMA = {
+    "bronnen": [
+        {
+            "bron_id": "br1",
+            "reikwijdte": "<optioneel>",
+            "geraadpleegde": "<optioneel>",
+            "markeringen": _ACT2_SCHEMA["markeringen"],
+            "verwijzingen": _ACT2_SCHEMA["verwijzingen"],
+            "samenhang": "<korte tekst over samenhang>",
+        }
+    ],
 }
 
 
@@ -131,6 +149,38 @@ def _leden_blok(basis: dict) -> str:
     for lid in basis.get("leden", []):
         regels.append(f"Lid {lid.get('lid','')}: {lid.get('tekst','')}")
     return "\n".join(regels)
+
+
+def _bron_label(bron: dict) -> str:
+    if bron.get("label"):
+        return bron["label"]
+    lid = f" lid {bron['lid']}" if bron.get("lid") else ""
+    return f"{bron.get('wet','')} art. {bron.get('artikel','')}{lid}".strip()
+
+
+def _bronnen_blok(analyse: dict) -> str:
+    """Wettekst van álle bronnen in het werkgebied (per bron gelabeld met bron_id)."""
+    regels = []
+    for bron in analyse.get("bronnen", []):
+        regels.append(f"\n--- bron {bron.get('bron_id','')} — {_bron_label(bron)} ({bron.get('bwbId','')}) ---")
+        for lid in bron.get("leden", []):
+            regels.append(f"Lid {lid.get('lid','')}: {lid.get('tekst','')}")
+    return "\n".join(regels)
+
+
+def _bron_index_blok(analyse: dict) -> str:
+    """Compacte bron-index zodat het LLM `vindplaatsen.bron_id` correct kan invullen."""
+    regels = ["Bronnen (gebruik deze bron_id's in 'vindplaatsen'):"]
+    for bron in analyse.get("bronnen", []):
+        regels.append(f"- {bron.get('bron_id','')}: {_bron_label(bron)}")
+    return "\n".join(regels)
+
+
+def _verzamel(analyse: dict, sleutel: str) -> list:
+    out = []
+    for bron in analyse.get("bronnen", []):
+        out.extend(bron.get(sleutel) or [])
+    return out
 
 
 def _mcp_verwijzingen_blok(basis: dict) -> str:
@@ -222,43 +272,67 @@ def act2_prompt(
     return _SYSTEM, user, _ACT2_SCHEMA, _hash(_SYSTEM, user)
 
 
-def act3_prompt(basis: dict, act2: dict) -> tuple[str, str, dict, str]:
+def act3_prompt(context: dict) -> tuple[str, str, dict, str]:
+    """Werkgebied-breed: één gedeelde begrippenlijst + afleidingsregels over álle bronnen.
+    `context` is de act-2-aggregaat ({werkgebied, bronnen[...]})."""
     user = (
         "REFERENTIE — begrippen en afleidingsregels opstellen:\n"
         + BEGRIPPEN_REF
-        + "\n\n=== WETTEKST ===\n"
-        + _leden_blok(basis)
-        + "\n\n=== GECLASSIFICEERDE MARKERINGEN (activiteit 2) ===\n"
-        + json.dumps({"markeringen": act2.get("markeringen", []), "samenhang": act2.get("samenhang", "")}, ensure_ascii=False, indent=2)
+        + "\n\n=== WETTEKST VAN ALLE BRONNEN IN HET WERKGEBIED ===\n"
+        + _bronnen_blok(context)
+        + "\n\n" + _bron_index_blok(context)
+        + "\n\n=== GECLASSIFICEERDE MARKERINGEN (activiteit 2, alle bronnen) ===\n"
+        + json.dumps(_verzamel(context, "markeringen"), ensure_ascii=False, indent=2)
         + "\n\n=== UITGAANDE VERWIJZINGEN (activiteit 2; brondefinities staan in 'betekenis') ===\n"
-        + json.dumps({"verwijzingen": act2.get("verwijzingen", [])}, ensure_ascii=False, indent=2)
-        + "\n\nOPDRACHT (activiteit 3): stel per betekenisdragend element een begrip op "
-        "(definitie, voorbeeld, kenmerken/relaties, vindplaats) en leg de afleidingsregels vast "
-        "(type, in-/uitvoer, parameters, voorwaarden, gestructureerde formulering). Hergebruik "
-        "brondefinities letterlijk; markeer eigen werkdefinities als [interpretatie]. Komt een "
-        "hergebruikte definitie uit een verwijzing met functie 'definitie', zet dan "
-        "'bron_verwijzing' op het id van die verwijzing. Gebruik stabiele id's (b1, r1, …). "
-        "Noteer aandachtspunten als validatiepunten."
+        + json.dumps(_verzamel(context, "verwijzingen"), ensure_ascii=False, indent=2)
+        + "\n\nOPDRACHT (activiteit 3 — WERKGEBIED-BREED): stel ÉÉN gedeelde begrippenlijst op over "
+        "alle bronnen heen. Cruciaal is hergebruik en ontdubbeling:\n"
+        "- Hergebruik: één begrip voor elke formulering met dezelfde betekenis; som alle "
+        "'vindplaatsen' (bron_id + lid) op waar het voorkomt.\n"
+        "- Synoniemen: verschillende formuleringen, zelfde betekenis → één begrip met één "
+        "voorkeursterm ('naam') + de rest in 'synoniemen'.\n"
+        "- Homoniemen: zelfde formulering, andere betekenis → APARTE begrippen; leg de letterlijke "
+        "'grondformulering' vast zodat de splitsing herleidbaar is.\n"
+        "- Gebruik in een begripsomschrijving eerder gedefinieerde begrippen en noteer die in "
+        "'verwijst_naar_begrippen'.\n"
+        "Leg per begrip definitie/voorbeeld/kenmerken vast (hergebruik brondefinities letterlijk; "
+        "markeer eigen werkdefinities als [interpretatie]; 'bron_verwijzing' = id van een "
+        "definitie-verwijzing indien van elders). Leg de afleidingsregels vast (type, in-/uitvoer, "
+        "parameters, voorwaarden, gestructureerde formulering, vindplaatsen). Gebruik stabiele, "
+        "werkgebied-brede id's (b1, r1, …). Noteer aandachtspunten als validatiepunten."
     )
     return _SYSTEM, user, _ACT3_SCHEMA, _hash(_SYSTEM, user)
 
 
 def revise_prompt(
-    activiteit: str, basis: dict, vorige: dict, feedback: dict
+    activiteit: str, context: dict, vorige: dict, feedback: dict
 ) -> tuple[str, str, dict, str]:
-    schema = _ACT2_SCHEMA if activiteit == "2" else _ACT3_SCHEMA
-    ref = (JAS_REF + "\n\n" + VERWIJZINGEN_REF) if activiteit == "2" else BEGRIPPEN_REF
+    if activiteit == "2":
+        schema = _ACT2_REVISE_SCHEMA
+        wettekst = "\n\n=== WETTEKST VAN ALLE BRONNEN ===\n" + _bronnen_blok(context)
+        ref = JAS_REF + "\n\n" + VERWIJZINGEN_REF
+        extra = (
+            "\n\nOPDRACHT: lever per bron de HERZIENE markeringen/verwijzingen/samenhang terug "
+            "(gebruik dezelfde bron_id's). Verwerk elke per-item-correctie (per id) en de algemene "
+            "feedback. HOUD ID'S STABIEL en werkgebied-breed uniek. Citeer letterlijk uit de "
+            "leden-tekst van de betreffende bron."
+        )
+    else:
+        schema = _ACT3_SCHEMA
+        wettekst = "\n\n" + _bron_index_blok(vorige)
+        ref = BEGRIPPEN_REF
+        extra = (
+            "\n\nOPDRACHT: lever de HERZIENE werkgebied-brede begrippenlijst + afleidingsregels. "
+            "Verwerk elke per-item-correctie (per id) en de algemene feedback. HOUD ID'S STABIEL. "
+            "Behoud hergebruik/ontdubbeling (synoniemen samenvoegen, homoniemen splitsen) en vul "
+            "'vindplaatsen' met de juiste bron_id's."
+        )
     user = (
-        "REFERENTIE:\n"
-        + ref
-        + "\n\n=== WETTEKST ===\n"
-        + _leden_blok(basis)
+        "REFERENTIE:\n" + ref + wettekst
         + "\n\n=== JE VORIGE VERSIE ===\n"
         + json.dumps(vorige, ensure_ascii=False, indent=2)
         + "\n\n=== FEEDBACK VAN DE ANALIST (verwerk ELK punt) ===\n"
         + json.dumps(feedback, ensure_ascii=False, indent=2)
-        + "\n\nOPDRACHT: lever de HERZIENE versie. Verwerk elke per-item-correctie (per id) en de "
-        "algemene feedback. HOUD ID'S STABIEL: hetzelfde concept houdt hetzelfde id, ook na een "
-        "correctie. Citeer nog steeds letterlijk uit de leden-tekst."
+        + extra
     )
     return _SYSTEM, user, schema, _hash(_SYSTEM, user)

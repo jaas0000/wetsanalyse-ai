@@ -4,6 +4,11 @@
 Controleert mechanische fouten zodat de menselijke review zich op inhoud kan richten.
 Draai dit script na het schrijven van analyse.json, vóórdat je review_server.py start.
 
+De analyse-eenheid is het **werkgebied** met meerdere **bronnen**: activiteit 2 draagt een
+`bronnen[]`-array (per bron leden/markeringen/verwijzingen); activiteit 3 is werkgebied-breed
+(gedeelde begrippen/afleidingsregels met `vindplaatsen[{bron_id,lid}]`). Id's zijn
+werkgebied-breed uniek.
+
 Exitcodes:
   0 — geen fouten of waarschuwingen
   1 — waarschuwingen (niet-blokkerend; toon als context bij de review)
@@ -69,54 +74,47 @@ def fragmenten_letterlijk(formulering: str, brontekst: str) -> bool:
     return all((not f) or (f in brontekst) for f in fragmenten)
 
 
-def check_verwijzingen(data: dict) -> tuple[list[str], list[str]]:
-    """Valideert de uitgaande-verwijzingen-array (structuur + enums).
-
-    De cross-file koppeling (bron_verwijzing op een act-3-begrip → verwijzing-id in
-    act-2) wordt niet hier maar in build_rapport_json.py gecheckt, waar beide
-    activiteiten samenkomen.
-    """
+def check_verwijzing_item(v: dict, geziene_ids: set[str], label: str) -> tuple[list[str], list[str]]:
+    """Valideert één uitgaande verwijzing (structuur + enums). `geziene_ids` is werkgebied-breed."""
     fouten: list[str] = []
     waarschuwingen: list[str] = []
 
-    geziene_ids: set[str] = set()
-    for v in (data.get("verwijzingen") or []):
-        vid = v.get("id", "")
-        if not vid:
-            fouten.append("Verwijzing heeft geen 'id'.")
-        else:
-            if vid in geziene_ids:
-                fouten.append(f"Verwijzing-id '{vid}' komt meerdere keren voor.")
-            geziene_ids.add(vid)
+    vid = v.get("id", "")
+    if not vid:
+        fouten.append(f"[{label}] Verwijzing heeft geen 'id'.")
+    else:
+        if vid in geziene_ids:
+            fouten.append(f"Verwijzing-id '{vid}' komt meerdere keren voor (werkgebied-breed).")
+        geziene_ids.add(vid)
 
-        functie = v.get("functie", "")
-        if not functie:
-            fouten.append(f"[{vid or '?'}] Verwijzing mist 'functie'.")
-        elif functie not in GELDIGE_VERWIJZING_FUNCTIES:
-            fouten.append(
-                f"[{vid or '?'}] Ongeldige verwijzing-functie: '{functie}'. "
-                f"Gebruik: {', '.join(sorted(GELDIGE_VERWIJZING_FUNCTIES))}."
-            )
+    functie = v.get("functie", "")
+    if not functie:
+        fouten.append(f"[{vid or '?'}] Verwijzing mist 'functie'.")
+    elif functie not in GELDIGE_VERWIJZING_FUNCTIES:
+        fouten.append(
+            f"[{vid or '?'}] Ongeldige verwijzing-functie: '{functie}'. "
+            f"Gebruik: {', '.join(sorted(GELDIGE_VERWIJZING_FUNCTIES))}."
+        )
 
-        status = v.get("status", "")
-        if not status:
-            fouten.append(f"[{vid or '?'}] Verwijzing mist 'status'.")
-        elif status not in GELDIGE_VERWIJZING_STATUS:
-            fouten.append(
-                f"[{vid or '?'}] Ongeldige verwijzing-status: '{status}'. "
-                f"Gebruik: {', '.join(sorted(GELDIGE_VERWIJZING_STATUS))}."
-            )
+    status = v.get("status", "")
+    if not status:
+        fouten.append(f"[{vid or '?'}] Verwijzing mist 'status'.")
+    elif status not in GELDIGE_VERWIJZING_STATUS:
+        fouten.append(
+            f"[{vid or '?'}] Ongeldige verwijzing-status: '{status}'. "
+            f"Gebruik: {', '.join(sorted(GELDIGE_VERWIJZING_STATUS))}."
+        )
 
-        soort = v.get("soort", "")
-        if soort and soort not in GELDIGE_VERWIJZING_SOORT:
-            waarschuwingen.append(
-                f"[{vid or '?'}] Onbekende verwijzing-soort: '{soort}' "
-                f"(verwacht: {', '.join(sorted(GELDIGE_VERWIJZING_SOORT))})."
-            )
+    soort = v.get("soort", "")
+    if soort and soort not in GELDIGE_VERWIJZING_SOORT:
+        waarschuwingen.append(
+            f"[{vid or '?'}] Onbekende verwijzing-soort: '{soort}' "
+            f"(verwacht: {', '.join(sorted(GELDIGE_VERWIJZING_SOORT))})."
+        )
 
-        doel = v.get("doel") or {}
-        if not (doel.get("label") or "").strip():
-            fouten.append(f"[{vid or '?'}] Verwijzing mist 'doel.label'.")
+    doel = v.get("doel") or {}
+    if not (doel.get("label") or "").strip():
+        fouten.append(f"[{vid or '?'}] Verwijzing mist 'doel.label'.")
 
     return fouten, waarschuwingen
 
@@ -125,66 +123,116 @@ def check_activiteit_2(data: dict) -> tuple[list[str], list[str]]:
     fouten: list[str] = []
     waarschuwingen: list[str] = []
 
-    if not data.get("bronreferentie", "").strip():
-        fouten.append("Topniveau-veld 'bronreferentie' ontbreekt of is leeg.")
+    bronnen = data.get("bronnen") or []
+    if not bronnen:
+        fouten.append("Geen bronnen in 'bronnen' (een werkgebied heeft minstens één bron).")
 
-    leden_tekst = " ".join(
-        (lid.get("tekst") or "") for lid in (data.get("leden") or [])
-    )
+    geziene_ids: set[str] = set()   # werkgebied-breed: markeringen én verwijzingen
+    bron_ids: set[str] = set()
+    heeft_delegatie_markering = False
+    heeft_delegatie_verwijzing = False
 
-    markeringen = data.get("markeringen") or []
-    if not markeringen:
-        waarschuwingen.append("Geen markeringen gevonden in 'markeringen'.")
-
-    geziene_ids: set[str] = set()
-    for m in markeringen:
-        mid = m.get("id", "")
-        if not mid:
-            fouten.append("Markering heeft geen 'id' (verplicht voor feedback-koppeling).")
+    for bron in bronnen:
+        bron_id = bron.get("bron_id", "")
+        label = bron.get("label") or bron_id or "?"
+        if not bron_id:
+            fouten.append("Bron heeft geen 'bron_id'.")
+        elif bron_id in bron_ids:
+            fouten.append(f"bron_id '{bron_id}' komt meerdere keren voor.")
         else:
-            if mid in geziene_ids:
-                fouten.append(f"Markering-id '{mid}' komt meerdere keren voor.")
-            geziene_ids.add(mid)
+            bron_ids.add(bron_id)
 
-        klasse = m.get("klasse", "")
-        if not klasse:
-            fouten.append(f"[{mid or '?'}] Veld 'klasse' ontbreekt of is leeg.")
-        elif klasse not in GELDIGE_JAS_KLASSEN:
-            fouten.append(
-                f"[{mid or '?'}] Ongeldige JAS-klasse: '{klasse}'. "
-                "Gebruik een van de 13 toegestane klassen."
-            )
+        if not (bron.get("bronreferentie") or "").strip():
+            fouten.append(f"[{label}] Veld 'bronreferentie' ontbreekt of is leeg.")
 
-        formulering = (m.get("formulering") or "").strip()
-        if formulering and leden_tekst and not fragmenten_letterlijk(formulering, leden_tekst):
-            kort = formulering[:60] + ("..." if len(formulering) > 60 else "")
-            waarschuwingen.append(
-                f"[{mid}] Formulering lijkt geen letterlijk citaat uit de wettekst: '{kort}'"
-            )
+        leden_tekst = " ".join(
+            (lid.get("tekst") or "") for lid in (bron.get("leden") or [])
+        )
 
-        if not (m.get("vindplaats") or "").strip():
-            waarschuwingen.append(f"[{mid}] Veld 'vindplaats' ontbreekt of is leeg.")
+        markeringen = bron.get("markeringen") or []
+        if not markeringen:
+            waarschuwingen.append(f"[{label}] Geen markeringen gevonden.")
 
-    # Delegatie-koppeling: een delegatie-markering hoort een verwijzing met
-    # functie 'delegatie' te hebben (de gedelegeerde regeling als uitgaande pointer).
-    heeft_delegatie_markering = any(
-        m.get("klasse") == DELEGATIE_KLASSE for m in markeringen
-    )
-    heeft_delegatie_verwijzing = any(
-        v.get("functie") == "delegatie" for v in (data.get("verwijzingen") or [])
-    )
+        for m in markeringen:
+            mid = m.get("id", "")
+            if not mid:
+                fouten.append(f"[{label}] Markering heeft geen 'id' (verplicht voor feedback-koppeling).")
+            else:
+                if mid in geziene_ids:
+                    fouten.append(f"Id '{mid}' komt meerdere keren voor (werkgebied-breed).")
+                geziene_ids.add(mid)
+
+            m_bron = m.get("bron_id", "")
+            if m_bron and bron_id and m_bron != bron_id:
+                fouten.append(
+                    f"[{mid or '?'}] bron_id '{m_bron}' wijkt af van de bron '{bron_id}' "
+                    "waarin de markering staat."
+                )
+
+            klasse = m.get("klasse", "")
+            if not klasse:
+                fouten.append(f"[{mid or '?'}] Veld 'klasse' ontbreekt of is leeg.")
+            elif klasse not in GELDIGE_JAS_KLASSEN:
+                fouten.append(
+                    f"[{mid or '?'}] Ongeldige JAS-klasse: '{klasse}'. "
+                    "Gebruik een van de 13 toegestane klassen."
+                )
+            elif klasse == DELEGATIE_KLASSE:
+                heeft_delegatie_markering = True
+
+            formulering = (m.get("formulering") or "").strip()
+            if formulering and leden_tekst and not fragmenten_letterlijk(formulering, leden_tekst):
+                kort = formulering[:60] + ("..." if len(formulering) > 60 else "")
+                waarschuwingen.append(
+                    f"[{mid}] Formulering lijkt geen letterlijk citaat uit de wettekst: '{kort}'"
+                )
+
+            if not (m.get("vindplaats") or "").strip():
+                waarschuwingen.append(f"[{mid}] Veld 'vindplaats' ontbreekt of is leeg.")
+
+        for v in (bron.get("verwijzingen") or []):
+            v_bron = v.get("bron_id", "")
+            if v_bron and bron_id and v_bron != bron_id:
+                fouten.append(
+                    f"[{v.get('id', '?')}] verwijzing-bron_id '{v_bron}' wijkt af van bron "
+                    f"'{bron_id}'."
+                )
+            if v.get("functie") == "delegatie":
+                heeft_delegatie_verwijzing = True
+            v_fouten, v_waarschuwingen = check_verwijzing_item(v, geziene_ids, label)
+            fouten.extend(v_fouten)
+            waarschuwingen.extend(v_waarschuwingen)
+
+    # Delegatie-koppeling: een delegatie-markering hoort ergens in het werkgebied een verwijzing
+    # met functie 'delegatie' te hebben (de gedelegeerde regeling als uitgaande pointer of een
+    # eigen bron).
     if heeft_delegatie_markering and not heeft_delegatie_verwijzing:
         waarschuwingen.append(
             "Er is een markering met klasse 'Delegatiebevoegdheid en delegatie-invulling' "
             "maar geen verwijzing met functie 'delegatie' — leg de gedelegeerde regeling "
-            "vast als verwijzing."
+            "vast als verwijzing of als eigen bron."
         )
 
-    v_fouten, v_waarschuwingen = check_verwijzingen(data)
-    fouten.extend(v_fouten)
-    waarschuwingen.extend(v_waarschuwingen)
-
     return fouten, waarschuwingen
+
+
+def check_vindplaatsen(item: dict, iid: str, soort: str, bron_ids: set[str]) -> list[str]:
+    """Waarschuw als 'vindplaatsen' ontbreekt/leeg is, items zonder bron_id bevat, of
+    naar een bron_id wijst die niet in de bron-index staat."""
+    waarschuwingen: list[str] = []
+    vindplaatsen = item.get("vindplaatsen") or []
+    if not vindplaatsen:
+        waarschuwingen.append(f"[{iid or '?'}] {soort} heeft geen 'vindplaatsen'.")
+    else:
+        for vp in vindplaatsen:
+            bid = (vp.get("bron_id") or "").strip()
+            if not bid:
+                waarschuwingen.append(f"[{iid or '?'}] vindplaats zonder 'bron_id'.")
+            elif bron_ids and bid not in bron_ids:
+                waarschuwingen.append(
+                    f"[{iid or '?'}] vindplaats-bron_id '{bid}' staat niet in de bron-index."
+                )
+    return waarschuwingen
 
 
 def check_activiteit_3(data: dict) -> tuple[list[str], list[str]]:
@@ -192,6 +240,7 @@ def check_activiteit_3(data: dict) -> tuple[list[str], list[str]]:
     waarschuwingen: list[str] = []
 
     geziene_ids: set[str] = set()
+    bron_ids = {b.get("bron_id") for b in (data.get("bronnen") or []) if b.get("bron_id")}
 
     for b in (data.get("begrippen") or []):
         bid = b.get("id", "")
@@ -216,8 +265,7 @@ def check_activiteit_3(data: dict) -> tuple[list[str], list[str]]:
         if not (b.get("definitie") or "").strip():
             waarschuwingen.append(f"[{bid or '?'}] Begrip heeft geen 'definitie'.")
 
-        if not (b.get("vindplaats") or "").strip():
-            waarschuwingen.append(f"[{bid or '?'}] Begrip heeft geen 'vindplaats'.")
+        waarschuwingen.extend(check_vindplaatsen(b, bid, "Begrip", bron_ids))
 
         if "bron_verwijzing" in b and not (b.get("bron_verwijzing") or "").strip():
             waarschuwingen.append(
@@ -251,12 +299,7 @@ def check_activiteit_3(data: dict) -> tuple[list[str], list[str]]:
         if not (r.get("formulering") or "").strip():
             fouten.append(f"[{rid}] Afleidingsregel heeft geen 'formulering'.")
 
-        if not (r.get("vindplaats") or "").strip():
-            waarschuwingen.append(f"[{rid}] Afleidingsregel heeft geen 'vindplaats'.")
-
-    v_fouten, v_waarschuwingen = check_verwijzingen(data)
-    fouten.extend(v_fouten)
-    waarschuwingen.extend(v_waarschuwingen)
+        waarschuwingen.extend(check_vindplaatsen(r, rid, "Afleidingsregel", bron_ids))
 
     return fouten, waarschuwingen
 
@@ -284,11 +327,12 @@ def main() -> None:
 
     if args.activiteit == "2":
         fouten, waarschuwingen = check_activiteit_2(data)
+        context = f"{len(data.get('bronnen') or [])} bron(nen)"
     else:
         fouten, waarschuwingen = check_activiteit_3(data)
+        context = (data.get("werkgebied") or {}).get("naam", "?")
 
-    artikel = data.get("artikel", "?")
-    print(f"\n  Pre-check analyse.json - activiteit {args.activiteit}, artikel {artikel}")
+    print(f"\n  Pre-check analyse.json - activiteit {args.activiteit}, werkgebied {context}")
     print(f"  {'-' * 52}")
 
     if not fouten and not waarschuwingen:

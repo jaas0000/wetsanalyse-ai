@@ -8,8 +8,7 @@ export function summaryNaarUpdate(s: JobSummary): DashboardUpdate {
   return {
     id: s.id,
     naam: s.naam,
-    bwbId: s.bwbId,
-    artikel: s.artikel,
+    bronnen: s.bronnen ?? [],
     state: s.state,
     current_activiteit: null,
     current_ronde: 0,

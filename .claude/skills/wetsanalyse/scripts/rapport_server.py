@@ -38,14 +38,34 @@ def cel(tekst) -> str:
     return str(tekst).replace("|", "\\|").replace("\n", "<br>").strip()
 
 
+def bron_titel(b: dict) -> str:
+    if b.get("label"):
+        return b["label"]
+    if b.get("wet"):
+        lid = f" lid {b['lid']}" if b.get("lid") else ""
+        return f"{b['wet']} art. {b.get('artikel', '')}{lid}"
+    return b.get("bron_id", "bron")
+
+
+def vindplaats_text(vps, bron_label: dict) -> str:
+    if not isinstance(vps, list) or not vps:
+        return ""
+    delen = []
+    for vp in vps:
+        lbl = bron_label.get(vp.get("bron_id"), vp.get("bron_id", ""))
+        delen.append(lbl + (f" lid {vp['lid']}" if vp.get("lid") else ""))
+    return "; ".join(d for d in delen if d)
+
+
 def rapport_naar_md(d: dict) -> str:
     regels: list[str] = []
+    wg = d.get("werkgebied") or {}
+    bronnen = d.get("bronnen") or []
+    bron_label = {b.get("bron_id"): (b.get("label") or bron_titel(b)) for b in bronnen}
 
-    # Titel
-    leden = d.get("leden", [])
-    lid_aand = f" lid {leden[0]['lid']}" if len(leden) == 1 and leden[0].get("lid") else ""
+    titel = wg.get("naam") or (bron_titel(bronnen[0]) if len(bronnen) == 1 else "werkgebied")
     regels += [
-        f"# Wetsanalyse — {d.get('wet', '')}, artikel {d.get('artikel', '')}{lid_aand}",
+        f"# Wetsanalyse — {titel}",
         "",
         "> Analyse volgens de methode Wetsanalyse (Ausems, Bulles & Lokin), activiteit 2 + 3.",
         "> Dit is een **concept-analyse als hulpmiddel**: bedoeld voor multidisciplinaire validatie",
@@ -53,97 +73,80 @@ def rapport_naar_md(d: dict) -> str:
         "",
     ]
 
-    # §0 Bron en afbakening
-    artikel = d.get("artikel", "")
-    lid_str = f", lid {leden[0]['lid']}" if len(leden) == 1 and leden[0].get("lid") else ""
+    # §0 Werkgebied en afbakening
     regels += [
-        "## 0. Bron en afbakening",
+        "## 0. Werkgebied en afbakening",
         "",
-        f"- **Wet / regeling:** {d.get('wet', '')} ({d.get('type', '')})",
-        f"- **BWB-id:** {d.get('bwbId', '')}",
-        f"- **Artikel(en):** {artikel}{lid_str} — pad: {d.get('pad', '')}",
-        f"- **Versie-/peildatum:** {d.get('versiedatum', '')}",
-        f"- **Bronreferentie(s):** {d.get('bronreferentie', '')}",
-        f"- **Analysefocus / hoofdvraag:** {d.get('analysefocus', '')}",
-        f"- **Reikwijdte:** {d.get('reikwijdte', '')}",
-        f"- **Geraadpleegde definitie-/aanpalende artikelen:** {d.get('geraadpleegde', '')}",
+        f"- **Werkgebied:** {wg.get('naam', '')}",
+        f"- **Hoofdvraag / analysefocus:** {wg.get('hoofdvraag') or wg.get('analysefocus', '')}",
+        f"- **Omschrijving:** {wg.get('omschrijving', '')}",
+        f"- **Afbakening (scoping):** {wg.get('scoping', '')}",
+        "",
+        f"### Bronnen in het werkgebied ({len(bronnen)})",
         "",
     ]
+    for b in bronnen:
+        det = " · ".join(filter(None, [b.get("bwbId"), b.get("versiedatum"), b.get("bronreferentie")]))
+        regels.append(f"- **{bron_titel(b)}** — {det}")
+    regels.append("")
 
-    # §1 Wettekst
-    regels += [
-        "## 1. Wettekst (letterlijk)",
-        "",
-        "> Letterlijk overgenomen uit de bron, lid voor lid. Geen parafrase.",
-        "",
-    ]
-    for lid in leden:
-        regels.append(f"**Lid {lid.get('lid', '?')}.** {lid.get('tekst', '')}")
-        regels.append("")
-
-    # §2 Markeringen
-    regels += [
-        "## 2. Activiteit 2 — Juridische structuur",
-        "",
-        "### 2a/2b — Markeringen en classificaties",
-        "",
-        "| # | Formulering (letterlijk) | JAS-klasse | Vindplaats | Toelichting (waarom deze klasse; evt. alternatief) |",
-        "| --- | --- | --- | --- | --- |",
-    ]
-    for m in d.get("markeringen", []):
-        regels.append(
-            f"| {cel(m.get('id'))} | \"{cel(m.get('formulering'))}\" | "
-            f"{cel(m.get('klasse'))} | {cel(m.get('vindplaats'))} | "
-            f"{cel(m.get('toelichting'))} |"
-        )
-    regels += [
-        "",
-        "### Samenhang rond de centrale klassen",
-        "",
-        d.get("samenhang", ""),
-        "",
-    ]
-
-    # §2b Verwijzingen
-    verwijzingen = d.get("verwijzingen", [])
-    if verwijzingen:
+    # §1/§2 Per bron: wettekst, markeringen, verwijzingen, samenhang
+    regels += ["## 1/2. Bronnen — wettekst, markeringen en verwijzingen", ""]
+    for i, b in enumerate(bronnen, 1):
+        regels += [f"### Bron {i} — {bron_titel(b)}", ""]
+        regels += ["**Wettekst (letterlijk)**", ""]
+        for lid in b.get("leden", []):
+            regels.append(f"**Lid {lid.get('lid', '?')}.** {lid.get('tekst', '')}")
+            regels.append("")
         regels += [
-            "## 2b. Verwijzingen",
+            "**Markeringen & classificaties**",
             "",
-            "> Uitgaande verwijzingen van de bepaling, naar functie en scope-status.",
-            "",
-            "| # | Functie | Doel | Bron | Soort | Status | Betekenis |",
-            "| --- | --- | --- | --- | --- | --- | --- |",
+            "| # | Formulering (letterlijk) | JAS-klasse | Vindplaats | Toelichting |",
+            "| --- | --- | --- | --- | --- |",
         ]
-        for v in verwijzingen:
-            doel = v.get("doel") or {}
-            doel_tekst = doel.get("label") or doel.get("target") or ""
-            if doel.get("target"):
-                doel_tekst = f"[{doel_tekst}](https://wetten.overheid.nl/{doel['target']})"
-            soort = v.get("soort", "")
-            if v.get("extern"):
-                soort = (soort + " · extern").strip(" ·")
+        for m in b.get("markeringen", []):
             regels.append(
-                f"| {cel(v.get('id'))} | {cel(v.get('functie'))} | {cel(doel_tekst)} | "
-                f"{cel(v.get('bron_lid'))} | {cel(soort)} | {cel(v.get('status'))} | "
-                f"{cel(v.get('betekenis'))} |"
+                f"| {cel(m.get('id'))} | \"{cel(m.get('formulering'))}\" | "
+                f"{cel(m.get('klasse'))} | {cel(m.get('vindplaats'))} | {cel(m.get('toelichting'))} |"
             )
         regels.append("")
+        verwijzingen = b.get("verwijzingen", [])
+        if verwijzingen:
+            regels += [
+                "**Verwijzingen**",
+                "",
+                "| # | Functie | Doel | Bron | Soort | Status | Betekenis |",
+                "| --- | --- | --- | --- | --- | --- | --- |",
+            ]
+            for v in verwijzingen:
+                doel = v.get("doel") or {}
+                doel_tekst = doel.get("label") or doel.get("target") or ""
+                if doel.get("target"):
+                    doel_tekst = f"[{doel_tekst}](https://wetten.overheid.nl/{doel['target']})"
+                regels.append(
+                    f"| {cel(v.get('id'))} | {cel(v.get('functie'))} | {cel(doel_tekst)} | "
+                    f"{cel(v.get('bron_lid'))} | {cel(v.get('soort'))} | {cel(v.get('status'))} | "
+                    f"{cel(v.get('betekenis'))} |"
+                )
+            regels.append("")
+        if b.get("samenhang"):
+            regels += ["**Samenhang centrale klassen**", "", b["samenhang"], ""]
 
-    # §3 Begrippen
+    # §3 Begrippen + afleidingsregels (gedeeld over het werkgebied)
     regels += [
-        "## 3. Activiteit 3 — Betekenis",
+        "## 3. Activiteit 3 — Betekenis (gedeeld over het werkgebied)",
         "",
         "### 3a — Begrippen",
         "",
-        "| Begripsnaam | Klasse | Definitie (bron of [interpretatie]) | Voorbeeld | Kenmerken / relaties | Vindplaats | Twijfel/aanname |",
-        "| --- | --- | --- | --- | --- | --- | --- |",
+        "| Begripsnaam | Synoniemen | Klasse | Definitie | Grondformulering | Voorbeeld | Kenmerken / relaties | Vindplaats | Twijfel/aanname |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
     for b in d.get("begrippen", []):
         regels.append(
-            f"| {cel(b.get('naam'))} | {cel(b.get('klasse'))} | {cel(b.get('definitie'))} | "
+            f"| {cel(b.get('naam'))} | {cel(', '.join(b.get('synoniemen') or []))} | "
+            f"{cel(b.get('klasse'))} | {cel(b.get('definitie'))} | {cel(b.get('grondformulering'))} | "
             f"{cel(b.get('voorbeeld'))} | {cel(b.get('kenmerken'))} | "
-            f"{cel(b.get('vindplaats'))} | {cel(b.get('twijfel'))} |"
+            f"{cel(vindplaats_text(b.get('vindplaatsen'), bron_label))} | {cel(b.get('twijfel'))} |"
         )
     regels += ["", "### 3b — Afleidingsregels", ""]
     for r in d.get("afleidingsregels", []):
@@ -160,8 +163,9 @@ def rapport_naar_md(d: dict) -> str:
         for regel in str(r.get("formulering", "")).split("\n"):
             regels.append(f"  {regel}")
         regels += ["  ```"]
-        if r.get("vindplaats"):
-            regels.append(f"- **Vindplaats / bron:** {r['vindplaats']}")
+        vp = vindplaats_text(r.get("vindplaatsen"), bron_label)
+        if vp:
+            regels.append(f"- **Vindplaats / bron:** {vp}")
         if r.get("twijfel"):
             regels.append(f"- **Twijfel/aanname:** {r['twijfel']}")
         regels.append("")
@@ -190,13 +194,17 @@ def rapport_naar_md(d: dict) -> str:
 
 
 def md_bestandsnaam(d: dict) -> str:
-    bwb = re.sub(r"[^a-z0-9]", "", (d.get("bwbId") or "").lower())
-    # Punt in het artikelnummer behouden (bv. "9.5"), zodat de bestandsnaam het
-    # artikelnummer accuraat weergeeft en gelijkloopt met de analyse-mapnaam.
-    art = re.sub(r"[^a-z0-9.]", "", str(d.get("artikel") or "").lower())
-    leden = d.get("leden", [])
-    lid = f"-lid{leden[0]['lid']}" if len(leden) == 1 and leden[0].get("lid") else ""
-    slug = f"{bwb}-art{art}{lid}" if bwb and art else "analyserapport"
+    wg = d.get("werkgebied") or {}
+    bronnen = d.get("bronnen") or []
+    slug = re.sub(r"[^a-z0-9]+", "-", (wg.get("naam") or "").lower()).strip("-")
+    if not slug and bronnen:
+        b = bronnen[0]
+        bwb = re.sub(r"[^a-z0-9]", "", (b.get("bwbId") or "").lower())
+        # Punt in het artikelnummer behouden (bv. "9.5").
+        art = re.sub(r"[^a-z0-9.]", "", str(b.get("artikel") or "").lower())
+        lid = f"-lid{b['lid']}" if b.get("lid") else ""
+        slug = f"{bwb}-art{art}{lid}" if bwb and art else ""
+    slug = slug or "analyserapport"
     return f"analyserapport-{slug}.md"
 
 
@@ -388,11 +396,10 @@ def main():
         sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 
     url = f"http://localhost:{port}"
-    wet = rapport_data.get("wet", "")
-    art = rapport_data.get("artikel", "")
-    leden = rapport_data.get("leden", [])
-    lid_str = f" lid {leden[0]['lid']}" if len(leden) == 1 and leden[0].get("lid") else ""
-    print(f"\n  Wetsanalyse - rapport {wet}, artikel {art}{lid_str}")
+    wg = rapport_data.get("werkgebied") or {}
+    bronnen = rapport_data.get("bronnen") or []
+    titel = wg.get("naam") or (bron_titel(bronnen[0]) if len(bronnen) == 1 else "werkgebied")
+    print(f"\n  Wetsanalyse - rapport {titel} ({len(bronnen)} bron(nen))")
     print(f"  -----------------------------------------")
     print(f"  URL:      {url}")
     print(f"  Rapport:  {args.input}")

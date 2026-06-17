@@ -5,6 +5,28 @@ herbruikbare begrippen (3a) en expliciete regels (3b). Doel is dat de uitvoering
 (handmatig én geautomatiseerd) op de wet kan steunen en dat elke conclusie herleidbaar is
 naar de bron.
 
+## Werkgebied-breed: hergebruik en ontdubbeling
+
+Activiteit 3 is **werkgebied-breed**: je bouwt één gedeelde begrippenlijst over **alle
+bronnen** heen (niet per bron). Dat is de kern van de methode — een begrip wordt *hergebruikt*
+voor elke formulering met dezelfde betekenis, ook als die in een andere bron of regeling staat.
+
+- **Hergebruik (één begrip, meerdere vindplaatsen).** Komt dezelfde betekenis in meerdere
+  bronnen voor, dan maak je niet twee begrippen maar één, met alle `vindplaatsen` opgesomd.
+- **Synoniemen samenvoegen.** Verschillende formuleringen, dezelfde betekenis → één begrip met
+  één **voorkeursterm** (`naam`) en de alternatieven in **`synoniemen`**. (Bv. *termijn* en
+  *wettelijke aangiftetermijn* als ze hetzelfde betekenen.)
+- **Homoniemen splitsen.** Dezelfde formulering, een andere betekenis → **aparte** begrippen.
+  Leg de letterlijke **`grondformulering`** vast zodat de splitsing herleidbaar is. Klassiek
+  voorbeeld: *bijdrage-inkomen* in Zvw art. 43 lid 1/2/3 → *berekend bijdrage-inkomen*,
+  *bijdrage-inkomen na beoordeling op nihilstelling*, *…op maximumstelling*.
+- **Begrip→begrip.** Gebruik in een begripsomschrijving al eerder gedefinieerde begrippen en
+  noteer die in **`verwijst_naar_begrippen`** (de begrip-id's). Gebruik nooit het begrip zelf
+  in zijn eigen omschrijving.
+- **Aspecten uit andere bronnen.** Een formulering krijgt soms pas haar precieze betekenis uit
+  een ander artikel/andere regeling (bv. *persoonsgebonden aftrek* uit een verwijzing). Neem
+  die aspecten op in de definitie en kies zo nodig een betekenisvoller begrip.
+
 ## 3a — Begrippen maken
 
 Een begrip is een unieke, herbruikbare betekeniseenheid die op een of meer gemarkeerde
@@ -16,8 +38,9 @@ rechtsobjecten, rechtsbetrekkingen, rechtsfeiten** en de **variabelen** die daar
 
 Leg per begrip vast:
 
-- **Begripsnaam** — kort, uniek, herkenbaar. Bij een rechtsbetrekking vaak een
-  zelfstandig-naamwoordvorm van het werkwoord (bv. 'recht op zorgtoeslag').
+- **Begripsnaam (voorkeursterm)** — kort, uniek, herkenbaar; uniek per werkgebied. Bij een
+  rechtsbetrekking vaak een zelfstandig-naamwoordvorm van het werkwoord (bv. 'recht op
+  zorgtoeslag'). Alternatieve termen met dezelfde betekenis komen in **`synoniemen`**.
 - **Klasse** — de JAS-klasse waartoe het begrip hoort.
 - **Definitie** — *hergebruik een brondefinitie letterlijk* als de wet de term definieert
   (verwijs naar het definitieartikel). Staat die definitie in een **ander** artikel, dan heb
@@ -33,8 +56,9 @@ Leg per begrip vast:
     (begrip 2)".
   - *kenmerk:* een eigenschap/variabele van het begrip — bv. "de ingangsdatum waarop de
     rechtsbetrekking geldig wordt".
-- **Vindplaats / bron** — artikel + lid (+ bronreferentie) van de markering(en) waarop het
-  begrip berust. Dit borgt de traceerbaarheid (en daarmee de rechtmatigheid).
+- **Vindplaatsen** — de bron(nen) + lid waarop het begrip berust, als lijst
+  `[{bron_id, lid}, …]` over de bronnen heen. Dit borgt de traceerbaarheid (en daarmee de
+  rechtmatigheid) en maakt hergebruik zichtbaar.
 - **Interpretatie/twijfel** — eventuele aannames of open punten bij dit begrip.
 
 Vuistregels:
@@ -82,7 +106,7 @@ Leg per regel vast:
       normpremie - eigen_bijdrage(toetsingsinkomen, standaardpremie[jaar])
   ```
 
-- **Vindplaats / bron** — artikel + lid (+ bronreferentie).
+- **Vindplaatsen** — de bron(nen) + lid waarop de regel berust, als lijst `[{bron_id, lid}, …]`.
 - **Interpretatie/twijfel** — aannames, open normen of delegaties die de regel onvolledig
   maken (bv. een drempelbedrag dat bij ministeriële regeling wordt vastgesteld → noteer dat
   de parameterwaarde uit de gedelegeerde regeling moet komen).
