@@ -19,8 +19,8 @@ class IdConflict(Exception):
 
 @runtime_checkable
 class JobStore(Protocol):
-    # --- id-afleiding ---
-    async def afgeleid_id(self, bwb_id: str, artikel: str, lid: str | None) -> str: ...
+    # --- id-afleiding (seed = werkgebied-naam of een afgeleide van de eerste bron) ---
+    async def afgeleid_id(self, seed: str) -> str: ...
 
     # --- job (state-machine view) ---
     async def save_job(self, job: Job, *, owner: str | None = None) -> bool: ...

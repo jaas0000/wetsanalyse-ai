@@ -8,7 +8,13 @@ import { JasBadge } from "@/components/ui/Badge";
 import { Textarea } from "@/components/ui/Field";
 import { LedenLijst } from "@/components/LedenLijst";
 import { getRonde, sendFeedback, isApiError } from "@/lib/api";
-import type { Analyse2, Analyse3, Feedback, Job, Lid } from "@/lib/types";
+import { bronLabelMap, vindplaatsText } from "@/lib/bronnen";
+import type { Analyse2, Analyse3, Bron, Feedback, Job, Lid } from "@/lib/types";
+
+/** Alle leden van alle bronnen samen, als wettekst-context voor de review. */
+function ledenUitBronnen(bronnen: Bron[] | undefined): Lid[] {
+  return (bronnen ?? []).flatMap((b) => b.leden ?? []);
+}
 
 interface ReviewItem {
   id: string;
@@ -35,38 +41,51 @@ function splitsWaarschuwingen(ws: string[]): { perId: Record<string, string[]>; 
 function itemsUitAnalyse(act: "2" | "3", data: Analyse2 | Analyse3): ReviewItem[] {
   if (act === "2") {
     const a = data as Analyse2;
-    const markeringen: ReviewItem[] = (a.markeringen ?? []).map((m) => ({
-      id: m.id,
-      titel: m.formulering || m.id,
-      klasse: m.klasse,
-      soort: "markering",
-      regels: [
-        { label: "Vindplaats", waarde: m.vindplaats },
-        { label: "Toelichting", waarde: m.toelichting },
-      ],
-      twijfel: m.twijfel,
-    }));
-    const verwijzingen: ReviewItem[] = (a.verwijzingen ?? []).map((v) => ({
-      id: v.id,
-      titel: v.doel?.label || v.functie || v.id,
-      soort: "verwijzing",
-      regels: [
-        { label: "Functie", waarde: v.functie },
-        { label: "Status", waarde: v.status },
-        { label: "Betekenis", waarde: v.betekenis },
-      ],
-    }));
-    return [...markeringen, ...verwijzingen];
+    const labels = bronLabelMap(a.bronnen);
+    const out: ReviewItem[] = [];
+    for (const bron of a.bronnen ?? []) {
+      const bronNaam = labels[bron.bron_id] || bron.label;
+      for (const m of bron.markeringen ?? []) {
+        out.push({
+          id: m.id,
+          titel: m.formulering || m.id,
+          klasse: m.klasse,
+          soort: "markering",
+          regels: [
+            { label: "Bron", waarde: bronNaam },
+            { label: "Vindplaats", waarde: m.vindplaats },
+            { label: "Toelichting", waarde: m.toelichting },
+          ],
+          twijfel: m.twijfel,
+        });
+      }
+      for (const v of bron.verwijzingen ?? []) {
+        out.push({
+          id: v.id,
+          titel: v.doel?.label || v.functie || v.id,
+          soort: "verwijzing",
+          regels: [
+            { label: "Bron", waarde: bronNaam },
+            { label: "Functie", waarde: v.functie },
+            { label: "Status", waarde: v.status },
+            { label: "Betekenis", waarde: v.betekenis },
+          ],
+        });
+      }
+    }
+    return out;
   }
   const a = data as Analyse3;
+  const labels = bronLabelMap(a.bronnen);
   const begrippen: ReviewItem[] = (a.begrippen ?? []).map((b) => ({
     id: b.id,
     titel: b.naam || b.id,
     klasse: b.klasse,
     regels: [
+      { label: "Synoniemen", waarde: (b.synoniemen ?? []).join(", ") },
       { label: "Definitie", waarde: b.definitie },
       { label: "Kenmerken", waarde: b.kenmerken },
-      { label: "Vindplaats", waarde: b.vindplaats },
+      { label: "Vindplaats", waarde: vindplaatsText(b.vindplaatsen, labels) },
     ],
     twijfel: b.twijfel,
   }));
@@ -79,6 +98,7 @@ function itemsUitAnalyse(act: "2" | "3", data: Analyse2 | Analyse3): ReviewItem[
       { label: "Invoer", waarde: r.invoervariabelen },
       { label: "Voorwaarden", waarde: r.voorwaarden },
       { label: "Formulering", waarde: r.formulering },
+      { label: "Vindplaats", waarde: vindplaatsText(r.vindplaatsen, labels) },
     ],
     twijfel: r.twijfel,
   }));
@@ -123,11 +143,11 @@ export function ReviewPanel({
         // niet, maar de brongetrouwe wettekst is in elke activiteit-2-ronde identiek → haal 'm
         // best-effort uit ronde 1 van activiteit 2 (mislukt dat, dan tonen we simpelweg geen tekst).
         if (activiteit === "2") {
-          setLeden((d as Analyse2).leden ?? []);
+          setLeden(ledenUitBronnen((d as Analyse2).bronnen));
         } else {
           try {
             const a2 = await getRonde(job.id, "2", 1);
-            if (actief) setLeden((a2 as Analyse2).leden ?? []);
+            if (actief) setLeden(ledenUitBronnen((a2 as Analyse2).bronnen));
           } catch {
             /* wettekst is context, geen blocker */
           }

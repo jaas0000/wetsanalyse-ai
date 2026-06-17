@@ -14,6 +14,14 @@ state + telemetrie en het `rapport` (JSONB-kolom); de immutabele analyse-rondes 
 aparte `rondes`-tabel. De API schrijft *niet* naar de `analyses/<id>/werk/`-disk; de
 disk-interoperabiliteit met de lokale skill staat op de roadmap, niet in de huidige flow.
 
+**De analyse-eenheid is het werkgebied (kennisdomein), niet één artikel.** Een project draagt een
+`bronnen`-lijst (`StartRequest.bronnen[]`; elke bron = `bwbId`+`artikel`+`lid?`) — opgeslagen als
+`projects.bronnen` JSON-kolom (vervangt de oude scalar `bwbId/artikel/lid`). De orchestrator haalt in
+`_fase_start` per bron de tekst op en genereert **activiteit 2 per bron** (geaggregeerd in
+`Analyse2.bronnen[]`); **activiteit 3 is werkgebied-breed** — één LLM-call over alle bronnen levert de
+gedeelde, ontdubbelde `begrippen`/`afleidingsregels` (met cross-bron `vindplaatsen`). Eén bron is het
+triviale geval; het rapport heeft de vorm `{werkgebied, bronnen[], begrippen, afleidingsregels, …}`.
+
 ## Architectuur (app/)
 
 - `config.py` — env-config + projectpaden (PROJECT_ROOT = repo-root).

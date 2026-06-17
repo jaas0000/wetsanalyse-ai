@@ -6,7 +6,8 @@ import { JasBadge, Tag } from "@/components/ui/Badge";
 import { LinkButton } from "@/components/ui/Button";
 import { LedenLijst } from "@/components/LedenLijst";
 import { bronHref, pathSegment, wettenOverheidHref } from "@/lib/url";
-import type { Markering, Rapport, Verwijzing } from "@/lib/types";
+import { bronLabel, bronLabelMap, vindplaatsText } from "@/lib/bronnen";
+import type { Bron, Markering, Rapport, Verwijzing } from "@/lib/types";
 
 const VERWIJZING_FUNCTIE_LABEL: Record<string, string> = {
   definitie: "Definitie",
@@ -42,68 +43,29 @@ function Veld({ label, waarde }: { label: string; waarde?: string }) {
   );
 }
 
-export function RapportView({ rapport, projectId }: { rapport: Rapport; projectId: string }) {
-  const markeringenPerKlasse = groepeer(rapport.markeringen ?? []);
-
+/** Eén bron in het werkgebied: wettekst, markeringen (per JAS-klasse), verwijzingen, samenhang. */
+function BronSectie({ bron }: { bron: Bron }) {
+  const markeringenPerKlasse = groepeer(bron.markeringen ?? []);
   return (
-    <div className="space-y-10">
-      {/* Kop */}
-      <Card className="p-6">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <h2 className="font-display text-2xl font-semibold text-lint">
-              {rapport.wet || "Wetsanalyse"}
-            </h2>
-            <p className="mt-1 text-sm text-muted">
-              Artikel {rapport.artikel}
-              {rapport.type ? ` · ${rapport.type}` : ""}
-            </p>
-            <div className="mt-3 flex flex-wrap gap-2">
-              {rapport.bwbId && <Tag>{rapport.bwbId}</Tag>}
-              {rapport.versiedatum && <Tag>versie {rapport.versiedatum}</Tag>}
-              {bronHref(rapport.bronreferentie) ? (
-                <a
-                  href={bronHref(rapport.bronreferentie)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center rounded-md border border-line bg-paper px-2 py-0.5 font-mono text-xs text-link hover:underline"
-                >
-                  bron ↗
-                </a>
-              ) : rapport.bronreferentie ? (
-                <span className="inline-flex items-center rounded-md border border-line bg-paper px-2 py-0.5 font-mono text-xs text-faint">
-                  {rapport.bronreferentie}
-                </span>
-              ) : null}
-            </div>
-          </div>
-          <LinkButton href={`/api/projects/${pathSegment(projectId)}/rapport-md`} variant="secondary" className="w-full sm:w-auto">
-            Download .md
-          </LinkButton>
+    <Section title={bronLabel(bron)} subtitle={bron.bwbId}>
+      <div className="space-y-6">
+        <div className="flex flex-wrap gap-2">
+          {bron.versiedatum && <Tag>versie {bron.versiedatum}</Tag>}
+          {bronHref(bron.bronreferentie) ? (
+            <a
+              href={bronHref(bron.bronreferentie)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center rounded-md border border-line bg-paper px-2 py-0.5 font-mono text-xs text-link hover:underline"
+            >
+              bron ↗
+            </a>
+          ) : null}
         </div>
-        {(rapport.analysefocus || rapport.reikwijdte || rapport.geraadpleegde) && (
-          <div className="mt-4 space-y-1.5 border-t border-line pt-4">
-            <Veld label="Focus" waarde={rapport.analysefocus} />
-            <Veld label="Reikwijdte" waarde={rapport.reikwijdte} />
-            <Veld label="Geraadpleegd" waarde={rapport.geraadpleegde} />
-          </div>
-        )}
-      </Card>
 
-      {/* Leden */}
-      {rapport.leden?.length > 0 && (
-        <Section title="Wettekst per lid" count={rapport.leden.length}>
-          <LedenLijst leden={rapport.leden} />
-        </Section>
-      )}
+        {bron.leden?.length > 0 && <LedenLijst leden={bron.leden} />}
 
-      {/* Markeringen per JAS-klasse */}
-      {rapport.markeringen?.length > 0 && (
-        <Section
-          title="Markeringen & classificatie"
-          count={rapport.markeringen.length}
-          subtitle="activiteit 2"
-        >
+        {bron.markeringen?.length > 0 && (
           <div className="space-y-6">
             {markeringenPerKlasse.map(([klasse, items]) => (
               <div key={klasse}>
@@ -128,27 +90,12 @@ export function RapportView({ rapport, projectId }: { rapport: Rapport; projectI
               </div>
             ))}
           </div>
-        </Section>
-      )}
+        )}
 
-      {/* Samenhang */}
-      {rapport.samenhang && (
-        <Section title="Samenhang">
-          <Card className="p-4">
-            <p className="text-sm leading-relaxed text-muted">{rapport.samenhang}</p>
-          </Card>
-        </Section>
-      )}
-
-      {/* Verwijzingen */}
-      {rapport.verwijzingen?.length > 0 && (
-        <Section
-          title="Verwijzingen"
-          count={rapport.verwijzingen.length}
-          subtitle="uitgaand"
-        >
+        {bron.verwijzingen?.length > 0 && (
           <div className="space-y-6">
-            {groepeerVerwijzingen(rapport.verwijzingen).map(([functie, items]) => (
+            <p className="text-xs uppercase tracking-wide text-faint">Verwijzingen (uitgaand)</p>
+            {groepeerVerwijzingen(bron.verwijzingen).map(([functie, items]) => (
               <div key={functie}>
                 <div className="mb-2 flex items-center gap-2">
                   <Tag>{VERWIJZING_FUNCTIE_LABEL[functie] ?? functie}</Tag>
@@ -167,20 +114,16 @@ export function RapportView({ rapport, projectId }: { rapport: Rapport; projectI
                           >
                             {v.doel.label || v.doel.target} ↗
                           </a>
-                        ) : v.doel?.target ? (
-                          <span className="min-w-0 break-words font-display text-[15px] text-ink">
-                            {v.doel.label || v.doel.target}
-                          </span>
                         ) : (
                           <span className="min-w-0 break-words font-display text-[15px] text-ink">
-                            {v.doel?.label || "(verwijzing)"}
+                            {v.doel?.label || v.doel?.target || "(verwijzing)"}
                           </span>
                         )}
                         <Tag>{VERWIJZING_STATUS_LABEL[v.status] ?? v.status}</Tag>
                         {v.soort && (
                           <span className="font-mono text-xs text-faint">
                             {v.soort}
-                            {v.doel?.bwbId && rapport.bwbId && v.doel.bwbId !== rapport.bwbId ? " · extern" : ""}
+                            {v.doel?.bwbId && bron.bwbId && v.doel.bwbId !== bron.bwbId ? " · extern" : ""}
                           </span>
                         )}
                         {v.bron_lid && <span className="font-mono text-xs text-faint">{v.bron_lid}</span>}
@@ -194,12 +137,64 @@ export function RapportView({ rapport, projectId }: { rapport: Rapport; projectI
               </div>
             ))}
           </div>
-        </Section>
-      )}
+        )}
 
-      {/* Begrippen */}
+        {bron.samenhang && (
+          <Card className="p-4">
+            <p className="text-xs uppercase tracking-wide text-faint">Samenhang</p>
+            <p className="mt-1 text-sm leading-relaxed text-muted">{bron.samenhang}</p>
+          </Card>
+        )}
+      </div>
+    </Section>
+  );
+}
+
+export function RapportView({ rapport, projectId }: { rapport: Rapport; projectId: string }) {
+  const wg = rapport.werkgebied ?? ({} as Rapport["werkgebied"]);
+  const bronnen = rapport.bronnen ?? [];
+  const labels = bronLabelMap(bronnen);
+  const hoofdvraag = wg.hoofdvraag || wg.analysefocus;
+
+  return (
+    <div className="space-y-10">
+      {/* Kop — werkgebied */}
+      <Card className="p-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h2 className="font-display text-2xl font-semibold text-lint">{wg.naam || "Wetsanalyse"}</h2>
+            <p className="mt-1 text-sm text-muted">
+              Werkgebied · {bronnen.length} bron{bronnen.length === 1 ? "" : "nen"}
+            </p>
+          </div>
+          <LinkButton href={`/api/projects/${pathSegment(projectId)}/rapport-md`} variant="secondary" className="w-full sm:w-auto">
+            Download .md
+          </LinkButton>
+        </div>
+        {(hoofdvraag || wg.omschrijving || wg.scoping) && (
+          <div className="mt-4 space-y-1.5 border-t border-line pt-4">
+            <Veld label="Hoofdvraag" waarde={hoofdvraag} />
+            <Veld label="Omschrijving" waarde={wg.omschrijving} />
+            <Veld label="Afbakening" waarde={wg.scoping} />
+          </div>
+        )}
+        {bronnen.length > 0 && (
+          <div className="mt-4 flex flex-wrap gap-2 border-t border-line pt-4">
+            {bronnen.map((b) => (
+              <Tag key={b.bron_id}>{bronLabel(b)}</Tag>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      {/* Per bron: wettekst, markeringen, verwijzingen, samenhang */}
+      {bronnen.map((b) => (
+        <BronSectie key={b.bron_id} bron={b} />
+      ))}
+
+      {/* Begrippen — gedeeld over het werkgebied */}
       {rapport.begrippen?.length > 0 && (
-        <Section title="Begrippen" count={rapport.begrippen.length} subtitle="activiteit 3">
+        <Section title="Begrippen" count={rapport.begrippen.length} subtitle="activiteit 3 · gedeeld">
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             {rapport.begrippen.map((b) => (
               <Card key={b.id} className="p-4">
@@ -208,10 +203,11 @@ export function RapportView({ rapport, projectId }: { rapport: Rapport; projectI
                   {b.klasse && <JasBadge klasse={b.klasse} />}
                 </div>
                 <div className="mt-2 space-y-1">
+                  {b.synoniemen?.length > 0 && <Veld label="Synoniemen" waarde={b.synoniemen.join(", ")} />}
                   <Veld label="Definitie" waarde={b.definitie} />
                   <Veld label="Voorbeeld" waarde={b.voorbeeld} />
                   <Veld label="Kenmerken" waarde={b.kenmerken} />
-                  <Veld label="Vindplaats" waarde={b.vindplaats} />
+                  <Veld label="Vindplaats" waarde={vindplaatsText(b.vindplaatsen, labels)} />
                 </div>
                 <Twijfel tekst={b.twijfel} />
               </Card>
@@ -220,9 +216,9 @@ export function RapportView({ rapport, projectId }: { rapport: Rapport; projectI
         </Section>
       )}
 
-      {/* Afleidingsregels */}
+      {/* Afleidingsregels — gedeeld over het werkgebied */}
       {rapport.afleidingsregels?.length > 0 && (
-        <Section title="Afleidingsregels" count={rapport.afleidingsregels.length} subtitle="activiteit 3">
+        <Section title="Afleidingsregels" count={rapport.afleidingsregels.length} subtitle="activiteit 3 · gedeeld">
           <div className="space-y-3">
             {rapport.afleidingsregels.map((r) => (
               <Card key={r.id} className="p-4">
@@ -234,7 +230,7 @@ export function RapportView({ rapport, projectId }: { rapport: Rapport; projectI
                   <Veld label="Uitvoer" waarde={r.uitvoervariabele} />
                   <Veld label="Invoer" waarde={r.invoervariabelen} />
                   <Veld label="Parameters" waarde={r.parameters} />
-                  <Veld label="Vindplaats" waarde={r.vindplaats} />
+                  <Veld label="Vindplaats" waarde={vindplaatsText(r.vindplaatsen, labels)} />
                 </div>
                 <div className="mt-1 space-y-1">
                   <Veld label="Voorwaarden" waarde={r.voorwaarden} />
@@ -319,9 +315,7 @@ function Reviewlog({ rapport }: { rapport: Rapport }) {
                 </span>
               ) : null}
             </summary>
-            {data?.samenvatting && (
-              <p className="mt-2 text-sm text-muted">{data.samenvatting}</p>
-            )}
+            {data?.samenvatting && <p className="mt-2 text-sm text-muted">{data.samenvatting}</p>}
             <div className="mt-3 space-y-2">
               {data?.rondes?.map((r) => (
                 <div key={r.ronde} className="rounded border border-line/60 bg-paper/50 p-3 text-sm">

@@ -4,7 +4,7 @@ import pytest
 from sqlalchemy import update
 
 from app import db
-from app.contracts import Feedback, Job, JobState
+from app.contracts import BronInput, Feedback, Job, JobState
 
 
 async def _set_lease(slug: str, owner: str | None, lease_until) -> None:
@@ -17,21 +17,22 @@ async def _set_lease(slug: str, owner: str | None, lease_until) -> None:
 
 
 async def test_id_afleiding_en_collisie(store):
-    assert await store.afgeleid_id("BWBR0004770", "9", "2") == "bwbr0004770-art9-lid2"
-    await store.save_job(Job(id="bwbr0004770-art9-lid2", bwbId="BWBR0004770", artikel="9", lid="2"))
-    assert await store.afgeleid_id("BWBR0004770", "9", "2") == "bwbr0004770-art9-lid2-2"
+    assert await store.afgeleid_id("Iab Zorgverzekeringswet") == "iab-zorgverzekeringswet"
+    await store.save_job(Job(id="iab-zorgverzekeringswet",
+                             bronnen=[BronInput(bwbId="BWBR1", artikel="1")]))
+    assert await store.afgeleid_id("Iab Zorgverzekeringswet") == "iab-zorgverzekeringswet-2"
 
 
 async def test_job_roundtrip(store):
-    job = Job(id="x-art1", bwbId="BWBR1", artikel="1", state=JobState.queued)
+    job = Job(id="x-art1", bronnen=[BronInput(bwbId="BWBR1", artikel="1")], state=JobState.queued)
     await store.save_job(job)
     geladen = await store.load_job("x-art1")
-    assert geladen.bwbId == "BWBR1"
+    assert geladen.bronnen[0].bwbId == "BWBR1"
     assert geladen.state == JobState.queued
 
 
 async def test_analyse_immutabel(store):
-    await store.save_job(Job(id="j", bwbId="X", artikel="1"))
+    await store.save_job(Job(id="j"))
     await store.schrijf_analyse("j", "2", 1, {"markeringen": [{"id": "m1"}]})
     with pytest.raises(PermissionError):
         await store.schrijf_analyse("j", "2", 1, {"markeringen": []})
@@ -40,7 +41,7 @@ async def test_analyse_immutabel(store):
 
 
 async def test_feedback_roundtrip(store):
-    await store.save_job(Job(id="j2", bwbId="X", artikel="1"))
+    await store.save_job(Job(id="j2"))
     fb = Feedback(status="wijzigingen", activiteit="2", items={"m1": "fout"}, algemeen="")
     await store.schrijf_feedback("j2", "2", 1, fb)
     result = await store.lees_feedback("j2", "2", 1)
@@ -63,7 +64,7 @@ def test_rate_limiter_sliding_window():
 
 async def test_save_job_overschrijft_geen_artefacten(store):
     """save_job mag uitsluitend state-velden raken — nooit eerder geschreven rondes/rapport."""
-    await store.save_job(Job(id="j3", bwbId="X", artikel="1", state=JobState.queued))
+    await store.save_job(Job(id="j3", state=JobState.queued))
     await store.schrijf_analyse("j3", "2", 1, {"markeringen": [{"id": "m1"}]})
     await store.schrijf_rapport("j3", {"wet": "Testwet"})
 
@@ -90,7 +91,7 @@ async def test_schrijfpaden_falen_netjes_zonder_project(store):
 
 async def test_claim_eenmalig(store):
     """De eerste claim wint; een tweede claim ziet de al-gewijzigde state → None (geen dubbele pickup)."""
-    await store.save_job(Job(id="c1", bwbId="X", artikel="1", state=JobState.queued))
+    await store.save_job(Job(id="c1", state=JobState.queued))
     eerste = await store.claim("c1", {JobState.queued}, JobState.act2_runt, "worker-a", 120)
     assert eerste is not None and eerste.state == JobState.act2_runt
     tweede = await store.claim("c1", {JobState.queued}, JobState.act2_runt, "worker-b", 120)
@@ -102,7 +103,7 @@ async def test_claim_eenmalig(store):
 
 async def test_claim_alleen_verlopen_lease(store):
     """vereist_verlopen_lease=True claimt een verse lease NIET, een verlopen lease wel (reaper)."""
-    await store.save_job(Job(id="c2", bwbId="X", artikel="1", state=JobState.act2_runt))
+    await store.save_job(Job(id="c2", state=JobState.act2_runt))
     await _set_lease("c2", "worker-a", datetime.now(timezone.utc) + timedelta(seconds=120))
     # Verse lease → reaper-claim mist.
     assert await store.claim("c2", {JobState.act2_runt}, JobState.fout, "reaper", 120,
@@ -116,7 +117,7 @@ async def test_claim_alleen_verlopen_lease(store):
 
 async def test_verleng_lease_alleen_door_owner(store):
     """De heartbeat verlengt de lease alleen voor de huidige owner in een runt-state (fencing)."""
-    await store.save_job(Job(id="c3", bwbId="X", artikel="1", state=JobState.queued))
+    await store.save_job(Job(id="c3", state=JobState.queued))
     await store.claim("c3", {JobState.queued}, JobState.act2_runt, "worker-a", 120)
     assert await store.verleng_lease("c3", "worker-a", 120) is True
     assert await store.verleng_lease("c3", "worker-b", 120) is False  # niet de owner
@@ -126,11 +127,11 @@ async def test_lijst_verlopen_running(store):
     """Alleen runt-jobs met een verlopen lease komen in de reaper-lijst."""
     verleden = datetime.now(timezone.utc) - timedelta(seconds=1)
     toekomst = datetime.now(timezone.utc) + timedelta(seconds=120)
-    await store.save_job(Job(id="r-verlopen", bwbId="X", artikel="1", state=JobState.act2_runt))
+    await store.save_job(Job(id="r-verlopen", state=JobState.act2_runt))
     await _set_lease("r-verlopen", "w", verleden)
-    await store.save_job(Job(id="r-vers", bwbId="X", artikel="1", state=JobState.act3_runt))
+    await store.save_job(Job(id="r-vers", state=JobState.act3_runt))
     await _set_lease("r-vers", "w", toekomst)
-    await store.save_job(Job(id="r-review", bwbId="X", artikel="1", state=JobState.wacht_review_act2))
+    await store.save_job(Job(id="r-review", state=JobState.wacht_review_act2))
     await _set_lease("r-review", "w", verleden)
     ids = await store.lijst_verlopen_running()
     assert ids == ["r-verlopen"]
@@ -138,7 +139,7 @@ async def test_lijst_verlopen_running(store):
 
 async def test_claim_overschrijft_geen_owner_via_save_job(store):
     """save_job mag owner/lease_until NIET schrijven — die horen alleen bij claim/verleng_lease."""
-    await store.save_job(Job(id="c4", bwbId="X", artikel="1", state=JobState.queued))
+    await store.save_job(Job(id="c4", state=JobState.queued))
     await store.claim("c4", {JobState.queued}, JobState.act2_runt, "worker-a", 120)
     voor = await store.load_project("c4")
     # Een latere state-overgang via een verse Job-snapshot (zonder owner-kennis).
@@ -152,7 +153,7 @@ async def test_claim_overschrijft_geen_owner_via_save_job(store):
 
 async def test_set_current_fase_fenced_zonder_updated_bump(store):
     """De observerende fase-tik is owner-fenced en raakt `updated` (de homepage-sortering) niet."""
-    await store.save_job(Job(id="f1", bwbId="X", artikel="1", state=JobState.queued))
+    await store.save_job(Job(id="f1", state=JobState.queued))
     await store.claim("f1", {JobState.queued}, JobState.act2_runt, "worker-a", 120)
     updated_voor = (await store.load_project("f1")).updated
 

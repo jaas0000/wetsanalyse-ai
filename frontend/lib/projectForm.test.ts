@@ -2,50 +2,56 @@ import { describe, expect, it } from "vitest";
 import { buildStartRequest, projectSchema } from "./projectForm";
 
 describe("projectSchema", () => {
-  it("eist een niet-leeg artikel", () => {
-    const leeg = projectSchema.safeParse({ artikel: "", review: true });
+  it("eist minstens één bron met een niet-leeg artikel", () => {
+    const geen = projectSchema.safeParse({ bronnen: [], review: true });
+    expect(geen.success).toBe(false);
+    const leeg = projectSchema.safeParse({ bronnen: [{ artikel: "" }], review: true });
     expect(leeg.success).toBe(false);
-    const spaties = projectSchema.safeParse({ artikel: "   ", review: true });
+    const spaties = projectSchema.safeParse({ bronnen: [{ artikel: "   " }], review: true });
     expect(spaties.success).toBe(false); // trim → leeg
   });
 
   it("trimt waarden en accepteert een geldig artikel", () => {
-    const r = projectSchema.safeParse({ artikel: "  9  ", review: true });
+    const r = projectSchema.safeParse({ bronnen: [{ artikel: "  9  " }], review: true });
     expect(r.success).toBe(true);
-    if (r.success) expect(r.data.artikel).toBe("9");
+    if (r.success) expect(r.data.bronnen[0].artikel).toBe("9");
   });
 
   it("weigert te lange velden", () => {
-    expect(projectSchema.safeParse({ artikel: "1", review: true, bwbId: "x".repeat(65) }).success).toBe(false);
-    expect(projectSchema.safeParse({ artikel: "x".repeat(33), review: true }).success).toBe(false);
+    expect(
+      projectSchema.safeParse({ bronnen: [{ artikel: "1", bwbId: "x".repeat(65) }], review: true }).success,
+    ).toBe(false);
+    expect(projectSchema.safeParse({ bronnen: [{ artikel: "x".repeat(33) }], review: true }).success).toBe(false);
   });
 });
 
 describe("buildStartRequest", () => {
-  it("laat lege optionele velden weg, behoudt artikel + review", () => {
-    const body = buildStartRequest({ artikel: "9", review: true });
-    expect(body).toEqual({ artikel: "9", review: true });
-    expect("bwbId" in body).toBe(false);
+  it("laat lege optionele velden weg, behoudt bronnen + review", () => {
+    const body = buildStartRequest({ bronnen: [{ artikel: "9" }], review: true });
+    expect(body).toEqual({ bronnen: [{ artikel: "9" }], review: true });
+    expect("naam" in body).toBe(false);
     expect("model_profile" in body).toBe(false);
   });
 
-  it("neemt ingevulde optionele velden mee", () => {
+  it("neemt meerdere bronnen en optionele velden mee", () => {
     const body = buildStartRequest({
-      artikel: "9",
+      bronnen: [
+        { artikel: "43", bwbId: "BWBR0018450", lid: "2" },
+        { artikel: "5.6", bwbId: "BWBR0018715" },
+      ],
       review: false,
-      bwbId: "BWBR0004770",
-      lid: "2",
-      naam: "Erfrecht",
+      naam: "Iab Zvw",
       omschrijving: "context",
       analysefocus: "vraag",
       model_profile: "azure-sonnet",
     });
     expect(body).toEqual({
-      artikel: "9",
+      bronnen: [
+        { artikel: "43", bwbId: "BWBR0018450", lid: "2" },
+        { artikel: "5.6", bwbId: "BWBR0018715" },
+      ],
       review: false,
-      bwbId: "BWBR0004770",
-      lid: "2",
-      naam: "Erfrecht",
+      naam: "Iab Zvw",
       omschrijving: "context",
       analysefocus: "vraag",
       model_profile: "azure-sonnet",

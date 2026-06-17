@@ -8,6 +8,7 @@ import { fasenVoor, faseLabel } from "@/lib/fasen";
 import { isReview } from "@/lib/states";
 import { pathSegment } from "@/lib/url";
 import { retryProject, isApiError } from "@/lib/api";
+import { bronnenSamenvatting } from "@/lib/bronnen";
 import type { DashboardUpdate, JobState } from "@/lib/types";
 
 // De zeven macro-stations (gelijk aan frontend/lib/states.ts, samengevouwen tot één rij lichtjes).
@@ -101,15 +102,14 @@ export function DashboardCard({ u, now }: { u: DashboardUpdate; now: number }) {
             isFout ? "border-accent/40 text-accent" : "border-line text-muted"
           }`}
         >
-          {initialen(u.naam, u.bwbId)}
+          {initialen(u.naam, u.bronnen?.[0]?.bwbId ?? "")}
         </span>
         <div className="min-w-0">
           <Link href={`/projecten/${pathSegment(u.id)}`} className="block truncate font-medium text-ink hover:text-accent">
-            {u.naam || `${u.bwbId} · art. ${u.artikel}`}
+            {u.naam || bronnenSamenvatting(u.bronnen)}
           </Link>
           <p className="truncate font-mono text-xs text-faint">
-            {u.bwbId}
-            {u.artikel ? ` · art. ${u.artikel}` : ""}
+            {bronnenSamenvatting(u.bronnen)}
             {u.model_profile ? ` · ${u.model_profile}` : ""}
           </p>
         </div>

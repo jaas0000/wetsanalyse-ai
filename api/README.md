@@ -68,19 +68,28 @@ ronde in de `provenance` van het job-document vastgelegd (audit).
 
 ## Analyseverzoek
 
+Een analyse is een **werkgebied** (kennisdomein) met **één of meer bronnen** (elke bron =
+`bwbId` + `artikel` + optioneel `lid`):
+
 ```json
 POST /v1/projects
 {
-  "bwbId": "BWBR0004770",
-  "artikel": "9",
-  "lid": "2",
+  "bronnen": [
+    { "bwbId": "BWBR0018450", "artikel": "43", "lid": "2" },
+    { "bwbId": "BWBR0018715", "artikel": "5.6" }
+  ],
+  "naam": "Inkomensafhankelijke bijdrage Zvw",
+  "analysefocus": "Berekenen van de inkomensafhankelijke bijdrage Zvw",
   "review": false
 }
 ```
 
-`bwbId` is verplicht in v1 (wet-only resolutie via zoekterm staat op de roadmap); `lid` optioneel.
-`review: false` slaat de human-in-the-loop checkpoints over — uitsluitend voor geautomatiseerde
-verwerking. Gebruik `review: true` (default) voor een volwaardige analyse met reviewrondes.
+`bronnen` bevat minstens één bron; `bwbId` is per bron verplicht in v1 (wet-only resolutie via
+zoekterm staat op de roadmap), `lid` is optioneel. Eén bron is het triviale geval. `review: false`
+slaat de human-in-the-loop checkpoints over — uitsluitend voor geautomatiseerde verwerking. Gebruik
+`review: true` (default) voor een volwaardige analyse met reviewrondes. Activiteit 2 wordt per bron
+uitgevoerd (markeringen/verwijzingen, geaggregeerd in `bronnen[]`); activiteit 3 is **werkgebied-breed**
+(één gedeelde, ontdubbelde begrippenlijst + afleidingsregels met cross-bron `vindplaatsen`).
 
 **Cross-referenties.** Activiteit 2 is twee-fase: eerst een lichte *verwijzing-inventaris* (per
 verwijzing een functie + `volgen`-vlag), dan een begrensde deterministische fetch-lus die de

@@ -5,7 +5,7 @@ import pytest
 from sqlalchemy import update
 
 from app import db
-from app.contracts import Feedback, Job, JobState, StartRequest
+from app.contracts import BronInput, Feedback, Job, JobState, StartRequest
 from app.engine.orchestrator import WetsanalyseEngine
 from app.wettenbank import WettenbankError
 
@@ -13,7 +13,7 @@ from conftest import FakeLLM, FakeWettenbank
 
 
 def _start_req(review: bool) -> StartRequest:
-    return StartRequest(bwbId="BWBR9999999", artikel="1", review=review)
+    return StartRequest(bronnen=[BronInput(bwbId="BWBR9999999", artikel="1")], review=review)
 
 
 async def _set_lease(slug: str, owner: str | None, lease_until) -> None:
@@ -33,7 +33,7 @@ async def test_autonoom_loopt_door_tot_klaar(engine, store):
     assert job.state == JobState.klaar
     rapport = await store.lees_rapport(job.id)
     assert rapport is not None
-    assert rapport["markeringen"][0]["klasse"] == "Rechtssubject"
+    assert rapport["bronnen"][0]["markeringen"][0]["klasse"] == "Rechtssubject"
     assert rapport["begrippen"][0]["naam"] == "belastingplichtige"
     assert len(job.provenance) == 2
     assert job.provenance[0].model == "fake-model"
@@ -46,7 +46,7 @@ async def test_verwijzingen_in_rapport_met_fetch(engine, store):
 
     rapport = await store.lees_rapport(job.id)
     assert rapport is not None
-    verwijzingen = rapport["verwijzingen"]
+    verwijzingen = rapport["bronnen"][0]["verwijzingen"]
     assert len(verwijzingen) == 1
     assert verwijzingen[0]["id"] == "v1"
     assert verwijzingen[0]["functie"] == "definitie"
@@ -166,7 +166,7 @@ async def test_retry_vanuit_fout(settings, store):
 
 async def test_bwbid_verplicht(engine):
     with pytest.raises(ValueError):
-        await engine.create_job(StartRequest(artikel="1"), "test")
+        await engine.create_job(StartRequest(bronnen=[BronInput(artikel="1")]), "test")
 
 
 async def test_dubbele_run_initial_geen_dubbele_pickup(engine, store):
@@ -247,12 +247,12 @@ async def test_max_active_jobs_quota(settings, store):
 
     settings.max_active_jobs = 2
     eng = WetsanalyseEngine(settings, store, FakeLLM(), FakeWettenbank())
-    await eng.create_job(StartRequest(bwbId="BWBR1", artikel="1"), "klant")
-    await eng.create_job(StartRequest(bwbId="BWBR1", artikel="2"), "klant")
+    await eng.create_job(StartRequest(bronnen=[BronInput(bwbId="BWBR1", artikel="1")]), "klant")
+    await eng.create_job(StartRequest(bronnen=[BronInput(bwbId="BWBR1", artikel="2")]), "klant")
     with pytest.raises(QuotaExceeded):
-        await eng.create_job(StartRequest(bwbId="BWBR1", artikel="3"), "klant")
+        await eng.create_job(StartRequest(bronnen=[BronInput(bwbId="BWBR1", artikel="3")]), "klant")
     # Een andere client wordt niet geraakt.
-    await eng.create_job(StartRequest(bwbId="BWBR1", artikel="1"), "andere-klant")
+    await eng.create_job(StartRequest(bronnen=[BronInput(bwbId="BWBR1", artikel="1")]), "andere-klant")
 
 
 async def test_token_budget_stopt_job(settings, store):

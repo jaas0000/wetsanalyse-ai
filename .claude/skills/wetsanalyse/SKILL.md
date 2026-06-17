@@ -32,8 +32,17 @@ zijn. Deze skill voert de analytische kern uit:
   *begrippen* maken (3a, met definitie, voorbeeld, kenmerken/relaties) en *afleidingsregels*
   vastleggen (3b: beslis-, reken- en specialisatieregels en de voorwaarden daarbij).
 
-Het resultaat is één traceerbaar `rapport.json`-analyserapport, gepresenteerd via een
-HTML-viewer; Markdown is als export beschikbaar.
+**De analyse-eenheid is het *werkgebied* (kennisdomein), niet één artikel.** Een werkgebied
+is een afbakening rond een hoofdvraag die zich over **meerdere bronnen** uitstrekt — leden,
+artikelen, hoofdstukken, en zelfs meerdere regelingen (bv. een wet + de gedelegeerde
+regeling). Eén *bron* is één `(bwbId, artikel, lid?)`-eenheid ("tekstdeel"). Activiteit 2
+doe je per bron (markeren/classificeren); activiteit 3 is **werkgebied-breed**: één gedeelde
+begrippenlijst + afleidingsregels over álle bronnen heen, met hergebruik en ontdubbeling
+(homoniemen splitsen, synoniemen samenvoegen). Een werkgebied met één bron is het triviale
+geval.
+
+Het resultaat is één traceerbaar `rapport.json`-werkgebied-analyserapport, gepresenteerd via
+een HTML-viewer; Markdown is als export beschikbaar.
 
 Na activiteit 2 en na activiteit 3 pauzeert de skill voor een **review-checkpoint**: de
 analist valideert de tussenresultaten in een lokale reviewpagina en geeft per onderdeel of
@@ -54,24 +63,32 @@ aan de bron. Daarom:
 
 - **Werk alleen met de letterlijke, opgehaalde wettekst.** Verzin nooit tekst, leden of
   artikelnummers. Citeer formuleringen letterlijk.
-- **Houd alles herleidbaar.** Elke markering, elk begrip en elke afleidingsregel verwijst
-  naar de vindplaats (artikel + lid) en, waar beschikbaar, de `bronreferentie` (jci-link)
-  uit de MCP.
+- **Houd alles herleidbaar.** Elke markering verwijst naar haar bron (`bron_id`) + lid; elk
+  begrip en elke afleidingsregel naar de vindplaats(en) over de bronnen heen
+  (`vindplaatsen: [{bron_id, lid}]`) en, waar beschikbaar, de `bronreferentie` (jci-link) uit
+  de MCP. Id's zijn **werkgebied-breed uniek** (`m1..`, `v1..`, `b1..`, `r1..`).
 - **Gebruik uitsluitend de dertien JAS-klassen** hieronder. Verzin geen eigen klassen.
 
-## Stap 1 — Wettekst ophalen via de wettenbank-MCP
+## Stap 1 — Bepaal het werkgebied en haal de wettekst op
 
-De gebruiker geeft doorgaans een wetsnaam + artikel(en). Haal de actuele tekst zelf op;
-laat de gebruiker niet plakken tenzij de MCP onbeschikbaar is.
+Bepaal eerst het **werkgebied**: de hoofdvraag + de set **bronnen** die daarvoor relevant
+zijn. De gebruiker geeft soms één artikel, soms een hoofdvraag waarvoor je zelf de relevante
+bronnen verzamelt (meerdere artikelen/leden, eventueel over meerdere regelingen). Leg de
+afbakening **traceerbaar** vast (welke hoofdstukken/artikelen overwogen, wat in/uit scope is
+en waarom) — dit voedt het `werkgebied.scoping`-veld. Het werkgebied **mag groeien** tijdens
+de analyse: kom je een relevante definitie of gedelegeerde regeling tegen, voeg die dan als
+bron toe ("breiden we het werkgebied uit").
 
-Aanbevolen volgorde:
+Haal de actuele tekst zelf op; laat de gebruiker niet plakken tenzij de MCP onbeschikbaar is.
+Per bron, aanbevolen volgorde:
 
 1. `wettenbank_zoek` (op `titel`, evt. `rechtsgebied`/`ministerie`) → bepaal het **BWB-id**.
 2. `wettenbank_structuur` (met `bwbId`) → controleer het juiste artikelnummer en het pad
    in de wet. Doe dit ook om aangrenzende/definitie-artikelen te vinden die de betekenis
-   bepalen (zie hieronder).
-3. `wettenbank_artikel` (`bwbId` + `artikel`, evt. `lid`) → haal de letterlijke tekst,
-   `leden`, `pad` en `bronreferentie` op.
+   bepalen (zie hieronder) — kandidaat-bronnen voor het werkgebied.
+3. `wettenbank_artikel` (`bwbId` + `artikel`, evt. `lid`) → haal per bron de letterlijke
+   tekst, `leden`, `pad` en `bronreferentie` op. Geef elke bron een stabiel `bron_id`
+   (`br1`, `br2`, …) en een leesbaar `label` (bv. "Zvw art. 43 lid 2").
 
 Gebruik `wettenbank_zoekterm` om binnen een wet te vinden waar een begrip nog meer
 voorkomt, of om **brondefinities** op te sporen (een gedefinieerde term staat vaak in een
@@ -86,8 +103,12 @@ aangeleverde tekst, met dezelfde brongetrouwheid.
 Wetsformuleringen verwijzen naar andere bepalingen die de betekenis bepalen: het
 definitieartikel, andere leden ("in afwijking van het eerste lid"), schakelbepalingen ("van
 overeenkomstige toepassing") en gedelegeerde regelingen. Inventariseer die uitgaande
-verwijzingen vóór je classificeert, volg de relevante volgens beleid, en leg ze vast als
-`verwijzingen`-array in `analyse.json`.
+verwijzingen **per bron** vóór je classificeert, volg de relevante volgens beleid, en leg ze
+vast als `verwijzingen`-array op die bron (elke verwijzing draagt het `bron_id` van haar bron).
+
+Wordt een gevolgde definitie of gedelegeerde regeling zelf zo relevant dat je haar wilt
+markeren/classificeren, **promoveer haar dan tot een eigen bron** in het werkgebied (het
+werkgebied mag groeien) in plaats van haar enkel als verwijzing te noteren.
 
 Bron: `wettenbank_artikel` geeft per lid een `verwijzingen`-array (getagde intref/extref,
 óók als inline-link in de tekst); natuurlijke-taalverwijzingen ("het eerste lid") herken je
@@ -108,8 +129,10 @@ activiteit-2 review-checkpoint, zodat de analist de scope kan bijsturen.
 
 ## Stap 2 — Activiteit 2: markeren en classificeren
 
-Lees de tekst lid voor lid. Identificeer samenhangende formuleringen (2a) en ken elk een
-JAS-klasse toe (2b). Werk fijnmazig: een lid bevat vrijwel altijd meerdere markeringen.
+Doorloop de bronnen één voor één ("pak eerstvolgende tekstdeel uit het werkgebied"). Lees
+per bron de tekst lid voor lid. Identificeer samenhangende formuleringen (2a) en ken elk een
+JAS-klasse toe (2b). Werk fijnmazig: een lid bevat vrijwel altijd meerdere markeringen. Geef
+elke markering het `bron_id` van haar bron en een werkgebied-breed uniek id.
 
 Gebruik per klasse de **herkenningsvraag** als grammaticale ontleedvraag op de tekst. Dit
 is de compacte checklist; voor de volledige omschrijving, herkenningsvragen en
@@ -157,12 +180,14 @@ geland zijn. Lees `references/review-checkpoints.md` voor het datacontract; in h
 met `N` = rondenummer (start op 1):
 
 Schrijf alle output van deze analyse in één analysemap onder `analyses/`. Noem die map naar
-de **BWB-id in kleine letters**: `<bwbid>-art<nr>[-lidN]`, bijv. `bwbr0004770-art9-lid2`.
-De `werk/`-paden hieronder zijn relatief aan die analysemap.
+het **werkgebied** (kebab-case van de naam, bijv. `iab-zorgverzekeringswet`); val bij gebrek
+aan een naam terug op de eerste bron (`<bwbid>-art<nr>[-lidN]`). De `werk/`-paden hieronder
+zijn relatief aan die analysemap.
 
-1. Schrijf het tussenresultaat naar `werk/activiteit-2/ronde-{N}/analyse.json` (markeringen
-   met **stabiele id's**, leden-tekst, samenhang) volgens het schema in de referentie.
-   Overschrijf eerdere rondes niet; houd id's gelijk aan de vorige ronde.
+1. Schrijf het tussenresultaat naar `werk/activiteit-2/ronde-{N}/analyse.json`: het
+   `werkgebied`-object + een `bronnen`-array, per bron de `leden`-tekst, `markeringen` en
+   `verwijzingen` (met **stabiele, werkgebied-brede id's**), volgens het schema in de
+   referentie. Overschrijf eerdere rondes niet; houd id's gelijk aan de vorige ronde.
 1b. Voer de pre-check uit op de zojuist geschreven analyse.json:
    `python "<skill>/scripts/validate_analyse.py" --input werk/activiteit-2/ronde-{N}/analyse.json --activiteit 2`
    - Exit 2 (fouten): herstel de gemelde fouten vóórdat je de server start.
@@ -194,20 +219,34 @@ rapport dat de reviews zijn overgeslagen.
 Lees `references/begrippen-en-afleidingsregels-opstellen.md` voordat je begrippen en regels opstelt; dat
 bevat de werkwijze en voorbeelden. In het kort:
 
+Activiteit 3 is **werkgebied-breed**: je bouwt één gedeelde begrippenlijst + afleidingsregels
+over **alle bronnen** heen. Cruciaal is **hergebruik en ontdubbeling**:
+
+- **Hergebruik:** één begrip geldt voor elke formulering met dezelfde betekenis. Komt het in
+  meerdere bronnen voor, dan som je alle vindplaatsen op (`vindplaatsen: [{bron_id, lid}, …]`).
+- **Synoniemen samenvoegen:** verschillende formuleringen met dezelfde betekenis → één begrip
+  met één **voorkeursterm** (`naam`) + de alternatieven in `synoniemen`.
+- **Homoniemen splitsen:** dezelfde formulering met een andere betekenis → **aparte** begrippen.
+  Leg de letterlijke `grondformulering` vast zodat de splitsing herleidbaar is (bv.
+  *bijdrage-inkomen* → *berekend bijdrage-inkomen*, *…na beoordeling op nihilstelling*).
+- **Begrip→begrip:** gebruik in een begripsomschrijving al eerder gedefinieerde begrippen en
+  noteer die in `verwijst_naar_begrippen`.
+
 **3a Begrippen.** Maak per uniek, betekenisdragend element (vooral rechtssubjecten,
 rechtsobjecten, rechtsbetrekkingen, rechtsfeiten en variabelen) een begrip met: een
-unieke **begripsnaam**, een **definitie** (hergebruik een *brondefinitie* letterlijk als
-die er is; anders formuleer je een werkdefinitie en markeer je dat als interpretatie), een
-kort **voorbeeld**, en **kenmerken/relaties** (bv. "rechtssubject X is rechthebbende van
-rechtsbetrekking Y"). Elk begrip verwijst naar de markering(en) en vindplaats waarop het
-berust (traceerbaarheid).
+**voorkeursterm** (`naam`) + eventuele `synoniemen`, een **definitie** (hergebruik een
+*brondefinitie* letterlijk als die er is; anders formuleer je een werkdefinitie en markeer je
+dat als interpretatie), een kort **voorbeeld**, **kenmerken/relaties** (bv. "rechtssubject X
+is rechthebbende van rechtsbetrekking Y"), en de **`vindplaatsen`** over de bronnen waarop het
+berust (traceerbaarheid). Steunt een begrip op een gevolgde verwijzing (bv. een hergebruikte
+brondefinitie), wijs daar dan naar met `bron_verwijzing`.
 
 **3b Afleidingsregels.** Leg per regel vast: een **naam**, het **type** (beslisregel →
 ja/nee of waar/onwaar; rekenregel → een berekend bedrag/getal; specialisatieregel →
 behoort tot doelgroep), de **uitvoervariabele**, de **invoervariabelen** en **parameters**,
 de **voorwaarden**, en een gestructureerde **formulering** (leesbaar pseudo, met de
-operatoren expliciet). Verwijs naar de bron. Houd parameters (vaste waarden) en variabelen
-(per geval verschillend) uit elkaar.
+operatoren expliciet). Verwijs naar de bron(nen) via `vindplaatsen`. Houd parameters (vaste
+waarden) en variabelen (per geval verschillend) uit elkaar.
 
 ## Stap 3b — Review-checkpoint na activiteit 3
 
@@ -215,8 +254,10 @@ Net als na activiteit 2: laat de begrippen en afleidingsregels door de analist v
 voordat je het eindrapport opmaakt — als dezelfde **iteratieve lus**, tot akkoord zonder
 opmerkingen (zie `references/review-checkpoints.md`). Met `N` = rondenummer:
 
-1. Schrijf `werk/activiteit-3/ronde-{N}/analyse.json` (begrippen + afleidingsregels met
-   **stabiele id's**, concept-validatiepunten). Overschrijf eerdere rondes niet.
+1. Schrijf `werk/activiteit-3/ronde-{N}/analyse.json`: het `werkgebied`-object, een lichte
+   `bronnen`-index (`{bron_id, label}` per bron, gekopieerd uit act-2, zodat `vindplaatsen`
+   leesbaar zijn), en de werkgebied-brede `begrippen` + `afleidingsregels` (met **stabiele
+   id's**) en concept-validatiepunten. Overschrijf eerdere rondes niet.
 1b. Voer de pre-check uit:
    `python "<skill>/scripts/validate_analyse.py" --input werk/activiteit-3/ronde-{N}/analyse.json --activiteit 3`
    - Exit 2 (fouten): herstel vóórdat je de server start.

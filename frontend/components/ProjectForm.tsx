@@ -8,7 +8,7 @@ import { Card } from "@/components/ui/Card";
 import { Field, Input, Select, Textarea } from "@/components/ui/Field";
 import { Melding } from "@/components/ui/Melding";
 import { createProject, isApiError, listModelProfiles, listWetten } from "@/lib/api";
-import { buildStartRequest, projectSchema } from "@/lib/projectForm";
+import { buildStartRequest, legeBron, projectSchema, type BronFormValue } from "@/lib/projectForm";
 import { pathSegment } from "@/lib/url";
 import type { ProfileChoice, WetChoice } from "@/lib/types";
 
@@ -21,9 +21,9 @@ export function ProjectForm() {
   const [profielen, setProfielen] = useState<ProfileChoice[] | null>(null);
   const [profiel, setProfiel] = useState("");
   const [wetten, setWetten] = useState<WetChoice[] | null>(null);
-  const [bwbId, setBwbId] = useState("");
+  // Het werkgebied: één of meer bronnen (wet + artikel + lid).
+  const [bronnen, setBronnen] = useState<BronFormValue[]>([legeBron()]);
 
-  // Live ophalen zodat profielen/wetten die in de draaiende app worden toegevoegd/verwijderd direct meekomen.
   useEffect(() => {
     let levend = true;
     listModelProfiles()
@@ -41,15 +41,23 @@ export function ProjectForm() {
     };
   }, []);
 
+  function updateBron(i: number, patch: Partial<BronFormValue>) {
+    setBronnen((bs) => bs.map((b, j) => (j === i ? { ...b, ...patch } : b)));
+  }
+  function voegBronToe() {
+    setBronnen((bs) => [...bs, legeBron()]);
+  }
+  function verwijderBron(i: number) {
+    setBronnen((bs) => (bs.length > 1 ? bs.filter((_, j) => j !== i) : bs));
+  }
+
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setFout(null);
     setVeldFout({});
     const fd = new FormData(e.currentTarget);
     const raw = {
-      bwbId: String(fd.get("bwbId") ?? ""),
-      artikel: String(fd.get("artikel") ?? ""),
-      lid: String(fd.get("lid") ?? ""),
+      bronnen,
       naam: String(fd.get("naam") ?? ""),
       omschrijving: String(fd.get("omschrijving") ?? ""),
       analysefocus: String(fd.get("analysefocus") ?? ""),
@@ -59,7 +67,14 @@ export function ProjectForm() {
     const parsed = projectSchema.safeParse(raw);
     if (!parsed.success) {
       const errs: Record<string, string> = {};
-      for (const issue of parsed.error.issues) errs[String(issue.path[0])] = issue.message;
+      for (const issue of parsed.error.issues) {
+        // bron-veldfouten op "bronnen.<index>.<veld>"; overige op het topveld.
+        if (issue.path[0] === "bronnen" && typeof issue.path[1] === "number") {
+          errs[`bronnen.${issue.path[1]}.${String(issue.path[2] ?? "")}`] = issue.message;
+        } else {
+          errs[String(issue.path[0])] = issue.message;
+        }
+      }
       setVeldFout(errs);
       return;
     }
@@ -82,77 +97,114 @@ export function ProjectForm() {
     }
   }
 
+  const heeftCatalogus = wetten !== null && wetten.length > 0;
+
   return (
     <Card className="p-6">
       <form onSubmit={onSubmit} className="space-y-5">
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-          <Field
-            label="Wet"
-            hint={wetten === null ? "laden…" : wetten.length > 0 ? "beheer via /beheer" : "BWB-id, bv. BWBR0004770"}
-            error={veldFout.bwbId}
-          >
-            {wetten && wetten.length > 0 ? (
-              <Select name="bwbId" value={bwbId} onChange={(e) => setBwbId(e.target.value)}>
-                <option value="">— kies een wet —</option>
-                {wetten.map((w) => (
-                  <option key={w.bwbId} value={w.bwbId}>
-                    {w.naam || w.bwbId}
-                  </option>
-                ))}
-              </Select>
-            ) : (
-              // Fallback: lege catalogus → vrije BWB-id-invoer.
-              <Input
-                name="bwbId"
-                value={bwbId}
-                onChange={(e) => setBwbId(e.target.value)}
-                placeholder="BWBR0004770"
-                autoComplete="off"
-              />
-            )}
-          </Field>
-          <Field
-            label="Model-profiel"
-            hint={profielen === null ? "laden…" : "beheer via /beheer"}
-            error={veldFout.model_profile}
-          >
-            {profielen && profielen.length > 0 ? (
-              <Select name="model_profile" value={profiel} onChange={(e) => setProfiel(e.target.value)}>
-                {profielen.map((p) => (
-                  <option key={p.name} value={p.name}>
-                    {p.name}
-                    {p.is_default ? " (default)" : ""}
-                  </option>
-                ))}
-              </Select>
-            ) : (
-              // Fallback: geen profielen opgehaald → vrije invoer (API valt terug op de default).
-              <Input
-                name="model_profile"
-                value={profiel}
-                onChange={(e) => setProfiel(e.target.value)}
-                placeholder="azure-sonnet"
-                autoComplete="off"
-              />
-            )}
-          </Field>
-          <Field label="Artikel" required error={veldFout.artikel}>
-            <Input name="artikel" placeholder="9" autoComplete="off" />
-          </Field>
-          <Field label="Lid" hint="optioneel" error={veldFout.lid}>
-            <Input name="lid" placeholder="2" autoComplete="off" />
-          </Field>
+        <div className="space-y-3">
+          <div className="flex items-baseline justify-between">
+            <span className="text-sm font-medium text-ink">Bronnen in het werkgebied</span>
+            <span className="text-xs text-muted">
+              {bronnen.length} bron{bronnen.length === 1 ? "" : "nen"}
+            </span>
+          </div>
+          {veldFout.bronnen && <Melding type="fout">{veldFout.bronnen}</Melding>}
+
+          {bronnen.map((b, i) => (
+            <div
+              key={i}
+              className="grid grid-cols-1 gap-3 rounded-lg border border-line bg-paper/60 p-3 sm:grid-cols-[1fr_auto_auto_auto]"
+            >
+              <Field label="Wet" error={veldFout[`bronnen.${i}.bwbId`]}>
+                {heeftCatalogus ? (
+                  <Select value={b.bwbId} onChange={(e) => updateBron(i, { bwbId: e.target.value })}>
+                    <option value="">— kies een wet —</option>
+                    {wetten!.map((w) => (
+                      <option key={w.bwbId} value={w.bwbId}>
+                        {w.naam || w.bwbId}
+                      </option>
+                    ))}
+                  </Select>
+                ) : (
+                  <Input
+                    value={b.bwbId}
+                    onChange={(e) => updateBron(i, { bwbId: e.target.value })}
+                    placeholder="BWBR0004770"
+                    autoComplete="off"
+                  />
+                )}
+              </Field>
+              <Field label="Artikel" required error={veldFout[`bronnen.${i}.artikel`]}>
+                <Input
+                  value={b.artikel}
+                  onChange={(e) => updateBron(i, { artikel: e.target.value })}
+                  placeholder="9"
+                  autoComplete="off"
+                  className="sm:w-24"
+                />
+              </Field>
+              <Field label="Lid" hint="optioneel" error={veldFout[`bronnen.${i}.lid`]}>
+                <Input
+                  value={b.lid}
+                  onChange={(e) => updateBron(i, { lid: e.target.value })}
+                  placeholder="2"
+                  autoComplete="off"
+                  className="sm:w-20"
+                />
+              </Field>
+              <div className="flex items-end">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => verwijderBron(i)}
+                  disabled={bronnen.length === 1}
+                  aria-label="Bron verwijderen"
+                >
+                  ×
+                </Button>
+              </div>
+            </div>
+          ))}
+          <Button type="button" variant="secondary" onClick={voegBronToe}>
+            + Bron toevoegen
+          </Button>
         </div>
 
-        <Field label="Naam" hint="optioneel — anders afgeleid" error={veldFout.naam}>
-          <Input name="naam" placeholder="Art. 9 lid 2 — erfrecht" autoComplete="off" />
+        <Field
+          label="Model-profiel"
+          hint={profielen === null ? "laden…" : "beheer via /beheer"}
+          error={veldFout.model_profile}
+        >
+          {profielen && profielen.length > 0 ? (
+            <Select name="model_profile" value={profiel} onChange={(e) => setProfiel(e.target.value)}>
+              {profielen.map((p) => (
+                <option key={p.name} value={p.name}>
+                  {p.name}
+                  {p.is_default ? " (default)" : ""}
+                </option>
+              ))}
+            </Select>
+          ) : (
+            <Input
+              name="model_profile"
+              value={profiel}
+              onChange={(e) => setProfiel(e.target.value)}
+              placeholder="azure-sonnet"
+              autoComplete="off"
+            />
+          )}
+        </Field>
+
+        <Field label="Naam werkgebied" hint="optioneel — anders afgeleid" error={veldFout.naam}>
+          <Input name="naam" placeholder="Inkomensafhankelijke bijdrage Zvw" autoComplete="off" />
         </Field>
 
         <Field label="Omschrijving / context" hint="optioneel" error={veldFout.omschrijving}>
           <Textarea name="omschrijving" rows={2} placeholder="Achtergrond bij deze analyse…" />
         </Field>
 
-        <Field label="Analysefocus / onderzoeksvraag" hint="optioneel" error={veldFout.analysefocus}>
+        <Field label="Hoofdvraag / analysefocus" hint="optioneel" error={veldFout.analysefocus}>
           <Textarea
             name="analysefocus"
             rows={2}

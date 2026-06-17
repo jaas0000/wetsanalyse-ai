@@ -52,7 +52,11 @@ De **harde scheidingslijn**: alles met een token is server-only.
   `openapi-typescript http://localhost:3000/openapi.json` — zie de README). `lib/states.ts` /
   `lib/jas.ts` / `lib/fasen.ts` zijn afgeleide presentatie-helpers (macro-statuslabels,
   JAS-klasse-weergave, en het fijnmazige **fase**-vocabulaire dat 1-op-1 de orchestrator-fasen
-  spiegelt — verzin daar geen fasen bij; brongetrouw geldt ook in de UI).
+  spiegelt — verzin daar geen fasen bij; brongetrouw geldt ook in de UI). **De analyse-eenheid is
+  het werkgebied met meerdere bronnen:** een analyse draagt `bronnen[]` (wet+artikel+lid),
+  activiteit 2 rendert per bron, activiteit 3 is werkgebied-breed met cross-bron `vindplaatsen`.
+  `lib/bronnen.ts` centraliseert de bron-labels, de `vindplaatsen`-weergave en de wet-afleiding;
+  het analyseformulier (`ProjectForm`/`lib/projectForm.ts`) heeft herhaalbare bron-rijen.
 - `app/**/page.tsx` (Server Components) — data ophalen via `lib/server.ts`; interactie delegeren naar
   een `*Client.tsx` Client Component (bv. `app/projecten/[id]/ProjectClient.tsx`). `app/page.tsx`
   (home) en `app/dashboard` renderen server-side de projectlijst en delegeren naar resp.

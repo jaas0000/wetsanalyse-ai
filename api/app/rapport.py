@@ -43,21 +43,11 @@ def bouw_rapport(
     a2 = _laad_json(ronde2 / "analyse.json")
     a3 = _laad_json(ronde3 / "analyse.json")
 
+    werkgebied = dict(a2.get("werkgebied") or {})
+    werkgebied.setdefault("analysefocus", a2.get("analysefocus", ""))
     return {
-        "wet": a2.get("wet", ""),
-        "bwbId": a2.get("bwbId", ""),
-        "artikel": a2.get("artikel", ""),
-        "versiedatum": a2.get("versiedatum", ""),
-        "bronreferentie": a2.get("bronreferentie", ""),
-        "type": a2.get("type", ""),
-        "pad": a2.get("pad", ""),
-        "analysefocus": a2.get("analysefocus", ""),
-        "reikwijdte": a2.get("reikwijdte", ""),
-        "geraadpleegde": a2.get("geraadpleegde", ""),
-        "leden": a2.get("leden", []),
-        "markeringen": a2.get("markeringen", []),
-        "verwijzingen": a2.get("verwijzingen", []),
-        "samenhang": a2.get("samenhang", ""),
+        "werkgebied": werkgebied,
+        "bronnen": a2.get("bronnen", []),
         "begrippen": a3.get("begrippen", []),
         "afleidingsregels": a3.get("afleidingsregels", []),
         "validatiepunten": a3.get("validatiepunten", []),
@@ -100,21 +90,11 @@ async def bouw_rapport_async(
             for k, rd in sorted(rondes.items(), key=lambda x: int(x[0]))
         ]
 
+    werkgebied = dict(a2.get("werkgebied") or {})
+    werkgebied.setdefault("analysefocus", a2.get("analysefocus", ""))
     return {
-        "wet": a2.get("wet", ""),
-        "bwbId": a2.get("bwbId", ""),
-        "artikel": a2.get("artikel", ""),
-        "versiedatum": a2.get("versiedatum", ""),
-        "bronreferentie": a2.get("bronreferentie", ""),
-        "type": a2.get("type", ""),
-        "pad": a2.get("pad", ""),
-        "analysefocus": a2.get("analysefocus", ""),
-        "reikwijdte": a2.get("reikwijdte", ""),
-        "geraadpleegde": a2.get("geraadpleegde", ""),
-        "leden": a2.get("leden", []),
-        "markeringen": a2.get("markeringen", []),
-        "verwijzingen": a2.get("verwijzingen", []),
-        "samenhang": a2.get("samenhang", ""),
+        "werkgebied": werkgebied,
+        "bronnen": a2.get("bronnen", []),
         "begrippen": a3.get("begrippen", []),
         "afleidingsregels": a3.get("afleidingsregels", []),
         "validatiepunten": a3.get("validatiepunten", []),

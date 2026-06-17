@@ -194,93 +194,66 @@
 /*__EMBEDDED_DATA__*/
 
 const D = EMBEDDED_DATA;
-const DRAFT_KEY = "wetsanalyse-rapport-" + (D.bwbId || "") + "-" + (D.artikel || "");
+const WG = D.werkgebied || {};
+const BRONNEN = D.bronnen || [];
+const DRAFT_KEY = "wetsanalyse-rapport-" + (WG.naam || (BRONNEN[0] && BRONNEN[0].bron_id) || "");
+
+// Bron-index (bron_id → leesbaar label) voor de cross-bron vindplaatsen in §3.
+const BRON_LABEL = {};
+BRONNEN.forEach(b => { if (b && b.bron_id) BRON_LABEL[b.bron_id] = b.label || b.bron_id; });
 
 function esc(s) {
   return String(s == null ? "" : s)
     .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
+function vindplaatsText(vps) {
+  if (!Array.isArray(vps) || !vps.length) return "";
+  return vps.map(vp => {
+    const lbl = BRON_LABEL[vp.bron_id] || vp.bron_id || "";
+    return lbl + (vp.lid ? " lid " + vp.lid : "");
+  }).filter(Boolean).join("; ");
+}
+
+function bronTitel(bron) {
+  return bron.label || (bron.wet ? bron.wet + " art. " + bron.artikel + (bron.lid ? " lid " + bron.lid : "") : bron.bron_id);
+}
+
 // --- Header ------------------------------------------------------------------
 
 function renderHeader() {
-  const leden = D.leden || [];
-  const lidStr = leden.length === 1 && leden[0].lid ? " lid " + leden[0].lid : "";
+  const nBron = BRONNEN.length;
   document.getElementById("title").textContent =
-    "Wetsanalyse — " + (D.wet || "") + ", artikel " + (D.artikel || "") + lidStr;
-  const sub = [D.wet, D.artikel ? "artikel " + D.artikel : "", D.versiedatum]
+    "Wetsanalyse — " + (WG.naam || (nBron === 1 ? bronTitel(BRONNEN[0]) : "werkgebied"));
+  const sub = [WG.naam, nBron ? nBron + " bron" + (nBron === 1 ? "" : "nen") : "", WG.hoofdvraag || WG.analysefocus]
     .filter(Boolean).join(" · ");
-  document.getElementById("subtitle").textContent =
-    sub + (D.bronreferentie ? "  —  " + D.bronreferentie : "");
+  document.getElementById("subtitle").textContent = sub;
 }
 
 // --- §0 Bron en afbakening ---------------------------------------------------
 
 function renderSectie0() {
-  const leden = D.leden || [];
-  const lidStr = leden.length === 1 && leden[0].lid ? ", lid " + leden[0].lid : "";
   const velden = [
-    ["Wet / regeling", (D.wet || "") + (D.type ? " (" + D.type + ")" : "")],
-    ["BWB-id", D.bwbId],
-    ["Artikel(en)", (D.artikel || "") + lidStr + (D.pad ? " — pad: " + D.pad : "")],
-    ["Versie-/peildatum", D.versiedatum],
-    ["Bronreferentie(s)", D.bronreferentie],
-    ["Analysefocus / hoofdvraag", D.analysefocus],
-    ["Reikwijdte", D.reikwijdte],
-    ["Geraadpleegde definitie-/aanpalende artikelen", D.geraadpleegde],
+    ["Werkgebied", WG.naam],
+    ["Hoofdvraag / analysefocus", WG.hoofdvraag || WG.analysefocus],
+    ["Omschrijving", WG.omschrijving],
+    ["Afbakening (scoping)", WG.scoping],
   ];
   const rijen = velden
     .filter(([, v]) => v)
     .map(([l, v]) => `<li><span class="lbl">${esc(l)}</span><span>${esc(v)}</span></li>`)
     .join("");
-  return `<div class="panel"><h2>0. Bron en afbakening</h2>
-    <ul class="meta-list">${rijen}</ul></div>`;
+  const bronRijen = BRONNEN.map(b => {
+    const det = [b.bwbId, b.versiedatum, b.bronreferentie].filter(Boolean).join(" · ");
+    return `<li><span class="lbl">${esc(bronTitel(b))}</span><span>${esc(det)}</span></li>`;
+  }).join("");
+  return `<div class="panel"><h2>0. Werkgebied en afbakening</h2>
+    <ul class="meta-list">${rijen}</ul>
+    <h3>Bronnen in het werkgebied (${BRONNEN.length})</h3>
+    <ul class="meta-list">${bronRijen}</ul></div>`;
 }
 
-// --- §1 Wettekst -------------------------------------------------------------
-
-function renderSectie1() {
-  const leden = D.leden || [];
-  if (!leden.length) return "";
-  const rows = leden.map(l =>
-    `<div class="lid"><b>${l.lid ? "Lid " + esc(l.lid) : ""}</b> ${esc(l.tekst)}</div>`
-  ).join("");
-  return `<div class="panel"><h2>1. Wettekst (letterlijk)</h2>
-    <p style="color:var(--muted);font-size:13px;margin:0 0 10px">
-      Letterlijk overgenomen uit de bron, lid voor lid. Geen parafrase.</p>
-    ${rows}</div>`;
-}
-
-// --- §2 Markeringen ----------------------------------------------------------
-
-function renderSectie2() {
-  const markeringen = D.markeringen || [];
-  const items = markeringen.map(m => `
-    <div class="item">
-      <div class="top">
-        <span class="id">#${esc(m.id)}</span>
-        <span class="chip" data-klasse="${esc(m.klasse)}">${esc(m.klasse)}</span>
-        <span style="color:var(--muted);font-size:13px">${esc(m.vindplaats || "")}</span>
-      </div>
-      <div class="formulering">"${esc(m.formulering)}"</div>
-      ${m.toelichting ? `<div style="font-size:13.5px;color:var(--ink)">${esc(m.toelichting)}</div>` : ""}
-    </div>`).join("");
-  const samenhang = D.samenhang
-    ? `<h3>Samenhang centrale klassen</h3>
-       <div class="samenhang-tekst">${esc(D.samenhang)}</div>`
-    : "";
-  return `<div class="panel">
-    <h2>2. Activiteit 2 — Juridische structuur</h2>
-    <div style="font-family:var(--sans);font-size:11px;font-weight:600;text-transform:uppercase;
-      letter-spacing:0.08em;color:var(--muted);margin-bottom:10px">
-      Markeringen &amp; classificaties (${markeringen.length})
-    </div>
-    ${items}
-    ${samenhang}
-  </div>`;
-}
-
-// --- §2b Verwijzingen --------------------------------------------------------
+// --- §1/§2 Per bron: wettekst, markeringen, verwijzingen, samenhang ----------
 
 const VW_FUNCTIE_LABEL = {
   "definitie": "Definitie", "schakel": "Schakel / afwijking", "delegatie": "Delegatie",
@@ -292,8 +265,7 @@ const VW_STATUS_LABEL = {
 };
 const VW_VOLGORDE = ["definitie", "schakel", "delegatie", "intra-artikel", "informatief"];
 
-function renderVerwijzingen() {
-  const vs = D.verwijzingen || [];
+function renderVerwijzingenBlok(vs) {
   if (!vs.length) return "";
 
   const groepen = {};
@@ -314,23 +286,54 @@ function renderVerwijzingen() {
         <div class="top">
           <span class="id">#${esc(v.id)}</span>
           <span class="vw-status" data-status="${esc(v.status || "")}">${esc(status)}</span>
-          ${v.soort ? `<span class="vw-extern">${esc(v.soort)}${v.extern ? " · extern" : ""}</span>` : ""}
+          ${v.soort ? `<span class="vw-extern">${esc(v.soort)}</span>` : ""}
           ${v.bron_lid ? `<span style="color:var(--muted);font-size:13px">${esc(v.bron_lid)}</span>` : ""}
         </div>
         <div class="vw-doel" style="margin:6px 0;font-size:14px">${doelHtml}</div>
         ${v.betekenis ? `<div style="font-size:13.5px;color:var(--ink)">${esc(v.betekenis)}</div>` : ""}
       </div>`;
     }).join("");
-    return `<h3>${esc(VW_FUNCTIE_LABEL[f] || f)} (${groepen[f].length})</h3>${items}`;
+    return `<h4 style="font-family:var(--sans);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin:14px 0 8px">${esc(VW_FUNCTIE_LABEL[f] || f)} (${groepen[f].length})</h4>${items}`;
   }).join("");
 
+  return `<h3>Verwijzingen (${vs.length})</h3>${blokken}`;
+}
+
+// Eén panel per bron: wettekst + markeringen + verwijzingen + samenhang van die bron.
+function renderBron(bron, n) {
+  const leden = bron.leden || [];
+  const ledenHtml = leden.map(l =>
+    `<div class="lid"><b>${l.lid ? "Lid " + esc(l.lid) : ""}</b> ${esc(l.tekst)}</div>`
+  ).join("");
+  const markeringen = bron.markeringen || [];
+  const mItems = markeringen.map(m => `
+    <div class="item">
+      <div class="top">
+        <span class="id">#${esc(m.id)}</span>
+        <span class="chip" data-klasse="${esc(m.klasse)}">${esc(m.klasse)}</span>
+        <span style="color:var(--muted);font-size:13px">${esc(m.vindplaats || "")}</span>
+      </div>
+      <div class="formulering">"${esc(m.formulering)}"</div>
+      ${m.toelichting ? `<div style="font-size:13.5px;color:var(--ink)">${esc(m.toelichting)}</div>` : ""}
+    </div>`).join("");
+  const det = [bron.bwbId, bron.versiedatum, bron.type, bron.pad].filter(Boolean).join("  ·  ");
+  const samenhang = bron.samenhang
+    ? `<h3>Samenhang centrale klassen</h3><div class="samenhang-tekst">${esc(bron.samenhang)}</div>`
+    : "";
   return `<div class="panel">
-    <h2>2b. Verwijzingen</h2>
-    <p style="color:var(--muted);font-size:13px;margin:0 0 10px">
-      Uitgaande verwijzingen van de bepaling, geclassificeerd naar functie en met hun
-      scope-status. Links openen de bron op wetten.overheid.nl.</p>
-    ${blokken}
+    <h2>Bron ${n} — ${esc(bronTitel(bron))}</h2>
+    ${det ? `<div style="color:var(--muted);font-size:13px;margin:-6px 0 12px">${esc(det)}</div>` : ""}
+    <h3>Wettekst (letterlijk)</h3>
+    ${ledenHtml || `<p style="color:var(--muted);font-size:13px">Geen leden-tekst.</p>`}
+    <h3>Markeringen &amp; classificaties (${markeringen.length})</h3>
+    ${mItems}
+    ${renderVerwijzingenBlok(bron.verwijzingen || [])}
+    ${samenhang}
   </div>`;
+}
+
+function renderBronnen() {
+  return BRONNEN.map((b, i) => renderBron(b, i + 1)).join("");
 }
 
 // --- §3 Begrippen + Afleidingsregels -----------------------------------------
@@ -350,10 +353,12 @@ function renderSectie3() {
         <strong>${esc(b.naam)}</strong>
       </div>
       <div class="grid">
+        ${(b.synoniemen && b.synoniemen.length) ? `<span class="lbl">Synoniemen</span><span>${esc(b.synoniemen.join(", "))}</span>` : ""}
         ${b.definitie ? `<span class="lbl">Definitie</span><span>${esc(b.definitie)}</span>` : ""}
+        ${b.grondformulering ? `<span class="lbl">Grondformulering</span><span>${esc(b.grondformulering)}</span>` : ""}
         ${b.voorbeeld ? `<span class="lbl">Voorbeeld</span><span>${esc(b.voorbeeld)}</span>` : ""}
         ${b.kenmerken ? `<span class="lbl">Kenmerken/relaties</span><span>${esc(b.kenmerken)}</span>` : ""}
-        ${b.vindplaats ? `<span class="lbl">Vindplaats</span><span>${esc(b.vindplaats)}</span>` : ""}
+        ${vindplaatsText(b.vindplaatsen) ? `<span class="lbl">Vindplaats</span><span>${esc(vindplaatsText(b.vindplaatsen))}</span>` : ""}
         ${b.twijfel ? `<span class="lbl">Twijfel/aanname</span><span>${esc(b.twijfel)}</span>` : ""}
       </div>
     </div>`).join("");
@@ -370,7 +375,7 @@ function renderSectie3() {
         ${r.invoervariabelen ? `<span class="lbl">Invoer</span><span>${esc(r.invoervariabelen)}</span>` : ""}
         ${r.parameters ? `<span class="lbl">Parameters</span><span>${esc(r.parameters)}</span>` : ""}
         ${r.voorwaarden ? `<span class="lbl">Voorwaarden</span><span>${esc(r.voorwaarden)}</span>` : ""}
-        ${r.vindplaats ? `<span class="lbl">Vindplaats</span><span>${esc(r.vindplaats)}</span>` : ""}
+        ${vindplaatsText(r.vindplaatsen) ? `<span class="lbl">Vindplaats</span><span>${esc(vindplaatsText(r.vindplaatsen))}</span>` : ""}
         ${r.twijfel ? `<span class="lbl">Twijfel/aanname</span><span>${esc(r.twijfel)}</span>` : ""}
       </div>
       ${r.formulering ? `<pre>${esc(r.formulering)}</pre>` : ""}
@@ -382,7 +387,7 @@ function renderSectie3() {
     : "";
 
   return `<div class="panel">
-    <h2>3. Activiteit 3 — Betekenis</h2>
+    <h2>3. Activiteit 3 — Betekenis (gedeeld over het werkgebied)</h2>
     <div style="font-family:var(--sans);font-size:11px;font-weight:600;text-transform:uppercase;
       letter-spacing:0.08em;color:var(--muted);margin-bottom:10px">
       Begrippen (${begrippen.length})
@@ -446,9 +451,7 @@ function render() {
   renderHeader();
   document.getElementById("main").innerHTML =
     renderSectie0() +
-    renderSectie1() +
-    renderSectie2() +
-    renderVerwijzingen() +
+    renderBronnen() +
     renderSectie3() +
     renderSectie4();
   restoreDraft();

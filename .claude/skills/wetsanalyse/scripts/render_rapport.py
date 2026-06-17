@@ -98,93 +98,107 @@ def veld(data: dict, sleutel: str) -> str:
 
 # --- rendering ------------------------------------------------------------
 
+def bron_titel(b: dict) -> str:
+    if b.get("label"):
+        return b["label"]
+    if b.get("wet"):
+        lid = f" lid {b['lid']}" if b.get("lid") else ""
+        return f"{b['wet']} art. {b.get('artikel', '')}{lid}"
+    return b.get("bron_id", "bron")
+
+
+def vindplaats_text(vps, bron_label: dict) -> str:
+    if not isinstance(vps, list) or not vps:
+        return ""
+    delen = []
+    for vp in vps:
+        lbl = bron_label.get(vp.get("bron_id"), vp.get("bron_id", ""))
+        delen.append(lbl + (f" lid {vp['lid']}" if vp.get("lid") else ""))
+    return "; ".join(d for d in delen if d)
+
+
 def titel(a2: dict) -> str:
-    wet = a2.get("wet", TODO)
-    artikel = a2.get("artikel", TODO)
-    leden = a2.get("leden", [])
-    if len(leden) == 1 and leden[0].get("lid"):
-        return f"# Wetsanalyse — {wet}, artikel {artikel} lid {leden[0]['lid']}"
-    return f"# Wetsanalyse — {wet}, artikel {artikel}"
+    wg = a2.get("werkgebied") or {}
+    bronnen = a2.get("bronnen") or []
+    naam = wg.get("naam") or (bron_titel(bronnen[0]) if len(bronnen) == 1 else "werkgebied")
+    return f"# Wetsanalyse — {naam}"
 
 
 def sectie_0(a2: dict) -> list[str]:
-    artikel = a2.get("artikel", TODO)
-    leden = a2.get("leden", [])
-    lid_aand = f", lid {leden[0]['lid']}" if len(leden) == 1 and leden[0].get("lid") else ""
-    return [
-        "## 0. Bron en afbakening",
-        "",
-        f"- **Wet / regeling:** {a2.get('wet', TODO)} ({veld(a2, 'type')})",
-        f"- **BWB-id:** {a2.get('bwbId', TODO)}",
-        f"- **Artikel(en):** {artikel}{lid_aand} — pad: {veld(a2, 'pad')}",
-        f"- **Versie-/peildatum:** {a2.get('versiedatum', TODO)}",
-        f"- **Bronreferentie(s):** {a2.get('bronreferentie', TODO)}",
-        f"- **Analysefocus / hoofdvraag:** {veld(a2, 'analysefocus')}",
-        f"- **Reikwijdte:** {veld(a2, 'reikwijdte')}",
-        f"- **Geraadpleegde definitie-/aanpalende artikelen:** {veld(a2, 'geraadpleegde')}",
-        "",
-    ]
-
-
-def sectie_1(a2: dict) -> list[str]:
+    wg = a2.get("werkgebied") or {}
+    bronnen = a2.get("bronnen") or []
     regels = [
-        "## 1. Wettekst (letterlijk)",
+        "## 0. Werkgebied en afbakening",
         "",
-        "> Letterlijk overgenomen uit de bron, lid voor lid. Geen parafrase.",
+        f"- **Werkgebied:** {wg.get('naam', TODO)}",
+        f"- **Hoofdvraag / analysefocus:** {wg.get('hoofdvraag') or wg.get('analysefocus') or TODO}",
+        f"- **Omschrijving:** {wg.get('omschrijving') or TODO}",
+        f"- **Afbakening (scoping):** {wg.get('scoping') or TODO}",
+        "",
+        f"### Bronnen in het werkgebied ({len(bronnen)})",
         "",
     ]
-    leden = a2.get("leden", [])
-    if not leden:
-        regels.append(f"{TODO} (geen leden in analyse.json)")
-        regels.append("")
-        return regels
-    for lid in leden:
-        nr = lid.get("lid", "?")
-        tekst = lid.get("tekst", TODO)
-        regels.append(f"**Lid {nr}.** {tekst}")
-        regels.append("")
+    for b in bronnen:
+        det = " · ".join(x for x in [b.get("bwbId"), b.get("versiedatum"), b.get("bronreferentie")] if x)
+        regels.append(f"- **{bron_titel(b)}** — {det}")
+    regels.append("")
     return regels
 
 
-def sectie_2(a2: dict) -> list[str]:
-    regels = [
-        "## 2. Activiteit 2 — Juridische structuur",
-        "",
-        "### 2a/2b — Markeringen en classificaties",
-        "",
-        "| # | Formulering (letterlijk) | JAS-klasse | Vindplaats | Toelichting (waarom deze klasse; evt. alternatief) |",
-        "| --- | --- | --- | --- | --- |",
-    ]
-    for m in a2.get("markeringen", []):
-        regels.append(
-            f"| {cel(m.get('id'))} | \"{cel(m.get('formulering'))}\" | "
-            f"{cel(m.get('klasse'))} | {cel(m.get('vindplaats'))} | "
-            f"{cel(m.get('toelichting'))} |"
-        )
-    regels += [
-        "",
-        "### Samenhang rond de centrale klassen",
-        "",
-        a2.get("samenhang", TODO),
-        "",
-    ]
+def sectie_bronnen(a2: dict) -> list[str]:
+    """§1/§2 per bron: wettekst, markeringen, verwijzingen, samenhang."""
+    regels = ["## 1/2. Bronnen — wettekst, markeringen en verwijzingen", ""]
+    for i, b in enumerate(a2.get("bronnen") or [], 1):
+        regels += [f"### Bron {i} — {bron_titel(b)}", "", "**Wettekst (letterlijk)**", ""]
+        for lid in b.get("leden", []):
+            regels.append(f"**Lid {lid.get('lid', '?')}.** {lid.get('tekst', TODO)}")
+            regels.append("")
+        regels += [
+            "**Markeringen en classificaties**",
+            "",
+            "| # | Formulering (letterlijk) | JAS-klasse | Vindplaats | Toelichting |",
+            "| --- | --- | --- | --- | --- |",
+        ]
+        for m in b.get("markeringen", []):
+            regels.append(
+                f"| {cel(m.get('id'))} | \"{cel(m.get('formulering'))}\" | "
+                f"{cel(m.get('klasse'))} | {cel(m.get('vindplaats'))} | {cel(m.get('toelichting'))} |"
+            )
+        verwijzingen = b.get("verwijzingen", [])
+        if verwijzingen:
+            regels += ["", "**Verwijzingen**", "",
+                       "| # | Functie | Doel | Bron | Soort | Status | Betekenis |",
+                       "| --- | --- | --- | --- | --- | --- | --- |"]
+            for v in verwijzingen:
+                doel = v.get("doel") or {}
+                doel_tekst = doel.get("label") or doel.get("target") or ""
+                regels.append(
+                    f"| {cel(v.get('id'))} | {cel(v.get('functie'))} | {cel(doel_tekst)} | "
+                    f"{cel(v.get('bron_lid'))} | {cel(v.get('soort'))} | {cel(v.get('status'))} | "
+                    f"{cel(v.get('betekenis'))} |"
+                )
+        if b.get("samenhang"):
+            regels += ["", f"**Samenhang:** {b['samenhang']}"]
+        regels.append("")
     return regels
 
 
 def sectie_3(a3: dict) -> list[str]:
+    bron_label = {b.get("bron_id"): (b.get("label") or bron_titel(b)) for b in (a3.get("bronnen") or [])}
     regels = [
-        "## 3. Activiteit 3 — Betekenis",
+        "## 3. Activiteit 3 — Betekenis (gedeeld over het werkgebied)",
         "",
         "### 3a — Begrippen",
         "",
-        "| Begripsnaam | Klasse | Definitie (bron of [interpretatie]) | Voorbeeld | Kenmerken / relaties | Vindplaats | Twijfel/aanname |",
-        "| --- | --- | --- | --- | --- | --- | --- |",
+        "| Begripsnaam | Synoniemen | Klasse | Definitie | Grondformulering | Voorbeeld | Kenmerken / relaties | Vindplaats | Twijfel/aanname |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
     for b in a3.get("begrippen", []):
         regels.append(
-            f"| {cel(b.get('naam'))} | {cel(b.get('klasse'))} | {cel(b.get('definitie'))} | "
+            f"| {cel(b.get('naam'))} | {cel(', '.join(b.get('synoniemen') or []))} | "
+            f"{cel(b.get('klasse'))} | {cel(b.get('definitie'))} | {cel(b.get('grondformulering'))} | "
             f"{cel(b.get('voorbeeld'))} | {cel(b.get('kenmerken'))} | "
-            f"{cel(b.get('vindplaats'))} | {cel(b.get('twijfel'))} |"
+            f"{cel(vindplaats_text(b.get('vindplaatsen'), bron_label))} | {cel(b.get('twijfel'))} |"
         )
     regels += ["", "### 3b — Afleidingsregels", ""]
     for r in a3.get("afleidingsregels", []):
@@ -202,7 +216,7 @@ def sectie_3(a3: dict) -> list[str]:
             regels.append(f"  {fr}")
         regels += [
             "  ```",
-            f"- **Vindplaats / bron:** {r.get('vindplaats', TODO)}",
+            f"- **Vindplaats / bron:** {vindplaats_text(r.get('vindplaatsen'), bron_label) or TODO}",
             f"- **Twijfel/aanname:** {r.get('twijfel', TODO)}",
             "",
         ]
@@ -301,8 +315,7 @@ def main() -> None:
         "",
     ]
     regels += sectie_0(a2)
-    regels += sectie_1(a2)
-    regels += sectie_2(a2)
+    regels += sectie_bronnen(a2)
     regels += sectie_3(a3)
     regels += sectie_4(a3, rondes2, rondes3)
 

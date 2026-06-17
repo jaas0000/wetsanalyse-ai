@@ -1,4 +1,5 @@
 import type { DashboardUpdate } from "./types";
+import { distinctBwbIds } from "./bronnen";
 import { statusBucket, type StatusBucket } from "./states";
 
 export type SortKey = "bijgewerkt-desc" | "bijgewerkt-asc" | "naam" | "status";
@@ -25,18 +26,19 @@ export function filtersActief(f: ProjectFilters): boolean {
 // Aandacht-eerst: lopend/review boven, dan fout, dan klaar.
 const STATUS_RANK: Record<StatusBucket, number> = { lopend: 0, review: 0, fout: 1, klaar: 2 };
 
-/** Unieke BWB-id's uit de lijst, gesorteerd — voor de wet-dropdown. */
+/** Unieke BWB-id's over alle bronnen, gesorteerd — voor de wet-dropdown. */
 export function distinctWetten(items: DashboardUpdate[]): string[] {
-  return [...new Set(items.map((u) => u.bwbId).filter(Boolean))].sort();
+  return distinctBwbIds(items.map((u) => u.bronnen));
 }
 
 export function filterEnSorteer(items: DashboardUpdate[], f: ProjectFilters): DashboardUpdate[] {
   const q = f.q.trim().toLowerCase();
   const arr = items.filter((u) => {
     if (f.status !== "alle" && statusBucket(u.state, u.error) !== f.status) return false;
-    if (f.wet !== "alle" && (u.bwbId || "") !== f.wet) return false;
+    if (f.wet !== "alle" && !(u.bronnen || []).some((b) => (b.bwbId || "") === f.wet)) return false;
     if (q) {
-      const hooi = `${u.naam} ${u.id} ${u.bwbId} ${u.artikel}`.toLowerCase();
+      const bronTekst = (u.bronnen || []).map((b) => `${b.bwbId || ""} ${b.artikel}`).join(" ");
+      const hooi = `${u.naam} ${u.id} ${bronTekst}`.toLowerCase();
       if (!hooi.includes(q)) return false;
     }
     return true;

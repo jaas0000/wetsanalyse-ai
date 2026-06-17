@@ -76,7 +76,7 @@ async def lijst_projecten(
     return [
         JobSummary(
             id=p.slug, naam=p.naam, state=p.state,
-            bwbId=p.bwbId, artikel=p.artikel, updated=p.updated.isoformat(),
+            bronnen=p.bronnen, updated=p.updated.isoformat(),
             current_fase=p.current_fase, model_profile=p.model_profile,
             tokens_in=sum(r.tokens_in for r in p.provenance),
             tokens_out=sum(r.tokens_out for r in p.provenance),
@@ -92,8 +92,7 @@ def _dashboard_payload(p) -> dict:
     return {
         "id": p.slug,
         "naam": p.naam,
-        "bwbId": p.bwbId,
-        "artikel": p.artikel,
+        "bronnen": [b.model_dump() for b in p.bronnen],
         "state": p.state,
         "current_activiteit": p.current_activiteit,
         "current_ronde": p.current_ronde,

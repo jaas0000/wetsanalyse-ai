@@ -121,8 +121,12 @@ export function ProjectClient({ initieel }: { initieel: Job }) {
           </h1>
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <StateBadge state={job.state} />
-            {job.bwbId && <Tag>{job.bwbId}</Tag>}
-            {job.artikel && <Tag>art. {job.artikel}{job.lid ? ` lid ${job.lid}` : ""}</Tag>}
+            {(job.bronnen ?? []).map((b, i) => (
+              <Tag key={i}>
+                {b.bwbId ? `${b.bwbId} ` : ""}art. {b.artikel}
+                {b.lid ? ` lid ${b.lid}` : ""}
+              </Tag>
+            ))}
             {job.model_profile && <Tag>{job.model_profile}</Tag>}
             {!job.review && <Tag>volautomatisch</Tag>}
           </div>

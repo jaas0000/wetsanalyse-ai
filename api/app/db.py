@@ -47,9 +47,8 @@ projects = Table(
     Column("slug", String(255), primary_key=True),
     Column("naam", Text, nullable=False, default=""),
     Column("omschrijving", Text, nullable=False, default=""),
-    Column("bwbId", String(64), nullable=False, default=""),
-    Column("artikel", String(64), nullable=False, default=""),
-    Column("lid", String(32), nullable=True),
+    # Het werkgebied bevat meerdere bronnen: list[{bwbId, artikel, lid}] als JSON.
+    Column("bronnen", _JSON, nullable=False, default=list),
     Column("analysefocus", Text, nullable=False, default=""),
     Column("review", Boolean, nullable=False, default=True),
     Column("model_profile", String(128), nullable=False, default=""),

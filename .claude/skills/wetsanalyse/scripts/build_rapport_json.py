@@ -2,8 +2,12 @@
 """Bouw rapport.json uit de gevalideerde analyse-tussenresultaten.
 
 Leest de hoogste ronde van activiteit-2 en activiteit-3 uit de werkmap en
-combineert die tot één rapport.json — de primaire bron voor de HTML-viewer en
-de Markdown-download.
+combineert die tot één werkgebied-rapport.json — de primaire bron voor de
+HTML-viewer en de Markdown-download.
+
+De analyse-eenheid is het **werkgebied** (kennisdomein) met meerdere **bronnen**:
+activiteit 2 levert per bron markeringen/verwijzingen (`bronnen[]`), activiteit 3
+is werkgebied-breed (gedeelde `begrippen`/`afleidingsregels`).
 
 De drie vrije-tekstvelden (reviewlog act. 2, reviewlog act. 3, aandachtspunten)
 kunnen direct als vlag worden meegegeven zodat de skill ze in één aanroep invult.
@@ -27,7 +31,7 @@ import sys
 from pathlib import Path
 
 
-# --- helpers (gelijk aan render_rapport.py) -----------------------------------
+# --- helpers ------------------------------------------------------------------
 
 def laatste_ronde(activiteit_dir: Path) -> Path | None:
     if not activiteit_dir.is_dir():
@@ -122,29 +126,20 @@ def main() -> None:
     rondes2 = verzamel_rondes(dir2)
     rondes3 = verzamel_rondes(dir3)
 
-    # Bouw rapport.json — root-niveau, consistent met analyse.json structuur.
+    bronnen = a2.get("bronnen", [])
+    werkgebied = dict(a2.get("werkgebied") or {})
+    # analysefocus voedt §0; act-3 mag een eigen werkgebied dragen, act-2 is leidend.
+    werkgebied.setdefault("analysefocus", a2.get("analysefocus", ""))
+
+    # Bouw werkgebied-rapport.json — bronnen[] (act-2) + gedeelde begrippen/regels (act-3).
     rapport = {
-        # §0 metadata (uit act-2)
-        "wet":           a2.get("wet", ""),
-        "bwbId":         a2.get("bwbId", ""),
-        "artikel":       a2.get("artikel", ""),
-        "versiedatum":   a2.get("versiedatum", ""),
-        "bronreferentie":a2.get("bronreferentie", ""),
-        "type":          a2.get("type", ""),
-        "pad":           a2.get("pad", ""),
-        "analysefocus":  a2.get("analysefocus", ""),
-        "reikwijdte":    a2.get("reikwijdte", ""),
-        "geraadpleegde": a2.get("geraadpleegde", ""),
+        # §0 werkgebied-metadata
+        "werkgebied": werkgebied,
 
-        # §1 wettekst (uit act-2)
-        "leden":         a2.get("leden", []),
+        # §1/§2 bronnen: per bron wettekst, markeringen, uitgaande verwijzingen, samenhang
+        "bronnen": bronnen,
 
-        # §2 markeringen + uitgaande verwijzingen (uit act-2)
-        "markeringen":   a2.get("markeringen", []),
-        "verwijzingen":  a2.get("verwijzingen", []),
-        "samenhang":     a2.get("samenhang", ""),
-
-        # §3 begrippen + regels (uit act-3)
+        # §3 gedeelde begrippen + regels (werkgebied-breed, uit act-3)
         "begrippen":        a3.get("begrippen", []),
         "afleidingsregels": a3.get("afleidingsregels", []),
         "validatiepunten":  a3.get("validatiepunten", []),
@@ -173,25 +168,39 @@ def main() -> None:
         1 if not rapport["aandachtspunten"] else 0,
     ])
     print(f"rapport.json geschreven naar {args.out}")
-    print(f"Bron: activiteit-2 {ronde2.name}, activiteit-3 {ronde3.name}")
+    print(f"Bron: activiteit-2 {ronde2.name}, activiteit-3 {ronde3.name} "
+          f"({len(bronnen)} bron(nen))")
     if leeg:
         print(f"Let op: {leeg} vrij tekstveld(en) nog leeg "
               "(--reviewlog-act2, --reviewlog-act3, --aandachtspunten).")
 
-    # Referentiële integriteit: elke bron_verwijzing op een begrip/regel moet naar een
-    # bestaande verwijzing-id wijzen. Hier (na het mergen) is het volledige beeld bekend;
-    # validate_analyse.py kan dit per los bestand niet over de activiteiten heen checken.
-    verwijzing_ids = {v.get("id") for v in rapport["verwijzingen"] if v.get("id")}
-    dangling = []
+    # Referentiële integriteit over de bronnen heen. Hier (na het mergen) is het volledige
+    # beeld bekend; validate_analyse.py kan dit per los bestand niet over de activiteiten heen
+    # checken. Twee controles:
+    #   1. bron_verwijzing op een begrip/regel → een bestaande verwijzing-id in één van de bronnen;
+    #   2. elke vindplaatsen.bron_id → een bestaande bron.
+    bron_ids = {b.get("bron_id") for b in bronnen if b.get("bron_id")}
+    verwijzing_ids = {
+        v.get("id")
+        for b in bronnen
+        for v in (b.get("verwijzingen") or [])
+        if v.get("id")
+    }
+    problemen: list[str] = []
     for groep, enkelvoud in (("begrippen", "begrip"), ("afleidingsregels", "afleidingsregel")):
         for item in rapport[groep]:
+            iid = item.get("id", "?")
             bv = item.get("bron_verwijzing")
             if bv and bv not in verwijzing_ids:
-                dangling.append(f"{enkelvoud} '{item.get('id', '?')}' → bron_verwijzing '{bv}'")
-    if dangling:
-        print("Let op: bron_verwijzing zonder bijbehorende verwijzing (controleer act-2/act-3):")
-        for d in dangling:
-            print(f"  - {d}")
+                problemen.append(f"{enkelvoud} '{iid}' → onbekende bron_verwijzing '{bv}'")
+            for vp in (item.get("vindplaatsen") or []):
+                bid = vp.get("bron_id")
+                if bid and bid not in bron_ids:
+                    problemen.append(f"{enkelvoud} '{iid}' → onbekende vindplaats-bron_id '{bid}'")
+    if problemen:
+        print("Let op: dangling referenties (controleer act-2/act-3):")
+        for p in problemen:
+            print(f"  - {p}")
 
 
 if __name__ == "__main__":

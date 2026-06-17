@@ -13,7 +13,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from .contracts import JobFout, JobState, RondeProvenance
+from .contracts import BronInput, JobFout, JobState, RondeProvenance
 
 
 def _utcnow() -> datetime:
@@ -30,9 +30,7 @@ class Project(BaseModel):
     naam: str = ""
     omschrijving: str = ""
 
-    bwbId: str = ""
-    artikel: str = ""
-    lid: str | None = None
+    bronnen: list[BronInput] = Field(default_factory=list)
     analysefocus: str = ""
     review: bool = True
     model_profile: str = ""
@@ -70,9 +68,8 @@ class Project(BaseModel):
         from .contracts import Job
         return Job(
             id=self.slug,
-            bwbId=self.bwbId,
-            artikel=self.artikel,
-            lid=self.lid,
+            naam=self.naam,
+            bronnen=self.bronnen,
             review=self.review,
             model_profile=self.model_profile,
             analysefocus=self.analysefocus,

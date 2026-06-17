@@ -27,7 +27,9 @@ PROBE = "ZZPROBE"  # uniek baken zodat de assertie los staat van template-inhoud
 class XssEscapingTest(unittest.TestCase):
     def test_review_build_html_escapet_script(self):
         html = review_server.build_html(
-            {"bronreferentie": "x", "markeringen": [{"id": "m1", "toelichting": PROBE + "</script>"}]},
+            {"werkgebied": {"naam": "x"},
+             "bronnen": [{"bron_id": "br1", "label": "x",
+                          "markeringen": [{"id": "m1", "bron_id": "br1", "toelichting": PROBE + "</script>"}]}]},
             "2", 1, None,
         )
         self.assertNotIn(PROBE + "</script>", html)   # rauwe payload niet aanwezig
@@ -41,7 +43,10 @@ class XssEscapingTest(unittest.TestCase):
 
 class BestandsnaamTest(unittest.TestCase):
     def test_md_bestandsnaam_bevat_geen_padscheiders(self):
-        naam = rapport_server.md_bestandsnaam({"bwbId": "a/b\\c", "artikel": "1/2", "leden": []})
+        naam = rapport_server.md_bestandsnaam(
+            {"werkgebied": {"naam": "a/b\\c"},
+             "bronnen": [{"bron_id": "br1", "bwbId": "a/b", "artikel": "1/2"}]}
+        )
         self.assertNotIn("/", naam)
         self.assertNotIn("\\", naam)
         self.assertTrue(naam.startswith("analyserapport-"))

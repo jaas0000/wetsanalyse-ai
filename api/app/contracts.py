@@ -2,6 +2,11 @@
 
 Deze modellen zijn de waarheid voor (de)serialisatie en validatie van de artefacten op disk.
 De mechanische JAS-controles zitten in validation.py (hergebruik van de skill-scripts).
+
+De analyse-eenheid is het **werkgebied** (kennisdomein) met **meerdere bronnen**. Activiteit 2
+levert per bron markeringen/verwijzingen (geaggregeerd in `Analyse2.bronnen`); activiteit 3 is
+werkgebied-breed: één gedeelde begrippenlijst + afleidingsregels (`Analyse3`). Id's zijn
+werkgebied-breed uniek; elke markering/verwijzing draagt daarnaast een `bron_id`.
 """
 
 from __future__ import annotations
@@ -17,6 +22,38 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+# --- Werkgebied + bron (gedeeld) ----------------------------------------------
+
+class Werkgebied(BaseModel):
+    """Het werkgebied (kennisdomein) — de afbakening waarbinnen de analyse plaatsvindt."""
+
+    naam: str = ""
+    hoofdvraag: str = ""
+    omschrijving: str = ""
+    scoping: str = ""   # stap 1: overwogen hoofdstukken/artikelen, in/uit-scope + reden
+
+
+class Vindplaats(BaseModel):
+    """Absolute, cross-bron vindplaats: welke bron + (optioneel) welk lid."""
+
+    bron_id: str = ""
+    lid: str = ""
+
+
+class BronRef(BaseModel):
+    """Lichte bron-index (bron_id → leesbaar label) zodat act-3 zelfstandig leesbaar is.
+
+    Activiteit 3 draagt geen volledige bronnen, maar wel deze index, zodat de review-viewer
+    en de validatie een `vindplaatsen.bron_id` naar een leesbaar label kunnen herleiden.
+    """
+
+    bron_id: str = ""
+    label: str = ""
+    bwbId: str = ""
+    artikel: str = ""
+    lid: str | None = None
+
+
 # --- Activiteit 2 -------------------------------------------------------------
 
 class Lid(BaseModel):
@@ -27,9 +64,10 @@ class Lid(BaseModel):
 
 class Markering(BaseModel):
     id: str
+    bron_id: str = ""      # werkgebied-breed unieke id's; bron_id maakt de bron herleidbaar
     formulering: str = ""
     klasse: str = ""
-    vindplaats: str = ""
+    vindplaats: str = ""   # lid-relatief binnen de bron (bv. "lid 2")
     toelichting: str = ""
     twijfel: str = ""
 
@@ -41,13 +79,14 @@ class VerwijzingDoel(BaseModel):
 
 
 class Verwijzing(BaseModel):
-    """Eén uitgaande verwijzing van de bepaling — zie references/verwijzingen-volgen.md.
+    """Eén uitgaande verwijzing van een bron — zie references/verwijzingen-volgen.md.
 
     Aparte as náást de markeringen (uitgaande pointers). `volgen` is de fetch-afweging:
     de orchestrator haalt alleen te-volgen verwijzingen daadwerkelijk op (begrensd).
     """
 
     id: str
+    bron_id: str = ""
     bron_lid: str = ""
     soort: str = ""        # intref | extref | natuurlijk
     functie: str = ""      # definitie | schakel | delegatie | intra-artikel | informatief
@@ -57,15 +96,19 @@ class Verwijzing(BaseModel):
     volgen: bool = False    # of de orchestrator de verwezen tekst moet ophalen
 
 
-class Analyse2(BaseModel):
+class Bron(BaseModel):
+    """Eén bron in het werkgebied: een (bwbId, artikel, lid?)-eenheid met haar act-2-uitkomst."""
+
+    bron_id: str
+    label: str = ""        # leesbaar, bv. "Zvw art. 43 lid 2"
     wet: str = ""
     bwbId: str = ""
     artikel: str = ""
+    lid: str | None = None
     versiedatum: str = ""
     bronreferentie: str = ""
     type: str = ""
     pad: str = ""
-    analysefocus: str = ""
     reikwijdte: str = ""
     geraadpleegde: str = ""
     leden: list[Lid] = Field(default_factory=list)
@@ -74,16 +117,25 @@ class Analyse2(BaseModel):
     samenhang: str = ""
 
 
+class Analyse2(BaseModel):
+    werkgebied: Werkgebied = Field(default_factory=Werkgebied)
+    analysefocus: str = ""
+    bronnen: list[Bron] = Field(default_factory=list)
+
+
 # --- Activiteit 3 -------------------------------------------------------------
 
 class Begrip(BaseModel):
     id: str
-    naam: str = ""
+    naam: str = ""                                         # de voorkeursterm (uniek per werkgebied)
+    synoniemen: list[str] = Field(default_factory=list)   # alternatieve termen voor hetzelfde begrip
     klasse: str = ""
     definitie: str = ""
+    grondformulering: str = ""                            # letterlijke wetformulering (homoniem-herleiding)
     voorbeeld: str = ""
     kenmerken: str = ""
-    vindplaats: str = ""
+    vindplaatsen: list[Vindplaats] = Field(default_factory=list)
+    verwijst_naar_begrippen: list[str] = Field(default_factory=list)  # begrip-id's in de omschrijving
     bron_verwijzing: str = ""   # id van de verwijzing waarop het begrip steunt (bv. brondefinitie)
     twijfel: str = ""
 
@@ -97,16 +149,13 @@ class Afleidingsregel(BaseModel):
     parameters: str = ""
     voorwaarden: str = ""
     formulering: str = ""
-    vindplaats: str = ""
+    vindplaatsen: list[Vindplaats] = Field(default_factory=list)
     twijfel: str = ""
 
 
 class Analyse3(BaseModel):
-    wet: str = ""
-    bwbId: str = ""
-    artikel: str = ""
-    versiedatum: str = ""
-    bronreferentie: str = ""
+    werkgebied: Werkgebied = Field(default_factory=Werkgebied)
+    bronnen: list[BronRef] = Field(default_factory=list)   # lichte index voor vindplaats-labels
     begrippen: list[Begrip] = Field(default_factory=list)
     afleidingsregels: list[Afleidingsregel] = Field(default_factory=list)
     validatiepunten: list[str] = Field(default_factory=list)
@@ -137,14 +186,19 @@ class Feedback(BaseModel):
 
 # --- API-requests -------------------------------------------------------------
 
-class StartRequest(BaseModel):
+class BronInput(BaseModel):
+    """Eén bron-keuze bij het aanmaken van een werkgebied-analyse."""
+
     bwbId: str | None = Field(default=None, max_length=64)
-    wet: str | None = Field(default=None, max_length=256)
     artikel: str = Field(min_length=1, max_length=32)
     lid: str | None = Field(default=None, max_length=16)
-    naam: str = Field(default="", max_length=200)
+
+
+class StartRequest(BaseModel):
+    bronnen: list[BronInput] = Field(min_length=1, max_length=50)
+    naam: str = Field(default="", max_length=200)           # werkgebied-naam
     omschrijving: str = Field(default="", max_length=2000)
-    analysefocus: str | None = Field(default=None, max_length=2000)
+    analysefocus: str | None = Field(default=None, max_length=2000)  # hoofdvraag
     review: bool = True
     model_profile: str | None = Field(default=None, max_length=64)
 
@@ -203,9 +257,8 @@ class RondeProvenance(BaseModel):
 class Job(BaseModel):
     id: str
     state: JobState = JobState.queued
-    bwbId: str = ""
-    artikel: str = ""
-    lid: str | None = None
+    naam: str = ""
+    bronnen: list[BronInput] = Field(default_factory=list)
     review: bool = True
     model_profile: str = ""
     analysefocus: str = ""
@@ -234,8 +287,7 @@ class JobSummary(BaseModel):
     id: str
     naam: str = ""
     state: JobState
-    bwbId: str = ""
-    artikel: str = ""
+    bronnen: list[BronInput] = Field(default_factory=list)
     updated: str = ""
     # Voor de eerste (SSR-)render van het live dashboard, zodat de kaart meteen compleet is i.p.v.
     # pas na de eerste SSE-tick. Daarna verrijkt de aggregate-SSE deze velden live.
@@ -252,24 +304,12 @@ class FeedbackAccepted(BaseModel):
 
 
 class Rapport(BaseModel):
-    """Het analyserapport — de primaire bron, gepresenteerd via de HTML-viewer/Markdown."""
+    """Het werkgebied-analyserapport — de primaire bron, gepresenteerd via de HTML-viewer/Markdown."""
 
     model_config = {"extra": "allow"}
 
-    wet: str = ""
-    bwbId: str = ""
-    artikel: str = ""
-    versiedatum: str = ""
-    bronreferentie: str = ""
-    type: str = ""
-    pad: str = ""
-    analysefocus: str = ""
-    reikwijdte: str = ""
-    geraadpleegde: str = ""
-    leden: list = Field(default_factory=list)
-    markeringen: list = Field(default_factory=list)
-    verwijzingen: list = Field(default_factory=list)
-    samenhang: str = ""
+    werkgebied: dict = Field(default_factory=dict)   # naam, hoofdvraag, omschrijving, scoping, analysefocus
+    bronnen: list = Field(default_factory=list)      # per bron: metadata + leden/markeringen/verwijzingen/samenhang
     begrippen: list = Field(default_factory=list)
     afleidingsregels: list = Field(default_factory=list)
     validatiepunten: list = Field(default_factory=list)

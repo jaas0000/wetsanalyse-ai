@@ -8,6 +8,7 @@ import { Card } from "@/components/ui/Card";
 import { ProjectControls } from "@/components/ProjectControls";
 import { Pagination } from "@/components/Pagination";
 import { useProjectenStream } from "@/lib/useProjectenStream";
+import { bronnenSamenvatting } from "@/lib/bronnen";
 import { pathSegment } from "@/lib/url";
 import {
   DEFAULT_FILTERS,
@@ -104,8 +105,7 @@ export function ProjectenLijstClient({ initieel }: { initieel: JobSummary[] }) {
                         </Link>
                       </td>
                       <td className="px-4 py-3 text-muted">
-                        <span className="font-mono text-xs">{p.bwbId || "—"}</span>
-                        {p.artikel && <span className="ml-1 text-xs">art. {p.artikel}</span>}
+                        <span className="text-xs">{bronnenSamenvatting(p.bronnen)}</span>
                       </td>
                       <td className="px-4 py-3">
                         <StateBadge state={p.state} />

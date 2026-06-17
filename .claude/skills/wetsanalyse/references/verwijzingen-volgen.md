@@ -5,7 +5,8 @@ vooraan ("in deze wet wordt verstaan onder…"), naar andere leden ("in afwijkin
 eerste lid"), naar schakelbepalingen ("van overeenkomstige toepassing"), en naar
 gedelegeerde regelingen (amvb / ministeriële regeling). Die verwijzingen bepalen mede de
 *betekenis* en *werking* van de bepaling die je analyseert. Deze stap maakt ze expliciet,
-volgt de relevante, en legt ze traceerbaar vast als `verwijzingen`-array in `analyse.json`.
+volgt de relevante, en legt ze traceerbaar vast als `verwijzingen`-array **op de bron** in
+`analyse.json` (elke verwijzing draagt het `bron_id` van haar bron).
 
 `verwijzingen` is een **aparte as** náást de markeringen: het zijn uitgaande pointers van de
 bepaling, géén tweede plek om JAS-klassen te registreren. Een delegatie blijft óók een
@@ -39,7 +40,7 @@ brondefinitie als definitie, en wijst met `bron_verwijzing` naar de definitie-ve
 | --- | --- | --- | --- |
 | **definitie** | Ophalen; de definitie letterlijk hergebruiken in het begrip (`bron_verwijzing`) | 1 | `wettenbank_zoekterm` / `wettenbank_artikel` |
 | **schakel** | Ophalen voor zover het de focus-bepaling betekenis geeft | 1 | `wettenbank_artikel` |
-| **delegatie** | *Bounded:* vindplaats + relevante bepaling identificeren, de betekenis verwerken; een volledige JAS-analyse van die regeling is een **aparte** analyse → signaleer dat als validatiepunt | 1 (identificatie) | `wettenbank_structuur` |
+| **delegatie** | *Bounded:* vindplaats + relevante bepaling identificeren, de betekenis verwerken. Wordt de gedelegeerde regeling relevant genoeg, **promoveer haar tot een eigen bron** in het werkgebied (het werkgebied mag groeien); anders signaleer je een volledige JAS-analyse als validatiepunt | 1 (identificatie) | `wettenbank_structuur` |
 | **intra-artikel** | Als relatie vastleggen; de tekst staat al in scope | 0 | — |
 | **informatief** | Signaleren, niet volgen | — | — |
 
@@ -60,15 +61,17 @@ Omdat alle soorten in beginsel gevolgd worden, gelden twee harde grenzen:
 - `opgehaald` — gevolgd én de tekst opgehaald (de betekenis is in de analyse verwerkt).
 - `gevolgd` — gevolgd zonder aparte fetch (bv. intra-artikel: de tekst is al in scope).
 - `gesignaleerd` — herkend maar bewust niet gevolgd (informatief of niet-relevant).
-- `buiten-scope-diepte` — buiten de diepte-cap gelaten; kandidaat voor een eigen analyse.
+- `buiten-scope-diepte` — buiten de diepte-cap gelaten; kandidaat om als bron toe te voegen.
 
 ## Registreren
 
-Schrijf de verwijzingen als `verwijzingen`-array in `werk/activiteit-2/ronde-{N}/analyse.json`
-(zie het schema in `references/review-checkpoints.md`), met stabiele id's (`v1`, `v2`, …).
-`validate_analyse.py` controleert de structuur (functie/status-enums, `doel.label`, en de
-delegatie-koppeling); `build_rapport_json.py` controleert of elke `bron_verwijzing` op een
-begrip/regel naar een bestaande verwijzing wijst.
+Schrijf de verwijzingen als `verwijzingen`-array **op de betreffende bron** in
+`werk/activiteit-2/ronde-{N}/analyse.json` (zie het schema in
+`references/review-checkpoints.md`), met **werkgebied-breed stabiele id's** (`v1`, `v2`, …) en
+het `bron_id` van de bron. `validate_analyse.py` controleert de structuur (functie/status-enums,
+`doel.label`, id-uniciteit over bronnen, en de delegatie-koppeling); `build_rapport_json.py`
+controleert of elke `bron_verwijzing` op een begrip/regel naar een bestaande verwijzing in één
+van de bronnen wijst.
 
 **Houd stap 1b licht:** het is inventariseren + gericht ophalen, niet al classificeren in
 JAS-klassen — dat blijft activiteit 2. De verwijzing-inventaris hoort bij het activiteit-2

@@ -32,13 +32,28 @@ from ..jobstore import IdConflict, JobStore
 from ..ratelimit import QuotaExceeded
 from ..rapport import bouw_rapport_async
 from ..validation import brongetrouwheid_check, schema_check
-from ..wettenbank import WettenbankClient, WettenbankError, map_artikel_naar_analyse_basis, parse_jci
+from ..wettenbank import WettenbankClient, WettenbankError, map_artikel_naar_bron_basis, parse_jci
 from . import prompts, steps
 from .retry import met_retry
 
 logger = logging.getLogger(__name__)
 
-BASIS_KEYS = ("wet", "bwbId", "artikel", "versiedatum", "bronreferentie", "pad", "leden")
+
+def _seed(req: StartRequest) -> str:
+    """Slug-seed voor het werkgebied: de naam, of een afleiding van de eerste bron."""
+    if req.naam:
+        return req.naam
+    b = req.bronnen[0]
+    lid = f"-lid{b.lid}" if b.lid else ""
+    return f"{(b.bwbId or '').lower()}-art{(b.artikel or '').lower().replace(' ', '')}{lid}"
+
+
+def _naam(req: StartRequest) -> str:
+    if req.naam:
+        return req.naam
+    b = req.bronnen[0]
+    extra = f" e.a. ({len(req.bronnen)} bronnen)" if len(req.bronnen) > 1 else ""
+    return f"Art. {b.artikel}{f' lid {b.lid}' if b.lid else ''}{extra}"
 
 
 class LeaseVerloren(Exception):
@@ -67,25 +82,21 @@ class WetsanalyseEngine:
     # --- publieke API -----------------------------------------------------
 
     async def create_project(self, req: StartRequest, client_id: str):
-        """Maak een Project aan zonder de analyse te starten."""
+        """Maak een Project (werkgebied met ≥1 bron) aan zonder de analyse te starten."""
         from ..project import Project as ProjectDoc
-        if not req.bwbId:
-            raise ValueError("bwbId is verplicht in v1 (wet-only resolutie is roadmap).")
+        self._valideer_bronnen(req)
         if req.model_profile:
             await profiles.ensure_exists(req.model_profile)
         await self._check_active_quota(client_id)
-        naam = req.naam or f"Art. {req.artikel}{f' lid {req.lid}' if req.lid else ''}"
         # Begrensde retry: twee gelijktijdige identieke POSTs kunnen dezelfde vrije slug zien;
         # de unieke sleutel laat er één winnen, de ander leidt een nieuwe slug af (IdConflict).
         for _ in range(5):
-            slug = await self.store.afgeleid_id(req.bwbId, req.artikel, req.lid)
+            slug = await self.store.afgeleid_id(_seed(req))
             project = ProjectDoc(
                 slug=slug,
-                naam=naam,
+                naam=_naam(req),
                 omschrijving=req.omschrijving,
-                bwbId=req.bwbId,
-                artikel=req.artikel,
-                lid=req.lid,
+                bronnen=list(req.bronnen),
                 review=req.review,
                 model_profile=req.model_profile or self.s.default_model_profile,
                 analysefocus=req.analysefocus or "",
@@ -99,21 +110,19 @@ class WetsanalyseEngine:
         raise IdConflict("Kon geen uniek project-id reserveren; probeer opnieuw.")
 
     async def create_job(self, req: StartRequest, client_id: str) -> Job:
-        if not req.bwbId:
-            raise ValueError("bwbId is verplicht in v1 (wet-only resolutie is roadmap).")
+        self._valideer_bronnen(req)
         if req.model_profile:
             await profiles.ensure_exists(req.model_profile)
         await self._check_active_quota(client_id)
         # Begrensde retry tegen de gelijktijdige-aanmaak-race (zie create_project). insert_job
         # maakt altijd een nieuw document, zodat de tweede POST geen bestaand project overschrijft.
         for _ in range(5):
-            job_id = await self.store.afgeleid_id(req.bwbId, req.artikel, req.lid)
+            job_id = await self.store.afgeleid_id(_seed(req))
             job = Job(
                 id=job_id,
                 state=JobState.queued,
-                bwbId=req.bwbId,
-                artikel=req.artikel,
-                lid=req.lid,
+                naam=_naam(req),
+                bronnen=list(req.bronnen),
                 review=req.review,
                 model_profile=req.model_profile or self.s.default_model_profile,
                 analysefocus=req.analysefocus or "",
@@ -125,6 +134,14 @@ class WetsanalyseEngine:
             except IdConflict:
                 continue
         raise IdConflict("Kon geen uniek analyse-id reserveren; probeer opnieuw.")
+
+    @staticmethod
+    def _valideer_bronnen(req: StartRequest) -> None:
+        if not req.bronnen:
+            raise ValueError("Minstens één bron is verplicht.")
+        for b in req.bronnen:
+            if not b.bwbId:
+                raise ValueError("bwbId is verplicht per bron (wet-only resolutie is roadmap).")
 
     async def run_initial(self, job_id: str) -> None:
         # CAS: claim queued → act2_runt. Faalt de claim, dan is de job al opgepakt/voorbij —
@@ -208,37 +225,94 @@ class WetsanalyseEngine:
         job.state = JobState.act2_runt
         await self._save(job)
         await self._set_fase(job, "wettekst-ophalen")
-        artikel_data = await self._met_retry(lambda: self.wb.artikel(job.bwbId, job.artikel, job.lid))
-        basis = map_artikel_naar_analyse_basis(artikel_data)
-        await self._genereer(job, "2", 1, basis, vorige=None, feedback=None)
+        # Haal per bron de letterlijke tekst op (deterministisch, via de MCP). Eén bron met een
+        # MCP-mis laat de hele job falen (brongetrouwheid) — geen stille lege context.
+        bron_bases: list[dict] = []
+        for i, b in enumerate(job.bronnen, 1):
+            data = await self._met_retry(lambda b=b: self.wb.artikel(b.bwbId, b.artikel, b.lid))
+            bron_bases.append(map_artikel_naar_bron_basis(data, f"br{i}", b.lid))
+        await self._genereer_act2_vers(job, 1, bron_bases)
 
     async def _fase_feedback(self, job: Job, activiteit: str, ronde: int, feedback) -> None:
-        if feedback.is_akkoord_zonder_opmerkingen():
-            await self._advance_akkoord(job, activiteit)
-            return
-        if ronde >= self.s.max_rondes:
+        if feedback.is_akkoord_zonder_opmerkingen() or ronde >= self.s.max_rondes:
             await self._advance_akkoord(job, activiteit)
             return
         job.state = JobState.act2_runt if activiteit == "2" else JobState.act3_runt
         await self._save(job)
-        basis = await self._basis(job)
-        vorige = await self.store.lees_analyse(job.id, activiteit, ronde)
-        await self._genereer(job, activiteit, ronde + 1, basis, vorige=vorige, feedback=feedback.model_dump())
+        llm = await self._llm_for(job)
+        vorige = await self.store.lees_analyse(job.id, activiteit, ronde) or {}
+        # Context voor de merge: act-2 herziet op de brongetrouwe bronnen van ronde 1; act-3 op
+        # de vorige act-3 (werkgebied + bron-index).
+        context = (await self._context_act2(job)) if activiteit == "2" else vorige
+        fb = feedback.model_dump()
+
+        async def maak():
+            return await steps.herzie(llm, activiteit, context, ronde + 1, vorige, fb)
+
+        await self._afronden_ronde(job, activiteit, ronde + 1, maak)
 
     async def _advance_akkoord(self, job: Job, activiteit: str) -> None:
         if activiteit == "2":
             job.state = JobState.act3_runt
             await self._save(job)
-            basis = await self._basis(job)
-            n = await self.store.hoogste_ronde(job.id, "2")
-            act2 = await self.store.lees_analyse(job.id, "2", n)
-            await self._genereer(job, "3", 1, basis, vorige=None, feedback=None, act2=act2)
+            llm = await self._llm_for(job)
+            act2 = await self._context_act2(job)
+
+            async def maak():
+                return await steps.genereer_act3(llm, 1, act2)
+
+            await self._afronden_ronde(job, "3", 1, maak)
         else:
             await self._bouw_rapport(job)
 
     # --- generatie van één ronde (incl. auto-correctie) -------------------
 
-    async def _genereer(self, job, activiteit, ronde, basis, vorige, feedback, act2=None) -> None:
+    def _werkgebied(self, job: Job) -> dict:
+        return {"naam": job.naam, "hoofdvraag": job.analysefocus or "", "omschrijving": "", "scoping": ""}
+
+    async def _context_act2(self, job: Job) -> dict:
+        """De act-2-aggregaat van ronde 1 (brongetrouwe bronnen) — context voor act-3 en revise."""
+        return await self.store.lees_analyse(job.id, "2", 1) or {}
+
+    async def _genereer_act2_vers(self, job: Job, ronde: int, bron_bases: list[dict]) -> None:
+        """Verse act-2: per bron de verwijzing-inventaris (fase 2a) + begrensde fetch (één keer),
+        daarna per bron markeren/classificeren en tot één werkgebied-aggregaat samenvoegen."""
+        llm = await self._llm_for(job)
+        per_bron: list[tuple[dict, dict, dict]] = []
+        inv_in = inv_out = 0
+        for bb in bron_bases:
+            await self._set_fase(job, "verwijzingen-inventariseren")
+            inv_res = await self._met_retry(lambda bb=bb: steps.inventariseer_verwijzingen(llm, bb))
+            inv_in += inv_res.tokens_in
+            inv_out += inv_res.tokens_out
+            await self._set_fase(job, "verwijzingen-volgen")
+            opgehaald = await self._volg_verwijzingen(bb, inv_res.data)
+            per_bron.append((bb, inv_res.data, opgehaald))
+
+        async def maak():
+            bronnen, tin, tout, prov0 = [], 0, 0, None
+            for bb, inv, opg in per_bron:
+                bron_dict, prov = await steps.genereer_act2_bron(
+                    llm, bb, ronde, job.analysefocus or None, inv, opg
+                )
+                bronnen.append(bron_dict)
+                tin += prov["tokens_in"]
+                tout += prov["tokens_out"]
+                prov0 = prov0 or prov
+            analyse = {
+                "werkgebied": self._werkgebied(job),
+                "analysefocus": job.analysefocus or "",
+                "bronnen": bronnen,
+            }
+            prov = dict(prov0 or {})
+            prov["tokens_in"], prov["tokens_out"] = tin, tout
+            return analyse, prov
+
+        await self._afronden_ronde(job, "2", ronde, maak, extra_tokens=(inv_in, inv_out))
+
+    async def _afronden_ronde(self, job: Job, activiteit: str, ronde: int, maak, extra_tokens=(0, 0)) -> None:
+        """Gemeenschappelijke afronding van één ronde: budget-check, auto-correctie op harde
+        brongetrouwheid, schema-check, wegschrijven, en de state-overgang (review of door)."""
         if self.s.llm_token_budget > 0:
             gebruikt = sum(p.tokens_in + p.tokens_out for p in job.provenance)
             if gebruikt >= self.s.llm_token_budget:
@@ -248,44 +322,17 @@ class WetsanalyseEngine:
                 )
                 return
 
-        llm = await self._llm_for(job)
-
-        # Niveau B — verwijzing-inventaris (fase 2a) + begrensde fetch, alleen bij een VERSE
-        # act-2-generatie. Eén keer bepaald (niet per auto-correctie-poging): de opgehaalde
-        # verwezen tekst verandert niet bij hergeneratie op een brongetrouwheid-schending.
-        inventaris = opgehaald = None
-        inv_res = None
-        if feedback is None and activiteit == "2":
-            await self._set_fase(job, "verwijzingen-inventariseren")
-            inv_res = await self._met_retry(lambda: steps.inventariseer_verwijzingen(llm, basis))
-            inventaris = inv_res.data
-            await self._set_fase(job, "verwijzingen-volgen")
-            opgehaald = await self._volg_verwijzingen(basis, inventaris)
-
-        async def maak():
-            if feedback is not None:
-                return await steps.herzie(llm, activiteit, basis, ronde, vorige, feedback)
-            if activiteit == "2":
-                return await steps.genereer_act2(
-                    llm, basis, ronde, job.analysefocus or None, inventaris, opgehaald
-                )
-            return await steps.genereer_act3(llm, basis, ronde, act2)
-
         await self._set_fase(job, "llm-generatie")
         analyse, prov = await self._met_retry(maak)
-        # Tel de inventaris-tokens (fase 2a) bij de act-2-ronde — anders ontbreken ze in het
-        # token-budget en de usage-aggregatie.
-        if inv_res is not None:
-            prov["tokens_in"] += inv_res.tokens_in
-            prov["tokens_out"] += inv_res.tokens_out
         pogingen = 0
-        # Auto-correctie regenereert UITSLUITEND op harde brongetrouwheid-schendingen. Zachte
-        # schema-fouten blokkeren per ontwerp niet en mogen geen (dure) hergeneratie triggeren;
-        # ze reizen als waarschuwing mee naar het checkpoint.
+        # Auto-correctie regenereert UITSLUITEND op harde brongetrouwheid-schendingen.
         while pogingen < self.s.max_autocorrectie and brongetrouwheid_check(analyse, activiteit):
             pogingen += 1
             await self._set_fase(job, "auto-correctie")
             analyse, prov = await self._met_retry(maak)
+        # Tel eenmalig de inventaris-tokens (fase 2a) bij de ronde — budget/usage-aggregatie.
+        prov["tokens_in"] += extra_tokens[0]
+        prov["tokens_out"] += extra_tokens[1]
 
         await self._set_fase(job, "brongetrouwheid-check")
         schendingen = brongetrouwheid_check(analyse, activiteit)
@@ -412,10 +459,6 @@ class WetsanalyseEngine:
                 label = doel.get("target") or f"{bwb} artikel {artikel}"
                 opgehaald[label] = "\n".join(teksten)
         return opgehaald
-
-    async def _basis(self, job: Job) -> dict:
-        a2 = await self.store.lees_analyse(job.id, "2", 1) or {}
-        return {k: a2.get(k) for k in BASIS_KEYS}
 
     async def _fail(self, job: Job, stap: str, klasse: FoutKlasse, bericht: str) -> None:
         job.state = JobState.fout

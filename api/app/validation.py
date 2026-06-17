@@ -42,8 +42,8 @@ GELDIGE_REGELTYPEN: set[str] = _validate.GELDIGE_REGELTYPEN
 # skill-spoor (zonder harde check) zijn deze waarschuwingen de enige citaat/vindplaats-controle.
 _OVERLAPT_MET_HARD = (
     "lijkt geen letterlijk citaat",        # citaat (act 2)
-    "Veld 'vindplaats' ontbreekt",         # vindplaats (act 2)
-    "geen 'vindplaats'",                   # vindplaats (act 3: begrip/afleidingsregel)
+    "Veld 'vindplaats' ontbreekt",         # vindplaats (act 2: markering, lid-relatief)
+    "geen 'vindplaatsen'",                 # vindplaatsen (act 3: begrip/afleidingsregel)
 )
 
 
@@ -85,39 +85,43 @@ def normaliseer(tekst: str) -> str:
 
 
 def brongetrouwheid_check(data: dict, activiteit: str) -> list[str]:
-    """Harde controles die altijd gelden. Geeft een lijst schendingen terug (leeg = ok)."""
+    """Harde controles die altijd gelden, werkgebied-breed. Geeft een lijst schendingen terug
+    (leeg = ok). Activiteit 2 controleert per bron: bronreferentie aanwezig, en elke markering
+    een vindplaats + letterlijk citaat uit de leden-tekst van DIE bron. Activiteit 3 controleert
+    dat elk begrip/regel ten minste één vindplaats heeft."""
     schendingen: list[str] = []
 
-    if not (data.get("bronreferentie") or "").strip():
-        schendingen.append("Bronreferentie (jci) ontbreekt — moet uit de MCP komen, niet uit het LLM.")
-
     if activiteit == "2":
-        leden_genorm = normaliseer(
-            _strip_md_links(" ".join((lid.get("tekst") or "") for lid in (data.get("leden") or [])))
-        )
-        for m in data.get("markeringen") or []:
-            mid = m.get("id", "?")
-            if not (m.get("vindplaats") or "").strip():
-                schendingen.append(f"[{mid}] Vindplaats ontbreekt (herleidbaarheid verplicht).")
-            formulering = (m.get("formulering") or "").strip()
-            # Hergebruik de canonieke citaat-toets uit het skill-script (drift-fix): die
-            # respecteert beletselteken ('...'/'…') voor geelideerde tussentekst en vierkante-
-            # haak-invoegingen ([...]) — citeerconventies die een platte substring-toets breken.
-            # `normaliseer` raakt punten/beletseltekens/haken niet, dus de fragmentlogica werkt
-            # correct op de al-genormaliseerde formulering tegen de genormaliseerde leden-tekst.
-            if (
-                formulering
-                and leden_genorm
-                and not _validate.fragmenten_letterlijk(normaliseer(formulering), leden_genorm)
-            ):
-                kort = formulering[:60] + ("…" if len(formulering) > 60 else "")
+        bronnen = data.get("bronnen") or []
+        for bron in bronnen:
+            label = bron.get("label") or bron.get("bron_id") or "?"
+            if not (bron.get("bronreferentie") or "").strip():
                 schendingen.append(
-                    f"[{mid}] Formulering is geen letterlijk citaat uit de leden-tekst: '{kort}'"
+                    f"[{label}] Bronreferentie (jci) ontbreekt — moet uit de MCP komen, niet uit het LLM."
                 )
+            leden_genorm = normaliseer(
+                _strip_md_links(" ".join((lid.get("tekst") or "") for lid in (bron.get("leden") or [])))
+            )
+            for m in bron.get("markeringen") or []:
+                mid = m.get("id", "?")
+                if not (m.get("vindplaats") or "").strip():
+                    schendingen.append(f"[{mid}] Vindplaats ontbreekt (herleidbaarheid verplicht).")
+                formulering = (m.get("formulering") or "").strip()
+                # Hergebruik de canonieke citaat-toets uit het skill-script (drift-fix): die
+                # respecteert beletselteken ('...'/'…') en vierkante-haak-invoegingen ([...]).
+                if (
+                    formulering
+                    and leden_genorm
+                    and not _validate.fragmenten_letterlijk(normaliseer(formulering), leden_genorm)
+                ):
+                    kort = formulering[:60] + ("…" if len(formulering) > 60 else "")
+                    schendingen.append(
+                        f"[{mid}] Formulering is geen letterlijk citaat uit de leden-tekst: '{kort}'"
+                    )
     else:
         for item in (data.get("begrippen") or []) + (data.get("afleidingsregels") or []):
             iid = item.get("id", "?")
-            if not (item.get("vindplaats") or "").strip():
-                schendingen.append(f"[{iid}] Vindplaats ontbreekt (herleidbaarheid verplicht).")
+            if not (item.get("vindplaatsen") or []):
+                schendingen.append(f"[{iid}] Vindplaatsen ontbreken (herleidbaarheid verplicht).")
 
     return schendingen

@@ -163,12 +163,28 @@ const VORIGE_ITEMS = buildVorigeItems(VORIGE && VORIGE.analyse);
 function buildVorigeItems(analyse) {
   const map = {};
   if (!analyse) return map;
-  for (const key of ["markeringen", "verwijzingen", "begrippen", "afleidingsregels"]) {
-    for (const it of (analyse[key] || [])) {
-      if (it && it.id != null) map[it.id] = it;
-    }
+  const lijsten = [];
+  // Activiteit 2: markeringen/verwijzingen leven per bron; activiteit 3: werkgebied-breed.
+  for (const bron of (analyse.bronnen || [])) {
+    lijsten.push(bron.markeringen || [], bron.verwijzingen || []);
+  }
+  lijsten.push(analyse.begrippen || [], analyse.afleidingsregels || []);
+  for (const lst of lijsten) {
+    for (const it of lst) if (it && it.id != null) map[it.id] = it;
   }
   return map;
+}
+
+// Bron-index (bron_id → leesbaar label): act-2 draagt volledige bronnen, act-3 een lichte index.
+const BRON_LABEL = {};
+(A.bronnen || []).forEach(b => { if (b && b.bron_id) BRON_LABEL[b.bron_id] = b.label || b.bron_id; });
+
+function vindplaatsText(vps) {
+  if (!Array.isArray(vps) || !vps.length) return "";
+  return vps.map(vp => {
+    const lbl = BRON_LABEL[vp.bron_id] || vp.bron_id || "";
+    return lbl + (vp.lid ? " lid " + vp.lid : "");
+  }).filter(Boolean).join("; ");
 }
 
 function esc(s) {
@@ -208,14 +224,15 @@ function vorigeBlok(id, velden) {
 }
 
 function renderHeader() {
-  const meta = [A.wet, A.artikel ? "artikel " + A.artikel : "", A.versiedatum]
+  const wg = A.werkgebied || {};
+  const nBron = (A.bronnen || []).length;
+  const meta = [wg.naam, nBron ? nBron + " bron" + (nBron === 1 ? "" : "nen") : "", wg.hoofdvraag]
     .filter(Boolean).join(" · ");
   document.getElementById("title").textContent =
     "Wetsanalyse — Review activiteit " + ACT +
     (ACT === "2" ? " (markeren & classificeren)" : " (begrippen & afleidingsregels)") +
     (RONDE > 1 ? " — ronde " + RONDE : "");
-  document.getElementById("subtitle").textContent =
-    meta + (A.bronreferentie ? "  —  " + A.bronreferentie : "");
+  document.getElementById("subtitle").textContent = meta;
 }
 
 function renderBanner() {
@@ -225,17 +242,19 @@ function renderBanner() {
     er toen uitzag, en bevestig of je correctie verwerkt is.</div>`;
 }
 
-function renderWettekst() {
-  if (!A.leden || !A.leden.length) return "";
-  const rows = A.leden.map(l =>
+function renderWettekst(bron) {
+  if (!bron.leden || !bron.leden.length) return "";
+  const rows = bron.leden.map(l =>
     `<div class="lid"><b>${l.lid ? "Lid " + esc(l.lid) : ""}</b> ${esc(l.tekst)}</div>`
   ).join("");
-  return `<div class="panel"><details><summary>Wettekst (letterlijk) — context</summary>
-    <div style="margin-top:10px">${rows}</div></details></div>`;
+  return `<details><summary>Wettekst (letterlijk) — context</summary>
+    <div style="margin-top:10px">${rows}</div></details>`;
 }
 
-function renderMarkeringen() {
-  const items = (A.markeringen || []).map(m => `
+function renderMarkeringen(bron) {
+  const ms = bron.markeringen || [];
+  if (!ms.length) return "";
+  const items = ms.map(m => `
     <div class="item">
       <div class="top">
         <span class="id">#${esc(m.id)}</span>
@@ -248,7 +267,7 @@ function renderMarkeringen() {
       ${vorigeBlok(m.id, [["Formulering", "formulering"], ["Klasse", "klasse"],
         ["Vindplaats", "vindplaats"], ["Toelichting", "toelichting"]])}
     </div>`).join("");
-  return `<div class="panel"><h2>Markeringen &amp; classificaties (${(A.markeringen||[]).length})</h2>${items}</div>`;
+  return `<div class="subhead">Markeringen &amp; classificaties (${ms.length})</div>${items}`;
 }
 
 const VW_FUNCTIE_LABEL = {
@@ -256,8 +275,8 @@ const VW_FUNCTIE_LABEL = {
   "intra-artikel": "Intra-artikel", "informatief": "Informatief",
 };
 
-function renderVerwijzingen() {
-  const vs = A.verwijzingen || [];
+function renderVerwijzingen(bron) {
+  const vs = bron.verwijzingen || [];
   if (!vs.length) return "";
   const items = vs.map(v => {
     const doel = v.doel || {};
@@ -280,16 +299,31 @@ function renderVerwijzingen() {
         ["Betekenis", "betekenis"]])}
     </div>`;
   }).join("");
-  return `<div class="panel"><h2>Verwijzingen (${vs.length})</h2>
+  return `<div class="subhead">Verwijzingen (${vs.length})</div>
     <div class="meta" style="margin-bottom:10px">Stuur het scope-besluit per verwijzing bij
-      (bv. "volg deze delegatie wél verder" of "deze hoort buiten scope").</div>
-    ${items}</div>`;
+      (bv. "volg deze delegatie wél verder", "deze hoort buiten scope", of "promoveer tot eigen bron").</div>
+    ${items}`;
 }
 
-function renderSamenhang() {
-  if (!A.samenhang) return "";
-  return `<div class="panel"><h2>Samenhang centrale klassen</h2>
-    <div style="white-space:pre-wrap">${esc(A.samenhang)}</div>${fb("samenhang")}</div>`;
+function renderSamenhang(bron) {
+  if (!bron.samenhang) return "";
+  return `<div class="subhead">Samenhang centrale klassen</div>
+    <div style="white-space:pre-wrap">${esc(bron.samenhang)}</div>${fb("samenhang__" + bron.bron_id)}`;
+}
+
+// Eén panel per bron met wettekst, markeringen, verwijzingen en samenhang van die bron.
+function renderBronnen() {
+  return (A.bronnen || []).map(bron => {
+    const titel = bron.label || (bron.wet ? bron.wet + " art. " + bron.artikel : bron.bron_id);
+    const sub = [bron.bwbId, bron.bronreferentie].filter(Boolean).join("  ·  ");
+    const body = renderWettekst(bron) + renderMarkeringen(bron)
+      + renderVerwijzingen(bron) + renderSamenhang(bron);
+    return `<div class="panel">
+      <h2>${esc(titel)}</h2>
+      ${sub ? `<div class="meta" style="margin:-6px 0 12px">${esc(sub)}</div>` : ""}
+      ${body}
+    </div>`;
+  }).join("");
 }
 
 function renderBegrippen() {
@@ -299,18 +333,20 @@ function renderBegrippen() {
         <span class="chip">${esc(b.klasse)}</span>
         <strong>${esc(b.naam)}</strong></div>
       <div class="grid">
+        ${(b.synoniemen && b.synoniemen.length) ? `<span class="lbl">Synoniemen</span><span>${esc(b.synoniemen.join(", "))}</span>` : ""}
         ${b.definitie ? `<span class="lbl">Definitie</span><span>${esc(b.definitie)}</span>` : ""}
+        ${b.grondformulering ? `<span class="lbl">Grondformulering</span><span>${esc(b.grondformulering)}</span>` : ""}
         ${b.voorbeeld ? `<span class="lbl">Voorbeeld</span><span>${esc(b.voorbeeld)}</span>` : ""}
         ${b.kenmerken ? `<span class="lbl">Kenmerken/relaties</span><span>${esc(b.kenmerken)}</span>` : ""}
-        ${b.vindplaats ? `<span class="lbl">Vindplaats</span><span>${esc(b.vindplaats)}</span>` : ""}
+        ${vindplaatsText(b.vindplaatsen) ? `<span class="lbl">Vindplaats</span><span>${esc(vindplaatsText(b.vindplaatsen))}</span>` : ""}
         ${b.twijfel ? `<span class="lbl">Twijfel/aanname</span><span>${esc(b.twijfel)}</span>` : ""}
       </div>
       ${fb(b.id)}
       ${vorigeBlok(b.id, [["Naam", "naam"], ["Klasse", "klasse"],
         ["Definitie", "definitie"], ["Kenmerken/relaties", "kenmerken"],
-        ["Vindplaats", "vindplaats"], ["Twijfel/aanname", "twijfel"]])}
+        ["Twijfel/aanname", "twijfel"]])}
     </div>`).join("");
-  return `<div class="panel"><h2>Begrippen (${(A.begrippen||[]).length})</h2>${items}</div>`;
+  return `<div class="panel"><h2>Begrippen — gedeeld over het werkgebied (${(A.begrippen||[]).length})</h2>${items}</div>`;
 }
 
 function renderRegels() {
@@ -324,7 +360,7 @@ function renderRegels() {
         ${r.invoervariabelen ? `<span class="lbl">Invoer</span><span>${esc(r.invoervariabelen)}</span>` : ""}
         ${r.parameters ? `<span class="lbl">Parameters</span><span>${esc(r.parameters)}</span>` : ""}
         ${r.voorwaarden ? `<span class="lbl">Voorwaarden</span><span>${esc(r.voorwaarden)}</span>` : ""}
-        ${r.vindplaats ? `<span class="lbl">Vindplaats</span><span>${esc(r.vindplaats)}</span>` : ""}
+        ${vindplaatsText(r.vindplaatsen) ? `<span class="lbl">Vindplaats</span><span>${esc(vindplaatsText(r.vindplaatsen))}</span>` : ""}
         ${r.twijfel ? `<span class="lbl">Twijfel/aanname</span><span>${esc(r.twijfel)}</span>` : ""}
       </div>
       ${r.formulering ? `<pre>${esc(r.formulering)}</pre>` : ""}
@@ -332,10 +368,9 @@ function renderRegels() {
       ${vorigeBlok(r.id, [["Naam", "naam"], ["Type", "type"],
         ["Uitvoer", "uitvoervariabele"], ["Invoer", "invoervariabelen"],
         ["Parameters", "parameters"], ["Voorwaarden", "voorwaarden"],
-        ["Formulering", "formulering"], ["Vindplaats", "vindplaats"],
-        ["Twijfel/aanname", "twijfel"]])}
+        ["Formulering", "formulering"], ["Twijfel/aanname", "twijfel"]])}
     </div>`).join("");
-  return `<div class="panel"><h2>Afleidingsregels (${(A.afleidingsregels||[]).length})</h2>${items}</div>`;
+  return `<div class="panel"><h2>Afleidingsregels — gedeeld over het werkgebied (${(A.afleidingsregels||[]).length})</h2>${items}</div>`;
 }
 
 function renderValidatie() {
@@ -360,9 +395,9 @@ function renderAlgemeen() {
 
 function render() {
   renderHeader();
-  let html = renderBanner() + renderWettekst();
+  let html = renderBanner();
   if (ACT === "2") {
-    html += renderMarkeringen() + renderVerwijzingen() + renderSamenhang();
+    html += renderBronnen();
   } else {
     html += renderBegrippen() + renderRegels() + renderValidatie();
   }
