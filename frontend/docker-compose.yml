@@ -15,6 +15,10 @@
 # Stack-omgeving (in Portainer, of door CI via stack-update meegegeven):
 #   PROXY_NETWORK  — naam van het bestaande NPM-netwerk (default homeinfra_internal).
 #   SECRETS_DIR    — host-pad naar de secrets-map (gedeeld met de API-stack).
+#   AUTH_URL       — PUBLIEKE origin van de webapp (bv. https://wetsanalyse.ipalm.nl). Verplicht
+#                    achter een reverse proxy: Auth.js pint hierop z'n login/logout-redirects.
+#                    Zonder dit valt het terug op het interne 0.0.0.0:3000 en springt de browser
+#                    daarheen bij in-/uitloggen.
 #
 # Drie extra secret-bestanden t.o.v. de API-stack, op de host in SECRETS_DIR (mode 644):
 #   frontend_api_token    — ALLEEN de tokenwaarde (het deel NA de ":") van een entry in de
@@ -37,6 +41,8 @@ services:
       API_TOKEN_FILE: /run/secrets/frontend_api_token
       ADMIN_API_TOKEN_FILE: /run/secrets/frontend_admin_token
       AUTH_SECRET_FILE: /run/secrets/frontend_auth_secret
+      # Publieke origin voor Auth.js-redirects (achter NPM). Override via de stack-env AUTH_URL.
+      AUTH_URL: "${AUTH_URL:-https://wetsanalyse.ipalm.nl}"
       NODE_ENV: production
     volumes:
       - ${SECRETS_DIR:-/opt/secrets/wetsanalyse-api}:/run/secrets:ro
