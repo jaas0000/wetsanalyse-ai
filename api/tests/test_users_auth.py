@@ -175,7 +175,9 @@ async def test_2fa_cyclus(monkeypatch, db):
     ok_user, code = await users.verify_credentials("baas", "wachtwoord1", _totp_now(uri))
     assert code == "ok" and ok_user is not None
 
-    await users.disable_2fa("baas")
+    with pytest.raises(users.UserError):
+        await users.disable_2fa("baas", "000000")
+    await users.disable_2fa("baas", _totp_now(uri))
     assert not (await users.get_user("baas")).totp_enabled
     assert (await users.verify_credentials("baas", "wachtwoord1"))[1] == "ok"
 
@@ -286,5 +288,9 @@ async def test_2fa_http_via_header(client):
     assert act.status_code == 204
     assert (await client.get("/v1/auth/me", headers=hdr)).json()["totp_enabled"] is True
 
-    dis = await client.post("/v1/auth/2fa/disable", headers=hdr)
+    dis_fout = await client.post("/v1/auth/2fa/disable", json={"totp": "000000"}, headers=hdr)
+    assert dis_fout.status_code == 400
+
+    totp_code = _totp_now(begin.json()["otpauth_uri"])
+    dis = await client.post("/v1/auth/2fa/disable", json={"totp": totp_code}, headers=hdr)
     assert dis.status_code == 204

@@ -14,7 +14,6 @@ function isPublic(path: string): boolean {
     path === "/login" ||
     path === "/setup" ||
     path === "/api/setup" ||
-    path === "/api/setup-status" ||
     path === "/api/login-verify" ||
     path === "/api/health"
   );

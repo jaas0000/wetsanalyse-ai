@@ -54,13 +54,13 @@ def rate_limited_client(client_id: str = Depends(require_client)) -> str:
     return client_id
 
 
-def login_allowed(email: str) -> bool:
-    """Per-e-mail brute-force-rem op de login-verificatie. Hergebruikt de muterende-rate-knoppen
+def login_allowed(userid: str) -> bool:
+    """Per-userid brute-force-rem op de login-verificatie. Hergebruikt de muterende-rate-knoppen
     (`WETSANALYSE_RATE_LIMIT_MAX`/`_WINDOW`); 0 = uit. In-process (per replica)."""
     s = get_settings()
     if s.rate_limit_max <= 0:
         return True
-    return _allow(f"login:{email.strip().lower()}", s.rate_limit_max, s.rate_limit_window_s)
+    return _allow(f"login:{userid.strip().lower()}", s.rate_limit_max, s.rate_limit_window_s)
 
 
 def rate_limited_admin_test(admin_id: str = Depends(require_admin)) -> str:

@@ -23,7 +23,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const totp = credentials?.totp ? String(credentials.totp) : undefined;
         if (!userid || !password) return null;
         const res = await verifyCredentials(userid, password, totp);
-        if (!res.ok) return null;
+        if (!res.ok) {
+          // Bij rate-limiting (code "rate") of foutieve gegevens retourneert null zodat Auth.js
+          // de sessie weigert. De loginVerify-precheck in LoginClient toont de specifieke
+          // rate-limit-melding; dit pad is de veiligheidsnet-verificatie.
+          return null;
+        }
         // Userid + rol reizen mee naar het JWT (zie jwt-callback). Bij ok is role nooit "".
         return { id: res.userid, userid: res.userid, name: res.userid, email: res.email, role: res.role as Role };
       },
