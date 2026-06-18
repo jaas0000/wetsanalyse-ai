@@ -36,7 +36,7 @@ export function getRapportServer(id: string): Promise<Rapport> {
 
 export interface VerifyResult {
   ok: boolean;
-  code: string; // "" | "invalid" | "totp_required"
+  code: string; // "" | "invalid" | "totp_required" | "rate"
   userid: string;
   email: string;
   role: "beheerder" | "analist" | "";
