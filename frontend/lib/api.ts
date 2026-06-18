@@ -249,8 +249,12 @@ export async function activate2fa(totp: string): Promise<void> {
   if (!res.ok) throw await parseError(res);
 }
 
-export async function disable2fa(): Promise<void> {
-  const res = await fetch("/api/account/2fa/disable", { method: "POST" });
+export async function disable2fa(totp: string): Promise<void> {
+  const res = await fetch("/api/account/2fa/disable", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ totp }),
+  });
   if (!res.ok) throw await parseError(res);
 }
 

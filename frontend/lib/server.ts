@@ -36,7 +36,7 @@ export function getRapportServer(id: string): Promise<Rapport> {
 
 export interface VerifyResult {
   ok: boolean;
-  code: string; // "" | "invalid" | "totp_required"
+  code: string; // "" | "invalid" | "totp_required" | "rate"
   userid: string;
   email: string;
   role: "beheerder" | "analist" | "";
@@ -54,7 +54,7 @@ export async function verifyCredentials(
     body: JSON.stringify({ userid, password, totp: totp ?? null }),
     cache: "no-store",
   });
-  if (!res.ok) return { ok: false, code: "invalid", userid: "", email: "", role: "" };
+  if (!res.ok) return { ok: false, code: res.status === 429 ? "rate" : "invalid", userid: "", email: "", role: "" };
   return (await res.json()) as VerifyResult;
 }
 

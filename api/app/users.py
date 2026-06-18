@@ -260,8 +260,6 @@ async def change_own_password(userid: str, current: str, nieuw: str) -> None:
     user = await _require_user(userid)
     if not user.active or not verify_password(current, user.password_hash):
         raise UserError("Huidig wachtwoord onjuist.")
-    if len(nieuw) < 8:
-        raise UserError("Het nieuwe wachtwoord moet minimaal 8 tekens zijn.")
     await _update(user.userid, password_hash=hash_password(nieuw))
 
 
@@ -303,6 +301,10 @@ async def activate_2fa(userid: str, code: str) -> None:
     await _update(user.userid, totp_enabled=True)
 
 
-async def disable_2fa(userid: str) -> None:
+async def disable_2fa(userid: str, code: str) -> None:
     user = await _require_user(userid)
+    if not user.totp_enabled:
+        raise UserError("2FA staat niet aan.")
+    if not _verify_totp(user, code):
+        raise UserError("Onjuiste of verlopen 2FA-code.")
     await _update(user.userid, totp_secret_enc=None, totp_enabled=False)

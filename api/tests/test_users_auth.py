@@ -147,8 +147,9 @@ async def test_change_own_password(monkeypatch, db):
     await users.bootstrap_admin("baas", "a@example.com", "oudwachtwoord")
     with pytest.raises(users.UserError):
         await users.change_own_password("baas", "fout", "nieuwwachtwoord")
-    with pytest.raises(users.UserError):
-        await users.change_own_password("baas", "oudwachtwoord", "kort")
+    # De minimumlengte van het nieuwe wachtwoord wordt op de routerlaag afgedwongen
+    # (Pydantic `PasswordChangeIn.new`, min_length=8), niet meer in deze service-functie —
+    # zie test_change_password_te_kort_http.
     await users.change_own_password("baas", "oudwachtwoord", "nieuwwachtwoord")
     assert (await users.verify_credentials("baas", "oudwachtwoord"))[1] == "invalid"
     assert (await users.verify_credentials("baas", "nieuwwachtwoord"))[1] == "ok"
@@ -175,7 +176,9 @@ async def test_2fa_cyclus(monkeypatch, db):
     ok_user, code = await users.verify_credentials("baas", "wachtwoord1", _totp_now(uri))
     assert code == "ok" and ok_user is not None
 
-    await users.disable_2fa("baas")
+    with pytest.raises(users.UserError):
+        await users.disable_2fa("baas", "000000")
+    await users.disable_2fa("baas", _totp_now(uri))
     assert not (await users.get_user("baas")).totp_enabled
     assert (await users.verify_credentials("baas", "wachtwoord1"))[1] == "ok"
 
@@ -238,6 +241,25 @@ async def test_verify_http(client):
     assert r.status_code == 200 and r.json()["ok"] is False and r.json()["code"] == "invalid"
 
 
+async def test_change_password_te_kort_http(client):
+    # De minimumlengte van het nieuwe wachtwoord leeft op de routerlaag (Pydantic min_length=8):
+    # een te korte waarde geeft 422; een geldige wijziging slaagt (204).
+    await client.post(
+        "/v1/auth/setup", json={"userid": "baas", "email": "b@example.com", "password": "wachtwoord1"}
+    )
+    hdr = {"X-User-Id": "baas"}
+
+    te_kort = await client.post(
+        "/v1/auth/change-password", json={"current": "wachtwoord1", "new": "kort"}, headers=hdr
+    )
+    assert te_kort.status_code == 422
+
+    ok = await client.post(
+        "/v1/auth/change-password", json={"current": "wachtwoord1", "new": "nieuwwachtwoord"}, headers=hdr
+    )
+    assert ok.status_code == 204
+
+
 async def test_admin_users_http(client):
     assert (await client.get("/v1/admin/users")).status_code == 401
 
@@ -286,5 +308,9 @@ async def test_2fa_http_via_header(client):
     assert act.status_code == 204
     assert (await client.get("/v1/auth/me", headers=hdr)).json()["totp_enabled"] is True
 
-    dis = await client.post("/v1/auth/2fa/disable", headers=hdr)
+    dis_fout = await client.post("/v1/auth/2fa/disable", json={"totp": "000000"}, headers=hdr)
+    assert dis_fout.status_code == 400
+
+    totp_code = _totp_now(begin.json()["otpauth_uri"])
+    dis = await client.post("/v1/auth/2fa/disable", json={"totp": totp_code}, headers=hdr)
     assert dis.status_code == 204

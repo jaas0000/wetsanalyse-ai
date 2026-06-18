@@ -26,6 +26,8 @@ export function AccountClient() {
   // Lopende 2FA-koppeling: de QR/secret + het in te voeren code-veld.
   const [koppeling, setKoppeling] = useState<{ uri: string; qr: string } | null>(null);
   const [code, setCode] = useState("");
+  // Bevestigingsformulier bij het uitschakelen van 2FA.
+  const [uitschakelCode, setUitschakelCode] = useState("");
   const [bezig, setBezig] = useState(false);
 
   const laad = useCallback(async () => {
@@ -76,12 +78,13 @@ export function AccountClient() {
     }
   }
 
-  async function onUitschakelen() {
-    if (!confirm("Tweestapsverificatie uitschakelen?")) return;
+  async function onUitschakelen(e: React.FormEvent) {
+    e.preventDefault();
     setFout(null);
     setBezig(true);
     try {
-      await disable2fa();
+      await disable2fa(uitschakelCode.trim());
+      setUitschakelCode("");
       await laad();
     } catch (e) {
       melden(e);
@@ -108,11 +111,28 @@ export function AccountClient() {
           </div>
 
           {account.totp_enabled ? (
-            <ButtonRow align="start" className="mt-3">
-              <Button variant="danger" onClick={onUitschakelen} disabled={bezig}>
-                2FA uitschakelen
-              </Button>
-            </ButtonRow>
+            <form onSubmit={onUitschakelen} className="mt-4 space-y-3">
+              <p className="text-sm text-muted">
+                Voer een geldige code uit je authenticator-app in om tweestapsverificatie uit te schakelen.
+              </p>
+              <div className="flex flex-wrap items-end gap-3">
+                <Field label="Code uit de app" hint="6 cijfers">
+                  <Input
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    required
+                    value={uitschakelCode}
+                    onChange={(e) => setUitschakelCode(e.target.value)}
+                  />
+                </Field>
+                <Button type="submit" variant="danger" disabled={bezig}>
+                  2FA uitschakelen
+                </Button>
+                <Button type="button" variant="ghost" onClick={() => setUitschakelCode("")} disabled={bezig}>
+                  Annuleren
+                </Button>
+              </div>
+            </form>
           ) : koppeling ? (
             <div className="mt-4 space-y-3">
               <p className="text-sm text-muted">

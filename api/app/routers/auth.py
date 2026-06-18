@@ -71,6 +71,10 @@ class TotpActivateIn(BaseModel):
     totp: str = Field(max_length=16)
 
 
+class TotpDisableIn(BaseModel):
+    totp: str = Field(max_length=16)
+
+
 class PasswordChangeIn(BaseModel):
     current: str = Field(max_length=512)
     new: str = Field(min_length=8, max_length=512)
@@ -160,8 +164,8 @@ async def tfa_activate(body: TotpActivateIn, userid: str = Depends(huidige_useri
 
 
 @router.post("/2fa/disable", status_code=status.HTTP_204_NO_CONTENT)
-async def tfa_disable(userid: str = Depends(huidige_userid)):
+async def tfa_disable(body: TotpDisableIn, userid: str = Depends(huidige_userid)):
     try:
-        await users.disable_2fa(userid)
+        await users.disable_2fa(userid, body.totp)
     except users.UserError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e))
