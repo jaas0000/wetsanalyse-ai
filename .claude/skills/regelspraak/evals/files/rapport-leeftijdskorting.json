@@ -1,0 +1,139 @@
+{
+  "werkgebied": {
+    "naam": "Leeftijdskorting reisbelasting",
+    "hoofdvraag": "Het bepalen of een reiziger recht heeft op leeftijdskorting en het berekenen van de te betalen reisbelasting",
+    "omschrijving": "Een fictieve reisbelasting waarbij minderjarige reizigers een korting krijgen op het basistarief.",
+    "scoping": "Artikel 3 (heffing en korting) en artikel 1 (begripsbepalingen) van de fictieve Wet reisbelasting; gedelegeerde tariefregeling buiten scope."
+  },
+  "bronnen": [
+    {
+      "bron_id": "br1",
+      "label": "Wet reisbelasting art. 3",
+      "wet": "Wet reisbelasting (fictief)",
+      "bwbId": "BWBR9999999",
+      "artikel": "3",
+      "lid": "1",
+      "versiedatum": "2026-01-01",
+      "bronreferentie": "jci1.3:c:BWBR9999999&artikel=3&lid=1",
+      "type": "wet",
+      "pad": "Hoofdstuk 2 > Artikel 3",
+      "leden": [
+        { "lid": "1", "tekst": "De reiziger is reisbelasting verschuldigd ter hoogte van het basistarief." },
+        { "lid": "2", "tekst": "Indien de reiziger minderjarig is, wordt de verschuldigde reisbelasting verminderd met de leeftijdskorting, met dien verstande dat de te betalen reisbelasting niet minder dan nihil bedraagt." }
+      ]
+    },
+    {
+      "bron_id": "br2",
+      "label": "Wet reisbelasting art. 1",
+      "wet": "Wet reisbelasting (fictief)",
+      "bwbId": "BWBR9999999",
+      "artikel": "1",
+      "lid": "1",
+      "versiedatum": "2026-01-01",
+      "bronreferentie": "jci1.3:c:BWBR9999999&artikel=1&lid=1",
+      "type": "wet",
+      "pad": "Hoofdstuk 1 > Artikel 1",
+      "leden": [
+        { "lid": "1", "tekst": "In deze wet wordt onder minderjarig verstaan: jonger dan achttien jaar." }
+      ]
+    }
+  ],
+  "begrippen": [
+    {
+      "id": "b1",
+      "naam": "reiziger",
+      "synoniemen": [],
+      "klasse": "Rechtssubject",
+      "definitie": "[interpretatie] De natuurlijke persoon die reisbelasting verschuldigd is.",
+      "grondformulering": "de reiziger",
+      "voorbeeld": "Een passagier die een reis maakt.",
+      "kenmerken": "rechtssubject; plichthebbende van de rechtsbetrekking 'reisbelasting verschuldigd'",
+      "vindplaatsen": [{ "bron_id": "br1", "lid": "1" }]
+    },
+    {
+      "id": "b2",
+      "naam": "leeftijd",
+      "synoniemen": [],
+      "klasse": "Variabele en variabelewaarde",
+      "definitie": "[interpretatie] De leeftijd van de reiziger in hele jaren.",
+      "grondformulering": "jonger dan achttien jaar",
+      "voorbeeld": "17 jaar.",
+      "kenmerken": "variabele van reiziger; numeriek, niet-negatief, hele jaren",
+      "vindplaatsen": [{ "bron_id": "br2", "lid": "1" }]
+    },
+    {
+      "id": "b3",
+      "naam": "minderjarig",
+      "synoniemen": [],
+      "klasse": "Brondefinitie",
+      "definitie": "Jonger dan achttien jaar.",
+      "grondformulering": "minderjarig",
+      "voorbeeld": "Een reiziger van 17 jaar is minderjarig.",
+      "kenmerken": "booleaanse eigenschap van reiziger; brondefinitie uit art. 1 lid 1",
+      "vindplaatsen": [{ "bron_id": "br2", "lid": "1" }, { "bron_id": "br1", "lid": "2" }]
+    },
+    {
+      "id": "b4",
+      "naam": "basistarief",
+      "synoniemen": [],
+      "klasse": "Parameter en parameterwaarde",
+      "definitie": "[interpretatie] Het vaste bedrag aan reisbelasting dat iedere reiziger in beginsel verschuldigd is.",
+      "grondformulering": "het basistarief",
+      "voorbeeld": "€ 20,00.",
+      "kenmerken": "parameter; geldbedrag",
+      "vindplaatsen": [{ "bron_id": "br1", "lid": "1" }]
+    },
+    {
+      "id": "b5",
+      "naam": "leeftijdskorting",
+      "synoniemen": [],
+      "klasse": "Parameter en parameterwaarde",
+      "definitie": "[interpretatie] Het vaste kortingsbedrag voor minderjarige reizigers.",
+      "grondformulering": "de leeftijdskorting",
+      "voorbeeld": "€ 5,00.",
+      "kenmerken": "parameter; geldbedrag",
+      "vindplaatsen": [{ "bron_id": "br1", "lid": "2" }]
+    },
+    {
+      "id": "b6",
+      "naam": "te betalen reisbelasting",
+      "synoniemen": ["verschuldigde reisbelasting"],
+      "klasse": "Variabele en variabelewaarde",
+      "definitie": "[interpretatie] Het uiteindelijk door de reiziger te betalen bedrag aan reisbelasting.",
+      "grondformulering": "de te betalen reisbelasting",
+      "voorbeeld": "€ 15,00 voor een minderjarige reiziger.",
+      "kenmerken": "uitvoervariabele van de rekenregel; geldbedrag, niet-negatief",
+      "vindplaatsen": [{ "bron_id": "br1", "lid": "1" }, { "bron_id": "br1", "lid": "2" }]
+    }
+  ],
+  "afleidingsregels": [
+    {
+      "id": "r1",
+      "naam": "bepalen of reiziger minderjarig is",
+      "type": "beslisregel",
+      "uitvoervariabele": "minderjarig (van reiziger)",
+      "invoervariabelen": "leeftijd (van reiziger)",
+      "parameters": "",
+      "voorwaarden": "indien de leeftijd van de reiziger kleiner is dan 18 jaar",
+      "formulering": "reiziger is minderjarig ALS leeftijd < 18 jaar",
+      "vindplaatsen": [{ "bron_id": "br2", "lid": "1" }],
+      "twijfel": ""
+    },
+    {
+      "id": "r2",
+      "naam": "berekenen te betalen reisbelasting",
+      "type": "rekenregel",
+      "uitvoervariabele": "te betalen reisbelasting (van reiziger)",
+      "invoervariabelen": "(geen attribuut-invoer; gebruikt parameters)",
+      "parameters": "basistarief, leeftijdskorting",
+      "voorwaarden": "indien de reiziger minderjarig is (anders alleen het basistarief)",
+      "formulering": "te betalen reisbelasting = basistarief MIN leeftijdskorting, met ondergrens nihil (voor minderjarige reiziger)",
+      "vindplaatsen": [{ "bron_id": "br1", "lid": "1" }, { "bron_id": "br1", "lid": "2" }],
+      "twijfel": "De ondergrens 'niet minder dan nihil' (art. 3 lid 2) is een begrenzing met een minimum van 0."
+    }
+  ],
+  "validatiepunten": [
+    "Het basistarief en de leeftijdskorting zijn parameters; hun concrete waarden volgen uit de (buiten scope gelaten) tariefregeling.",
+    "Art. 3 lid 1 geldt voor elke reiziger; art. 3 lid 2 is een vermindering voor de minderjarige reiziger."
+  ]
+}
