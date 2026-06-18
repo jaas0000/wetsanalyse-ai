@@ -12,11 +12,18 @@ import type {
   JobSummary,
   LlmProfileIn,
   LlmProfileOut,
+  LoginVerifyResult,
+  MeAccount,
   ProfileChoice,
   Rapport,
+  Role,
   StartRequest,
+  TempPassword,
   TestResult,
+  TotpBegin,
   UsageReport,
+  UserCreated,
+  UserOut,
   WetChoice,
   WetIn,
   WetOut,
@@ -165,4 +172,93 @@ export async function deleteWet(bwbId: string): Promise<void> {
 export async function resolveWetNaam(bwbId: string): Promise<WetResolveResult> {
   const res = await fetch(`/api/admin/wetten/${encodeURIComponent(bwbId)}/resolve`, { method: "POST" });
   return json<WetResolveResult>(res);
+}
+
+// --- Admin: gebruikers ------------------------------------------------------
+
+export async function listUsers(): Promise<UserOut[]> {
+  const res = await fetch("/api/admin/users", { cache: "no-store" });
+  return json<UserOut[]>(res);
+}
+
+export async function createUser(userid: string, email: string, role: Role): Promise<UserCreated> {
+  const res = await fetch("/api/admin/users", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ userid, email, role }),
+  });
+  return json<UserCreated>(res);
+}
+
+export async function patchUser(userid: string, body: { role?: Role; active?: boolean }): Promise<UserOut> {
+  const res = await fetch(`/api/admin/users/${encodeURIComponent(userid)}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return json<UserOut>(res);
+}
+
+export async function resetUserPassword(userid: string): Promise<TempPassword> {
+  const res = await fetch(`/api/admin/users/${encodeURIComponent(userid)}/reset-password`, { method: "POST" });
+  return json<TempPassword>(res);
+}
+
+export async function deleteUser(userid: string): Promise<void> {
+  const res = await fetch(`/api/admin/users/${encodeURIComponent(userid)}`, { method: "DELETE" });
+  if (!res.ok) throw await parseError(res);
+}
+
+// --- Login (pre-check vóór de Auth.js-sessie) -------------------------------
+
+/** Pre-check: kloppen de gegevens (op userid), en is 2FA vereist? Zet zelf geen sessie. */
+export async function loginVerify(
+  userid: string,
+  password: string,
+  totp?: string,
+): Promise<LoginVerifyResult> {
+  const res = await fetch("/api/login-verify", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ userid, password, totp: totp ?? null }),
+  });
+  if (!res.ok) {
+    return { ok: false, code: res.status === 429 ? "rate" : "invalid", userid: "", email: "", role: "" };
+  }
+  return (await res.json()) as LoginVerifyResult;
+}
+
+// --- Account (self-service): 2FA --------------------------------------------
+
+export async function getAccount(): Promise<MeAccount> {
+  const res = await fetch("/api/account/me", { cache: "no-store" });
+  return json<MeAccount>(res);
+}
+
+export async function begin2fa(): Promise<TotpBegin> {
+  const res = await fetch("/api/account/2fa/begin", { method: "POST" });
+  return json<TotpBegin>(res);
+}
+
+export async function activate2fa(totp: string): Promise<void> {
+  const res = await fetch("/api/account/2fa/activate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ totp }),
+  });
+  if (!res.ok) throw await parseError(res);
+}
+
+export async function disable2fa(): Promise<void> {
+  const res = await fetch("/api/account/2fa/disable", { method: "POST" });
+  if (!res.ok) throw await parseError(res);
+}
+
+export async function changePassword(current: string, nieuw: string): Promise<void> {
+  const res = await fetch("/api/account/password", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ current, new: nieuw }),
+  });
+  if (!res.ok) throw await parseError(res);
 }

@@ -114,6 +114,24 @@ wet_catalogus = Table(
     Column("updated", _DT, nullable=False),
 )
 
+# Login-accounts voor de webapp. De API is de identiteitsbron; de frontend (Auth.js) houdt alleen
+# de browsersessie. Inloggen gaat met de `userid` (de natuurlijke sleutel, lowercase genormaliseerd);
+# `email` is een verplicht, uniek registratiegegeven (geen inlog-identiteit). Het TOTP-secret staat
+# versleuteld (Fernet, zie secrets_crypto) en is optioneel (2FA staat standaard uit).
+users = Table(
+    "users",
+    metadata,
+    Column("userid", String(64), primary_key=True),
+    Column("email", String(320), nullable=False, unique=True),
+    Column("password_hash", Text, nullable=False),
+    Column("role", String(16), nullable=False, default="analist"),
+    Column("totp_secret_enc", Text, nullable=True),
+    Column("totp_enabled", Boolean, nullable=False, default=False),
+    Column("active", Boolean, nullable=False, default=True),
+    Column("created", _DT, nullable=False),
+    Column("updated", _DT, nullable=False),
+)
+
 
 # --- engine-beheer -------------------------------------------------------------
 

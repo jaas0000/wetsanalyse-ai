@@ -25,7 +25,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
-from .. import profiles, usage, wetten
+from .. import profiles, usage, users, wetten
 from ..auth import require_admin
 from ..llm.litellm_client import build_llm_client
 from ..llm_profile import LlmProfile
@@ -244,3 +244,92 @@ async def resolve_wet_naam(bwbId: str):
     except WettenbankError as e:
         raise HTTPException(status_code=502, detail=str(e))
     return ResolveResult(naam=naam)
+
+
+# --- gebruikersbeheer ----------------------------------------------------------
+
+class UserOut(BaseModel):
+    userid: str
+    email: str
+    role: str
+    totp_enabled: bool
+    active: bool
+    created: str = ""
+    updated: str = ""
+
+
+class UserCreateIn(BaseModel):
+    userid: str = Field(max_length=64)
+    email: str = Field(max_length=320)
+    role: str = Field(default="analist", max_length=16)
+
+
+class UserPatchIn(BaseModel):
+    role: str | None = Field(default=None, max_length=16)
+    active: bool | None = None
+
+
+class UserCreated(UserOut):
+    # Het tijdelijke wachtwoord wordt eenmalig teruggegeven (nooit opnieuw op te vragen).
+    temp_password: str
+
+
+class TempPassword(BaseModel):
+    userid: str
+    temp_password: str
+
+
+def _user_to_out(u) -> UserOut:
+    return UserOut(
+        userid=u.userid, email=u.email, role=u.role, totp_enabled=u.totp_enabled, active=u.active,
+        created=u.created.isoformat(), updated=u.updated.isoformat(),
+    )
+
+
+@router.get("/users", response_model=list[UserOut])
+async def lijst_users():
+    return [_user_to_out(u) for u in await users.list_users()]
+
+
+@router.post("/users", response_model=UserCreated, status_code=status.HTTP_201_CREATED)
+async def maak_user(body: UserCreateIn):
+    try:
+        user, temp = await users.create_user(body.userid, body.email, role=body.role)
+    except users.UserError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    out = _user_to_out(user)
+    return UserCreated(**out.model_dump(), temp_password=temp)
+
+
+@router.patch("/users/{userid}", response_model=UserOut)
+async def wijzig_user(userid: str, body: UserPatchIn):
+    try:
+        user = None
+        if body.role is not None:
+            user = await users.set_role(userid, body.role)
+        if body.active is not None:
+            user = await users.set_active(userid, body.active)
+        if user is None:  # niets meegegeven → huidige staat teruggeven
+            user = await users.get_user(userid)
+            if user is None:
+                raise users.UserError(f"Onbekende gebruiker: {userid}")
+    except users.UserError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    return _user_to_out(user)
+
+
+@router.post("/users/{userid}/reset-password", response_model=TempPassword)
+async def reset_user_wachtwoord(userid: str):
+    try:
+        user, temp = await users.reset_password(userid)
+    except users.UserError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    return TempPassword(userid=user.userid, temp_password=temp)
+
+
+@router.delete("/users/{userid}", status_code=status.HTTP_204_NO_CONTENT)
+async def verwijder_user(userid: str):
+    try:
+        await users.delete_user(userid)
+    except users.UserError as e:
+        raise HTTPException(status_code=409, detail=str(e))

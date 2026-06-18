@@ -16,12 +16,15 @@
 #   PROXY_NETWORK  — naam van het bestaande NPM-netwerk (default homeinfra_internal).
 #   SECRETS_DIR    — host-pad naar de secrets-map (gedeeld met de API-stack).
 #
-# Twee extra secret-bestanden t.o.v. de API-stack, op de host in SECRETS_DIR:
+# Drie extra secret-bestanden t.o.v. de API-stack, op de host in SECRETS_DIR (mode 644):
 #   frontend_api_token    — ALLEEN de tokenwaarde (het deel NA de ":") van een entry in de
 #                           API-tokenlijst (api_tokens). Voeg daar bv. "frontend:<token>" toe en
 #                           zet dan louter "<token>" in dit bestand.
 #   frontend_admin_token  — idem maar de tokenwaarde uit de admin-tokenlijst (admin_tokens),
 #                           voor het /beheer-scherm (→ /v1/admin/*).
+#   frontend_auth_secret  — geheim voor de login-sessie (Auth.js). Genereer met
+#                           `openssl rand -base64 32`. De entrypoint laadt dit in AUTH_SECRET.
+#                           (2FA hergebruikt de API-secret llm_config_secret; geen extra bestand.)
 services:
   wetsanalyse-frontend:
     image: ghcr.io/palmw01/wetsanalyse-frontend:latest
@@ -33,6 +36,7 @@ services:
       API_BASE_URL: "http://wetsanalyse-api:3000"
       API_TOKEN_FILE: /run/secrets/frontend_api_token
       ADMIN_API_TOKEN_FILE: /run/secrets/frontend_admin_token
+      AUTH_SECRET_FILE: /run/secrets/frontend_auth_secret
       NODE_ENV: production
     volumes:
       - ${SECRETS_DIR:-/opt/secrets/wetsanalyse-api}:/run/secrets:ro

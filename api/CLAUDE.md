@@ -29,7 +29,16 @@ triviale geval; het rapport heeft de vorm `{werkgebied, bronnen[], begrippen, af
   `JobSummary` draagt ook de observerende `current_fase`(`_sinds`) + telemetrie, zodat het dashboard al
   bij de eerste render compleet is zonder per-job na te laden.
 - `auth.py` — per-client bearer-tokens (erft het MCP-patroon; fail-closed; constant-tijd).
-  `require_admin` is een aparte, altijd-verplichte bearer voor `/v1/admin/*` (LLM-beheer).
+  `require_admin` is een aparte, altijd-verplichte bearer voor `/v1/admin/*` (LLM-beheer +
+  gebruikersbeheer). `user.py`/`users.py` + `routers/auth.py` vormen de **login-module**: de API is
+  de identiteitsbron van de webapp. Inloggen gaat met de **`userid`** (de primaire sleutel van de
+  `users`-tabel); `email` is een verplicht, uniek registratiegegeven (geen inlog-identiteit).
+  Verder: wachtwoord-hash via bcrypt, rollen `beheerder`/`analist`, optioneel TOTP-2FA versleuteld
+  met dezelfde Fernet-key als de LLM-keys. `/v1/auth/*` (achter `require_client`) levert de BFF
+  (Auth.js) login-verificatie (`/verify` op userid), de eenmalige eerste-beheerder-registratie
+  (`/setup`, alleen bij lege tabel) en de self-service 2FA/account (`/2fa/*`, `/change-password`,
+  identiteit via de vertrouwde `X-User-Id`-header van de BFF). De browsersessie zelf leeft in de
+  frontend, niet hier.
 - `llm_profile.py` — `LlmProfile`-domeinmodel (Pydantic; benoemde modelprofielen in de DB; vervangt de
   vroegere hardcoded `Settings.model_profiles`). `profiles.py` — service eroverheen: CRUD,
   default-beheer, `resolve_config` (profiel → `LlmConfig`, ontsleutelt de key, env-fallback) en
@@ -84,7 +93,9 @@ triviale geval; het rapport heeft de vorm `{werkgebied, bronnen[], begrippen, af
   een willekeurige BWB-id blijft geldig. De wet-naam in het rapport komt los hiervan uit de MCP.
 - `routers/admin.py` — **`/v1/admin/*`** achter `require_admin`: modelprofielen-CRUD
   (`/profiles`, write-only API-key, `api_key_set` nooit de key zelf), default zetten, verbinding
-  testen, `/usage` (token-verbruik), en de wet-catalogus (`/wetten` CRUD + `/wetten/{bwbId}/resolve`).
+  testen, `/usage` (token-verbruik), de wet-catalogus (`/wetten` CRUD + `/wetten/{bwbId}/resolve`)
+  en het gebruikersbeheer (`/users` CRUD: aanmaken met eenmalig tijdelijk wachtwoord, rol/active
+  wijzigen, wachtwoord resetten; de laatste actieve beheerder is beschermd).
   De engine bouwt per analyse de LLM-client uit het profiel van de job, dus runtime-wijzigingen
   werken zonder redeploy. De niet-admin keuzelijsten (`/v1/profiles`, `/v1/wetten`) staan in
   `routers/catalog.py` zodat de frontend de dropdowns zonder admin-token vult.
@@ -288,9 +299,14 @@ elke analyse is client-gescopet (404 op andermans id).
 
 MS Teams-client; wet-only resolutie (nu is `bwbId` verplicht); echte job-queue (werk-distributie:
 nu draait een analyse op de replica die het request kreeg — horizontaal schalen geeft spreiding van
-verschillende analyses, geen parallellisme binnen één analyse); OIDC + per-gebruiker toegangscontrole
-op de frontend (nu is `/beheer` alleen via het admin-token van de BFF afgeschermd, niet per
-browser-sessie).
+verschillende analyses, geen parallellisme binnen één analyse).
+
+**Login (gebouwd).** De webapp zit achter een login met **userid** + wachtwoord (e-mail wordt
+verplicht/uniek geregistreerd, maar is geen inlog-identiteit), rollen (`beheerder`/`analist`) en
+optionele TOTP-2FA — zie `routers/auth.py` + `users.py`. De analyses zelf blijven
+voorlopig **gedeeld** (alle ingelogde gebruikers delen de upstream API-client van de BFF); per-
+gebruiker gescheiden werkruimtes (de gebruikersidentiteit doorvoeren tot in de project-scoping) en
+externe IdP/OIDC blijven toekomstwerk.
 
 **Cross-referenties (gebouwd).** Activiteit 2 is twee-fase: een lichte inventaris-stap
 (`prompts.act2_inventaris_prompt`, geeft per verwijzing `functie` + `volgen`) gevolgd door een

@@ -53,6 +53,22 @@ Admin-endpoints (LLM-beheer) achter een **apart admin-token**, onder `/v1/admin`
 | `PUT` | `/v1/admin/wetten/{bwbId}` | Maak/werk catalogus-item bij (BWB-id + naam) |
 | `DELETE` | `/v1/admin/wetten/{bwbId}` | Verwijder catalogus-item |
 | `POST` | `/v1/admin/wetten/{bwbId}/resolve` | Stel de officiële citeertitel voor via de MCP |
+| `GET` | `/v1/admin/users` | Lijst login-accounts (userid, e-mail, rol, 2FA-aan, actief) |
+| `POST` | `/v1/admin/users` | Maak een account (`userid`+`email`+`role`; geeft eenmalig een tijdelijk wachtwoord) |
+| `PATCH` | `/v1/admin/users/{userid}` | Wijzig rol/actief (laatste actieve beheerder beschermd) |
+| `POST` | `/v1/admin/users/{userid}/reset-password` | Nieuw tijdelijk wachtwoord |
+| `DELETE` | `/v1/admin/users/{userid}` | Verwijder account |
+
+Login-endpoints (de webapp-BFF is de enige client; achter het **client-token**), onder `/v1/auth`:
+
+| Methode | Pad | Wat het doet |
+|---------|-----|--------------|
+| `GET` | `/v1/auth/setup-status` | Is de users-tabel nog leeg? (dan staat de eenmalige registratie open) |
+| `POST` | `/v1/auth/setup` | Maak de allereerste beheerder (`userid`+`email`+`password`; alleen bij lege tabel → anders 409) |
+| `POST` | `/v1/auth/verify` | Valideer **userid** + wachtwoord (+ optionele TOTP) |
+| `GET` | `/v1/auth/me` | Eigen account (rol + 2FA-status) — `X-User-Id`-header |
+| `POST` | `/v1/auth/change-password` | Eigen wachtwoord wijzigen (huidig → nieuw) — `X-User-Id`-header |
+| `POST` | `/v1/auth/2fa/{begin,activate,disable}` | Optionele TOTP-2FA, self-service — `X-User-Id`-header |
 
 Swagger-UI beschikbaar op `/docs`.
 

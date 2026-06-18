@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import Image from "next/image";
 import Link from "next/link";
+import { auth } from "@/auth";
+import { Providers } from "@/components/Providers";
 import { SiteNav } from "@/components/SiteNav";
 import { sans, mono } from "./fonts";
 import "./globals.css";
@@ -29,10 +31,12 @@ export const viewport: Viewport = {
   themeColor: "#154273",
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const session = await auth();
   return (
     <html lang="nl" className={`${sans.variable} ${mono.variable}`}>
       <body className="min-h-screen">
+        <Providers session={session}>
         <header className="relative z-30">
           {/* Logobalk (Rijkshuisstijl): het LINT staat altijd op de horizontale middenas,
               bovenaan op een witte achtergrond, met het woordmerk rechts ernaast; géén andere
@@ -80,6 +84,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           (Ausems, Bulles &amp; Lokin) · Juridisch Analyseschema · brongetrouw herleidbaar naar
           artikel, lid en bronreferentie.
         </footer>
+        </Providers>
       </body>
     </html>
   );

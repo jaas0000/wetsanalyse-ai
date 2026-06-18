@@ -1,0 +1,308 @@
+"""Service-laag over de login-accounts in de database.
+
+Verantwoordelijkheden:
+  - Wachtwoord-hashing (bcrypt) + verificatie (constant-tijd via bcrypt zelf).
+  - `verify_credentials`: **userid** + wachtwoord (+ optionele TOTP) → `User` of een reden-code,
+    gebruikt door de auth-router waar de BFF (Auth.js) op inlogt. Inloggen gaat uitsluitend met de
+    userid; `email` is een verplicht, uniek registratiegegeven (geen inlog-identiteit).
+  - Eenmalige registratie: `needs_setup`/`bootstrap_admin` maken de allereerste beheerder zolang
+    de tabel leeg is; daarna sluit die route.
+  - Admin-CRUD voor gebruikersbeheer in /beheer, met de beleidsgaranties (laatste actieve
+    beheerder mag niet verdwijnen).
+  - Optionele 2FA (TOTP): koppelen (`begin_2fa`), bevestigen (`activate_2fa`) en losmaken
+    (`disable_2fa`). Het secret staat versleuteld (Fernet, zie secrets_crypto).
+
+Het wachtwoord-hash en het versleutelde TOTP-secret blijven binnen deze laag; de routers geven ze
+nooit terug.
+"""
+
+from __future__ import annotations
+
+import re
+import secrets
+
+import bcrypt
+import pyotp
+from sqlalchemy import delete, func, insert, select, update
+
+from . import db
+from .secrets_crypto import decrypt, encrypt
+from .user import ROLLEN, User, _utcnow
+
+# Issuer-naam in de authenticator-app (bij het scannen van de QR zichtbaar als "Wetsanalyse").
+_TOTP_ISSUER = "Wetsanalyse"
+
+# Userid: 3–64 tekens, kleine letters/cijfers en . _ - (genormaliseerd lowercase).
+_USERID_RE = re.compile(r"^[a-z0-9._-]{3,64}$")
+
+
+class UserError(ValueError):
+    """Ongeldige gebruiker-operatie (onbekend, dubbel, laatste beheerder, ongeldige rol, e.d.)."""
+
+
+def _norm_userid(userid: str) -> str:
+    return userid.strip().lower()
+
+
+def _norm_email(email: str) -> str:
+    return email.strip().lower()
+
+
+def _row_to_user(row) -> User:
+    m = dict(row)
+    return User(
+        userid=m["userid"],
+        email=m["email"],
+        password_hash=m["password_hash"],
+        role=m["role"],
+        totp_secret_enc=m["totp_secret_enc"],
+        totp_enabled=m["totp_enabled"],
+        active=m["active"],
+        created=db.aware(m["created"]),
+        updated=db.aware(m["updated"]),
+    )
+
+
+# --- wachtwoord-hashing --------------------------------------------------------
+
+def hash_password(plain: str) -> str:
+    # bcrypt kapt op 72 bytes; afdoende voor wachtwoorden. Hash bevat de salt.
+    return bcrypt.hashpw(plain.encode("utf-8")[:72], bcrypt.gensalt()).decode("ascii")
+
+
+def verify_password(plain: str, hashed: str) -> bool:
+    if not hashed:
+        return False
+    try:
+        return bcrypt.checkpw(plain.encode("utf-8")[:72], hashed.encode("ascii"))
+    except ValueError:
+        return False
+
+
+def genereer_wachtwoord() -> str:
+    """Tijdelijk wachtwoord bij aanmaken/resetten door een beheerder (eenmalig getoond)."""
+    return secrets.token_urlsafe(12)
+
+
+# --- lezen ---------------------------------------------------------------------
+
+async def get_user(userid: str) -> User | None:
+    async with db.get_engine().connect() as conn:
+        row = (await conn.execute(
+            select(db.users).where(db.users.c.userid == _norm_userid(userid))
+        )).mappings().first()
+    return _row_to_user(row) if row is not None else None
+
+
+async def get_user_by_email(email: str) -> User | None:
+    async with db.get_engine().connect() as conn:
+        row = (await conn.execute(
+            select(db.users).where(db.users.c.email == _norm_email(email))
+        )).mappings().first()
+    return _row_to_user(row) if row is not None else None
+
+
+async def list_users() -> list[User]:
+    async with db.get_engine().connect() as conn:
+        rows = (await conn.execute(select(db.users).order_by(db.users.c.userid))).mappings().all()
+    return [_row_to_user(r) for r in rows]
+
+
+async def _count() -> int:
+    async with db.get_engine().connect() as conn:
+        return (await conn.execute(select(func.count()).select_from(db.users))).scalar() or 0
+
+
+async def _aantal_actieve_beheerders() -> int:
+    async with db.get_engine().connect() as conn:
+        return (await conn.execute(
+            select(func.count()).select_from(db.users).where(
+                db.users.c.role == "beheerder", db.users.c.active.is_(True)
+            )
+        )).scalar() or 0
+
+
+async def needs_setup() -> bool:
+    """True zolang er nog geen enkel account is (de eenmalige-registratie-route is dan open)."""
+    return await _count() == 0
+
+
+# --- credential-verificatie ----------------------------------------------------
+
+def _verify_totp(user: User, code: str) -> bool:
+    if not user.totp_secret_enc:
+        return False
+    secret = decrypt(user.totp_secret_enc)
+    # valid_window=1 vangt klok-drift van ±30s op.
+    return pyotp.TOTP(secret).verify(code.strip(), valid_window=1)
+
+
+async def verify_credentials(
+    userid: str, password: str, totp: str | None = None
+) -> tuple[User | None, str]:
+    """Valideer inloggegevens (uitsluitend op userid). Geeft (user, "ok") of (None, reden).
+
+    Reden-codes: "invalid" (onbekend/inactief/verkeerd wachtwoord — bewust niet onderscheiden om
+    niets te lekken) en "totp_required" (wachtwoord klopt, maar 2FA staat aan en de code ontbreekt
+    of is onjuist).
+    """
+    user = await get_user(userid)
+    if user is None or not user.active or not verify_password(password, user.password_hash):
+        return None, "invalid"
+    if user.totp_enabled:
+        if not totp or not _verify_totp(user, totp):
+            return None, "totp_required"
+    return user, "ok"
+
+
+# --- validatie + insert --------------------------------------------------------
+
+def _valideer_userid(userid: str) -> str:
+    norm = _norm_userid(userid)
+    if not _USERID_RE.match(norm):
+        raise UserError("Ongeldige userid (3–64 tekens: kleine letters, cijfers, . _ -).")
+    return norm
+
+
+def _valideer_email(email: str) -> str:
+    norm = _norm_email(email)
+    if not norm or "@" not in norm:
+        raise UserError("Ongeldig e-mailadres.")
+    return norm
+
+
+async def _insert_user(userid: str, email: str, password: str, *, role: str) -> User:
+    if role not in ROLLEN:
+        raise UserError(f"Onbekende rol: {role!r}")
+    norm_id = _valideer_userid(userid)
+    norm_email = _valideer_email(email)
+    # Vooraf-checks op de twee unieke velden, voor duidelijke meldingen (de DB-constraints zijn de
+    # uiteindelijke vangrail bij een race).
+    if await get_user(norm_id) is not None:
+        raise UserError(f"Userid bestaat al: {norm_id}")
+    if await get_user_by_email(norm_email) is not None:
+        raise UserError(f"E-mailadres bestaat al: {norm_email}")
+    now = _utcnow()
+    user = User(
+        userid=norm_id, email=norm_email, password_hash=hash_password(password),
+        role=role, created=now, updated=now,
+    )
+    try:
+        async with db.get_engine().begin() as conn:
+            await conn.execute(insert(db.users).values(
+                userid=user.userid, email=user.email, password_hash=user.password_hash,
+                role=user.role, totp_secret_enc=None, totp_enabled=False, active=True,
+                created=now, updated=now,
+            ))
+    except Exception as e:  # IntegrityError op dubbele userid/email (race)
+        raise UserError("Userid of e-mailadres bestaat al.") from e
+    return user
+
+
+# --- eenmalige registratie (bootstrap) -----------------------------------------
+
+async def bootstrap_admin(userid: str, email: str, password: str) -> User:
+    """Maak de allereerste beheerder — alleen zolang de tabel leeg is (anders UserError)."""
+    if await _count() > 0:
+        raise UserError("Er bestaat al een account; registratie is gesloten.")
+    return await _insert_user(userid, email, password, role="beheerder")
+
+
+# --- admin-CRUD ----------------------------------------------------------------
+
+async def create_user(userid: str, email: str, role: str = "analist") -> tuple[User, str]:
+    """Maak een account met een tijdelijk wachtwoord (eenmalig teruggegeven aan de beheerder)."""
+    tijdelijk = genereer_wachtwoord()
+    user = await _insert_user(userid, email, tijdelijk, role=role)
+    return user, tijdelijk
+
+
+async def _require_user(userid: str) -> User:
+    user = await get_user(userid)
+    if user is None:
+        raise UserError(f"Onbekende gebruiker: {userid}")
+    return user
+
+
+async def set_role(userid: str, role: str) -> User:
+    if role not in ROLLEN:
+        raise UserError(f"Onbekende rol: {role!r}")
+    user = await _require_user(userid)
+    # Laatste actieve beheerder niet kunnen degraderen.
+    if user.role == "beheerder" and role != "beheerder" and user.active:
+        if await _aantal_actieve_beheerders() <= 1:
+            raise UserError("Kan de laatste actieve beheerder niet degraderen.")
+    await _update(user.userid, role=role)
+    user.role = role
+    return user
+
+
+async def set_active(userid: str, active: bool) -> User:
+    user = await _require_user(userid)
+    if user.role == "beheerder" and user.active and not active:
+        if await _aantal_actieve_beheerders() <= 1:
+            raise UserError("Kan de laatste actieve beheerder niet deactiveren.")
+    await _update(user.userid, active=active)
+    user.active = active
+    return user
+
+
+async def reset_password(userid: str) -> tuple[User, str]:
+    """Zet een nieuw tijdelijk wachtwoord (eenmalig teruggegeven)."""
+    user = await _require_user(userid)
+    tijdelijk = genereer_wachtwoord()
+    await _update(user.userid, password_hash=hash_password(tijdelijk))
+    return user, tijdelijk
+
+
+async def change_own_password(userid: str, current: str, nieuw: str) -> None:
+    """Self-service wachtwoordwijziging: verifieer het huidige wachtwoord en zet een nieuw."""
+    user = await _require_user(userid)
+    if not user.active or not verify_password(current, user.password_hash):
+        raise UserError("Huidig wachtwoord onjuist.")
+    if len(nieuw) < 8:
+        raise UserError("Het nieuwe wachtwoord moet minimaal 8 tekens zijn.")
+    await _update(user.userid, password_hash=hash_password(nieuw))
+
+
+async def delete_user(userid: str) -> None:
+    user = await _require_user(userid)
+    if user.role == "beheerder" and user.active and await _aantal_actieve_beheerders() <= 1:
+        raise UserError("Kan de laatste actieve beheerder niet verwijderen.")
+    async with db.get_engine().begin() as conn:
+        await conn.execute(delete(db.users).where(db.users.c.userid == user.userid))
+
+
+async def _update(userid: str, **waarden) -> None:
+    waarden["updated"] = _utcnow()
+    async with db.get_engine().begin() as conn:
+        await conn.execute(update(db.users).where(db.users.c.userid == userid).values(**waarden))
+
+
+# --- 2FA (TOTP) ----------------------------------------------------------------
+
+async def begin_2fa(userid: str) -> str:
+    """Genereer een (nog niet actief) TOTP-secret en geef de otpauth://-URI voor de QR-code.
+
+    Het secret wordt versleuteld opgeslagen maar `totp_enabled` blijft False tot `activate_2fa`
+    één geldige code bevestigt. Opnieuw aanroepen vervangt een nog niet bevestigd secret.
+    """
+    user = await _require_user(userid)
+    secret = pyotp.random_base32()
+    await _update(user.userid, totp_secret_enc=encrypt(secret), totp_enabled=False)
+    # In de authenticator toont het account de userid; issuer = Wetsanalyse.
+    return pyotp.TOTP(secret).provisioning_uri(name=user.userid, issuer_name=_TOTP_ISSUER)
+
+
+async def activate_2fa(userid: str, code: str) -> None:
+    user = await _require_user(userid)
+    if not user.totp_secret_enc:
+        raise UserError("Geen 2FA-aanmelding gestart; vraag eerst een nieuwe code aan.")
+    if not _verify_totp(user, code):
+        raise UserError("Onjuiste of verlopen code.")
+    await _update(user.userid, totp_enabled=True)
+
+
+async def disable_2fa(userid: str) -> None:
+    user = await _require_user(userid)
+    await _update(user.userid, totp_secret_enc=None, totp_enabled=False)
