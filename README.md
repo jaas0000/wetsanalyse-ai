@@ -16,7 +16,7 @@ en aannames — zichtbaar maken in plaats van schijnzekerheid te produceren.
 | **wettenbank-MCP** | `tools/wettenbank-mcp/` | MCP-server (TypeScript) die actuele wettekst ophaalt via de publieke SRU-API van `overheid.nl`. De databron. |
 | **wetsanalyse-skill** | `.claude/skills/wetsanalyse/` | Voert de analyse uit (activiteit 2 + 3) en levert een `rapport.json` op die via een lokale HTML-viewer wordt getoond. Markdown is beschikbaar als export. Gebruikt de MCP als bron. |
 | **wetsanalyse-api** | `api/` | Headless REST-backend (FastAPI) die dezelfde werkstroom als de skill aanbiedt als async API, met PostgreSQL als jobstore. Stuurt de LLM aan via beheerbare modelprofielen. |
-| **frontend** | `frontend/` | Webapp (Next.js) bovenop de API: analyse aanmaken, live voortgang, de review-lus, het rapport, een live **`/dashboard`** (alle analyses tot op functieniveau), en een **`/beheer`-scherm** om de LLM-modelprofielen en het token-verbruik te beheren. Vormgegeven volgens de **Rijkshuisstijl** (Belastingdienst-stijlvak). |
+| **frontend** | `frontend/` | Webapp (Next.js) bovenop de API: analyse aanmaken, live voortgang, de review-lus, het rapport, een live **`/dashboard`** (alle analyses tot op functieniveau), en een **`/beheer`-scherm** om LLM-modelprofielen, gebruikers en token-verbruik te beheren. Zit achter een **login** (userid + wachtwoord, rollen, optionele 2FA). Vormgegeven volgens de **Rijkshuisstijl** (Belastingdienst-stijlvak). |
 | **analyses** | `analyses/` | Output: per analyse een eindrapport plus `werk/`-tussenbestanden. |
 | **docs** | `docs/` | Methodische onderbouwing (handleiding, leidraad, JAS-kader). |
 
@@ -96,6 +96,14 @@ Naast de skill kun je de analyse als zelfstandige dienst draaien:
   human-in-the-loop review-lus, het rapport bekijken, en een live **`/dashboard`** dat alle analyses
   tot op functieniveau (de engine-stap binnen een state) toont. Vormgegeven volgens de
   **Rijkshuisstijl** (Belastingdienst-stijlvak). Zie [`frontend/README.md`](frontend/README.md).
+
+**Login & toegang.** De hele webapp zit achter een login met **userid + wachtwoord** (Auth.js; de
+API is de identiteitsbron). E-mail wordt bij het aanmaken verplicht/uniek geregistreerd maar is geen
+inlog-identiteit. Twee rollen: **`beheerder`** (mag `/beheer`, inclusief gebruikersbeheer) en
+**`analist`** (de rest). De eerste keer maakt `/setup` eenmalig de eerste beheerder aan; verdere
+gebruikers voegt een beheerder toe via `/beheer` (met een eenmalig tijdelijk wachtwoord). **2FA
+(TOTP)** is optioneel en self-service via `/account`. Achter een reverse proxy moet `AUTH_URL` op de
+publieke origin staan; zie [`frontend/README.md`](frontend/README.md).
 
 **LLM-beheer.** Welk taalmodel de analyses gebruiken, leeft in **benoemde modelprofielen** in
 PostgreSQL — runtime te beheren via het **`/beheer`-scherm** in de webapp (of `GET/PUT /v1/admin/profiles`),

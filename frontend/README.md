@@ -124,10 +124,10 @@ anders redirecten login/logout naar het interne `0.0.0.0:3000`. In NPM een Proxy
 `wetsanalyse.ipalm.nl` → `wetsanalyse-frontend:3000`, met **proxy buffering uit** voor SSE (zie de
 commentaarregels in `docker-compose.yml`).
 
-> **Toegang.** De hele webapp zit achter een e-mail/wachtwoord-login (Auth.js); niet-ingelogde
-> bezoekers landen op `/login`. `/beheer` (LLM-beheer + gebruikersbeheer) is bovendien
-> rol-afgeschermd tot **beheerders**. Een losse NPM Access List is dus niet meer nodig; de eerste
-> beheerder maak je eenmalig via `/setup`.
+> **Toegang.** De hele webapp zit achter een login met **userid + wachtwoord** (Auth.js);
+> niet-ingelogde bezoekers landen op `/login`. `/beheer` (LLM-beheer + gebruikersbeheer) is
+> bovendien rol-afgeschermd tot **beheerders**. Een losse NPM Access List is dus niet meer nodig;
+> de eerste beheerder maak je eenmalig via `/setup`.
 
 ## Types up-to-date houden (optioneel)
 
