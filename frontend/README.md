@@ -104,7 +104,7 @@ AUTH_SECRET=<openssl rand -base64 32>   # ondertekent de login-sessiecookie (Aut
 | `ADMIN_API_TOKEN`      | —                             | Admin-bearer voor `/beheer` → `/v1/admin/*` (server-side).     |
 | `ADMIN_API_TOKEN_FILE` | —                             | Pad naar secret-bestand met het admin-token (heeft voorrang).  |
 | `AUTH_SECRET`          | —                             | Ondertekent de Auth.js-sessiecookie/JWT. Verplicht voor login. |
-| `AUTH_URL`             | —                             | Publiek origin voor callback-URLs achter een reverse proxy (optioneel). |
+| `AUTH_URL`             | —                             | Publieke origin (bv. `https://wetsanalyse.ipalm.nl`). **Verplicht achter een reverse proxy** — anders redirecten login/logout naar het interne `0.0.0.0:3000`. |
 
 ## Docker / deployment
 
@@ -118,7 +118,9 @@ tokenwaarde uit de **admin**-tokenlijst (voor `/beheer`), en `frontend_auth_secr
 login-sessie (`openssl rand -base64 32`). De container-entrypoint laadt dat laatste bestand in
 `AUTH_SECRET` (`AUTH_SECRET_FILE=/run/secrets/frontend_auth_secret`), zodat het — net als de andere
 tokens — een bestand blijft en niet als plain env in Portainer staat. 2FA hergebruikt de
-API-secret `llm_config_secret` (geen extra frontend-bestand). In NPM een Proxy Host
+API-secret `llm_config_secret` (geen extra frontend-bestand). Zet daarnaast de stack-env
+**`AUTH_URL`** op de publieke origin (bv. `https://wetsanalyse.ipalm.nl`) — verplicht achter NPM,
+anders redirecten login/logout naar het interne `0.0.0.0:3000`. In NPM een Proxy Host
 `wetsanalyse.ipalm.nl` → `wetsanalyse-frontend:3000`, met **proxy buffering uit** voor SSE (zie de
 commentaarregels in `docker-compose.yml`).
 

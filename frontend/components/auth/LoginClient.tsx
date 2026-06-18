@@ -8,6 +8,18 @@ import { Field, Input } from "@/components/ui/Field";
 import { Melding } from "@/components/ui/Melding";
 import { loginVerify } from "@/lib/api";
 
+/** Gebruik alleen het pad van een callbackUrl op hetzelfde origin; voorkomt een sprong naar een
+ *  ander host (bv. een intern 0.0.0.0:3000 dat door een verkeerd geconfigureerde proxy ontstaat). */
+function veiligPad(cb: string | null): string {
+  if (!cb) return "/";
+  try {
+    const u = new URL(cb, window.location.origin);
+    return u.origin === window.location.origin ? u.pathname + u.search : "/";
+  } catch {
+    return cb.startsWith("/") ? cb : "/";
+  }
+}
+
 export function LoginClient() {
   const router = useRouter();
   const params = useSearchParams();
@@ -58,8 +70,7 @@ export function LoginClient() {
         setFout("Inloggen mislukt. Probeer het opnieuw.");
         return;
       }
-      const next = params.get("callbackUrl") || "/";
-      router.push(next);
+      router.push(veiligPad(params.get("callbackUrl")));
       router.refresh();
     } finally {
       setBezig(false);
