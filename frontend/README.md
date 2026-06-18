@@ -69,7 +69,17 @@ npm run dev                     # http://localhost:3000
 API_BASE_URL=http://localhost:3000      # of https://wetsanalyse-api.ipalm.nl
 API_TOKEN=<alleen-de-tokenwaarde>       # het deel NA de ":" uit de API-tokenlijst
 ADMIN_API_TOKEN=<alleen-de-tokenwaarde> # idem, maar uit de ADMIN-tokenlijst (voor /beheer)
+AUTH_SECRET=<openssl rand -base64 32>   # ondertekent de login-sessiecookie (Auth.js)
 ```
+
+> **Eerste keer inloggen.** De webapp zit volledig achter een login. Inloggen gaat met een
+> **userid** (inlognaam) + wachtwoord; e-mail wordt bij het aanmaken verplicht/uniek geregistreerd
+> maar is geen inlog-identiteit. Is de users-tabel van de API nog leeg, dan stuurt de app je naar
+> `/setup` om eenmalig de eerste **beheerder** aan te maken (userid + e-mail + wachtwoord); daarna
+> sluit die route. Verdere gebruikers (rol `analist` of `beheerder`) voeg je toe via `/beheer` →
+> **Gebruikers** (ze krijgen een eenmalig tijdelijk wachtwoord en zetten zelf hun wachtwoord op
+> `/account`). 2FA (TOTP) is optioneel en zet je zelf aan via `/account`. Voor 2FA moet
+> `LLM_CONFIG_SECRET` op de **API** gezet zijn (de TOTP-secrets worden ermee versleuteld).
 
 > Draait de lokale API óók op poort 3000? Start de frontend dan op een andere poort:
 > `npm run dev -- -p 3001`.
@@ -93,6 +103,8 @@ ADMIN_API_TOKEN=<alleen-de-tokenwaarde> # idem, maar uit de ADMIN-tokenlijst (vo
 | `API_TOKEN_FILE`       | —                             | Pad naar secret-bestand met het token (heeft voorrang).        |
 | `ADMIN_API_TOKEN`      | —                             | Admin-bearer voor `/beheer` → `/v1/admin/*` (server-side).     |
 | `ADMIN_API_TOKEN_FILE` | —                             | Pad naar secret-bestand met het admin-token (heeft voorrang).  |
+| `AUTH_SECRET`          | —                             | Ondertekent de Auth.js-sessiecookie/JWT. Verplicht voor login. |
+| `AUTH_URL`             | —                             | Publiek origin voor callback-URLs achter een reverse proxy (optioneel). |
 
 ## Docker / deployment
 
@@ -100,16 +112,20 @@ Multi-stage `Dockerfile` (standalone, non-root) + `docker-compose.yml` voor de P
 achter Nginx Proxy Manager, identiek aan de API/MCP-stijl. CI:
 `.github/workflows/frontend-docker-publish.yml` (test → build → GHCR → Trivy → Portainer-redeploy).
 
-Eénmalig op de host (in `SECRETS_DIR`, gedeeld met de API-stack), beide mode 644:
-`frontend_api_token` met een tokenwaarde uit de API-tokenlijst, en `frontend_admin_token` met een
-tokenwaarde uit de **admin**-tokenlijst (voor `/beheer`). In NPM een Proxy Host
+Eénmalig op de host (in `SECRETS_DIR`, gedeeld met de API-stack), alle mode 644:
+`frontend_api_token` met een tokenwaarde uit de API-tokenlijst, `frontend_admin_token` met een
+tokenwaarde uit de **admin**-tokenlijst (voor `/beheer`), en `frontend_auth_secret` voor de
+login-sessie (`openssl rand -base64 32`). De container-entrypoint laadt dat laatste bestand in
+`AUTH_SECRET` (`AUTH_SECRET_FILE=/run/secrets/frontend_auth_secret`), zodat het — net als de andere
+tokens — een bestand blijft en niet als plain env in Portainer staat. 2FA hergebruikt de
+API-secret `llm_config_secret` (geen extra frontend-bestand). In NPM een Proxy Host
 `wetsanalyse.ipalm.nl` → `wetsanalyse-frontend:3000`, met **proxy buffering uit** voor SSE (zie de
 commentaarregels in `docker-compose.yml`).
 
-> **Toegang tot `/beheer`.** Het admin-token zit server-side in de BFF; de browser ziet het niet en
-> er is geen apart inlogscherm. Wie de frontend-URL kan bereiken, kan dus het LLM-beheer gebruiken.
-> Wil je dat afschermen, zet dan een NPM **Access List (basic auth)** op de `/beheer`-route (OIDC +
-> per-gebruiker toegang staat op de roadmap).
+> **Toegang.** De hele webapp zit achter een e-mail/wachtwoord-login (Auth.js); niet-ingelogde
+> bezoekers landen op `/login`. `/beheer` (LLM-beheer + gebruikersbeheer) is bovendien
+> rol-afgeschermd tot **beheerders**. Een losse NPM Access List is dus niet meer nodig; de eerste
+> beheerder maak je eenmalig via `/setup`.
 
 ## Types up-to-date houden (optioneel)
 

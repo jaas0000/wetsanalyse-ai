@@ -19,6 +19,7 @@ import type { LlmProfileOut, TestResult, WetOut } from "@/lib/types";
 import { ProfileEditor } from "./ProfileEditor";
 import { WetEditor } from "./WetEditor";
 import { UsagePanel } from "./UsagePanel";
+import { UsersPanel } from "./UsersPanel";
 
 type EditState =
   | { open: false }
@@ -222,6 +223,8 @@ export function BeheerClient() {
           </div>
         )}
       </Section>
+
+      <UsersPanel />
 
       <UsagePanel />
     </div>

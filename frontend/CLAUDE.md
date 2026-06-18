@@ -89,8 +89,23 @@ De **harde scheidingslijn**: alles met een token is server-only.
 - **Status/headers ongewijzigd doorgeven.** De API bezit het gedrag (409 bij verkeerde state, 429 +
   `Retry-After`, 404 op andermans id). De BFF maskeert dat niet; de UI reageert erop.
 - **Admin-pad apart.** `/api/admin/*` → `proxy(..., { admin: true })` → `/v1/admin/*`. Het admin-token
-  zit server-side in de BFF; er is **geen** apart inlogscherm — afscherming van `/beheer` gebeurt
-  buiten de app (NPM Access List; OIDC staat op de roadmap). Meng de twee tokens niet.
+  zit server-side in de BFF. Meng de twee tokens niet.
+- **Login = Auth.js (NextAuth v5), API is identiteitsbron.** De hele app zit achter een login met
+  **userid** + wachtwoord (`auth.ts` + `auth.config.ts`; `middleware.ts` bewaakt élke route en
+  stuurt niet-ingelogden naar `/login`). Inloggen gaat uitsluitend met de userid; e-mail wordt bij
+  het aanmaken verplicht/uniek geregistreerd maar is geen inlog-identiteit. De sessie is een
+  httpOnly JWT-cookie (`AUTH_SECRET`) die de `userid` + rol draagt; de Credentials-provider
+  verifieert server→server bij de API (`lib/server.ts → verifyCredentials` → `/v1/auth/verify`). De
+  **API blijft de identiteitsbron** (users-tabel met `userid` als sleutel, wachtwoord-hash, TOTP);
+  de BFF houdt alleen de sessie. Rollen: **`beheerder`** (mag `/beheer` + `/api/admin/*`) en
+  **`analist`** (de rest) — afgedwongen in de `authorized`-callback én server-side in
+  `app/beheer/page.tsx`. De eerste keer (lege users-tabel) maakt `/setup` eenmalig de eerste
+  beheerder; daarna sluit die route. **Gebruikersbeheer** zit in `/beheer` (`UsersPanel`, achter het
+  admin-token). **2FA (TOTP)** is optioneel en self-service in `/account`; verdere gebruikers maakt
+  een beheerder aan met een eenmalig tijdelijk wachtwoord. De account/2fa-BFF-routes zetten de
+  ingelogde identiteit als vertrouwde `X-User-Id`-header (uit de sessie, nooit uit browser-input).
+  Let op: Auth.js' eigen routes leven onder `/api/auth/*` — daar geen eigen BFF-route bijzetten
+  (de eenmalige-registratie-proxy staat daarom op `/api/setup`).
 - **Geen vrije model-string of dwingende wet-lijst in de UI.** Het modelprofiel kies je uit de live
   `/api/profiles`-dropdown; de wet-dropdown (`/api/wetten`) is een gemak — is de catalogus leeg, dan
   val je terug op vrije BWB-id-invoer. De API blijft elke geldige BWB-id accepteren.

@@ -31,7 +31,11 @@ inhoudelijke `references/`/`scripts/`. De samenwerkende delen:
    **`/dashboard`** dat alle analyses tot op functieniveau (de engine-stap binnen een state) volgt
    via een aggregate-SSE-stream, en de modelprofielen, de **wet-catalogus** (BWB-id + naam,
    selecteerbaar via dropdown bij een nieuwe analyse) en het token-verbruik beheren via het
-   **`/beheer`-scherm** (achter een apart admin-token). De UI volgt de **Rijkshuisstijl**
+   **`/beheer`-scherm** (achter een apart admin-token). De hele webapp zit achter een
+   **login met userid + wachtwoord** (Auth.js; e-mail wordt verplicht/uniek geregistreerd maar is
+   geen inlog-identiteit; de API is de identiteitsbron, rollen `beheerder`/`analist`, eenmalige
+   eerste-beheerder-registratie via `/setup`, optionele TOTP-2FA via `/account`, gebruikersbeheer in
+   `/beheer`). De UI volgt de **Rijkshuisstijl**
    (Belastingdienst-stijlvak): lintblauw, Fira-fonts, het officiële Belastingdienst-logo en
    JAS-klassekleuren uit `docs/wa-table.png`. Heeft een eigen `CLAUDE.md` + `README.md` —
    lees die bij werk *in* de frontend.

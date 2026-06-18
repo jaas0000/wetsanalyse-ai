@@ -54,6 +54,10 @@ COPY --from=builder --chown=10002:0 /app/.next/static ./.next/static
 COPY --from=builder --chown=10002:0 /app/public ./public
 RUN chgrp -R 0 /app && chmod -R g=u /app
 
+# Entrypoint laadt AUTH_SECRET uit een secret-bestand (file-secret-aanpak; zie docker-entrypoint.sh).
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod 755 /usr/local/bin/docker-entrypoint.sh
+
 ENV HOME=/tmp
 USER 10002
 
@@ -63,5 +67,6 @@ EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||3000)+'/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
-# server.js is het entrypoint van de standalone-build.
+# server.js is het entrypoint van de standalone-build; de wrapper zet eerst AUTH_SECRET klaar.
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 CMD ["node", "server.js"]

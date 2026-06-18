@@ -3,13 +3,17 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { signOut, useSession } from "next-auth/react";
 import { LinkButton } from "@/components/ui/Button";
 
-const ITEMS = [
+type NavItem = { href: string; label: string; adminOnly?: boolean };
+
+const ITEMS: NavItem[] = [
   { href: "/", label: "Projecten" },
   { href: "/dashboard", label: "Dashboard" },
-  { href: "/beheer", label: "Beheer" },
-] as const;
+  { href: "/account", label: "Account" },
+  { href: "/beheer", label: "Beheer", adminOnly: true },
+];
 
 function isActive(pathname: string, href: string): boolean {
   return href === "/" ? pathname === "/" : pathname.startsWith(href);
@@ -48,6 +52,7 @@ function NavItem({
 export function SiteNav() {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
+  const { data: session, status } = useSession();
 
   useEffect(() => {
     if (!open) return;
@@ -58,11 +63,17 @@ export function SiteNav() {
     return () => window.removeEventListener("keydown", onKey);
   }, [open]);
 
+  // Niet ingelogd (of nog aan het laden): geen navigatie tonen — de login-pagina staat los.
+  if (status !== "authenticated" || !session?.user) return null;
+
+  const isBeheerder = session.user.role === "beheerder";
+  const items = ITEMS.filter((item) => !item.adminOnly || isBeheerder);
+
   return (
     <>
       {/* Desktop: nav inline, naast de applicatienaam in de navigatiebalk */}
       <nav className="hidden items-center gap-1 sm:flex">
-        {ITEMS.map((item) => (
+        {items.map((item) => (
           <NavItem
             key={item.href}
             href={item.href}
@@ -73,6 +84,16 @@ export function SiteNav() {
         <LinkButton href="/nieuw" size="sm" className="ml-2">
           Nieuwe analyse
         </LinkButton>
+        <span className="ml-3 hidden max-w-[12rem] truncate text-xs text-faint lg:inline" title={session.user.email ?? ""}>
+          {session.user.userid ?? session.user.email}
+        </span>
+        <button
+          type="button"
+          onClick={() => signOut({ callbackUrl: "/login" })}
+          className="ml-2 rounded-button px-3 py-3.5 text-sm font-medium text-muted transition-colors hover:text-lint focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-lint"
+        >
+          Uitloggen
+        </button>
       </nav>
 
       {/* Mobiel: hamburger-toggle */}
@@ -106,7 +127,7 @@ export function SiteNav() {
           id="mobiel-menu"
           className="absolute inset-x-0 top-full z-20 flex flex-col gap-1 border-b border-line bg-paper px-6 py-3 shadow-sm sm:hidden"
         >
-          {ITEMS.map((item) => (
+          {items.map((item) => (
             <NavItem
               key={item.href}
               href={item.href}
@@ -119,6 +140,16 @@ export function SiteNav() {
           <LinkButton href="/nieuw" className="mt-1 w-full" onClick={() => setOpen(false)}>
             Nieuwe analyse
           </LinkButton>
+          <button
+            type="button"
+            onClick={() => {
+              setOpen(false);
+              signOut({ callbackUrl: "/login" });
+            }}
+            className="mt-1 w-full rounded-button px-3 py-3 text-left text-sm font-medium text-muted transition-colors hover:text-lint"
+          >
+            Uitloggen ({session.user.userid ?? session.user.email})
+          </button>
         </div>
       )}
     </>

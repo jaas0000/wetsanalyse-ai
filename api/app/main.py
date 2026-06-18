@@ -13,7 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from . import __version__, db
 from .config import get_settings
 from .deps import drain_tasks, get_engine
-from .routers import admin, catalog, projects
+from .routers import admin, auth, catalog, projects
 
 logger = logging.getLogger(__name__)
 
@@ -88,6 +88,7 @@ app.add_middleware(
 app.include_router(projects.router, prefix="/v1")
 app.include_router(catalog.router, prefix="/v1")
 app.include_router(admin.router, prefix="/v1")
+app.include_router(auth.router, prefix="/v1")
 
 
 @app.get("/health", tags=["meta"])

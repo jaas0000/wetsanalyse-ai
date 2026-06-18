@@ -369,6 +369,51 @@ export interface DashboardUpdate {
   error: { stap: string; klasse: FoutKlasse; bericht: string } | null;
 }
 
+// --- Auth: accounts + rollen ------------------------------------------------
+
+export type Role = "beheerder" | "analist";
+
+export interface UserOut {
+  userid: string;
+  email: string;
+  role: Role;
+  totp_enabled: boolean;
+  active: boolean;
+  created: string;
+  updated: string;
+}
+
+/** Antwoord bij aanmaken/resetten: het tijdelijke wachtwoord wordt eenmalig getoond. */
+export interface UserCreated extends UserOut {
+  temp_password: string;
+}
+
+export interface TempPassword {
+  userid: string;
+  temp_password: string;
+}
+
+/** Eigen account (self-service); spiegelt /v1/auth/me. */
+export interface MeAccount {
+  userid: string;
+  email: string;
+  role: Role;
+  totp_enabled: boolean;
+}
+
+export interface TotpBegin {
+  otpauth_uri: string;
+}
+
+/** Uitkomst van de login-pre-check (/api/login-verify). code: "" | "ok" | "invalid" | "totp_required" | "rate". */
+export interface LoginVerifyResult {
+  ok: boolean;
+  code: string;
+  userid: string;
+  email: string;
+  role: Role | "";
+}
+
 // --- API-fout doorgegeven door de BFF ---------------------------------------
 
 export interface ApiError {
