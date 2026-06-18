@@ -7,14 +7,16 @@ import type { NextAuthConfig } from "next-auth";
 
 export type Role = "beheerder" | "analist";
 
-// Paden die zonder sessie bereikbaar moeten zijn (login, eenmalige registratie + hun BFF-routes).
+// Paden die zonder sessie bereikbaar moeten zijn (login, eenmalige registratie + hun BFF-routes,
+// en de health-check voor Docker/NPM/CI — die mag nooit achter de login vallen).
 function isPublic(path: string): boolean {
   return (
     path === "/login" ||
     path === "/setup" ||
     path === "/api/setup" ||
     path === "/api/setup-status" ||
-    path === "/api/login-verify"
+    path === "/api/login-verify" ||
+    path === "/api/health"
   );
 }
 
