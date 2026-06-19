@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Card } from "@/components/ui/Card";
 import { StateBadge } from "@/components/ui/Badge";
 import { fasenVoor, faseLabel } from "@/lib/fasen";
-import { isReview } from "@/lib/states";
+import { isReview, reviewActiviteit } from "@/lib/states";
 import { pathSegment } from "@/lib/url";
 import { retryProject, isApiError } from "@/lib/api";
 import { bronnenSamenvatting } from "@/lib/bronnen";
@@ -22,13 +22,35 @@ const STATIONS: { key: string; label: string; states: JobState[]; tint: Tint }[]
   { key: "klaar", label: "Klaar", states: ["klaar"], tint: "klaar" },
 ];
 
+// De RegelSpraak-vervolgfase als eigen pijplijn (de analyse is dan al afgerond).
+const RS_STATIONS: { key: string; label: string; states: JobState[]; tint: Tint }[] = [
+  { key: "rs-gegevens", label: "GegevensSpraak", states: ["rs-gegevens-runt"], tint: "werk" },
+  { key: "rs-rev-g", label: "Review GS", states: ["wacht-op-review-rs-gegevens"], tint: "review" },
+  { key: "rs-regels", label: "Regels", states: ["rs-regels-runt"], tint: "werk" },
+  { key: "rs-rev-r", label: "Review R", states: ["wacht-op-review-rs-regels"], tint: "review" },
+  { key: "rs-bouwt", label: "Model", states: ["rs-bouwt"], tint: "bouw" },
+  { key: "rs-klaar", label: "Klaar", states: ["rs-klaar"], tint: "klaar" },
+];
+
+// De states (en fout-activiteiten) die bij de RegelSpraak-fase horen.
+const RS_STATES: JobState[] = RS_STATIONS.flatMap((s) => s.states);
+const RS_ACTIVITEITEN = ["rs-gegevens", "rs-regels"];
+
 type Tint = "neutraal" | "werk" | "review" | "bouw" | "klaar";
 type Status = "gedaan" | "actief" | "komt" | "fout";
 
+// Kort onderwerp per review-state voor de review-banner (consistent met de titels in ReviewPanel).
+const REVIEW_ONDERWERP: Record<string, string> = {
+  "2": "markeringen & JAS-klassen",
+  "3": "begrippen & afleidingsregels",
+  "rs-gegevens": "GegevensSpraak (objectmodel)",
+  "rs-regels": "RegelSpraak-regels",
+};
+
 const GROEN = "#3a7a3a";
 
-function stationIndex(state: JobState): number {
-  return STATIONS.findIndex((s) => s.states.includes(state));
+function stationIndex(stations: typeof STATIONS, state: JobState): number {
+  return stations.findIndex((s) => s.states.includes(state));
 }
 
 /** Lamp-styling per status; de actieve lamp pulseert en kleurt naar het stationstype. */
@@ -66,14 +88,21 @@ function initialen(naam: string, bwbId: string): string {
 export const DashboardCard = memo(function DashboardCard({ u }: { u: DashboardUpdate }) {
   const [bezig, setBezig] = useState(false);
   const isFout = u.state === "fout" || !!u.error;
-  const idx = stationIndex(u.state);
-  const foutIdx = u.current_activiteit === "3" ? 3 : 1; // waar de analyse stokte
-  const actief = !isFout && (u.state.endsWith("runt") || u.state === "bouwt");
+  // In de RegelSpraak-fase (lopend, of een fout die daar optrad) tonen we de rs-pijplijn; de
+  // analyse is dan al afgerond.
+  const inRsFase = RS_STATES.includes(u.state) || (isFout && RS_ACTIVITEITEN.includes(u.current_activiteit ?? ""));
+  const stations = inRsFase ? RS_STATIONS : STATIONS;
+  const idx = stationIndex(stations, u.state);
+  const foutIdx = inRsFase
+    ? u.current_activiteit === "rs-regels" ? 2 : 0 // rs-gegevens=0, rs-regels=2 in RS_STATIONS
+    : u.current_activiteit === "3" ? 3 : 1; // act2=1, act3=3 in STATIONS
+  const voltooid = inRsFase ? u.state === "rs-klaar" : u.state === "klaar";
+  const actief = !isFout && (u.state.endsWith("runt") || u.state === "bouwt" || u.state === "rs-bouwt");
 
   // Lokale 'verstreken tijd'-klok per kaart i.p.v. één gedeelde tik in het dashboard: zo
   // herberekent het dashboard niet elke seconde de filter/sorteer/pagineer-pijplijn, en tikken
   // alleen niet-afgeronde analyses (een klaar/fout-kaart bevriest z'n verstreken-tijd).
-  const levend = !isFout && u.state !== "klaar";
+  const levend = !isFout && u.state !== "klaar" && u.state !== "rs-klaar";
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     if (!levend) return;
@@ -129,12 +158,23 @@ export const DashboardCard = memo(function DashboardCard({ u }: { u: DashboardUp
         </div>
       </div>
 
-      {/* Macro-pijplijn */}
+      {/* Macro-pijplijn — in de RegelSpraak-fase voorafgegaan door een afgeronde-analyse-markering */}
       <div className="flex items-start px-4 pb-3">
-        {STATIONS.map((st, i) => {
+        {inRsFase && (
+          <div className="mr-3 flex shrink-0 flex-col items-center">
+            <span
+              className="relative z-10 grid h-4 w-4 place-items-center rounded-full text-[9px] text-paper"
+              style={{ background: GROEN }}
+            >
+              ✓
+            </span>
+            <span className="mt-1.5 text-center text-[10px] leading-tight text-faint">Analyse</span>
+          </div>
+        )}
+        {stations.map((st, i) => {
           let status: Status;
           if (isFout) status = i < foutIdx ? "gedaan" : i === foutIdx ? "fout" : "komt";
-          else if (u.state === "klaar") status = "gedaan";
+          else if (voltooid) status = "gedaan";
           else status = i < idx ? "gedaan" : i === idx ? "actief" : "komt";
 
           return (
@@ -142,7 +182,7 @@ export const DashboardCard = memo(function DashboardCard({ u }: { u: DashboardUp
               {i > 0 && (
                 <span
                   className="absolute right-1/2 top-[7px] -z-0 h-0.5 w-full"
-                  style={{ background: i <= idx || u.state === "klaar" ? GROEN : "rgb(var(--line))" }}
+                  style={{ background: i <= idx || voltooid ? GROEN : "rgb(var(--line))" }}
                 />
               )}
               <span
@@ -211,7 +251,7 @@ export const DashboardCard = memo(function DashboardCard({ u }: { u: DashboardUp
           className="flex items-center gap-2 border-t border-gold/30 bg-gold/5 px-4 py-2.5 text-sm text-gold hover:bg-gold/10"
         >
           ▲ Wacht op review —{" "}
-          {u.state === "wacht-op-review-act2" ? "markeringen & JAS-klassen" : "begrippen & afleidingsregels"}
+          {REVIEW_ONDERWERP[reviewActiviteit(u.state) ?? ""] ?? "deze stap"}
           <span className="ml-auto font-medium">Open review →</span>
         </Link>
       )}

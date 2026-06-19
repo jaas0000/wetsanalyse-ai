@@ -1,10 +1,14 @@
 import type { Job, JobState } from "@/lib/types";
 
-const STAPPEN: { key: string; label: string; states: JobState[] }[] = [
+const STAPPEN: { key: string; label: string; states: JobState[]; rs?: boolean }[] = [
   { key: "act2", label: "Activiteit 2 — markeren & classificeren", states: ["act2-runt", "wacht-op-review-act2"] },
   { key: "act3", label: "Activiteit 3 — begrippen & afleidingsregels", states: ["act3-runt", "wacht-op-review-act3"] },
   { key: "bouwt", label: "Rapport samenstellen", states: ["bouwt"] },
-  { key: "klaar", label: "Klaar", states: ["klaar"] },
+  { key: "klaar", label: "Analyse klaar", states: ["klaar"] },
+  { key: "rs-gegevens", label: "RegelSpraak — GegevensSpraak (objectmodel)", states: ["rs-gegevens-runt", "wacht-op-review-rs-gegevens"], rs: true },
+  { key: "rs-regels", label: "RegelSpraak — regels", states: ["rs-regels-runt", "wacht-op-review-rs-regels"], rs: true },
+  { key: "rs-bouwt", label: "RegelSpraak-model samenstellen", states: ["rs-bouwt"], rs: true },
+  { key: "rs-klaar", label: "RegelSpraak klaar", states: ["rs-klaar"], rs: true },
 ];
 
 const VOLGORDE: JobState[] = [
@@ -15,6 +19,12 @@ const VOLGORDE: JobState[] = [
   "wacht-op-review-act3",
   "bouwt",
   "klaar",
+  "rs-gegevens-runt",
+  "wacht-op-review-rs-gegevens",
+  "rs-regels-runt",
+  "wacht-op-review-rs-regels",
+  "rs-bouwt",
+  "rs-klaar",
 ];
 
 function fase(state: JobState): number {
@@ -24,14 +34,18 @@ function fase(state: JobState): number {
 
 export function StatusTimeline({ job }: { job: Job }) {
   const huidige = fase(job.state);
+  // De RegelSpraak-stappen alleen tonen zodra de analyse die fase ingaat — anders zou een gewone
+  // analyse vier niet-relevante grijze stappen tonen.
+  const inRsFase = fase(job.state) > fase("klaar");
+  const stappen = STAPPEN.filter((s) => !s.rs || inRsFase);
 
   return (
     <ol className="space-y-3">
-      {STAPPEN.map((stap) => {
+      {stappen.map((stap) => {
         const stapFase = fase(stap.states[stap.states.length - 1]);
         const actief = stap.states.includes(job.state);
-        const klaar = huidige > stapFase || job.state === "klaar";
-        const isRunt = actief && stap.states.some((s) => s.endsWith("runt") || s === "bouwt");
+        const klaar = huidige > stapFase || job.state === "klaar" || job.state === "rs-klaar";
+        const isRunt = actief && stap.states.some((s) => s.endsWith("runt") || s === "bouwt" || s === "rs-bouwt");
         return (
           <li key={stap.key} className="flex items-center gap-3">
             <span

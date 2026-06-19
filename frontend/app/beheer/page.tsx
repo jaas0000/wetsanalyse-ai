@@ -14,8 +14,9 @@ export default async function BeheerPagina() {
       <div>
         <h1 className="font-display text-3xl font-semibold text-lint">Beheer</h1>
         <p className="mt-1 text-sm text-muted">
-          Beheer de LLM-modelprofielen die de analyses aansturen en bekijk het token-verbruik. Een
-          analyse kiest een profiel op naam; de API-key wordt versleuteld bewaard en nooit getoond.
+          Beheer de LLM-modelprofielen die de analyses aansturen, de wet-catalogus en de gebruikers,
+          en bekijk het token-verbruik. Een analyse kiest een profiel op naam; de API-key wordt
+          versleuteld bewaard en nooit getoond.
         </p>
       </div>
       <BeheerClient />
