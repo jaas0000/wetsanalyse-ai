@@ -16,6 +16,8 @@ import type {
   MeAccount,
   ProfileChoice,
   Rapport,
+  RegelspraakModel,
+  RegelspraakStart,
   Role,
   StartRequest,
   TempPassword,
@@ -91,9 +93,27 @@ export async function getRapport(id: string): Promise<Rapport> {
   return json<Rapport>(res);
 }
 
-export async function getRonde(id: string, act: "2" | "3", n: number): Promise<Analyse2 | Analyse3> {
+export async function getRonde(
+  id: string,
+  act: "2" | "3" | "rs-gegevens" | "rs-regels",
+  n: number,
+): Promise<Analyse2 | Analyse3> {
   const res = await fetch(`/api/projects/${pathSegment(id)}/ronde/${act}/${n}`, { cache: "no-store" });
   return json<Analyse2 | Analyse3>(res);
+}
+
+export async function startRegelspraak(id: string, body: RegelspraakStart = {}): Promise<CreateAccepted> {
+  const res = await fetch(`/api/projects/${pathSegment(id)}/regelspraak`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return json<CreateAccepted>(res);
+}
+
+export async function getRegelspraak(id: string): Promise<RegelspraakModel> {
+  const res = await fetch(`/api/projects/${pathSegment(id)}/regelspraak`, { cache: "no-store" });
+  return json<RegelspraakModel>(res);
 }
 
 export function isApiError(e: unknown): e is ApiError {

@@ -120,7 +120,6 @@ _ACT3_SCHEMA = {
             "invoervariabelen": "...",
             "parameters": "...",
             "voorwaarden": "...",
-            "formulering": "<gestructureerde pseudo met expliciete operatoren>",
             "vindplaatsen": [{"bron_id": "br1", "lid": "<n>"}],
             "twijfel": "<optioneel>",
         }
@@ -300,7 +299,8 @@ def act3_prompt(context: dict) -> tuple[str, str, dict, str]:
         "Leg per begrip definitie/voorbeeld/kenmerken vast (hergebruik brondefinities letterlijk; "
         "markeer eigen werkdefinities als [interpretatie]; 'bron_verwijzing' = id van een "
         "definitie-verwijzing indien van elders). Leg de afleidingsregels vast (type, in-/uitvoer, "
-        "parameters, voorwaarden, gestructureerde formulering, vindplaatsen). Gebruik stabiele, "
+        "parameters, voorwaarden, vindplaatsen) — annoteer de regel, formuleer hem niet uit (de "
+        "uitvoerbare regel volgt in de RegelSpraak-stap). Gebruik stabiele, "
         "werkgebied-brede id's (b1, r1, …). Noteer aandachtspunten als validatiepunten."
     )
     return _SYSTEM, user, _ACT3_SCHEMA, _hash(_SYSTEM, user)

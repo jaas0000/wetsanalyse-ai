@@ -2,7 +2,8 @@
 
 Next.js (App Router) + TypeScript-webapp bovenop de [wetsanalyse-API](../api). Ontsluit de hele
 JAS-workflow in de browser: analyse aanmaken, live voortgang (SSE), de human-in-the-loop review-lus,
-het eindrapport, en een `/beheer`-scherm voor LLM-modelprofielen, de wet-catalogus en token-verbruik.
+het eindrapport, de **RegelSpraak-formaliseringsfase** (starten + model bekijken/downloaden), en een
+`/beheer`-scherm voor LLM-modelprofielen, de wet-catalogus en token-verbruik.
 Lees ook de projectroot-`CLAUDE.md` en `../api/CLAUDE.md` — de API is de bron van waarheid voor de
 datacontracten en de state machine; deze app is een **dunne, server-getokende schil** eroverheen.
 Operationele details (lokaal draaien, env-vars, deployment) staan in de `README.md`; dit bestand
@@ -70,6 +71,15 @@ De **harde scheidingslijn**: alles met een token is server-only.
   renderen puur in `RapportView.tsx` (Verwijzingen-sectie) en `ReviewPanel.tsx` (scope-feedback per
   verwijzing, via het bestaande per-id-feedbackmechanisme) uit de bestaande `/rapport`- en
   `/ronde`-data — er is **geen nieuwe BFF-route** voor nodig.
+- **RegelSpraak-vervolgfase.** Op een afgeronde analyse (`klaar`) toont `ProjectClient.tsx` een knop
+  **"Naar RegelSpraak"** (`startRegelspraak`); daarna heropent het de SSE-stream (`streamGen`) omdat
+  `klaar` terminaal is. De rs-states (`rs-gegevens-runt`/`wacht-op-review-rs-gegevens`/`rs-regels-runt`/
+  `wacht-op-review-rs-regels`/`rs-bouwt`/`rs-klaar`) staan in `lib/states.ts` + `lib/fasen.ts`; de
+  `reviewActiviteit`-helper mapt de rs-review-states op `rs-gegevens`/`rs-regels`, zodat `ReviewPanel.tsx`
+  ze met hetzelfde feedbackmechanisme afhandelt. Bij `rs-klaar` toont `components/RegelspraakView.tsx`
+  het model (GegevensSpraak + regels, met herkomst en `.rs`/`.md`-download). BFF-routes:
+  `app/api/projects/[id]/regelspraak{,-rs,-md}/route.ts`. De RegelSpraak-modeltypes staan in
+  `lib/types.ts` (`RegelspraakModel`, `GegevensSpraak`, …) — afgeleid van het API-contract.
 - **Vormgeving (Rijkshuisstijl, Belastingdienst-stijlvak)** — alle design tokens centraal:
   CSS-variabelen in `app/globals.css` → Tailwind in `tailwind.config.ts` (lintblauw `#154273` +
   hemelblauw `#007bc7` op wit, Fira Sans/Mono als vrij alternatief voor Rijksoverheid Sans,

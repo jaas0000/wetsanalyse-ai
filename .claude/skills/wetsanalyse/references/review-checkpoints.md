@@ -165,7 +165,7 @@ Activiteit 3 is **werkgebied-breed**: één gedeelde begrippenlijst + afleidings
     {
       "id": "r1", "naam": "bepalen berekend bijdrage-inkomen", "type": "rekenregel",
       "uitvoervariabele": "...", "invoervariabelen": "...", "parameters": "...",
-      "voorwaarden": "...", "formulering": "<gestructureerde pseudo>",
+      "voorwaarden": "...",
       "vindplaatsen": [{ "bron_id": "br1", "lid": "2" }], "twijfel": "..."
     }
   ],

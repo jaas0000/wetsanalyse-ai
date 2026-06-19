@@ -60,6 +60,36 @@ class FakeLLM:
         is_inventaris = "OPDRACHT (stap 1b" in user
         is_act3 = "begrippenlijst" in user        # act-3 vers én revise (BEGRIPPEN_REF)
         is_revise_act2 = "per bron de HERZIENE" in user
+        # RegelSpraak-vervolgfase (vers én revise) — eigen opdracht-markers.
+        is_rs_gegevens = "OPDRACHT (GegevensSpraak)" in user or "HERZIENE GegevensSpraak" in user
+        is_rs_regels = "OPDRACHT (RegelSpraak-regels)" in user or "HERZIENE RegelSpraak-regels" in user
+
+        if is_rs_gegevens:
+            data = {
+                "objecttypen": [{
+                    "id": "ot1", "naam": "belastingplichtige", "lidwoord": "de",
+                    "meervoud": "belastingplichtigen", "bezield": True,
+                    "attributen": [], "kenmerken": [],
+                    "regelspraak_tekst": "Objecttype de belastingplichtige (bezield)",
+                    "herkomst": {"begrip_ids": ["b1"], "vindplaatsen": [{"bron_id": "br1", "lid": "1"}]},
+                }],
+                "parameters": [], "feittypen": [], "domeinen": [], "eenheidssystemen": [],
+                "dimensies": [], "tijdlijnen": [], "dagsoorten": [],
+            }
+            return LLMResult(data=data, model="fake-model", provider="fake",
+                             output_strategie="prompt_and_parse")
+        if is_rs_regels:
+            data = {
+                "regels": [{
+                    "id": "rs1", "naam": "Beslis aangifteplicht", "soort": "kenmerktoekenning",
+                    "regelspraak_tekst": "Regel Beslis aangifteplicht\n  geldig altijd\n"
+                                         "    Een belastingplichtige is aangifteplichtig.",
+                    "herkomst": {"regel_id": "r1", "vindplaatsen": [{"bron_id": "br1", "lid": "1"}]},
+                }],
+                "validatiepunten": ["Open norm: 'aangifte' niet gedefinieerd."],
+            }
+            return LLMResult(data=data, model="fake-model", provider="fake",
+                             output_strategie="prompt_and_parse")
 
         markeringen = [{"id": "m1", "formulering": citaat, "klasse": "Rechtssubject",
                         "vindplaats": f"lid {lidnr}", "toelichting": "drager van de plicht"}]
@@ -85,7 +115,7 @@ class FakeLLM:
                                "definitie": "[interpretatie] degene die aangifte moet doen",
                                "vindplaatsen": [{"bron_id": "br1", "lid": lidnr}]}],
                 "afleidingsregels": [{"id": "r1", "naam": "aangifteplicht", "type": "beslisregel",
-                                      "formulering": "ALS belastingplichtig DAN aangifteplicht",
+                                      "voorwaarden": "belastingplichtig",
                                       "vindplaatsen": [{"bron_id": "br1", "lid": lidnr}]}],
                 "validatiepunten": ["Open norm: 'aangifte' niet gedefinieerd in dit artikel."],
             }

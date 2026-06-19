@@ -37,7 +37,7 @@ class Project(BaseModel):
     client_id: str = ""
 
     state: JobState = JobState.queued
-    current_activiteit: Literal["2", "3"] | None = None
+    current_activiteit: Literal["2", "3", "rs-gegevens", "rs-regels"] | None = None
     current_ronde: int = 0
     # Observerend, voor het live dashboard: de fijnmazige fase BINNEN een runt/bouwt-state
     # (bijv. "llm-generatie", "verwijzingen-volgen"). Bewust géén state-machine-veld — alleen
@@ -60,6 +60,10 @@ class Project(BaseModel):
 
     rondes: dict[str, dict[str, RondeData]] = Field(default_factory=dict)
     rapport: dict | None = None
+    # RegelSpraak-vervolgfase: het eind-model.json (gevuld via store.schrijf_regelspraak) en of die
+    # fase met review-checkpoints draait (None = nog niet gestart / erft review).
+    regelspraak: dict | None = None
+    regelspraak_review: bool | None = None
 
     def touch(self) -> None:
         self.updated = _utcnow()
@@ -74,6 +78,7 @@ class Project(BaseModel):
             model_profile=self.model_profile,
             analysefocus=self.analysefocus,
             client_id=self.client_id,
+            regelspraak_review=self.regelspraak_review,
             state=self.state,
             current_activiteit=self.current_activiteit,
             current_ronde=self.current_ronde,

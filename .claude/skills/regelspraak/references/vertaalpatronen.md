@@ -9,7 +9,9 @@ standalone-pad vanaf wettekst.
 ## 1. Een wetsanalyse-rapport.json inlezen
 
 Een afgeronde wetsanalyse levert per **werkgebied** één `rapport.json` op (zie de wetsanalyse-skill).
-De relevante delen voor formalisering:
+Lees dat niet handmatig over maar draai `scripts/ingest_rapport.py` (zie SKILL.md stap 1): dat schrijft
+een `ingest.json` met exact de onderstaande delen en behoudt de herkomst-id's. De relevante delen voor
+formalisering (zoals ze in `ingest.json` staan):
 
 - **`bronnen`** — de tekstdelen (`bron_id`, `label`, `bwbId`, `artikel`, `lid`, `bronreferentie`).
   Gebruik deze voor de **`herkomst`** van je declaraties en regels (`vindplaatsen: [{bron_id, lid}]`).
@@ -18,7 +20,8 @@ De relevante delen voor formalisering:
   **GegevensSpraak**.
 - **`afleidingsregels`** (activiteit 3b) — per regel: `naam`, `type` (beslis-/reken-/
   specialisatieregel), `uitvoervariabele`, `invoervariabelen`, `parameters`, `voorwaarden`,
-  `formulering`, `vindplaatsen`. Dit voedt **RegelSpraak**.
+  `vindplaatsen`. Dit voedt **RegelSpraak**. De regel is hier *geannoteerd*, niet uitgeschreven —
+  jij formuleert hem hier voor het eerst uit in RegelSpraak.
 
 Werkwijze: doorloop eerst **alle begrippen** → bouw GegevensSpraak (stap 2). Doorloop daarna **alle
 afleidingsregels** → schrijf RegelSpraak-regels (stap 3). De `naam` van een begrip is leidend voor de
@@ -65,9 +68,11 @@ Vertaal vervolgens de onderdelen van de afleidingsregel:
 - `uitvoervariabele` → het attribuut/kenmerk in het resultaatdeel.
 - `invoervariabelen` + `parameters` → de attributen/parameters in de expressie.
 - `voorwaarden` → het **voorwaardendeel** (`indien …`, enkel of samengesteld met bullets).
-- `formulering` (de gestructureerde pseudo) → de **expressie** met de juiste operatoren — vervang de
-  pseudo-operatoren door de **echte** RegelSpraak-operatoren (`plus`, `min`, `maal`, `de som van`, …);
-  verzin niets.
+- De **expressie** in het resultaatdeel leid je af uit `uitvoervariabele` (= het te berekenen
+  attribuut/kenmerk), `invoervariabelen` + `parameters` (= de operanden) en de letterlijke wettekst op
+  de `vindplaatsen`. Gebruik uitsluitend de **echte** RegelSpraak-operatoren (`plus`, `min`, `maal`,
+  `de som van`, …) uit `expressies-en-operatoren-referentie.md`; verzin niets. Is de rekenwijze in de
+  wet niet eenduidig, leg de keuze vast in `twijfel` en bij de validatiepunten.
 
 Een directe toekenning zonder berekening → `… moet gesteld worden op <waarde>`. Een attribuut dat niet
 leeg mag zijn → overweeg **Initialisatie**. Een verdeling van een totaal over instanties → **Verdeling**

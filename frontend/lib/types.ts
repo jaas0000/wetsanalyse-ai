@@ -10,9 +10,16 @@ export type JobState =
   | "wacht-op-review-act3"
   | "bouwt"
   | "klaar"
-  | "fout";
+  | "fout"
+  // RegelSpraak-vervolgfase (on-demand op een afgeronde analyse)
+  | "rs-gegevens-runt"
+  | "wacht-op-review-rs-gegevens"
+  | "rs-regels-runt"
+  | "wacht-op-review-rs-regels"
+  | "rs-bouwt"
+  | "rs-klaar";
 
-export type Activiteit = "2" | "3";
+export type Activiteit = "2" | "3" | "rs-gegevens" | "rs-regels";
 
 export type FoutKlasse = "mcp" | "llm" | "validatie" | "intern" | "quota";
 
@@ -32,6 +39,11 @@ export interface StartRequest {
   analysefocus?: string | null; // hoofdvraag
   review: boolean;
   model_profile?: string | null;
+}
+
+/** Optionele body bij het starten van de RegelSpraak-fase (review=null erft Job.review). */
+export interface RegelspraakStart {
+  review?: boolean | null;
 }
 
 export interface Feedback {
@@ -100,6 +112,7 @@ export interface Job {
   model_profile: string;
   analysefocus: string;
   client_id: string;
+  regelspraak_review?: boolean | null;
   current_activiteit: Activiteit | null;
   current_ronde: number;
   waarschuwingen: string[];
@@ -192,7 +205,6 @@ export interface Afleidingsregel {
   invoervariabelen: string;
   parameters: string;
   voorwaarden: string;
-  formulering: string;
   vindplaatsen: Vindplaats[];
   twijfel: string;
 }
@@ -257,6 +269,109 @@ export interface Rapport {
   validatiepunten: string[];
   reviewlog: Reviewlog;
   aandachtspunten: string;
+}
+
+// --- RegelSpraak-model (GegevensSpraak + regels) ----------------------------
+
+/** Herkomst van een declaratie/regel terug naar de wetsanalyse (begrip/regel + vindplaats). */
+export interface RegelspraakHerkomst {
+  begrip_ids?: string[];
+  regel_id?: string;
+  bron_id?: string;
+  vindplaatsen?: Vindplaats[];
+}
+
+export interface RsAttribuut {
+  naam: string;
+  lidwoord?: string;
+  datatype: string;
+  eenheid?: string;
+}
+
+export interface RsKenmerk {
+  naam: string;
+  soort?: string; // bijvoeglijk | bezittelijk | overig
+}
+
+export interface RsObjecttype {
+  id: string;
+  naam: string;
+  lidwoord?: string;
+  meervoud?: string;
+  bezield?: boolean;
+  attributen?: RsAttribuut[];
+  kenmerken?: RsKenmerk[];
+  regelspraak_tekst: string;
+  herkomst?: RegelspraakHerkomst;
+  twijfel?: string;
+}
+
+export interface RsRol {
+  naam: string;
+  lidwoord?: string;
+  objecttype?: string;
+  multipliciteit?: string; // een | meerdere
+}
+
+export interface RsFeittype {
+  id: string;
+  naam: string;
+  wederkerig?: boolean;
+  rollen?: RsRol[];
+  relatiebeschrijving?: string;
+  regelspraak_tekst: string;
+  herkomst?: RegelspraakHerkomst;
+}
+
+export interface RsParameter {
+  id: string;
+  naam: string;
+  lidwoord?: string;
+  datatype: string;
+  eenheid?: string;
+  regelspraak_tekst: string;
+  herkomst?: RegelspraakHerkomst;
+}
+
+export interface RsDomein {
+  naam: string;
+  regelspraak_tekst: string;
+  herkomst?: RegelspraakHerkomst;
+}
+
+export interface RsEenheidssysteem {
+  naam: string;
+  regelspraak_tekst: string;
+}
+
+export interface GegevensSpraak {
+  eenheidssystemen?: RsEenheidssysteem[];
+  domeinen?: RsDomein[];
+  objecttypen?: RsObjecttype[];
+  feittypen?: RsFeittype[];
+  parameters?: RsParameter[];
+  dimensies?: unknown[];
+  tijdlijnen?: unknown[];
+  dagsoorten?: unknown[];
+}
+
+export interface RsRegel {
+  id: string;
+  naam: string;
+  soort: string;
+  regelspraak_tekst: string;
+  herkomst?: RegelspraakHerkomst;
+  twijfel?: string;
+}
+
+export interface RegelspraakModel {
+  werkgebied: Werkgebied;
+  gegevensspraak: GegevensSpraak;
+  regels: RsRegel[];
+  reviewlog_gegevensspraak: string;
+  reviewlog_regels: string;
+  validatiepunten: string[];
+  reviewlog?: unknown;
 }
 
 // --- Catalogus (niet-admin): keuzelijsten -----------------------------------

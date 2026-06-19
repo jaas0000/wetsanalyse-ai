@@ -148,7 +148,6 @@ class Afleidingsregel(BaseModel):
     invoervariabelen: str = ""
     parameters: str = ""
     voorwaarden: str = ""
-    formulering: str = ""
     vindplaatsen: list[Vindplaats] = Field(default_factory=list)
     twijfel: str = ""
 
@@ -165,7 +164,7 @@ class Analyse3(BaseModel):
 
 class Feedback(BaseModel):
     status: Literal["akkoord", "wijzigingen"]
-    activiteit: Literal["2", "3"]
+    activiteit: Literal["2", "3", "rs-gegevens", "rs-regels"]
     items: dict[str, str] = Field(default_factory=dict)
     algemeen: str = Field(default="", max_length=5000)
 
@@ -214,11 +213,29 @@ class JobState(str, Enum):
     bouwt = "bouwt"
     klaar = "klaar"
     fout = "fout"
+    # RegelSpraak — een on-demand vervolgfase op een afgeronde (`klaar`) analyse: eerst
+    # GegevensSpraak (objectmodel), dan de RegelSpraak-regels, elk met een eigen review-checkpoint.
+    rs_gegevens_runt = "rs-gegevens-runt"
+    wacht_review_rs_gegevens = "wacht-op-review-rs-gegevens"
+    rs_regels_runt = "rs-regels-runt"
+    wacht_review_rs_regels = "wacht-op-review-rs-regels"
+    rs_bouwt = "rs-bouwt"
+    rs_klaar = "rs-klaar"
 
 
-RUNNING_STATES = {JobState.act2_runt, JobState.act3_runt, JobState.bouwt}
-REVIEW_STATES = {JobState.wacht_review_act2, JobState.wacht_review_act3}
-TERMINAL_STATES = {JobState.klaar, JobState.fout}
+RUNNING_STATES = {
+    JobState.act2_runt, JobState.act3_runt, JobState.bouwt,
+    JobState.rs_gegevens_runt, JobState.rs_regels_runt, JobState.rs_bouwt,
+}
+REVIEW_STATES = {
+    JobState.wacht_review_act2, JobState.wacht_review_act3,
+    JobState.wacht_review_rs_gegevens, JobState.wacht_review_rs_regels,
+}
+# rs_klaar is terminaal: de regelspraak-fase is af. (De analyse zelf bereikte daarvóór `klaar`.)
+TERMINAL_STATES = {JobState.klaar, JobState.fout, JobState.rs_klaar}
+
+# De activiteit-codes die in de rondes-tabel/provenance/current_activiteit voorkomen.
+ACTIVITEIT_CODES = ("2", "3", "rs-gegevens", "rs-regels")
 
 
 class FoutKlasse(str, Enum):
@@ -239,7 +256,7 @@ class JobFout(BaseModel):
 class RondeProvenance(BaseModel):
     """Audit per gegenereerde ronde (reproduceerbaarheid)."""
 
-    activiteit: Literal["2", "3"]
+    activiteit: Literal["2", "3", "rs-gegevens", "rs-regels"]
     ronde: int
     model: str = ""
     provider: str = ""
@@ -263,7 +280,9 @@ class Job(BaseModel):
     model_profile: str = ""
     analysefocus: str = ""
     client_id: str = ""
-    current_activiteit: Literal["2", "3"] | None = None
+    # Of de regelspraak-fase met review-checkpoints draait. None = nog niet gestart / erft job.review.
+    regelspraak_review: bool | None = None
+    current_activiteit: Literal["2", "3", "rs-gegevens", "rs-regels"] | None = None
     current_ronde: int = 0
     waarschuwingen: list[str] = Field(default_factory=list)
     error: JobFout | None = None
@@ -315,3 +334,25 @@ class Rapport(BaseModel):
     validatiepunten: list = Field(default_factory=list)
     reviewlog: dict = Field(default_factory=dict)
     aandachtspunten: str = ""
+
+
+class RegelspraakStart(BaseModel):
+    """Optionele body bij het starten van de regelspraak-fase. review=None erft `Job.review`."""
+
+    review: bool | None = None
+
+
+class RegelspraakModel(BaseModel):
+    """Het regelspraak-model — GegevensSpraak (objectmodel) + RegelSpraak-regels, met herkomst
+    naar de wetsanalyse-begrippen/-regels. Eigen artefact náást het rapport (1-op-1 met de
+    regelspraak-skill `model.json`)."""
+
+    model_config = {"extra": "allow"}
+
+    werkgebied: dict = Field(default_factory=dict)
+    gegevensspraak: dict = Field(default_factory=dict)  # objecttypen, domeinen, parameters, feittypen, …
+    regels: list = Field(default_factory=list)
+    reviewlog_gegevensspraak: str = ""
+    reviewlog_regels: str = ""
+    validatiepunten: list = Field(default_factory=list)
+    reviewlog: dict = Field(default_factory=dict)

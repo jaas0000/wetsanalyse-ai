@@ -56,7 +56,8 @@ projects = Table(
     Column("model_profile", String(128), nullable=False, default=""),
     Column("client_id", String(128), nullable=False, default=""),
     Column("state", String(32), nullable=False),
-    Column("current_activiteit", String(2), nullable=True),
+    # Ruim genoeg voor de regelspraak-codes ("rs-gegevens"/"rs-regels") náást "2"/"3".
+    Column("current_activiteit", String(16), nullable=True),
     Column("current_ronde", Integer, nullable=False, default=0),
     Column("current_fase", String(64), nullable=True),
     Column("current_fase_sinds", _DT, nullable=True),
@@ -69,6 +70,9 @@ projects = Table(
     Column("created", _DT, nullable=False),
     Column("updated", _DT, nullable=False),
     Column("rapport", _JSON, nullable=True),
+    # RegelSpraak-vervolgfase: het eind-model.json + of die fase met review draait.
+    Column("regelspraak", _JSON, nullable=True),
+    Column("regelspraak_review", Boolean, nullable=True),
     # Hot-path indexen: list_projects filtert op client_id + sorteert op updated DESC;
     # reaper/quota scannen op state. Zonder deze is dat een seq scan zodra de tabel groeit.
     Index("ix_projects_client_id_updated", "client_id", "updated"),
@@ -80,7 +84,7 @@ rondes = Table(
     "rondes",
     metadata,
     Column("project_slug", String(255), nullable=False),
-    Column("activiteit", String(2), nullable=False),
+    Column("activiteit", String(16), nullable=False),
     Column("ronde", Integer, nullable=False),
     Column("analyse", _JSON, nullable=False, default=dict),
     Column("feedback", _JSON, nullable=True),
@@ -208,6 +212,21 @@ async def reconcile_schema() -> None:
         for legacy in ("bwbId", "artikel", "lid"):
             if legacy in bestaande:
                 await conn.exec_driver_sql(f'ALTER TABLE projects DROP COLUMN "{legacy}"')
+        # RegelSpraak-vervolgfase: kolommen op een bestaande tabel idempotent toevoegen.
+        if "regelspraak" not in bestaande:
+            typ = "JSONB" if is_pg else "JSON"
+            await conn.exec_driver_sql(f"ALTER TABLE projects ADD COLUMN regelspraak {typ}")
+        if "regelspraak_review" not in bestaande:
+            await conn.exec_driver_sql("ALTER TABLE projects ADD COLUMN regelspraak_review BOOLEAN")
+        # current_activiteit/rondes.activiteit verbreed (rs-codes). Alleen op Postgres relevant —
+        # SQLite handhaaft de VARCHAR-lengte niet. Idempotent.
+        if is_pg:
+            await conn.exec_driver_sql(
+                "ALTER TABLE projects ALTER COLUMN current_activiteit TYPE VARCHAR(16)"
+            )
+            await conn.exec_driver_sql(
+                "ALTER TABLE rondes ALTER COLUMN activiteit TYPE VARCHAR(16)"
+            )
         # Hot-path indexen op een bestaande tabel: create_all maakt indexen alleen mee bij een
         # verse tabel, dus voor een bestaande prod-DB hier idempotent toevoegen. IF NOT EXISTS
         # werkt op zowel PostgreSQL als SQLite, dus ook veilig ná create_all in de tests.

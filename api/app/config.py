@@ -18,6 +18,12 @@ SKILL_SCRIPTS = SKILL_DIR / "scripts"
 REFERENCES_DIR = SKILL_DIR / "references"
 ANALYSES_DIR = PROJECT_ROOT / "analyses"
 
+# De regelspraak-skill: dezelfde references/scripts worden gedeeld met de skill (vervolgstap op
+# de wetsanalyse). De API herimplementeert de stappen in-process maar leest dezelfde references.
+REGELSPRAAK_SKILL_DIR = PROJECT_ROOT / ".claude" / "skills" / "regelspraak"
+REGELSPRAAK_SCRIPTS = REGELSPRAAK_SKILL_DIR / "scripts"
+REGELSPRAAK_REFERENCES_DIR = REGELSPRAAK_SKILL_DIR / "references"
+
 
 def _read_secret(env_name: str) -> str | None:
     """Lees een secret uit `${NAME}` of, als `${NAME}_FILE` is gezet, uit dat bestand.

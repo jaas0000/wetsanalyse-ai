@@ -14,6 +14,19 @@ state + telemetrie en het `rapport` (JSONB-kolom); de immutabele analyse-rondes 
 aparte `rondes`-tabel. De API schrijft *niet* naar de `analyses/<id>/werk/`-disk; de
 disk-interoperabiliteit met de lokale skill staat op de roadmap, niet in de huidige flow.
 
+**RegelSpraak-vervolgfase (gebouwd).** Naast de JAS-analyse kent een project een **on-demand**
+formaliseringsfase naar RegelSpraak/GegevensSpraak (de skill `regelspraak`). `POST /v1/projects/{id}/regelspraak`
+(alleen vanuit `klaar`; optioneel body `{review}`) start `WetsanalyseEngine.run_regelspraak`: claim
+`klaar → rs_gegevens_runt`, dan twee stappen met elk een review-checkpoint
+(`rs-gegevens` → `wacht-op-review-rs-gegevens` → `rs-regels` → `wacht-op-review-rs-regels` → `rs_bouwt`
+→ `rs_klaar`). De stappen leven in `engine/regelspraak_prompts.py` + `engine/regelspraak_steps.py` (zelfde
+patroon als `prompts.py`/`steps.py`; references uit `.claude/skills/regelspraak/references/`), de validatie
+in `validation.regelspraak_schema_check`/`regelspraak_brongetrouwheid_check` (herkomst is hard). Het
+resultaat is een **eigen artefact** `projects.regelspraak` (JSONB, naast `rapport`), uitleesbaar via
+`GET /v1/projects/{id}/regelspraak` (+ `.rs`/`.md`-export via `engine/render_regelspraak.py`). De rondes
+delen de `rondes`-tabel met activiteit-codes `rs-gegevens`/`rs-regels`. `feedback` en `retry` kennen de
+rs-states; `current_activiteit` draagt de rs-code zodat retry de fase herkent.
+
 **De analyse-eenheid is het werkgebied (kennisdomein), niet één artikel.** Een project draagt een
 `bronnen`-lijst (`StartRequest.bronnen[]`; elke bron = `bwbId`+`artikel`+`lid?`) — opgeslagen als
 `projects.bronnen` JSON-kolom (vervangt de oude scalar `bwbId/artikel/lid`). De orchestrator haalt in

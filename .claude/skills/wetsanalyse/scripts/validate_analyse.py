@@ -303,9 +303,6 @@ def check_activiteit_3(data: dict) -> tuple[list[str], list[str]]:
                 "Gebruik: beslisregel, rekenregel of specialisatieregel."
             )
 
-        if not (r.get("formulering") or "").strip():
-            fouten.append(f"[{rid}] Afleidingsregel heeft geen 'formulering'.")
-
         waarschuwingen.extend(check_vindplaatsen(r, rid, "Afleidingsregel", bron_ids))
 
     return fouten, waarschuwingen

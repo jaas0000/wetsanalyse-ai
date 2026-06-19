@@ -83,6 +83,39 @@ async def test_feedback_buiten_review_409(client):
     assert r.status_code == 409
 
 
+async def test_regelspraak_serve_en_export(client):
+    """GET regelspraak-model + .rs/.md-export voor een project met een gebouwd model."""
+    from app.deps import get_store
+    model = {
+        "werkgebied": {"naam": "Testwerkgebied"},
+        "gegevensspraak": {"objecttypen": [
+            {"id": "ot1", "naam": "belastingplichtige",
+             "regelspraak_tekst": "Objecttype de belastingplichtige (bezield)"}
+        ]},
+        "regels": [{"id": "rs1", "naam": "R", "soort": "kenmerktoekenning",
+                    "regelspraak_tekst": "Regel R\n  geldig altijd\n    Een belastingplichtige is x."}],
+        "validatiepunten": [], "reviewlog": {},
+    }
+    await get_store().schrijf_regelspraak("klaar-art1", model)
+
+    r = await client.get("/v1/projects/klaar-art1/regelspraak")
+    assert r.status_code == 200 and r.json()["gegevensspraak"]["objecttypen"][0]["naam"] == "belastingplichtige"
+    rs = await client.get("/v1/projects/klaar-art1/regelspraak.rs")
+    assert rs.status_code == 200 and "Objecttype de belastingplichtige" in rs.text
+    md = await client.get("/v1/projects/klaar-art1/regelspraak.md")
+    assert md.status_code == 200 and "# RegelSpraak-specificatie" in md.text
+
+
+async def test_regelspraak_nog_niet_gereed_409(client):
+    assert (await client.get("/v1/projects/klaar-art1/regelspraak")).status_code == 409
+
+
+async def test_regelspraak_start_alleen_vanuit_klaar_409(client):
+    """Starten vanuit een niet-afgeronde analyse (queued) → 409."""
+    r = await client.post("/v1/projects/bwbr1-art1/regelspraak", json={"review": False})
+    assert r.status_code == 409
+
+
 async def test_rapport_nog_niet_gereed_409(client):
     assert (await client.get("/v1/projects/bwbr1-art1/rapport")).status_code == 409
 
