@@ -14,7 +14,8 @@ een webapp of Teams-client.
 |-----------|-----|
 | **wettenbank-MCP** | Databron — haalt actuele wettekst op; wordt intern aangeroepen door de API |
 | **wetsanalyse-skill** | Inhoudelijke referentie — de API hergebruikt exact dezelfde `references/` en `scripts/` |
-| **wetsanalyse-api** *(deze map)* | HTTP-harness — biedt de werkstroom aan als async REST-API |
+| **regelspraak-skill** | Inhoudelijke referentie voor de RegelSpraak-vervolgfase — de API leest dezelfde `references/` |
+| **wetsanalyse-api** *(deze map)* | HTTP-harness — biedt de werkstroom (incl. RegelSpraak-fase) aan als async REST-API |
 | **PostgreSQL** | Jobstore — `projects`-rij per analyse (state + telemetrie + rapport) + aparte `rondes`-tabel |
 
 ## Endpoints
@@ -32,7 +33,11 @@ Alle analyse-endpoints zijn client-gescopet (alleen je eigen analyses) en versio
 | `POST` | `/v1/projects/{id}/retry` | Herstart een job in `fout`-state |
 | `GET` | `/v1/projects/{id}/rapport` | Volledig rapport als JSON |
 | `GET` | `/v1/projects/{id}/rapport.md` | Rapport als Markdown |
-| `GET` | `/v1/projects/{id}/ronde/{act}/{n}` | Analyse-JSON van één ronde |
+| `GET` | `/v1/projects/{id}/ronde/{act}/{n}` | Analyse-JSON van één ronde (`act` = `2`/`3`/`rs-gegevens`/`rs-regels`) |
+| `POST` | `/v1/projects/{id}/regelspraak` | Start de RegelSpraak-formaliseringsfase (alleen vanuit `klaar`; body `{review?}`) |
+| `GET` | `/v1/projects/{id}/regelspraak` | RegelSpraak-model (GegevensSpraak + regels) als JSON |
+| `GET` | `/v1/projects/{id}/regelspraak.rs` | RegelSpraak-tekstexport (.rs) |
+| `GET` | `/v1/projects/{id}/regelspraak.md` | RegelSpraak-model als Markdown |
 | `GET` | `/v1/projects/{id}/events` | SSE state-updates (max 10 min) |
 | `GET` | `/v1/profiles` | Keuzelijst modelprofielen (alleen naam + default; client-auth, geen geheimen) |
 | `GET` | `/v1/wetten` | Keuzelijst wetten (BWB-id + naam; client-auth) voor de dropdown |
@@ -127,6 +132,23 @@ Job-states: `queued` → `act2-runt` → `wacht-op-review-act2` → `act3-runt` 
 `wacht-op-review-act3` → `klaar` (of `fout` bij elke stap). Binnen een `*-runt`/`bouwt`-state geeft
 een **observerend** `current_fase`-veld de fijnmazige functiestap (bv. `llm-generatie`,
 `verwijzingen-volgen`, `brongetrouwheid-check`) — los van de state-machine, puur voor live voortgang.
+
+## RegelSpraak-formalisering (on-demand vervolgfase)
+
+Op een afgeronde analyse zet `POST /v1/projects/{id}/regelspraak` (alleen vanuit `klaar`; optionele
+body `{ "review": true|false }`, default erft `review` van de analyse) de geduide begrippen en
+afleidingsregels om naar **GegevensSpraak** (objectmodel) + **RegelSpraak-regels** (RegelSpraak-spec
+v2.3.0). Eigen state-machine, voortbouwend op `klaar`:
+
+`klaar` → `rs-gegevens-runt` → `wacht-op-review-rs-gegevens` → `rs-regels-runt` →
+`wacht-op-review-rs-regels` → `rs-bouwt` → `rs-klaar`.
+
+Twee review-checkpoints (GegevensSpraak en regels) werken net als act-2/3: feedback via
+`POST …/feedback` met `activiteit` = `rs-gegevens` of `rs-regels`, herziene rondes onder dezelfde
+`rondes`-tabel. Het resultaat is een **eigen artefact** (`GET …/regelspraak`, met `.rs`/`.md`-export),
+náást het rapport. Elke declaratie/regel draagt een `herkomst` naar het bron-begrip/de bron-regel
+(herleidbaarheid is hard). De engine leest de regelspraak-`references/` uit
+`.claude/skills/regelspraak/`; bij `fout` herstelt `retry` binnen de regelspraak-fase.
 
 ## Snel starten (lokaal)
 

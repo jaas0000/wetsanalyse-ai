@@ -30,9 +30,11 @@ from ..llm.litellm_client import build_llm_client
 from .. import profiles
 from ..jobstore import IdConflict, JobStore
 from ..rapport import bouw_rapport_async
-from ..validation import brongetrouwheid_check, schema_check
+from ..validation import (
+    brongetrouwheid_check, regelspraak_brongetrouwheid_check, regelspraak_schema_check, schema_check,
+)
 from ..wettenbank import WettenbankClient, WettenbankError, map_artikel_naar_bron_basis, parse_jci
-from . import prompts, steps
+from . import prompts, regelspraak_steps as rs_steps, steps
 from .retry import met_retry
 
 logger = logging.getLogger(__name__)
@@ -148,12 +150,19 @@ class WetsanalyseEngine:
             return
         await self._guard(job, "act2", self._fase_start(job))
 
+    # Review-state → (activiteit-code in de rondes-tabel, runt-state om naar te claimen).
+    _REVIEW_MAP = {
+        JobState.wacht_review_act2: ("2", JobState.act2_runt),
+        JobState.wacht_review_act3: ("3", JobState.act3_runt),
+        JobState.wacht_review_rs_gegevens: ("rs-gegevens", JobState.rs_gegevens_runt),
+        JobState.wacht_review_rs_regels: ("rs-regels", JobState.rs_regels_runt),
+    }
+
     async def apply_feedback(self, job_id: str, feedback) -> None:
         job = await self.store.load_job(job_id)
         if job is None or job.state not in REVIEW_STATES:
             return
-        activiteit = "2" if job.state == JobState.wacht_review_act2 else "3"
-        naar = JobState.act2_runt if activiteit == "2" else JobState.act3_runt
+        activiteit, naar = self._REVIEW_MAP[job.state]
         # Claim de review-state atomair → runt; pas NA een geslaagde claim schrijven we de
         # feedback (een verloren race schrijft dan geen feedback).
         claimed = await self.store.claim(job_id, {job.state}, naar, self.owner, self.s.lease_s)
@@ -161,11 +170,37 @@ class WetsanalyseEngine:
             return
         ronde = claimed.current_ronde
         await self.store.schrijf_feedback(claimed.id, activiteit, ronde, feedback)
-        await self._guard(claimed, f"act{activiteit}", self._fase_feedback(claimed, activiteit, ronde, feedback))
+        if activiteit in ("2", "3"):
+            await self._guard(claimed, f"act{activiteit}",
+                              self._fase_feedback(claimed, activiteit, ronde, feedback))
+        else:
+            await self._guard(claimed, activiteit,
+                              self._fase_rs_feedback(claimed, activiteit, ronde, feedback))
+
+    async def run_regelspraak(self, job_id: str, review: bool | None = None) -> None:
+        """On-demand: start de RegelSpraak-vervolgfase op een afgeronde (`klaar`) analyse.
+        Claim klaar → rs_gegevens_runt; zo niet klaar/al bezig, dan doet de claim niets."""
+        job = await self.store.claim(
+            job_id, {JobState.klaar}, JobState.rs_gegevens_runt, self.owner, self.s.lease_s
+        )
+        if job is None:
+            return
+        job.regelspraak_review = review if review is not None else job.review
+        job.current_activiteit = "rs-gegevens"
+        job.current_ronde = 0
+        job.error = None
+        await self._save(job)
+        await self._guard(job, "rs-gegevens", self._fase_rs_gegevens_start(job))
 
     async def retry(self, job_id: str) -> None:
         job = await self.store.load_job(job_id)
         if job is None or job.state != JobState.fout:
+            return
+        # Faalde de regelspraak-vervolgfase, dan herstellen we bínnen die fase (de analyse zelf was
+        # al `klaar`). current_activiteit (gezet bij de claim) wijst de fase aan, ook vóór de eerste
+        # ronde-write.
+        if job.current_activiteit in ("rs-gegevens", "rs-regels"):
+            await self._retry_regelspraak(job)
             return
         r2 = await self.store.hoogste_ronde(job.id, "2")
         r3 = await self.store.hoogste_ronde(job.id, "3")
@@ -398,6 +433,209 @@ class WetsanalyseEngine:
         if job.waarschuwingen:
             punten.append("Mechanische waarschuwingen: " + "; ".join(job.waarschuwingen))
         return "\n".join(f"- {p}" for p in punten) if punten else ""
+
+    # --- RegelSpraak-vervolgfase (GegevensSpraak → regels → model) --------
+
+    def _rs_review(self, job: Job) -> bool:
+        return job.regelspraak_review if job.regelspraak_review is not None else job.review
+
+    async def _retry_regelspraak(self, job: Job) -> None:
+        """Herstel een gefaalde regelspraak-fase: hervat in de review-state als er al een ronde is,
+        anders herstart de generatie van de betreffende stap."""
+        n_rg = await self.store.hoogste_ronde(job.id, "rs-regels")
+        n_gs = await self.store.hoogste_ronde(job.id, "rs-gegevens")
+        if n_rg > 0:
+            naar, stap, ronde = JobState.wacht_review_rs_regels, "rs-regels", n_rg
+        elif n_gs > 0:
+            naar, stap, ronde = JobState.wacht_review_rs_gegevens, "rs-gegevens", n_gs
+        else:
+            naar, stap, ronde = JobState.rs_gegevens_runt, None, 0
+        claimed = await self.store.claim(job.id, {JobState.fout}, naar, self.owner, self.s.lease_s)
+        if claimed is None:
+            return
+        try:
+            claimed.error = None
+            if stap is not None:
+                claimed.current_activiteit, claimed.current_ronde = stap, ronde
+            else:
+                claimed.current_activiteit, claimed.current_ronde = "rs-gegevens", 0
+            await self.store.save_job(claimed)
+        except Exception:  # noqa: BLE001
+            logger.exception("Retry regelspraak van job %s kon de state niet herstellen", job.id)
+            return
+        if naar == JobState.rs_gegevens_runt:
+            await self._guard(claimed, "rs-gegevens", self._fase_rs_gegevens_start(claimed))
+
+    def _rs_gegevens_context(self, rapport: dict) -> dict:
+        """Trim het rapport tot wat de GegevensSpraak-stap voedt: werkgebied + begrippen +
+        afleidingsregels + de brondefinitie-markeringen per bron (geen volledige leden-tekst)."""
+        bronnen = []
+        for b in rapport.get("bronnen") or []:
+            bronnen.append({
+                "bron_id": b.get("bron_id"), "label": b.get("label"),
+                "bwbId": b.get("bwbId"), "artikel": b.get("artikel"), "lid": b.get("lid"),
+                "versiedatum": b.get("versiedatum"), "bronreferentie": b.get("bronreferentie"),
+                "brondefinities": [
+                    m for m in (b.get("markeringen") or []) if m.get("klasse") == "Brondefinitie"
+                ],
+            })
+        return {
+            "werkgebied": rapport.get("werkgebied") or {},
+            "bronnen": bronnen,
+            "begrippen": rapport.get("begrippen") or [],
+            "afleidingsregels": rapport.get("afleidingsregels") or [],
+        }
+
+    async def _rs_regels_context(self, job: Job) -> dict:
+        """Context voor de regels-stap: het objectmodel van de hoogste GegevensSpraak-ronde +
+        de afleidingsregels uit het rapport."""
+        n = await self.store.hoogste_ronde(job.id, "rs-gegevens")
+        gs_model = await self.store.lees_analyse(job.id, "rs-gegevens", n) or {}
+        rapport = await self.store.lees_rapport(job.id) or {}
+        basis = self._rs_gegevens_context(rapport)
+        return {
+            "werkgebied": gs_model.get("werkgebied") or rapport.get("werkgebied") or {},
+            "gegevensspraak": gs_model.get("gegevensspraak") or {},
+            "afleidingsregels": rapport.get("afleidingsregels") or [],
+            "bronnen": basis["bronnen"],
+        }
+
+    async def _fase_rs_gegevens_start(self, job: Job) -> None:
+        job.state = JobState.rs_gegevens_runt
+        await self._save(job)
+        rapport = await self.store.lees_rapport(job.id) or {}
+        context = self._rs_gegevens_context(rapport)
+        llm = await self._llm_for(job)
+
+        async def maak():
+            return await rs_steps.genereer_gegevens(llm, 1, context)
+
+        await self._afronden_rs_ronde(job, "rs-gegevens", 1, maak)
+
+    async def _afronden_rs_ronde(self, job: Job, stap: str, ronde: int, maak) -> None:
+        """Afronding van één regelspraak-ronde: budget-check, auto-correctie op de harde
+        herkomst-invariant, zachte schema-check, wegschrijven en de overgang (review of door)."""
+        if self.s.llm_token_budget > 0:
+            gebruikt = sum(p.tokens_in + p.tokens_out for p in job.provenance)
+            if gebruikt >= self.s.llm_token_budget:
+                await self._fail(job, stap, FoutKlasse.quota,
+                                 f"LLM-tokenbudget ({self.s.llm_token_budget}) overschreden na "
+                                 f"{gebruikt} tokens.")
+                return
+
+        fase = "regelspraak-gegevens-generatie" if stap == "rs-gegevens" else "regelspraak-regels-generatie"
+        await self._set_fase(job, fase)
+        analyse, prov = await self._met_retry(maak)
+        pogingen = 0
+        while pogingen < self.s.max_autocorrectie and regelspraak_brongetrouwheid_check(analyse, stap):
+            pogingen += 1
+            await self._set_fase(job, "auto-correctie")
+            analyse, prov = await self._met_retry(maak)
+
+        await self._set_fase(job, "brongetrouwheid-check")
+        schendingen = regelspraak_brongetrouwheid_check(analyse, stap)
+        await self._set_fase(job, "schema-check")
+        fouten, waarschuwingen = regelspraak_schema_check(analyse, stap)
+
+        await self._set_fase(job, "analyse-wegschrijven")
+        await self.store.schrijf_analyse(job.id, stap, ronde, analyse)
+        job.provenance.append(RondeProvenance(**prov))
+        job.current_activiteit = stap
+        job.current_ronde = ronde
+        job.waarschuwingen = schendingen + fouten + waarschuwingen
+        await self._save(job)
+
+        if schendingen:
+            await self._fail(job, stap, FoutKlasse.validatie,
+                             "Herkomst ontbreekt na auto-correctie: " + "; ".join(schendingen))
+            return
+        if self._rs_review(job):
+            job.state = (JobState.wacht_review_rs_gegevens if stap == "rs-gegevens"
+                         else JobState.wacht_review_rs_regels)
+            await self._save(job)
+            await self._set_fase(job, None)
+            return
+        await self._advance_rs_akkoord(job, stap)
+
+    async def _advance_rs_akkoord(self, job: Job, stap: str) -> None:
+        if stap == "rs-gegevens":
+            job.state = JobState.rs_regels_runt
+            await self._save(job)
+            context = await self._rs_regels_context(job)
+            llm = await self._llm_for(job)
+
+            async def maak():
+                return await rs_steps.genereer_regels(llm, 1, context)
+
+            await self._afronden_rs_ronde(job, "rs-regels", 1, maak)
+        else:
+            await self._bouw_regelspraak(job)
+
+    async def _fase_rs_feedback(self, job: Job, stap: str, ronde: int, feedback) -> None:
+        if feedback.is_akkoord_zonder_opmerkingen() or ronde >= self.s.max_rondes:
+            await self._advance_rs_akkoord(job, stap)
+            return
+        job.state = JobState.rs_gegevens_runt if stap == "rs-gegevens" else JobState.rs_regels_runt
+        await self._save(job)
+        llm = await self._llm_for(job)
+        vorige = await self.store.lees_analyse(job.id, stap, ronde) or {}
+        if stap == "rs-gegevens":
+            rapport = await self.store.lees_rapport(job.id) or {}
+            context = self._rs_gegevens_context(rapport)
+        else:
+            context = await self._rs_regels_context(job)
+        fb = feedback.model_dump()
+
+        async def maak():
+            return await rs_steps.herzie(llm, stap, ronde + 1, context, vorige, fb)
+
+        await self._afronden_rs_ronde(job, stap, ronde + 1, maak)
+
+    async def _bouw_regelspraak(self, job: Job) -> None:
+        job.state = JobState.rs_bouwt
+        await self._save(job)
+        await self._set_fase(job, "regelspraak-bouwt")
+        n_gs = await self.store.hoogste_ronde(job.id, "rs-gegevens")
+        n_rg = await self.store.hoogste_ronde(job.id, "rs-regels")
+        gs = await self.store.lees_analyse(job.id, "rs-gegevens", n_gs) or {}
+        rg = await self.store.lees_analyse(job.id, "rs-regels", n_rg) or {}
+        model = {
+            "werkgebied": gs.get("werkgebied") or rg.get("werkgebied") or {},
+            "gegevensspraak": gs.get("gegevensspraak") or {},
+            "regels": rg.get("regels") or [],
+            "reviewlog_gegevensspraak": await self._rs_reviewlog(job, "rs-gegevens"),
+            "reviewlog_regels": await self._rs_reviewlog(job, "rs-regels"),
+            "validatiepunten": rg.get("validatiepunten") or [],
+            "reviewlog": {
+                "gegevensspraak": {"rondes": await self._rs_reviewlog_rondes(job, "rs-gegevens")},
+                "regels": {"rondes": await self._rs_reviewlog_rondes(job, "rs-regels")},
+            },
+        }
+        await self.store.schrijf_regelspraak(job.id, model)
+        job.state = JobState.rs_klaar
+        await self._save(job)
+        await self._set_fase(job, None)
+
+    async def _rs_reviewlog(self, job: Job, stap: str) -> str:
+        n = await self.store.hoogste_ronde(job.id, stap)
+        if not self._rs_review(job):
+            return f"Review overgeslagen (review:false); {n} ronde(n) autonoom gegenereerd."
+        if n <= 1:
+            return "1 ronde — direct akkoord, geen wijzigingen."
+        return f"{n} rondes — feedback per ronde verwerkt tot akkoord."
+
+    async def _rs_reviewlog_rondes(self, job: Job, stap: str) -> list[dict]:
+        rondes = await self.store.lees_alle_rondes(job.id, stap)
+        out = []
+        for nr in sorted(rondes, key=lambda x: int(x)):
+            fb = rondes[nr].feedback or {}
+            out.append({
+                "ronde": int(nr),
+                "items": fb.get("items") or {},
+                "algemeen": (fb.get("algemeen") or "").strip(),
+                "status": fb.get("status", ""),
+            })
+        return out
 
     # --- helpers ----------------------------------------------------------
 

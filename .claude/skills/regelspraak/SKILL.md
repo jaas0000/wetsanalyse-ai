@@ -75,11 +75,23 @@ wet als de taal. Daarom:
 De skill werkt **flexibel** vanuit twee soorten input. Bepaal eerst welke je hebt:
 
 1. **Vanuit een wetsanalyse-`rapport.json` (voorkeur).** Is er een afgeronde wetsanalyse voor
-   dit werkgebied (`analyses/<werkgebied>/rapport.json`), gebruik die dan als basis. De
-   **begrippen** (activiteit 3a) voeden GegevensSpraak; de **afleidingsregels** (3b) en hun
-   voorwaarden voeden de RegelSpraak-regels; de **brondefinities/verwijzingen** voeden domeinen
-   en herleidbaarheid. Lees `references/vertaalpatronen.md` voor hoe je het rapport inleest en
-   per onderdeel vertaalt.
+   dit werkgebied (`analyses/<werkgebied>/rapport.json`), gebruik die dan als basis. Lees het
+   rapport **deterministisch** in met het handoff-script (overtypen is foutgevoelig en laat
+   herkomst-id's verschuiven):
+
+   ```bash
+   python "<skill>/scripts/ingest_rapport.py" \
+     --rapport analyses/<werkgebied>/rapport.json \
+     --out     regelspraak/werk/ingest.json
+   ```
+
+   Het script schrijft één `ingest.json` met het `werkgebied`, de **bronnen** (lichte index met
+   `leden`, `verwijzingen` en `Brondefinitie`-markeringen), de **begrippen** (activiteit 3a) en de
+   **afleidingsregels** (activiteit 3b) — met behoud van de oorspronkelijke id's (`b*`, `r*`, `v*`).
+   De begrippen voeden GegevensSpraak; de afleidingsregels en hun voorwaarden voeden de
+   RegelSpraak-regels; de brondefinities/verwijzingen voeden domeinen en herleidbaarheid. Werk
+   verder vanuit `ingest.json`; lees `references/vertaalpatronen.md` voor hoe je per onderdeel
+   vertaalt. Meldt het script dangling referenties, signaleer dat dan als validatiepunt.
 2. **Standalone vanuit wettekst.** Is er geen rapport, haal dan de actuele wettekst zelf op via
    de wettenbank-MCP (`wettenbank_zoek` → `wettenbank_structuur` → `wettenbank_artikel`, en
    `wettenbank_zoekterm` voor definitieartikelen) en doe een **lichte** identificatie van de

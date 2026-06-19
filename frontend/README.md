@@ -6,6 +6,11 @@ het eindrapport — inclusief de **cross-referenties** (een Verwijzingen-sectie 
 functie met status en `wetten.overheid.nl`-links, en per-verwijzing scope-feedback in de
 activiteit-2 review).
 
+Op een afgeronde analyse kun je met **"Naar RegelSpraak"** de formaliseringsfase starten: dezelfde
+twee-checkpoint review-lus (GegevensSpraak-objectmodel en RegelSpraak-regels), waarna een eigen
+**RegelSpraak-weergave** het model toont (met herkomst per declaratie/regel) en een `.rs`/`.md`-download
+biedt.
+
 Daarbovenop een live **`/dashboard`** ("mission control"): één overzicht van álle analyses dat per
 analyse laat zien in welke stap de engine zit — niet alleen de macro-states, maar tot op
 **functieniveau** (LLM-generatie, verwijzingen volgen, brongetrouwheid-check), met verstreken tijd,

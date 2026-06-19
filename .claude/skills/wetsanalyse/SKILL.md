@@ -244,9 +244,9 @@ brondefinitie), wijs daar dan naar met `bron_verwijzing`.
 **3b Afleidingsregels.** Leg per regel vast: een **naam**, het **type** (beslisregel →
 ja/nee of waar/onwaar; rekenregel → een berekend bedrag/getal; specialisatieregel →
 behoort tot doelgroep), de **uitvoervariabele**, de **invoervariabelen** en **parameters**,
-de **voorwaarden**, en een gestructureerde **formulering** (leesbaar pseudo, met de
-operatoren expliciet). Verwijs naar de bron(nen) via `vindplaatsen`. Houd parameters (vaste
-waarden) en variabelen (per geval verschillend) uit elkaar.
+en de **voorwaarden**. Verwijs naar de bron(nen) via `vindplaatsen`. Houd parameters (vaste
+waarden) en variabelen (per geval verschillend) uit elkaar. Je **annoteert** de regel hier;
+de uitvoerbare formulering komt in de vervolgstap `regelspraak` (één bron van waarheid).
 
 ## Stap 3b — Review-checkpoint na activiteit 3
 

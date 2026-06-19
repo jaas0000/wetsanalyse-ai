@@ -15,9 +15,10 @@ en aannames — zichtbaar maken in plaats van schijnzekerheid te produceren.
 |-----------|-----|--------------|
 | **wettenbank-MCP** | `tools/wettenbank-mcp/` | MCP-server (TypeScript) die actuele wettekst ophaalt via de publieke SRU-API van `overheid.nl`. De databron. |
 | **wetsanalyse-skill** | `.claude/skills/wetsanalyse/` | Voert de analyse uit (activiteit 2 + 3) en levert een `rapport.json` op die via een lokale HTML-viewer wordt getoond. Markdown is beschikbaar als export. Gebruikt de MCP als bron. |
-| **wetsanalyse-api** | `api/` | Headless REST-backend (FastAPI) die dezelfde werkstroom als de skill aanbiedt als async API, met PostgreSQL als jobstore. Stuurt de LLM aan via beheerbare modelprofielen. |
-| **frontend** | `frontend/` | Webapp (Next.js) bovenop de API: analyse aanmaken, live voortgang, de review-lus, het rapport, een live **`/dashboard`** (alle analyses tot op functieniveau), en een **`/beheer`-scherm** om LLM-modelprofielen, gebruikers en token-verbruik te beheren. Zit achter een **login** (userid + wachtwoord, rollen, optionele 2FA). Vormgegeven volgens de **Rijkshuisstijl** (Belastingdienst-stijlvak). |
-| **analyses** | `analyses/` | Output: per analyse een eindrapport plus `werk/`-tussenbestanden. |
+| **regelspraak-skill** | `.claude/skills/regelspraak/` | Vervolgskill: formaliseert de geduide begrippen + afleidingsregels naar **RegelSpraak + GegevensSpraak** (Belastingdienst/ALEF). Levert een `model.json` (HTML-viewer; `.rs`/Markdown als export). Werkt vanuit een afgerond `rapport.json` of standalone vanaf wettekst. |
+| **wetsanalyse-api** | `api/` | Headless REST-backend (FastAPI) die dezelfde werkstroom als de skill aanbiedt als async API, met PostgreSQL als jobstore. Stuurt de LLM aan via beheerbare modelprofielen. Biedt ook de RegelSpraak-formaliseringsfase als on-demand vervolg (`POST /v1/projects/{id}/regelspraak`). |
+| **frontend** | `frontend/` | Webapp (Next.js) bovenop de API: analyse aanmaken, live voortgang, de review-lus, het rapport, de **RegelSpraak-fase** (knop "Naar RegelSpraak" + model-weergave), een live **`/dashboard`** (alle analyses tot op functieniveau), en een **`/beheer`-scherm** om LLM-modelprofielen, gebruikers en token-verbruik te beheren. Zit achter een **login** (userid + wachtwoord, rollen, optionele 2FA). Vormgegeven volgens de **Rijkshuisstijl** (Belastingdienst-stijlvak). |
+| **analyses** | `analyses/` | Output: per analyse een eindrapport plus `werk/`-tussenbestanden (en desgewenst een `regelspraak/`-submap met het RegelSpraak-`model.json`). |
 | **docs** | `docs/` | Methodische onderbouwing (handleiding, leidraad, JAS-kader). |
 
 Er zijn dus **twee manieren** om een analyse te draaien: interactief via de wetsanalyse-skill in
@@ -37,9 +38,14 @@ artikel + lid + bronreferentie — en doorloopt:
 2. **Activiteit 2 — markeren & classificeren**: relevante wetsformuleringen markeren en elk een
    van de dertien JAS-klassen geven (rechtssubject, rechtsbetrekking, voorwaarde, afleidingsregel, …).
 3. **Activiteit 3 — betekenis vaststellen**: begrippen (met definitie, voorbeeld, relaties) en
-   afleidingsregels (beslis-, reken- en specialisatieregels) vastleggen.
+   afleidingsregels (beslis-, reken- en specialisatieregels) vastleggen. Een afleidingsregel wordt
+   *geannoteerd* (type, in-/uitvoer, parameters, voorwaarden); de uitvoerbare formulering volgt pas
+   in de regelspraak-stap, zodat er één bron van waarheid voor de regel is.
 4. **Rapport** — `rapport.json` als primaire bron, gepresenteerd via een lokale HTML-viewer
    (poort 3119) met bewerkbare §4-velden en een exportknop voor Markdown.
+5. **RegelSpraak (optioneel vervolg)** — de regelspraak-skill zet het rapport om naar GegevensSpraak +
+   RegelSpraak-regels, opnieuw met twee review-checkpoints (poort 3120) en een `model.json` + viewer
+   (poort 3121) en `.rs`/Markdown-export.
 
 Na activiteit 2 én na activiteit 3 is er een **iteratief human-in-the-loop review-checkpoint**:
 een lokale reviewpagina waarin de analist de tussenresultaten per onderdeel valideert en feedback
@@ -85,15 +91,21 @@ wetsanalyse van artikel 9 lid 1 Invorderingswet 1990"*); de wetsanalyse-skill ha
 zelf op en doorloopt de werkstroom. Zie [`CLAUDE.md`](CLAUDE.md) voor de projectstructuur en
 de skill-`references/` voor de inhoudelijke regels (o.a. de JAS-klassen).
 
+Wil je de uitkomst formaliseren, vraag dan om *"zet deze wetsanalyse om naar RegelSpraak"*; de
+regelspraak-skill leest het `rapport.json` in en bouwt het objectmodel + de regels.
+
 ## Webapp & API
 
 Naast de skill kun je de analyse als zelfstandige dienst draaien:
 
 - **`api/`** — headless FastAPI-backend met dezelfde JAS-werkstroom als async REST-API
-  (`POST /v1/projects` → polling/SSE), PostgreSQL als jobstore, en per-client bearer-auth. Zie
+  (`POST /v1/projects` → polling/SSE), PostgreSQL als jobstore, en per-client bearer-auth. Op een
+  afgeronde analyse start `POST /v1/projects/{id}/regelspraak` de RegelSpraak-formaliseringsfase
+  (eigen artefact via `GET …/regelspraak`, met `.rs`/`.md`-export). Zie
   [`api/README.md`](api/README.md) en [`api/CLAUDE.md`](api/CLAUDE.md).
 - **`frontend/`** — Next.js-webapp (BFF) erbovenop: analyses aanmaken, voortgang volgen, de
-  human-in-the-loop review-lus, het rapport bekijken, en een live **`/dashboard`** dat alle analyses
+  human-in-the-loop review-lus, het rapport bekijken, de **RegelSpraak-fase** starten en het model
+  bekijken/downloaden, en een live **`/dashboard`** dat alle analyses
   tot op functieniveau (de engine-stap binnen een state) toont. Vormgegeven volgens de
   **Rijkshuisstijl** (Belastingdienst-stijlvak). Zie [`frontend/README.md`](frontend/README.md).
 

@@ -219,13 +219,6 @@ def sectie_3(a3: dict) -> list[str]:
             f"- **Invoervariabelen:** {r.get('invoervariabelen', TODO)}",
             f"- **Parameters:** {r.get('parameters', TODO)}",
             f"- **Voorwaarden:** {r.get('voorwaarden', TODO)}",
-            "- **Formulering:**",
-            "  ```",
-        ]
-        for fr in str(r.get("formulering", TODO)).split("\n"):
-            regels.append(f"  {fr}")
-        regels += [
-            "  ```",
             f"- **Vindplaats / bron:** {vindplaats_text(r.get('vindplaatsen'), bron_label) or TODO}",
             f"- **Twijfel/aanname:** {r.get('twijfel', TODO)}",
             "",

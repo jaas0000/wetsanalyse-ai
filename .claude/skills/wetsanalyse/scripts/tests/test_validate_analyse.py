@@ -134,7 +134,7 @@ class ValidateAnalyseTest(unittest.TestCase):
                  "definitie": "drager van rechten", "vindplaatsen": [{"bron_id": "br1", "lid": "1"}]}
             ],
             "afleidingsregels": [
-                {"id": "r1", "naam": "regel", "type": "rekenregel", "formulering": "x is y",
+                {"id": "r1", "naam": "regel", "type": "rekenregel",
                  "vindplaatsen": [{"bron_id": "br1", "lid": "1"}]}
             ],
         }
@@ -146,7 +146,7 @@ class ValidateAnalyseTest(unittest.TestCase):
             "bronnen": [{"bron_id": "br1", "label": "Wet X art. 1"}],
             "begrippen": [],
             "afleidingsregels": [
-                {"id": "r1", "naam": "regel", "type": "onzinregel", "formulering": "ALS x DAN y",
+                {"id": "r1", "naam": "regel", "type": "onzinregel",
                  "vindplaatsen": [{"bron_id": "br1", "lid": "1"}]}
             ],
         }

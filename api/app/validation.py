@@ -15,14 +15,14 @@ import sys
 import unicodedata
 from pathlib import Path
 
-from .config import SKILL_SCRIPTS
+from .config import REGELSPRAAK_SCRIPTS, SKILL_SCRIPTS
 
 
-def _load_skill_module(naam: str):
+def _load_module_from(scripts_dir, naam: str):
     """Laad een skill-script als module (de scripts vormen geen package)."""
-    if str(SKILL_SCRIPTS) not in sys.path:
-        sys.path.insert(0, str(SKILL_SCRIPTS))
-    pad = SKILL_SCRIPTS / f"{naam}.py"
+    if str(scripts_dir) not in sys.path:
+        sys.path.insert(0, str(scripts_dir))
+    pad = scripts_dir / f"{naam}.py"
     spec = importlib.util.spec_from_file_location(naam, pad)
     if spec is None or spec.loader is None:
         raise ImportError(f"Kan skill-script niet laden: {pad}")
@@ -31,9 +31,18 @@ def _load_skill_module(naam: str):
     return mod
 
 
+def _load_skill_module(naam: str):
+    return _load_module_from(SKILL_SCRIPTS, naam)
+
+
 _validate = _load_skill_module("validate_analyse")
 GELDIGE_JAS_KLASSEN: set[str] = _validate.GELDIGE_JAS_KLASSEN  # canonieke bron (drift-fix)
 GELDIGE_REGELTYPEN: set[str] = _validate.GELDIGE_REGELTYPEN
+
+# RegelSpraak-pre-check (gedeeld met de skill): dezelfde mechanische controles als
+# validate_regelspraak.py — geen drift tussen het skill- en het dienst-spoor.
+_validate_rs = _load_module_from(REGELSPRAAK_SCRIPTS, "validate_regelspraak")
+GELDIGE_REGELSOORTEN: set[str] = _validate_rs.GELDIGE_REGELSOORTEN
 
 
 # Concerns die in de API door de harde, genormaliseerde brongetrouwheid_check worden gedekt.
@@ -62,6 +71,38 @@ def schema_check(data: dict, activiteit: str) -> tuple[list[str], list[str]]:
         w for w in waarschuwingen if not any(m in w for m in _OVERLAPT_MET_HARD)
     ]
     return fouten, waarschuwingen
+
+
+def regelspraak_schema_check(data: dict, stap: str) -> tuple[list[str], list[str]]:
+    """Zachte pre-check voor de RegelSpraak-fase — delegeert naar de skill-functies.
+
+    stap ∈ {'rs-gegevens', 'rs-regels'}. Net als bij act-2/3 blokkeren fouten hier niet hard;
+    ze gaan als waarschuwing mee naar het checkpoint (review:true) of worden gelogd (review:false).
+    De harde invariant (herkomst aanwezig) zit in regelspraak_brongetrouwheid_check.
+    """
+    if stap == "rs-gegevens":
+        return _validate_rs.check_gegevensspraak(data)
+    return _validate_rs.check_regels(data)
+
+
+def regelspraak_brongetrouwheid_check(data: dict, stap: str) -> list[str]:
+    """Harde controle die altijd geldt: elke declaratie/regel draagt een herkomst naar de
+    wetsanalyse (begrip/regel + vindplaats). Zonder herkomst is de formalisering niet herleidbaar
+    naar de wet → schending (job → fout, ook in review:false)."""
+    schendingen: list[str] = []
+    if stap == "rs-gegevens":
+        gs = data.get("gegevensspraak") or {}
+        items = [
+            (o.get("id") or o.get("naam") or "?", o)
+            for groep in ("objecttypen", "feittypen", "parameters")
+            for o in (gs.get(groep) or [])
+        ]
+    else:
+        items = [(r.get("id") or r.get("naam") or "?", r) for r in (data.get("regels") or [])]
+    for iid, item in items:
+        if not _validate_rs.heeft_herkomst(item):
+            schendingen.append(f"[{iid}] Herkomst ontbreekt (herleidbaarheid naar de wet verplicht).")
+    return schendingen
 
 
 # --- harde brongetrouwheid-invariant -----------------------------------------

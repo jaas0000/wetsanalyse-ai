@@ -74,6 +74,11 @@ Een afleidingsregel legt een in de wet besloten regel expliciet vast: een bereke
 beslissing of een specialisatie, met de bijbehorende voorwaarden. Gebruik de begrippen uit
 3a in samenhang.
 
+Je **annoteert** de regel hier — wát hij afleidt (uitvoervariabele), waaruit (invoervariabelen
+en parameters) en onder welke voorwaarden — maar je formuleert de regel niet uit in een
+(pseudo)regeltaal. Die uitvoerbare formulering is de taak van de vervolgstap `regelspraak`
+(GegevensSpraak + RegelSpraak); zo blijft er één bron van waarheid voor de regel zelf.
+
 Bepaal eerst het **type**:
 
 - **Beslisregel** — leidt een ja/nee of waar/onwaar af (bv. "bestaat er recht op X?").
@@ -91,21 +96,6 @@ Leg per regel vast:
   parameterwaarde en geldigheidsperiode. Houd parameters strikt gescheiden van variabelen.
 - **Voorwaarden** — de condities waaronder de regel geldt of een bepaalde uitkomst geeft,
   met de operatoren expliciet (cumulatief = EN, alternatief = OF, negatie = NIET).
-- **Formulering** — een gestructureerde, leesbare weergave (pseudo) waarin operanden en
-  operatoren expliciet zijn. Bijvoorbeeld:
-
-  ```
-  recht_op_zorgtoeslag (beslisregel) :=
-      is_verzekerde = ja
-      EN leeftijd >= 18
-      EN toetsingsinkomen <= drempel_inkomen[jaar]
-  ```
-
-  ```
-  hoogte_zorgtoeslag (rekenregel) :=
-      normpremie - eigen_bijdrage(toetsingsinkomen, standaardpremie[jaar])
-  ```
-
 - **Vindplaatsen** — de bron(nen) + lid waarop de regel berust, als lijst `[{bron_id, lid}, …]`.
 - **Interpretatie/twijfel** — aannames, open normen of delegaties die de regel onvolledig
   maken (bv. een drempelbedrag dat bij ministeriële regeling wordt vastgesteld → noteer dat

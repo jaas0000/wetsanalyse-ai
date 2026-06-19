@@ -234,7 +234,6 @@ export function RapportView({ rapport, projectId }: { rapport: Rapport; projectI
                 </div>
                 <div className="mt-1 space-y-1">
                   <Veld label="Voorwaarden" waarde={r.voorwaarden} />
-                  <Veld label="Formulering" waarde={r.formulering} />
                 </div>
                 <Twijfel tekst={r.twijfel} />
               </Card>

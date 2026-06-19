@@ -1,4 +1,4 @@
-import type { JobState } from "./types";
+import type { Activiteit, JobState } from "./types";
 
 export const STATE_LABEL: Record<JobState, string> = {
   queued: "In wachtrij",
@@ -9,6 +9,12 @@ export const STATE_LABEL: Record<JobState, string> = {
   bouwt: "Rapport samenstellen",
   klaar: "Klaar",
   fout: "Fout",
+  "rs-gegevens-runt": "RegelSpraak — GegevensSpraak",
+  "wacht-op-review-rs-gegevens": "Wacht op review (GegevensSpraak)",
+  "rs-regels-runt": "RegelSpraak — regels",
+  "wacht-op-review-rs-regels": "Wacht op review (regels)",
+  "rs-bouwt": "RegelSpraak-model samenstellen",
+  "rs-klaar": "RegelSpraak klaar",
 };
 
 // Badge-stijl per state (Tailwind), afgestemd op de Rijkshuisstijl: lopend = lintblauw,
@@ -22,11 +28,23 @@ export const STATE_STYLE: Record<JobState, string> = {
   bouwt: "bg-[#ece9f2] text-[#473a5e] border-[#d2c8dd]",
   klaar: "bg-[#e6f0e0] text-[#2c6608] border-[#bcd9a8]",
   fout: "bg-[#fbe7e5] text-[#b01b10] border-[#f0bcb6]",
+  "rs-gegevens-runt": "bg-[#e7eef5] text-[#154273] border-[#bcd2e6]",
+  "wacht-op-review-rs-gegevens": "bg-[#fbefe2] text-[#8e4600] border-[#e7c9a8]",
+  "rs-regels-runt": "bg-[#e7eef5] text-[#154273] border-[#bcd2e6]",
+  "wacht-op-review-rs-regels": "bg-[#fbefe2] text-[#8e4600] border-[#e7c9a8]",
+  "rs-bouwt": "bg-[#ece9f2] text-[#473a5e] border-[#d2c8dd]",
+  "rs-klaar": "bg-[#e6f0e0] text-[#2c6608] border-[#bcd9a8]",
 };
 
-export const RUNNING_STATES: JobState[] = ["queued", "act2-runt", "act3-runt", "bouwt"];
-export const REVIEW_STATES: JobState[] = ["wacht-op-review-act2", "wacht-op-review-act3"];
-export const TERMINAL_STATES: JobState[] = ["klaar", "fout"];
+export const RUNNING_STATES: JobState[] = [
+  "queued", "act2-runt", "act3-runt", "bouwt",
+  "rs-gegevens-runt", "rs-regels-runt", "rs-bouwt",
+];
+export const REVIEW_STATES: JobState[] = [
+  "wacht-op-review-act2", "wacht-op-review-act3",
+  "wacht-op-review-rs-gegevens", "wacht-op-review-rs-regels",
+];
+export const TERMINAL_STATES: JobState[] = ["klaar", "fout", "rs-klaar"];
 
 export function isReview(state: JobState): boolean {
   return REVIEW_STATES.includes(state);
@@ -44,13 +62,15 @@ export type StatusBucket = "lopend" | "review" | "klaar" | "fout";
 export function statusBucket(state: JobState, error?: unknown): StatusBucket {
   if (state === "fout" || error) return "fout";
   if (isReview(state)) return "review";
-  if (state === "klaar") return "klaar";
+  if (state === "klaar" || state === "rs-klaar") return "klaar";
   return "lopend";
 }
 
 /** Welke activiteit hoort bij een review-state? */
-export function reviewActiviteit(state: JobState): "2" | "3" | null {
+export function reviewActiviteit(state: JobState): Activiteit | null {
   if (state === "wacht-op-review-act2") return "2";
   if (state === "wacht-op-review-act3") return "3";
+  if (state === "wacht-op-review-rs-gegevens") return "rs-gegevens";
+  if (state === "wacht-op-review-rs-regels") return "rs-regels";
   return null;
 }

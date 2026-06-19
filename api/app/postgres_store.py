@@ -33,7 +33,7 @@ from .project import Project, RondeData
 _STATE_FIELDS = (
     "state", "current_activiteit", "current_ronde", "waarschuwingen",
     "error", "provenance", "bronnen", "review",
-    "model_profile", "analysefocus", "client_id",
+    "model_profile", "analysefocus", "client_id", "regelspraak_review",
 )
 
 
@@ -78,6 +78,8 @@ def _row_to_project(row) -> Project:
         created=db.aware(m["created"]),
         updated=db.aware(m["updated"]),
         rapport=m["rapport"],
+        regelspraak=m.get("regelspraak"),
+        regelspraak_review=m.get("regelspraak_review"),
     )
 
 
@@ -407,6 +409,23 @@ class PostgresStore:
         async with db.get_engine().connect() as conn:
             res = await conn.execute(
                 select(db.projects.c.rapport).where(db.projects.c.slug == job_id)
+            )
+        row = res.first()
+        return row[0] if row is not None else None
+
+    # --- regelspraak-model (JSON-kolom op het project) ---
+
+    async def schrijf_regelspraak(self, job_id: str, model: dict) -> None:
+        async with db.get_engine().begin() as conn:
+            await conn.execute(
+                update(db.projects).where(db.projects.c.slug == job_id)
+                .values(regelspraak=model, updated=db.utcnow())
+            )
+
+    async def lees_regelspraak(self, job_id: str) -> dict | None:
+        async with db.get_engine().connect() as conn:
+            res = await conn.execute(
+                select(db.projects.c.regelspraak).where(db.projects.c.slug == job_id)
             )
         row = res.first()
         return row[0] if row is not None else None

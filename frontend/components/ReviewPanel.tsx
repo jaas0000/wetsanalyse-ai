@@ -9,7 +9,9 @@ import { Textarea } from "@/components/ui/Field";
 import { LedenLijst } from "@/components/LedenLijst";
 import { getRonde, sendFeedback, isApiError } from "@/lib/api";
 import { bronLabelMap, vindplaatsText } from "@/lib/bronnen";
-import type { Analyse2, Analyse3, Bron, Feedback, Job, Lid } from "@/lib/types";
+import type {
+  Activiteit, Analyse2, Analyse3, Bron, Feedback, GegevensSpraak, Job, Lid, RsRegel,
+} from "@/lib/types";
 
 /** Alle leden van alle bronnen samen, als wettekst-context voor de review. */
 function ledenUitBronnen(bronnen: Bron[] | undefined): Lid[] {
@@ -38,7 +40,58 @@ function splitsWaarschuwingen(ws: string[]): { perId: Record<string, string[]>; 
   return { perId, algemeen };
 }
 
-function itemsUitAnalyse(act: "2" | "3", data: Analyse2 | Analyse3): ReviewItem[] {
+/** ReviewItems voor de RegelSpraak-stappen (GegevensSpraak / regels). */
+function itemsUitRegelspraak(act: "rs-gegevens" | "rs-regels", data: unknown): ReviewItem[] {
+  if (act === "rs-gegevens") {
+    const gs = ((data as { gegevensspraak?: GegevensSpraak })?.gegevensspraak ?? {}) as GegevensSpraak;
+    const out: ReviewItem[] = [];
+    for (const o of gs.objecttypen ?? []) {
+      out.push({
+        id: o.id, titel: o.naam || o.id, klasse: "objecttype", soort: "gegeven",
+        regels: [
+          { label: "Attributen", waarde: (o.attributen ?? []).map((a) => a.naam).join(", ") },
+          { label: "Kenmerken", waarde: (o.kenmerken ?? []).map((k) => k.naam).join(", ") },
+          { label: "RegelSpraak", waarde: o.regelspraak_tekst },
+        ],
+        twijfel: o.twijfel,
+      });
+    }
+    for (const f of gs.feittypen ?? []) {
+      out.push({
+        id: f.id, titel: f.naam || f.id, klasse: "feittype", soort: "gegeven",
+        regels: [
+          { label: "Rollen", waarde: (f.rollen ?? []).map((r) => r.naam).join(", ") },
+          { label: "RegelSpraak", waarde: f.regelspraak_tekst },
+        ],
+      });
+    }
+    for (const p of gs.parameters ?? []) {
+      out.push({
+        id: p.id, titel: p.naam || p.id, klasse: "parameter", soort: "gegeven",
+        regels: [
+          { label: "Datatype", waarde: p.datatype },
+          { label: "RegelSpraak", waarde: p.regelspraak_tekst },
+        ],
+      });
+    }
+    return out;
+  }
+  const regels = ((data as { regels?: RsRegel[] })?.regels ?? []) as RsRegel[];
+  return regels.map((r) => ({
+    id: r.id, titel: r.naam || r.id, klasse: r.soort, soort: "regel",
+    regels: [{ label: "RegelSpraak", waarde: r.regelspraak_tekst }],
+    twijfel: r.twijfel,
+  }));
+}
+
+function itemsUitAnalyse(act: Activiteit, data: unknown): ReviewItem[] {
+  if (act === "rs-gegevens" || act === "rs-regels") {
+    return itemsUitRegelspraak(act, data);
+  }
+  return items2of3(act, data as Analyse2 | Analyse3);
+}
+
+function items2of3(act: "2" | "3", data: Analyse2 | Analyse3): ReviewItem[] {
   if (act === "2") {
     const a = data as Analyse2;
     const labels = bronLabelMap(a.bronnen);
@@ -97,7 +150,6 @@ function itemsUitAnalyse(act: "2" | "3", data: Analyse2 | Analyse3): ReviewItem[
       { label: "Uitvoer", waarde: r.uitvoervariabele },
       { label: "Invoer", waarde: r.invoervariabelen },
       { label: "Voorwaarden", waarde: r.voorwaarden },
-      { label: "Formulering", waarde: r.formulering },
       { label: "Vindplaats", waarde: vindplaatsText(r.vindplaatsen, labels) },
     ],
     twijfel: r.twijfel,
@@ -113,7 +165,7 @@ export function ReviewPanel({
   verwijderBezig,
 }: {
   job: Job;
-  activiteit: "2" | "3";
+  activiteit: Activiteit;
   onSubmitted: () => void | Promise<void>;
   /** Gooi de hele analyse weg (incl. bevestiging) — afgehandeld door de ouder. */
   onDelete?: () => void | Promise<void>;
@@ -139,9 +191,9 @@ export function ReviewPanel({
         const d = await getRonde(job.id, activiteit, ronde);
         if (!actief) return;
         setItems(itemsUitAnalyse(activiteit, d));
-        // Wettekst als context. Bij activiteit 2 zit 'leden' in de ronde zelf; bij activiteit 3
-        // niet, maar de brongetrouwe wettekst is in elke activiteit-2-ronde identiek → haal 'm
-        // best-effort uit ronde 1 van activiteit 2 (mislukt dat, dan tonen we simpelweg geen tekst).
+        // Wettekst als context. Bij activiteit 2 zit 'leden' in de ronde zelf; bij de andere
+        // stappen (act 3, regelspraak) niet, maar de brongetrouwe wettekst is in elke
+        // activiteit-2-ronde identiek → haal 'm best-effort uit ronde 1 van activiteit 2.
         if (activiteit === "2") {
           setLeden(ledenUitBronnen((d as Analyse2).bronnen));
         } else {
@@ -192,7 +244,11 @@ export function ReviewPanel({
   const titel =
     activiteit === "2"
       ? "Review activiteit 2 — markeringen & classificaties"
-      : "Review activiteit 3 — begrippen & afleidingsregels";
+      : activiteit === "3"
+        ? "Review activiteit 3 — begrippen & afleidingsregels"
+        : activiteit === "rs-gegevens"
+          ? "Review RegelSpraak — GegevensSpraak (objectmodel)"
+          : "Review RegelSpraak — regels";
 
   return (
     <Card className="p-6">

@@ -26,8 +26,8 @@ from fastapi.responses import PlainTextResponse, StreamingResponse
 
 from ..auth import require_client
 from ..contracts import (
-    CreateAccepted, Feedback, FeedbackAccepted, Job, JobState, JobSummary,
-    Rapport, REVIEW_STATES, TERMINAL_STATES, StartRequest,
+    ACTIVITEIT_CODES, CreateAccepted, Feedback, FeedbackAccepted, Job, JobState, JobSummary,
+    Rapport, RegelspraakModel, RegelspraakStart, REVIEW_STATES, TERMINAL_STATES, StartRequest,
 )
 from ..deps import get_engine, get_store, schedule
 from ..jobstore import IdConflict, JobStore
@@ -190,7 +190,12 @@ async def geef_feedback(project_id: str, feedback: Feedback, client_id: str = De
     job = p.to_job()
     if job.state not in REVIEW_STATES:
         raise HTTPException(status_code=409, detail=f"Feedback alleen in review-state; nu: {job.state}")
-    verwacht = "2" if job.state == JobState.wacht_review_act2 else "3"
+    verwacht = {
+        JobState.wacht_review_act2: "2",
+        JobState.wacht_review_act3: "3",
+        JobState.wacht_review_rs_gegevens: "rs-gegevens",
+        JobState.wacht_review_rs_regels: "rs-regels",
+    }[job.state]
     if feedback.activiteit != verwacht:
         raise HTTPException(status_code=400, detail=f"Feedback voor activiteit {verwacht} verwacht")
     schedule(get_engine().apply_feedback(project_id, feedback))
@@ -233,14 +238,68 @@ async def project_rapport_md(project_id: str, client_id: str = Depends(require_c
 async def project_ronde(
     project_id: str, activiteit: str, ronde: int, client_id: str = Depends(require_client)
 ):
-    if activiteit not in ("2", "3"):
-        raise HTTPException(status_code=400, detail="activiteit moet 2 of 3 zijn")
+    if activiteit not in ACTIVITEIT_CODES:
+        raise HTTPException(
+            status_code=400, detail=f"activiteit moet een van {ACTIVITEIT_CODES} zijn"
+        )
     store = get_store()
     await _project_or_404(store, project_id, client_id)
     data = await store.lees_analyse(project_id, activiteit, ronde)
     if data is None:
         raise HTTPException(status_code=404, detail="Geen analyse voor deze ronde")
     return data
+
+
+# --- RegelSpraak-vervolgfase (on-demand op een afgeronde analyse) -------------
+
+@router.post("/{project_id}/regelspraak", status_code=status.HTTP_202_ACCEPTED,
+             response_model=CreateAccepted)
+async def start_regelspraak(
+    project_id: str, body: RegelspraakStart | None = None,
+    client_id: str = Depends(rate_limited_client),
+):
+    store = get_store()
+    p = await _project_or_404(store, project_id, client_id)
+    if p.state != JobState.klaar:
+        raise HTTPException(
+            status_code=409,
+            detail=f"RegelSpraak start alleen vanuit een afgeronde analyse (klaar); nu: {p.state}",
+        )
+    review = body.review if body is not None else None
+    schedule(get_engine().run_regelspraak(project_id, review))
+    return CreateAccepted(id=project_id, naam=p.naam, state=JobState.rs_gegevens_runt)
+
+
+@router.get("/{project_id}/regelspraak", response_model=RegelspraakModel)
+async def project_regelspraak(project_id: str, client_id: str = Depends(require_client)):
+    store = get_store()
+    await _project_or_404(store, project_id, client_id)
+    data = await store.lees_regelspraak(project_id)
+    if data is None:
+        raise HTTPException(status_code=409, detail="RegelSpraak-model nog niet gereed")
+    return data
+
+
+@router.get("/{project_id}/regelspraak.rs", response_class=PlainTextResponse)
+async def project_regelspraak_rs(project_id: str, client_id: str = Depends(require_client)):
+    store = get_store()
+    await _project_or_404(store, project_id, client_id)
+    data = await store.lees_regelspraak(project_id)
+    if data is None:
+        raise HTTPException(status_code=409, detail="RegelSpraak-model nog niet gereed")
+    from ..engine.render_regelspraak import render_rs
+    return render_rs(data)
+
+
+@router.get("/{project_id}/regelspraak.md", response_class=PlainTextResponse)
+async def project_regelspraak_md(project_id: str, client_id: str = Depends(require_client)):
+    store = get_store()
+    await _project_or_404(store, project_id, client_id)
+    data = await store.lees_regelspraak(project_id)
+    if data is None:
+        raise HTTPException(status_code=409, detail="RegelSpraak-model nog niet gereed")
+    from ..engine.render_regelspraak import render_md
+    return render_md(data)
 
 
 @router.get("/{project_id}/events")

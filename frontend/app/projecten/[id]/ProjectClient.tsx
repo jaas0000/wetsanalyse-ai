@@ -10,10 +10,13 @@ import { Melding } from "@/components/ui/Melding";
 import { StatusTimeline } from "@/components/StatusTimeline";
 import { ReviewPanel } from "@/components/ReviewPanel";
 import { RapportView } from "@/components/RapportView";
-import { getProject, getRapport, retryProject, deleteProject, isApiError } from "@/lib/api";
+import { RegelspraakView } from "@/components/RegelspraakView";
+import {
+  getProject, getRapport, getRegelspraak, startRegelspraak, retryProject, deleteProject, isApiError,
+} from "@/lib/api";
 import { isReview, isTerminal, reviewActiviteit } from "@/lib/states";
 import { pathSegment } from "@/lib/url";
-import type { Job, Rapport } from "@/lib/types";
+import type { Job, Rapport, RegelspraakModel } from "@/lib/types";
 import { useRouter } from "next/navigation";
 
 /** Korte uitleg in mensentaal bij een foutklasse, zodat de pagina niet alleen een kale code toont. */
@@ -40,8 +43,16 @@ export function ProjectClient({ initieel }: { initieel: Job }) {
   const [rapport, setRapport] = useState<Rapport | null>(null);
   const [rapportFout, setRapportFout] = useState<string | null>(null);
   const [rapportBezig, setRapportBezig] = useState(false);
+  const [regelspraak, setRegelspraak] = useState<RegelspraakModel | null>(null);
+  const [regelspraakFout, setRegelspraakFout] = useState<string | null>(null);
+  const [regelspraakBezig, setRegelspraakBezig] = useState(false);
   const [actie, setActie] = useState<string | null>(null);
+  // Wordt opgehoogd bij het starten van de regelspraak-fase, zodat de SSE-stream heropent vanuit
+  // een (terminale) `klaar`-state.
+  const [streamGen, setStreamGen] = useState(0);
   const esRef = useRef<EventSource | null>(null);
+
+  const isKlaarachtig = job.state === "klaar" || job.state === "rs-klaar";
 
   const refreshJob = useCallback(async () => {
     try {
@@ -66,8 +77,9 @@ export function ProjectClient({ initieel }: { initieel: Job }) {
     // job.state-check: die zou de stale waarde uit deze closure lezen.
     return () => es.close();
     // We heropenen bewust niet bij elke state-wijziging: één stream volstaat tot terminaal.
+    // streamGen forceert wél een heropening (bv. bij het starten van de regelspraak-fase vanuit klaar).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initieel.id]);
+  }, [initieel.id, streamGen]);
 
   // Sluit de stream zodra we terminaal zijn.
   useEffect(() => {
@@ -90,11 +102,42 @@ export function ProjectClient({ initieel }: { initieel: Job }) {
 
   useEffect(() => {
     // Guards op fout/bezig voorkomen een herhaal-loop: na een fout blijft het bij die ene poging
-    // tot de gebruiker op "Opnieuw proberen" klikt.
-    if (job.state === "klaar" && !rapport && !rapportFout && !rapportBezig) {
+    // tot de gebruiker op "Opnieuw proberen" klikt. Het rapport blijft beschikbaar ná de
+    // regelspraak-fase (rs-klaar), dus ook dan laden.
+    if (isKlaarachtig && !rapport && !rapportFout && !rapportBezig) {
       void laadRapport();
     }
-  }, [job.state, rapport, rapportFout, rapportBezig, laadRapport]);
+  }, [isKlaarachtig, rapport, rapportFout, rapportBezig, laadRapport]);
+
+  const laadRegelspraak = useCallback(async () => {
+    setRegelspraakBezig(true);
+    setRegelspraakFout(null);
+    try {
+      setRegelspraak(await getRegelspraak(initieel.id));
+    } catch (e) {
+      setRegelspraakFout(isApiError(e) ? e.detail : (e as Error).message);
+    } finally {
+      setRegelspraakBezig(false);
+    }
+  }, [initieel.id]);
+
+  useEffect(() => {
+    if (job.state === "rs-klaar" && !regelspraak && !regelspraakFout && !regelspraakBezig) {
+      void laadRegelspraak();
+    }
+  }, [job.state, regelspraak, regelspraakFout, regelspraakBezig, laadRegelspraak]);
+
+  async function onStartRegelspraak() {
+    setActie("regelspraak");
+    try {
+      await startRegelspraak(initieel.id, {});
+      setStreamGen((n) => n + 1); // heropen de SSE-stream vanuit de terminale klaar-state
+      await refreshJob();
+    } catch (e) {
+      alert(isApiError(e) ? e.detail : (e as Error).message);
+    }
+    setActie(null);
+  }
 
   async function onRetry() {
     setActie("retry");
@@ -209,25 +252,7 @@ export function ProjectClient({ initieel }: { initieel: Job }) {
       )}
 
       {/* Hoofdinhoud per fase */}
-      {job.state === "klaar" ? (
-        rapport ? (
-          <RapportView rapport={rapport} projectId={job.id} />
-        ) : rapportFout ? (
-          <Melding type="fout" titel="Rapport kon niet worden geladen">
-            <p className="mt-1 text-sm">{rapportFout}</p>
-            <p className="mt-2 text-sm text-muted">
-              De analyse is klaar; alleen het ophalen van het rapport mislukte (vaak tijdelijk).
-            </p>
-            <div className="mt-3">
-              <Button variant="secondary" onClick={() => void laadRapport()} disabled={rapportBezig}>
-                {rapportBezig ? "Bezig…" : "Opnieuw proberen"}
-              </Button>
-            </div>
-          </Melding>
-        ) : (
-          <Card className="p-6 text-sm text-muted">Rapport laden…</Card>
-        )
-      ) : reviewAct ? (
+      {reviewAct ? (
         <ReviewPanel
           job={job}
           activiteit={reviewAct}
@@ -235,6 +260,58 @@ export function ProjectClient({ initieel }: { initieel: Job }) {
           onDelete={onDelete}
           verwijderBezig={actie === "delete"}
         />
+      ) : isKlaarachtig ? (
+        <div className="space-y-6">
+          {rapport ? (
+            <RapportView rapport={rapport} projectId={job.id} />
+          ) : rapportFout ? (
+            <Melding type="fout" titel="Rapport kon niet worden geladen">
+              <p className="mt-1 text-sm">{rapportFout}</p>
+              <p className="mt-2 text-sm text-muted">
+                De analyse is klaar; alleen het ophalen van het rapport mislukte (vaak tijdelijk).
+              </p>
+              <div className="mt-3">
+                <Button variant="secondary" onClick={() => void laadRapport()} disabled={rapportBezig}>
+                  {rapportBezig ? "Bezig…" : "Opnieuw proberen"}
+                </Button>
+              </div>
+            </Melding>
+          ) : (
+            <Card className="p-6 text-sm text-muted">Rapport laden…</Card>
+          )}
+
+          {job.state === "klaar" && (
+            <Card className="p-6">
+              <h2 className="font-display text-lg font-semibold text-lint">Formaliseren naar RegelSpraak</h2>
+              <p className="mt-1 max-w-prose text-sm text-muted">
+                Zet de begrippen en afleidingsregels van deze analyse om naar een uitvoerbare
+                specificatie in RegelSpraak/GegevensSpraak. De fase kent twee review-checkpoints
+                (objectmodel en regels), tenzij deze analyse volautomatisch draait.
+              </p>
+              <div className="mt-4">
+                <Button variant="primary" onClick={onStartRegelspraak} disabled={actie !== null}>
+                  {actie === "regelspraak" ? "Starten…" : "Naar RegelSpraak"}
+                </Button>
+              </div>
+            </Card>
+          )}
+
+          {job.state === "rs-klaar" &&
+            (regelspraak ? (
+              <RegelspraakView model={regelspraak} projectId={job.id} />
+            ) : regelspraakFout ? (
+              <Melding type="fout" titel="RegelSpraak-model kon niet worden geladen">
+                <p className="mt-1 text-sm">{regelspraakFout}</p>
+                <div className="mt-3">
+                  <Button variant="secondary" onClick={() => void laadRegelspraak()} disabled={regelspraakBezig}>
+                    {regelspraakBezig ? "Bezig…" : "Opnieuw proberen"}
+                  </Button>
+                </div>
+              </Melding>
+            ) : (
+              <Card className="p-6 text-sm text-muted">RegelSpraak-model laden…</Card>
+            ))}
+        </div>
       ) : job.state !== "fout" ? (
         <Card className="p-6">
           <p className="mb-4 text-sm text-muted">
