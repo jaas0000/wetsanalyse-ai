@@ -40,6 +40,9 @@ RUN apt-get update \
     && apt-get upgrade -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
+# CVE-2026-53655: tar@7.5.15 gebundeld door npm zelf; upgrade npm zodat tar@>=7.5.16 meegaat.
+RUN npm install -g npm@11.17.0 && npm cache clean --force
+
 # Alleen productie-dependencies in de runtime-image.
 COPY package*.json ./
 RUN npm ci --omit=dev && npm cache clean --force
