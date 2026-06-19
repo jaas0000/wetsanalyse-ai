@@ -34,8 +34,11 @@ WORKDIR /app/api
 COPY --from=builder /app/api/.venv /app/api/.venv
 
 # Applicatiecode + de gedeelde skill-kennis (references/scripts). analyses/ is een volume.
+# De API leest bij import zowel de wetsanalyse- als de regelspraak-skill (config.REGELSPRAAK_SCRIPTS
+# /_REFERENCES; validation.py laadt validate_regelspraak op import-tijd) — beide moeten mee.
 COPY api /app/api
 COPY .claude/skills/wetsanalyse /app/.claude/skills/wetsanalyse
+COPY .claude/skills/regelspraak /app/.claude/skills/regelspraak
 
 # Build-herkomst, door CI meegegeven → leesbaar voor de service op /health (deploy-pariteit).
 ARG GIT_SHA=""
