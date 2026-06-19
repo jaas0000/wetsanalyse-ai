@@ -5,19 +5,43 @@
       "id": 1,
       "prompt": "Hierbij de wetsanalyse van het werkgebied 'Leeftijdskorting reisbelasting' (rapport.json zit erbij). Zet deze om naar RegelSpraak: maak de GegevensSpraak (objectmodel) en de RegelSpraak-regels. Draai zonder de review-server (REGELSPRAAK_NO_REVIEW=1) en schrijf het resultaat weg als model.json plus de RegelSpraak-tekst.",
       "expected_output": "Een model.json met GegevensSpraak (een objecttype 'Reiziger' met attributen leeftijd + te betalen reisbelasting, een kenmerk 'minderjarig', en parameters basistarief + leeftijdskorting) en RegelSpraak-regels: een kenmerktoekenning 'is minderjarig indien zijn leeftijd kleiner is dan 18 jr' en een gelijkstelling-berekening voor de te betalen reisbelasting met 'min'/'verminderd met' en een begrenzing 'met een minimum van 0'. Alles met herkomst naar de begrippen/afleidingsregels en alleen echte RegelSpraak v2.3.0-taalpatronen.",
-      "files": ["files/rapport-leeftijdskorting.json"]
+      "files": [
+        "files/rapport-leeftijdskorting.json"
+      ],
+      "assertions": [
+        "Levert een objectmodel + minstens één regel op",
+        "Gebruikt uitsluitend echte RegelSpraak v2.3.0-syntax (geen verzonnen operatoren/terminators)",
+        "Het model.json doorstaat de mechanische validator (exit 0)",
+        "Objecttype 'Reiziger' met juiste Objecttype-syntax",
+        "Kenmerktoekenning 'is minderjarig'",
+        "Nihil-ondergrens als begrenzing 'met een minimum van'"
+      ]
     },
     {
       "id": 2,
       "prompt": "Ik heb geen wetsanalyse, maar wil RegelSpraak maken bij artikel 8 van de Algemene Ouderdomswet (AOW) — de ingangsdatum/pensioengerechtigde leeftijd. Haal de wettekst zelf op en maak een GegevensSpraak-objectmodel plus minstens één RegelSpraak-regel, brongetrouw.",
       "expected_output": "De skill haalt de actuele tekst van AOW artikel 8 op via de wettenbank-MCP, bouwt een licht objectmodel (objecttype voor de verzekerde/pensioengerechtigde + relevante attributen, eventueel een parameter voor de pensioenleeftijd) en minstens één RegelSpraak-regel, met herkomst naar artikel + lid. Adviseert eventueel eerst de wetsanalyse-skill. Gebruikt alleen echte RegelSpraak-taalpatronen.",
-      "files": []
+      "files": [],
+      "assertions": [
+        "Levert een objectmodel + minstens één regel op",
+        "Gebruikt uitsluitend echte RegelSpraak v2.3.0-syntax (geen verzonnen operatoren/terminators)",
+        "Het model.json doorstaat de mechanische validator (exit 0)",
+        "Haalt echte AOW art. 8-strekking op (toeslag/echtgenoot)",
+        "Levert objecttype + minstens één Regel"
+      ]
     },
     {
       "id": 3,
       "prompt": "Maak een RegelSpraak-rekenregel voor deze bepaling: 'De te betalen heffing bedraagt het tarief vermenigvuldigd met de grondslag, verminderd met de heffingskorting, en bedraagt ten minste nihil.' Geef ook de bijbehorende GegevensSpraak-declaraties.",
       "expected_output": "Een objecttype met attributen (grondslag, te betalen heffing) en parameters (tarief, heffingskorting), plus een gelijkstelling-berekening die 'maal' gebruikt voor de vermenigvuldiging, 'min' of 'verminderd met' voor de korting, en 'met een minimum van 0' voor de ondergrens. Geen verzonnen operatoren als 'som van' of 'vermeerderd met'.",
-      "files": []
+      "files": [],
+      "assertions": [
+        "Levert een objectmodel + minstens één regel op",
+        "Gebruikt uitsluitend echte RegelSpraak v2.3.0-syntax (geen verzonnen operatoren/terminators)",
+        "Het model.json doorstaat de mechanische validator (exit 0)",
+        "Vermenigvuldigen vertaald naar 'maal'",
+        "Nihil-ondergrens als 'met een minimum van'"
+      ]
     }
   ]
 }
