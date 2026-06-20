@@ -73,22 +73,45 @@ def schema_check(data: dict, activiteit: str) -> tuple[list[str], list[str]]:
     return fouten, waarschuwingen
 
 
-def regelspraak_schema_check(data: dict, stap: str) -> tuple[list[str], list[str]]:
+def _rs_stap_naar_skill(stap: str) -> str:
+    """De API-stapnamen (rs-gegevens/rs-regels) → de skill-CLI-namen waarop check_ingest brancht."""
+    return "gegevensspraak" if stap == "rs-gegevens" else "regels"
+
+
+def regelspraak_schema_check(
+    data: dict, stap: str, ingest: dict | None = None
+) -> tuple[list[str], list[str]]:
     """Zachte pre-check voor de RegelSpraak-fase — delegeert naar de skill-functies.
 
     stap ∈ {'rs-gegevens', 'rs-regels'}. Net als bij act-2/3 blokkeren fouten hier niet hard;
     ze gaan als waarschuwing mee naar het checkpoint (review:true) of worden gelogd (review:false).
-    De harde invariant (herkomst aanwezig) zit in regelspraak_brongetrouwheid_check.
+    De harde invariant (herkomst aanwezig + geldig) zit in regelspraak_brongetrouwheid_check.
+
+    Is `ingest` meegegeven (de wetsanalyse als startbasis, zie orchestrator._rs_gegevens_context),
+    dan komt daar de **dekkingscheck** bij: een ingest-begrip/-afleidingsregel dat door geen enkele
+    declaratie/regel wordt geraakt → waarschuwing (gedekt, of bewust buiten scope).
     """
     if stap == "rs-gegevens":
-        return _validate_rs.check_gegevensspraak(data)
-    return _validate_rs.check_regels(data)
+        fouten, waarschuwingen = _validate_rs.check_gegevensspraak(data)
+    else:
+        fouten, waarschuwingen = _validate_rs.check_regels(data)
+    if ingest:
+        _, dekking = _validate_rs.check_ingest(data, _rs_stap_naar_skill(stap), ingest)
+        waarschuwingen = waarschuwingen + dekking
+    return fouten, waarschuwingen
 
 
-def regelspraak_brongetrouwheid_check(data: dict, stap: str) -> list[str]:
+def regelspraak_brongetrouwheid_check(
+    data: dict, stap: str, ingest: dict | None = None
+) -> list[str]:
     """Harde controle die altijd geldt: elke declaratie/regel draagt een herkomst naar de
     wetsanalyse (begrip/regel + vindplaats). Zonder herkomst is de formalisering niet herleidbaar
-    naar de wet → schending (job → fout, ook in review:false)."""
+    naar de wet → schending (job → fout, ook in review:false).
+
+    Is `ingest` meegegeven, dan toetst de check óók de **integriteit** van die herkomst: een
+    `begrip_id`/`regel_id`/`bron_id` dat niet in de wetsanalyse bestaat (dangling) is net zo'n
+    harde schending — anders is de herleidbaarheid alleen schijn.
+    """
     schendingen: list[str] = []
     if stap == "rs-gegevens":
         gs = data.get("gegevensspraak") or {}
@@ -102,6 +125,9 @@ def regelspraak_brongetrouwheid_check(data: dict, stap: str) -> list[str]:
     for iid, item in items:
         if not _validate_rs.heeft_herkomst(item):
             schendingen.append(f"[{iid}] Herkomst ontbreekt (herleidbaarheid naar de wet verplicht).")
+    if ingest:
+        dangling, _ = _validate_rs.check_ingest(data, _rs_stap_naar_skill(stap), ingest)
+        schendingen.extend(dangling)
     return schendingen
 
 
