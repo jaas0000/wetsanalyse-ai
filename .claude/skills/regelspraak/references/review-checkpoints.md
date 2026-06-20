@@ -173,8 +173,18 @@ Akkoord, en laat het me weten als je klaar bent"). Ga niet zelf door tot de anal
 ## De iteratieve lus
 
 1. **Schrijf** `ronde-{N}/model.json` en draai de pre-check
-   (`validate_regelspraak.py --stap <stap>`). Start de server (ronde 1 zonder `--vorige`, ronde 2+ met
-   `--vorige ronde-{N-1}` en `--ronde N`).
+   (`validate_regelspraak.py --stap <stap>`). Werk je vanuit een wetsanalyse-rapport, geef dan ook
+   `--ingest <pad>/regelspraak/werk/ingest.json` mee: de pre-check toetst dan de **herkomst-keten**
+   tegen de wetsanalyse. Twee richtingen:
+   - **integriteit (blokkerend, exit 2):** een `herkomst.begrip_ids`/`regel_id` of een
+     `vindplaatsen.bron_id` die niet in de ingest voorkomt = dangling herkomst → herstel het
+     (verkeerd of verschoven id) vóór de review.
+   - **dekking (waarschuwing, exit 1):** een ingest-begrip (stap gegevensspraak) of -afleidingsregel
+     (stap regels) dat door geen enkele declaratie/regel wordt geraakt → dek het alsnog, of zet het
+     bewust buiten scope bij de validatiepunten.
+
+   Zonder `--ingest` (standalone-pad) blijft de pre-check ongewijzigd. Start daarna de server
+   (ronde 1 zonder `--vorige`, ronde 2+ met `--vorige ronde-{N-1}` en `--ronde N`).
 2. **Pauzeer** en wacht tot de analist bevestigt dat die klaar is.
 3. **Lees** `ronde-{N}/feedback.json`.
    - `status: "akkoord"` **zonder** `items` en **zonder** `algemeen`: de lus is klaar. Stop de server en

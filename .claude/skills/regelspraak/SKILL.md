@@ -106,7 +106,11 @@ een iteratieve termijnberekening of een schakelbepaling) horen hier expliciet *b
 worden gezet en bij de validatiepunten te landen. Zonder een concrete afbakening ga je **niet**
 door naar stap 2: een lege of generieke `scoping` (zoals een herhaling van de werkgebied-naam) is
 een stopconditie, omdat de skill anders alles probeert te formaliseren en bij een taalgrens gaat
-improviseren. Schrijf alle output naar één analysemap: `analyses/<werkgebied-slug>/regelspraak/`.
+improviseren. **De regelspraak-`scoping` is een ánder concept dan de wetsanalyse-`scoping`:** de
+eerste bakent het *duiden* af (welke bronnen/leden zijn geanalyseerd), de tweede het *formaliseren*
+(wat wordt wél/niet uitvoerbaar gemaakt, met de RegelSpraak-grenzen). Het **verbatim overnemen** van
+de analyse-scoping uit het rapport telt daarom **niet** als formaliseer-afbakening en is óók een
+stopconditie — formuleer een eigen afbakening die de niet-formaliseerbare delen expliciet benoemt. Schrijf alle output naar één analysemap: `analyses/<werkgebied-slug>/regelspraak/`.
 Bestaat er al een wetsanalyse-map voor dit werkgebied, gebruik die map (een `regelspraak/`-submap
 ernaast).
 
@@ -152,6 +156,11 @@ Dit is een **iteratieve lus** tot de analist akkoord is zonder opmerkingen. Lees
    feittypen, …) met **stabiele id's**. Overschrijf eerdere rondes niet.
 1b. Voer de pre-check uit:
    `python "<skill>/scripts/validate_regelspraak.py" --input regelspraak/werk/gegevensspraak/ronde-{N}/model.json --stap gegevensspraak`
+   - Werk je vanuit een rapport? Voeg dan `--ingest regelspraak/werk/ingest.json` toe: dat toetst
+     de **herkomst-integriteit** (een `begrip_id`/`bron_id` dat niet in de wetsanalyse bestaat →
+     blokkerende fout) en de **dekking** (een ingest-begrip dat door geen declaratie wordt geraakt
+     → waarschuwing: dek het, of zet het bewust buiten scope bij de validatiepunten). Standalone
+     (zonder rapport): laat de flag weg.
    - Exit 2 (fouten): herstel vóórdat je de server start.
      Bij `REGELSPRAAK_NO_REVIEW=1`: log de fouten maar blokkeer niet — ga door.
    - Exit 1 (waarschuwingen): ga door; toon ze als context bij de review.
@@ -227,7 +236,7 @@ tot akkoord zonder opmerkingen (zie `references/review-checkpoints.md`). Met `N`
 1. Schrijf `regelspraak/werk/regels/ronde-{N}/model.json`: het `werkgebied`-object, een lichte
    `gegevensspraak`-index (zodat de regels leesbaar zijn) en de `regels`-array (met **stabiele
    id's** en `regelspraak_tekst`) + concept-validatiepunten. Overschrijf eerdere rondes niet.
-1b. Pre-check: `python "<skill>/scripts/validate_regelspraak.py" --input regelspraak/werk/regels/ronde-{N}/model.json --stap regels` (exit-gedrag als bij stap 2b).
+1b. Pre-check: `python "<skill>/scripts/validate_regelspraak.py" --input regelspraak/werk/regels/ronde-{N}/model.json --stap regels` (exit-gedrag als bij stap 2b). Vanuit een rapport: voeg `--ingest regelspraak/werk/ingest.json` toe — hier toetst het de herkomst-integriteit (`regel_id`/`bron_id`) en de dekking van de **afleidingsregels** (een ongedekte regel → waarschuwing).
 2. Start de server met `--stap regels --feedback-out regelspraak/werk/regels/ronde-{N}/feedback.json --ronde {N}`; vanaf ronde 2 ook `--vorige regelspraak/werk/regels/ronde-{N-1}`.
 3. Geef de URL (`http://localhost:3120`), **pauzeer**, en wacht op bevestiging van de analist.
 4. Lees `regelspraak/werk/regels/ronde-{N}/feedback.json`. Bij `akkoord` zonder items en zonder
@@ -279,6 +288,10 @@ de §-velden bij te stellen, op **Opslaan** te klikken, en de RegelSpraak-tekst 
   verzonnen syntax/operatoren/predicaten)?
 - Heeft elk objecttype/attribuut/kenmerk/parameter/feittype en elke regel een `herkomst` naar
   het bron-begrip/de bron-regel (en daarmee naar artikel + lid)?
+- **Wijst elke `herkomst` naar een bestaand ingest-id, en is elk ingest-begrip/-afleidingsregel
+  gedekt of bewust buiten scope gezet?** Bij het rapport-pad borgt `validate_regelspraak.py --ingest`
+  dit mechanisch (dangling herkomst = fout, ongedekte ingest = waarschuwing) — laat geen
+  dangling- of dekkingsmelding onbeantwoord.
 - Bestaat elk objecttype/elke rol/parameter waarnaar een regel verwijst ook echt in de
   GegevensSpraak (geen verwijzing naar niet-gedeclareerde gegevens)?
 - Is het juiste **resultaatdeel** per regel gekozen (rekenregel → gelijkstelling-berekening,

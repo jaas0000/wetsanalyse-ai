@@ -58,6 +58,100 @@ def heeft_herkomst(item: dict) -> bool:
     return heeft_ref or heeft_vp
 
 
+def _verzamel_uit_herkomst(h: dict, begrip_ids: set, regel_ids: set, bron_ids: set) -> None:
+    if not isinstance(h, dict):
+        return
+    for bid in (h.get("begrip_ids") or []):
+        if bid:
+            begrip_ids.add(bid)
+    if h.get("regel_id"):
+        regel_ids.add(h["regel_id"])
+    for vp in (h.get("vindplaatsen") or []):
+        if isinstance(vp, dict) and vp.get("bron_id"):
+            bron_ids.add(vp["bron_id"])
+
+
+def verzamel_herkomst_refs(obj) -> tuple[set, set, set]:
+    """Loop recursief door obj en oogst álle herkomst-referenties.
+
+    Node-agnostisch: pakt elke `herkomst` ongeacht het knooptype (objecttype, parameter,
+    feittype, regel, of een geneste attribuut/kenmerk dat er een draagt). Zo is de check
+    robuust tegen schemavarianten en mist hij geen herkomst die dieper genest staat.
+    Geeft (begrip_ids, regel_ids, bron_ids) terug.
+    """
+    begrip_ids: set[str] = set()
+    regel_ids: set[str] = set()
+    bron_ids: set[str] = set()
+
+    def loop(node) -> None:
+        if isinstance(node, dict):
+            if "herkomst" in node:
+                _verzamel_uit_herkomst(node.get("herkomst") or {}, begrip_ids, regel_ids, bron_ids)
+            for v in node.values():
+                loop(v)
+        elif isinstance(node, list):
+            for item in node:
+                loop(item)
+
+    loop(obj)
+    return begrip_ids, regel_ids, bron_ids
+
+
+def check_ingest(data: dict, stap: str, ingest: dict) -> tuple[list[str], list[str]]:
+    """Toets de herkomst-keten van het model tegen de wetsanalyse-ingest.
+
+    Twee richtingen (zie review-checkpoints.md):
+      - integriteit (blokkerend): elke herkomst-referentie (begrip-/regel-/bron-id) moet in de
+        ingest bestaan — een verschoven of verzonnen id breekt de traceerbaarheid;
+      - dekking (waarschuwing): elk ingest-begrip (stap gegevensspraak) resp. elke ingest-regel
+        (stap regels) moet ergens herkomst krijgen, anders is het stil uit de vertaling gevallen.
+    """
+    fouten: list[str] = []
+    waarschuwingen: list[str] = []
+
+    begrip_namen = {b.get("id"): b.get("naam") for b in (ingest.get("begrippen") or []) if b.get("id")}
+    regel_namen = {r.get("id"): r.get("naam") for r in (ingest.get("afleidingsregels") or []) if r.get("id")}
+    ingest_begrip_ids = set(begrip_namen)
+    ingest_regel_ids = set(regel_namen)
+    ingest_bron_ids = {b.get("bron_id") for b in (ingest.get("bronnen") or []) if b.get("bron_id")}
+
+    scope = (data.get("gegevensspraak") or {}) if stap == "gegevensspraak" \
+        else {"regels": data.get("regels") or []}
+    ref_begrip_ids, ref_regel_ids, ref_bron_ids = verzamel_herkomst_refs(scope)
+
+    # Integriteit (blokkerend).
+    for bid in sorted(ref_begrip_ids - ingest_begrip_ids):
+        fouten.append(
+            f"Herkomst verwijst naar begrip-id '{bid}' dat niet in de wetsanalyse (ingest) bestaat."
+        )
+    for rid in sorted(ref_regel_ids - ingest_regel_ids):
+        fouten.append(
+            f"Herkomst verwijst naar afleidingsregel-id '{rid}' dat niet in de wetsanalyse (ingest) bestaat."
+        )
+    for brid in sorted(ref_bron_ids - ingest_bron_ids):
+        fouten.append(
+            f"Herkomst-vindplaats verwijst naar bron-id '{brid}' dat niet in de wetsanalyse (ingest) bestaat."
+        )
+
+    # Dekking (waarschuwing): per stap de bijbehorende ingest-as.
+    if stap == "gegevensspraak":
+        for bid in sorted(ingest_begrip_ids - ref_begrip_ids):
+            naam = f" ({begrip_namen[bid]})" if begrip_namen.get(bid) else ""
+            waarschuwingen.append(
+                f"Begrip '{bid}'{naam} uit de wetsanalyse wordt door geen enkele declaratie gedekt "
+                "— gedekt elders, of bewust buiten scope (validatiepunt)?"
+            )
+    else:
+        for rid in sorted(ingest_regel_ids - ref_regel_ids):
+            naam = f" ({regel_namen[rid]})" if regel_namen.get(rid) else ""
+            waarschuwingen.append(
+                f"Afleidingsregel '{rid}'{naam} uit de wetsanalyse wordt door geen enkele regel gedekt "
+                "— gedekt, of bewust buiten scope (validatiepunt)?"
+            )
+
+    return fouten, waarschuwingen
+
+
 def check_regelspraak_tekst(tekst: str, iid: str) -> list[str]:
     """Waarschuw bij verdachte, niet-bestaande taalpatronen in de RegelSpraak-tekst."""
     waarschuwingen: list[str] = []
@@ -262,6 +356,9 @@ def main() -> None:
     parser.add_argument("--input", type=Path, required=True, help="Pad naar model.json")
     parser.add_argument("--stap", choices=["gegevensspraak", "regels"], required=True,
                         help="Welke stap wordt gevalideerd")
+    parser.add_argument("--ingest", type=Path, default=None,
+                        help="optioneel: wetsanalyse-ingest.json voor de herkomst-cross-check "
+                             "(rapport-pad). Dangling herkomst = fout; ongedekte ingest = waarschuwing.")
     args = parser.parse_args()
 
     if not args.input.exists():
@@ -281,6 +378,20 @@ def main() -> None:
     else:
         fouten, waarschuwingen = check_regels(data)
         context = f"{len(data.get('regels') or [])} regel(s)"
+
+    # Optionele herkomst-cross-check tegen de wetsanalyse-ingest (rapport-pad).
+    if args.ingest is not None:
+        if not args.ingest.exists():
+            fouten.append(f"--ingest opgegeven maar niet gevonden: {args.ingest}")
+        else:
+            try:
+                ingest = json.loads(args.ingest.read_text(encoding="utf-8"))
+            except json.JSONDecodeError as e:
+                fouten.append(f"--ingest bevat ongeldige JSON ({args.ingest}): {e}")
+            else:
+                i_fouten, i_waarschuwingen = check_ingest(data, args.stap, ingest)
+                fouten.extend(i_fouten)
+                waarschuwingen.extend(i_waarschuwingen)
 
     werkgebied = (data.get("werkgebied") or {}).get("naam", "?")
     print(f"\n  Pre-check model.json - stap {args.stap}, werkgebied {werkgebied} ({context})")

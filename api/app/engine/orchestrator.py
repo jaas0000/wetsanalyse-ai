@@ -324,8 +324,15 @@ class WetsanalyseEngine:
         is_rs = activiteit in ("rs-gegevens", "rs-regels")
         n = await self.store.hoogste_ronde(job.id, activiteit)
         analyse = await self.store.lees_analyse(job.id, activiteit, n) or {}
-        check = regelspraak_brongetrouwheid_check if is_rs else brongetrouwheid_check
-        schendingen = check(analyse, activiteit)
+        if is_rs:
+            # Ook hier de ingest meegeven: een via retry hervatte ronde met dangling herkomst mag
+            # niet alsnog promoveren (zelfde garantie als de afronding van een verse ronde).
+            rapport = await self.store.lees_rapport(job.id) or {}
+            schendingen = regelspraak_brongetrouwheid_check(
+                analyse, activiteit, self._rs_gegevens_context(rapport)
+            )
+        else:
+            schendingen = brongetrouwheid_check(analyse, activiteit)
         if schendingen:
             stap = activiteit if is_rs else f"act{activiteit}"
             await self._fail(job, stap, FoutKlasse.validatie,
@@ -559,19 +566,23 @@ class WetsanalyseEngine:
                                  f"{gebruikt} tokens.")
                 return
 
+        # De wetsanalyse-als-ingest: voedt de herkomst-cross-check (dangling = hard, dekking = zacht).
+        rapport = await self.store.lees_rapport(job.id) or {}
+        ingest = self._rs_gegevens_context(rapport)
+
         fase = "regelspraak-gegevens-generatie" if stap == "rs-gegevens" else "regelspraak-regels-generatie"
         await self._set_fase(job, fase)
         analyse, prov = await self._met_retry(maak)
         pogingen = 0
-        while pogingen < self.s.max_autocorrectie and regelspraak_brongetrouwheid_check(analyse, stap):
+        while pogingen < self.s.max_autocorrectie and regelspraak_brongetrouwheid_check(analyse, stap, ingest):
             pogingen += 1
             await self._set_fase(job, "auto-correctie")
             analyse, prov = await self._met_retry(maak)
 
         await self._set_fase(job, "brongetrouwheid-check")
-        schendingen = regelspraak_brongetrouwheid_check(analyse, stap)
+        schendingen = regelspraak_brongetrouwheid_check(analyse, stap, ingest)
         await self._set_fase(job, "schema-check")
-        fouten, waarschuwingen = regelspraak_schema_check(analyse, stap)
+        fouten, waarschuwingen = regelspraak_schema_check(analyse, stap, ingest)
 
         await self._set_fase(job, "analyse-wegschrijven")
         await self.store.schrijf_analyse(job.id, stap, ronde, analyse)

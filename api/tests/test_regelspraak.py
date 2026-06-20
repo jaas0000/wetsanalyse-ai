@@ -40,6 +40,39 @@ class _RsGeenHerkomstLLM(FakeLLM):
         return res
 
 
+class _RsDanglingHerkomstLLM(FakeLLM):
+    """Brongetrouw, maar verwijst in de RegelSpraak-herkomst naar een begrip/regel dat niet in het
+    rapport bestaat (b999/r999). De herkomst is wél aanwezig — de aanwezigheidscheck slaagt — maar de
+    integriteit-cross-check tegen de ingest moet 'm als harde schending vangen (job → fout)."""
+
+    async def complete(self, system: str, user: str, schema=None):
+        res = await super().complete(system, user, schema)
+        if isinstance(res.data, dict):
+            for groep in ("objecttypen", "feittypen", "parameters", "domeinen"):
+                for item in res.data.get(groep) or []:
+                    if item.get("herkomst"):
+                        item["herkomst"]["begrip_ids"] = ["b999"]
+            for regel in res.data.get("regels") or []:
+                if regel.get("herkomst"):
+                    regel["herkomst"]["regel_id"] = "r999"
+        return res
+
+
+class _RsOngedektLLM(FakeLLM):
+    """Brongetrouw en herleidbaar (vindplaatsen blijven), maar laat de `begrip_ids` weg zodat het
+    rapport-begrip b1 door geen enkele declaratie wordt gedekt. Dat is geen harde schending (de
+    herkomst is aanwezig via vindplaatsen) maar moet als dekking-waarschuwing landen."""
+
+    async def complete(self, system: str, user: str, schema=None):
+        res = await super().complete(system, user, schema)
+        if isinstance(res.data, dict):
+            for groep in ("objecttypen", "feittypen", "parameters", "domeinen"):
+                for item in res.data.get(groep) or []:
+                    if item.get("herkomst"):
+                        item["herkomst"].pop("begrip_ids", None)
+        return res
+
+
 async def test_regelspraak_autonoom_tot_rs_klaar(engine, store):
     job_id = await _tot_klaar(engine)
     await engine.run_regelspraak(job_id, review=False)
@@ -136,6 +169,32 @@ async def test_regelspraak_brongetrouwheid_fout_ook_review_false(settings, store
     assert job.state == JobState.fout
     assert job.error.klasse == FoutKlasse.validatie
     assert await store.lees_regelspraak(job_id) is None
+
+
+async def test_regelspraak_dangling_herkomst_faalt(settings, store):
+    """Een herkomst-id dat niet in de wetsanalyse bestaat (b999) → harde schending → job naar `fout`,
+    ook in review:false. Aanwezige-maar-ongeldige herkomst is net zo onherleidbaar als ontbrekende."""
+    eng = WetsanalyseEngine(settings, store, _RsDanglingHerkomstLLM(), FakeWettenbank())
+    job_id = await _tot_klaar(eng)
+    await eng.run_regelspraak(job_id, review=False)
+
+    job = await store.load_job(job_id)
+    assert job.state == JobState.fout
+    assert job.error.klasse == FoutKlasse.validatie
+    assert "b999" in (job.error.bericht or "") or any("b999" in w for w in job.waarschuwingen)
+    assert await store.lees_regelspraak(job_id) is None
+
+
+async def test_regelspraak_ongedekt_begrip_waarschuwt(settings, store):
+    """Een rapport-begrip dat het model niet dekt → dekking-waarschuwing in job.waarschuwingen, zonder
+    de job te laten falen (de herkomst is aanwezig via vindplaatsen)."""
+    eng = WetsanalyseEngine(settings, store, _RsOngedektLLM(), FakeWettenbank())
+    job_id = await _tot_klaar(eng)
+    await eng.run_regelspraak(job_id, review=True)  # stopt op het gegevens-checkpoint
+
+    job = await store.load_job(job_id)
+    assert job.state == JobState.wacht_review_rs_gegevens
+    assert any("Begrip 'b1'" in w for w in job.waarschuwingen)
 
 
 async def test_regelspraak_retry_hervat_rs_fase(settings, store):

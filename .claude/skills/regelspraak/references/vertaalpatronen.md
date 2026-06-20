@@ -16,12 +16,16 @@ formalisering (zoals ze in `ingest.json` staan):
 - **`bronnen`** — de tekstdelen (`bron_id`, `label`, `bwbId`, `artikel`, `lid`, `bronreferentie`).
   Gebruik deze voor de **`herkomst`** van je declaraties en regels (`vindplaatsen: [{bron_id, lid}]`).
 - **`begrippen`** (activiteit 3a) — per begrip: `naam` (voorkeursterm), `synoniemen`, `klasse`
-  (JAS-klasse), `definitie`, `grondformulering`, `voorbeeld`, `kenmerken`, `vindplaatsen`. Dit voedt
-  **GegevensSpraak**.
-- **`afleidingsregels`** (activiteit 3b) — per regel: `naam`, `type` (beslis-/reken-/
-  specialisatieregel), `uitvoervariabele`, `invoervariabelen`, `parameters`, `voorwaarden`,
-  `vindplaatsen`. Dit voedt **RegelSpraak**. De regel is hier *geannoteerd*, niet uitgeschreven —
-  jij formuleert hem hier voor het eerst uit in RegelSpraak.
+  (JAS-klasse), `definitie`, `grondformulering`, `voorbeeld`, `kenmerken`, `vindplaatsen`,
+  `verwijst_naar_begrippen` (begrip-id's gebruikt in de omschrijving) en `bron_verwijzing` (id van de
+  definitie-verwijzing). Dit voedt **GegevensSpraak**. `bron_verwijzing` is het signaal voor een
+  **domein/begripsomschrijving** en voor de herleidbaarheid (een hergebruikte wettelijke definitie);
+  het komt mee in `ingest.json`.
+- **`afleidingsregels`** (activiteit 3b) — per regel: `naam`, `type`, `uitvoervariabele`,
+  `invoervariabelen`, `parameters`, `voorwaarden`, `vindplaatsen`. Het `type` is één van de
+  (lowercase) enum-waarden `rekenregel` / `beslisregel` / `specialisatieregel` (zo gevalideerd in de
+  wetsanalyse). Dit voedt **RegelSpraak**. De regel is hier *geannoteerd*, niet uitgeschreven — jij
+  formuleert hem hier voor het eerst uit in RegelSpraak.
 
 Werkwijze: doorloop eerst **alle begrippen** → bouw GegevensSpraak (stap 2). Doorloop daarna **alle
 afleidingsregels** → schrijf RegelSpraak-regels (stap 3). De `naam` van een begrip is leidend voor de
@@ -56,13 +60,14 @@ afleidingsregels** → schrijf RegelSpraak-regels (stap 3). De `naam` van een be
 
 ## 3. Afleidingsregel → resultaatactie
 
-Het `type` van de wetsanalyse-afleidingsregel bepaalt de RegelSpraak-resultaatactie:
+Het `type` van de wetsanalyse-afleidingsregel (lowercase enum: `rekenregel` / `beslisregel` /
+`specialisatieregel`) bepaalt de RegelSpraak-resultaatactie:
 
-| Afleidingsregel-type | Resultaatactie | Taalpatroon (zie regels-referentie) |
+| Afleidingsregel-`type` | Resultaatactie | Taalpatroon (zie regels-referentie) |
 | --- | --- | --- |
-| **Rekenregel** (berekent bedrag/getal) | **Gelijkstelling — berekening** | `De <attribuut> van een <onderwerp> moet berekend worden als <expressie>` |
-| **Beslisregel** (ja/nee, waar/onwaar) | **Kenmerktoekenning** of **Consistentieregel** | `Een <objecttype> is/heeft <kenmerk> indien …` (toekenning) of `… moet voldoen aan …` (controle) |
-| **Specialisatieregel** (behoort tot doelgroep) | **Kenmerktoekenning** | `Een <objecttype> is een <kenmerk> indien …` |
+| **`rekenregel`** (berekent bedrag/getal) | **Gelijkstelling — berekening** | `De <attribuut> van een <onderwerp> moet berekend worden als <expressie>` |
+| **`beslisregel`** (ja/nee, waar/onwaar) | **Kenmerktoekenning** of **Consistentieregel** | `Een <objecttype> is/heeft <kenmerk> indien …` (toekenning) of `… moet voldoen aan …` (controle) |
+| **`specialisatieregel`** (behoort tot doelgroep) | **Kenmerktoekenning** | `Een <objecttype> is een <kenmerk> indien …` |
 
 Vertaal vervolgens de onderdelen van de afleidingsregel:
 - `uitvoervariabele` → het attribuut/kenmerk in het resultaatdeel.
