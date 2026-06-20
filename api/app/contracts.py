@@ -234,6 +234,15 @@ REVIEW_STATES = {
 # rs_klaar is terminaal: de regelspraak-fase is af. (De analyse zelf bereikte daarvóór `klaar`.)
 TERMINAL_STATES = {JobState.klaar, JobState.fout, JobState.rs_klaar}
 
+# De RegelSpraak-vervolgfase draait on-demand op een al-afgeronde (`klaar`) analyse en is geen
+# nieuwe analyse-run. Deze states tellen daarom NIET mee in het max-actieve-jobs-quotum.
+RS_FASE_STATES = {
+    JobState.rs_gegevens_runt, JobState.wacht_review_rs_gegevens,
+    JobState.rs_regels_runt, JobState.wacht_review_rs_regels, JobState.rs_bouwt,
+}
+# States die niet meetellen als "lopende analyse" voor het quotum: terminaal óf rs-vervolgfase.
+QUOTA_VRIJE_STATES = TERMINAL_STATES | RS_FASE_STATES
+
 # De activiteit-codes die in de rondes-tabel/provenance/current_activiteit voorkomen.
 ACTIVITEIT_CODES = ("2", "3", "rs-gegevens", "rs-regels")
 

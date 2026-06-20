@@ -14,7 +14,7 @@ import { RegelspraakView } from "@/components/RegelspraakView";
 import {
   getProject, getRapport, getRegelspraak, startRegelspraak, retryProject, deleteProject, isApiError,
 } from "@/lib/api";
-import { isReview, isTerminal, reviewActiviteit } from "@/lib/states";
+import { isTerminal, reviewActiviteit } from "@/lib/states";
 import { pathSegment } from "@/lib/url";
 import type { Job, Rapport, RegelspraakModel } from "@/lib/types";
 import { useRouter } from "next/navigation";
@@ -46,6 +46,7 @@ export function ProjectClient({ initieel }: { initieel: Job }) {
   const [regelspraak, setRegelspraak] = useState<RegelspraakModel | null>(null);
   const [regelspraakFout, setRegelspraakFout] = useState<string | null>(null);
   const [regelspraakBezig, setRegelspraakBezig] = useState(false);
+  const [startFout, setStartFout] = useState<string | null>(null);
   const [actie, setActie] = useState<string | null>(null);
   // Wordt opgehoogd bij het starten van de regelspraak-fase, zodat de SSE-stream heropent vanuit
   // een (terminale) `klaar`-state.
@@ -132,13 +133,25 @@ export function ProjectClient({ initieel }: { initieel: Job }) {
 
   async function onStartRegelspraak() {
     setActie("regelspraak");
+    setStartFout(null);
     try {
       const res = await startRegelspraak(initieel.id, {});
       setJob((j) => ({ ...j, state: res.state })); // optimistisch: verlaat de klaar-kaart direct
       setStreamGen((n) => n + 1); // heropen de SSE-stream vanuit de terminale klaar-state
       await refreshJob();
     } catch (e) {
-      alert(isApiError(e) ? e.detail : (e as Error).message);
+      if (isApiError(e) && e.status === 429) {
+        setStartFout(
+          e.retryAfter
+            ? `Te veel verzoeken; probeer het over ${e.retryAfter} s opnieuw.`
+            : "Te veel verzoeken; probeer het zo opnieuw.",
+        );
+      } else if (isApiError(e) && e.status === 409) {
+        setStartFout("De RegelSpraak-fase is al gestart of de analyse is niet meer afgerond; de pagina ververst.");
+        await refreshJob();
+      } else {
+        setStartFout(isApiError(e) ? e.detail : (e as Error).message);
+      }
     }
     setActie(null);
   }
@@ -297,6 +310,13 @@ export function ProjectClient({ initieel }: { initieel: Job }) {
                   {actie === "regelspraak" ? "Starten…" : "Naar RegelSpraak"}
                 </Button>
               </div>
+              {startFout && (
+                <div className="mt-4">
+                  <Melding type="fout" titel="Starten mislukt">
+                    <p className="mt-1 text-sm">{startFout}</p>
+                  </Melding>
+                </div>
+              )}
             </Card>
           )}
 

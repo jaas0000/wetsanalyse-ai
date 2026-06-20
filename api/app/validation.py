@@ -94,7 +94,7 @@ def regelspraak_brongetrouwheid_check(data: dict, stap: str) -> list[str]:
         gs = data.get("gegevensspraak") or {}
         items = [
             (o.get("id") or o.get("naam") or "?", o)
-            for groep in ("objecttypen", "feittypen", "parameters")
+            for groep in ("objecttypen", "feittypen", "parameters", "domeinen")
             for o in (gs.get(groep) or [])
         ]
     else:

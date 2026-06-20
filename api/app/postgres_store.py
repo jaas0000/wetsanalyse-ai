@@ -22,8 +22,8 @@ from .config import Settings
 import re
 
 from .contracts import (
-    Analyse2, Analyse3, BronInput, Feedback, Job, JobState, RUNNING_STATES, RondeProvenance,
-    TERMINAL_STATES,
+    Analyse2, Analyse3, BronInput, Feedback, Job, JobState, QUOTA_VRIJE_STATES, RUNNING_STATES,
+    RondeProvenance,
 )
 from .jobstore import IdConflict
 from .project import Project, RondeData
@@ -157,7 +157,9 @@ class PostgresStore:
         actief = (await conn.execute(
             select(func.count()).select_from(db.projects).where(
                 db.projects.c.client_id == client_id,
-                db.projects.c.state.notin_([s.value for s in TERMINAL_STATES]),
+                # Tel alleen lopende/in-review ANALYSE-runs; terminale states én de on-demand
+                # RegelSpraak-vervolgfase tellen niet mee (anders vult formaliseren het quotum).
+                db.projects.c.state.notin_([s.value for s in QUOTA_VRIJE_STATES]),
             )
         )).scalar_one()
         if actief >= max_active:
