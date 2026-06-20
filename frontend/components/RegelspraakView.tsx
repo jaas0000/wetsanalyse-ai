@@ -55,7 +55,12 @@ function ObjecttypeKaart({ o }: { o: RsObjecttype }) {
       {(o.attributen?.length ?? 0) > 0 && (
         <p className="mt-1 text-sm text-muted">
           <span className="text-xs uppercase tracking-wide text-faint">Attributen: </span>
-          {(o.attributen ?? []).map((a) => a.naam).join(", ")}
+          {(o.attributen ?? [])
+            .map((a) => {
+              const type = [a.datatype, a.eenheid].filter(Boolean).join(", ");
+              return type ? `${a.naam} (${type})` : a.naam;
+            })
+            .join(", ")}
         </p>
       )}
       {(o.kenmerken?.length ?? 0) > 0 && (
@@ -151,8 +156,8 @@ export function RegelspraakView({ model, projectId }: { model: RegelspraakModel;
       {(gs.objecttypen?.length ?? 0) > 0 && (
         <Section title="Objecttypen" count={gs.objecttypen!.length}>
           <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-            {gs.objecttypen!.map((o) => (
-              <ObjecttypeKaart key={o.id} o={o} />
+            {gs.objecttypen!.map((o, i) => (
+              <ObjecttypeKaart key={`${o.id}-${i}`} o={o} />
             ))}
           </div>
         </Section>
@@ -161,8 +166,8 @@ export function RegelspraakView({ model, projectId }: { model: RegelspraakModel;
       {(gs.feittypen?.length ?? 0) > 0 && (
         <Section title="Feittypen" count={gs.feittypen!.length}>
           <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-            {gs.feittypen!.map((f) => (
-              <FeittypeKaart key={f.id} f={f} />
+            {gs.feittypen!.map((f, i) => (
+              <FeittypeKaart key={`${f.id}-${i}`} f={f} />
             ))}
           </div>
         </Section>
@@ -171,8 +176,8 @@ export function RegelspraakView({ model, projectId }: { model: RegelspraakModel;
       {(gs.parameters?.length ?? 0) > 0 && (
         <Section title="Parameters" count={gs.parameters!.length}>
           <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-            {gs.parameters!.map((p) => (
-              <ParameterKaart key={p.id} p={p} />
+            {gs.parameters!.map((p, i) => (
+              <ParameterKaart key={`${p.id}-${i}`} p={p} />
             ))}
           </div>
         </Section>
@@ -181,8 +186,8 @@ export function RegelspraakView({ model, projectId }: { model: RegelspraakModel;
       {(model.regels?.length ?? 0) > 0 && (
         <Section title="RegelSpraak-regels" count={model.regels.length}>
           <div className="space-y-3">
-            {model.regels.map((r) => (
-              <RegelKaart key={r.id} r={r} />
+            {model.regels.map((r, i) => (
+              <RegelKaart key={`${r.id}-${i}`} r={r} />
             ))}
           </div>
         </Section>

@@ -36,7 +36,7 @@ export function StatusTimeline({ job }: { job: Job }) {
   const huidige = fase(job.state);
   // De RegelSpraak-stappen alleen tonen zodra de analyse die fase ingaat — anders zou een gewone
   // analyse vier niet-relevante grijze stappen tonen.
-  const inRsFase = fase(job.state) > fase("klaar");
+  const inRsFase = huidige > fase("klaar");
   const stappen = STAPPEN.filter((s) => !s.rs || inRsFase);
 
   return (

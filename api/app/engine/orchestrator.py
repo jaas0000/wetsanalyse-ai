@@ -283,6 +283,8 @@ class WetsanalyseEngine:
 
     async def _fase_feedback(self, job: Job, activiteit: str, ronde: int, feedback) -> None:
         if feedback.is_akkoord_zonder_opmerkingen() or ronde >= self.s.max_rondes:
+            if not await self._herassert_brongetrouw(job, activiteit):
+                return  # onbetrouwbare (via retry hervatte) ronde → fout i.p.v. promoveren
             await self._advance_akkoord(job, activiteit)
             return
         job.state = JobState.act2_runt if activiteit == "2" else JobState.act3_runt
@@ -312,6 +314,24 @@ class WetsanalyseEngine:
             await self._afronden_ronde(job, "3", 1, maak)
         else:
             await self._bouw_rapport(job)
+
+    async def _herassert_brongetrouw(self, job: Job, activiteit: str) -> bool:
+        """Her-bevestig de HARDE brongetrouwheid-invariant vóór een akkoord-promotie. Een ronde die
+        langs de normale weg in review belandt is altijd brongetrouw, maar via `retry` kan een eerder
+        op brongetrouwheid gefaalde (en tóch weggeschreven) ronde in de review-akkoord-state hervatten.
+        Zonder deze her-check zou 'akkoord' dan een onherleidbaar model promoveren — in strijd met de
+        garantie 'HARD brongetrouwheid → fout, nooit stil door'. No-op voor geldige modellen."""
+        is_rs = activiteit in ("rs-gegevens", "rs-regels")
+        n = await self.store.hoogste_ronde(job.id, activiteit)
+        analyse = await self.store.lees_analyse(job.id, activiteit, n) or {}
+        check = regelspraak_brongetrouwheid_check if is_rs else brongetrouwheid_check
+        schendingen = check(analyse, activiteit)
+        if schendingen:
+            stap = activiteit if is_rs else f"act{activiteit}"
+            await self._fail(job, stap, FoutKlasse.validatie,
+                             "Promotie geweigerd — brongetrouwheid faalt: " + "; ".join(schendingen))
+            return False
+        return True
 
     # --- generatie van één ronde (incl. auto-correctie) -------------------
 
@@ -589,6 +609,8 @@ class WetsanalyseEngine:
 
     async def _fase_rs_feedback(self, job: Job, stap: str, ronde: int, feedback) -> None:
         if feedback.is_akkoord_zonder_opmerkingen() or ronde >= self.s.max_rondes:
+            if not await self._herassert_brongetrouw(job, stap):
+                return  # onbetrouwbare (via retry hervatte) ronde → fout i.p.v. promoveren
             await self._advance_rs_akkoord(job, stap)
             return
         job.state = JobState.rs_gegevens_runt if stap == "rs-gegevens" else JobState.rs_regels_runt
