@@ -3,8 +3,8 @@
 De brug tussen het duiden (skill `wetsanalyse`: JAS-klassen, begrippen, afleidingsregels) en het
 formaliseren (deze skill: GegevensSpraak + RegelSpraak). Lees dit voordat je vertaalt. Het beschrijft
 (1) hoe je een wetsanalyse-`rapport.json` inleest, (2) de afbeelding van JAS-klassen op
-GegevensSpraak/RegelSpraak, (3) hoe afleidingsregels resultaatacties worden, en (4) het
-standalone-pad vanaf wettekst.
+GegevensSpraak/RegelSpraak, (3) hoe afleidingsregels resultaatacties worden, (4) het
+standalone-pad vanaf wettekst, en (5) de grenzen en valkuilen bij het formaliseren.
 
 ## 1. Een wetsanalyse-rapport.json inlezen
 
@@ -98,3 +98,31 @@ en levert de begrippen/afleidingsregels kant-en-klaar. Wil de gebruiker direct d
 
 Is de MCP niet beschikbaar, zeg dat eerlijk en werk met door de gebruiker aangeleverde tekst, met
 dezelfde brongetrouwheid.
+
+## 5. Grenzen en valkuilen bij formaliseren
+
+De syntax hieronder bestáát al in `expressies-en-operatoren-referentie.md`; de fout zit doorgaans
+niet in onbekende taal maar in de *keuze* van het modelpatroon. Vier terugkerende valkuilen:
+
+- **Een booleaan zegt *dát*, niet *wanneer*.** Bepaalt de wet een moment of termijn (bv.
+  "invorderbaar ná X dagen", "uiterlijk Y weken na dagtekening"), dan is een kenmerk (`is
+  invorderbaar`) niet genoeg — het legt alleen vast *dát* iets geldt, niet *per wanneer*. Modelleer
+  een **datum-/duur-attribuut** en bereken het met `de tijdsduur van <datum> tot <datum> in
+  <eenheid>` of `<datum> plus/min <tijdseenheid>` (expressies §4/§6), met de termijn als
+  **parameter** in de expressie. **Vuistregel/diagnose:** een gedeclareerde parameter die door geen
+  enkele regel wordt gebruikt (de validator waarschuwt hierop) is bijna altijd het signaal dat
+  juist deze rekenregel ontbreekt — voeg de regel toe of haal de parameter weg.
+- **Rolcheck vs lege-waarde.** Wil je toetsen of een gerelateerd object *bestaat* (bv. "de
+  bijbehorende belastingaanslag"), gebruik dan de **rolcheck** `<onderwerp> heeft een <rol>` of `is
+  (g)een <rol>` (expressies §7). `is gevuld`/`is leeg` is uitsluitend voor de leegte van een
+  **attribuut**, niet voor het bestaan van een rol-relatie.
+- **Limitatieve opsomming → één enumeratiedomein, niet parallelle kenmerken.** Sluiten de
+  categorieën elkaar uit (navorderingsaanslag / naheffingsaanslag / uitnodiging tot betaling / …),
+  modelleer dan **één** `type`-attribuut met een **enumeratiedomein** en **declareer dat domein ook
+  echt**. Vermijd de dubbele representatie — een `type`-attribuut én een rij losse kenmerken voor
+  dezelfde categorie — want die kan inconsistent raken en legt de wederzijdse uitsluiting niet vast.
+- **Iteratie kent RegelSpraak v2.3.0 niet vrij.** Een onbekend of onbegrensd aantal stappen (bv.
+  "elke volgende invorderingstermijn") laat zich niet als een vrije lus uitdrukken. Is het aantal
+  telbaar en begrensd → overweeg een **dimensie** (`vanaf <label> t/m <label>`, expressies §3);
+  anders **noteer het expliciet als validatiepunt** en formaliseer het niet. Verzin geen
+  iteratieconstructie.

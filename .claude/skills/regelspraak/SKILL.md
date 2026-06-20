@@ -99,9 +99,16 @@ De skill werkt **flexibel** vanuit twee soorten input. Bepaal eerst welke je heb
    draaien — een goede JAS-duiding maakt de formalisering aanmerkelijk betrouwbaarder. Het
    standalone-pad staat beschreven in `references/vertaalpatronen.md`.
 
-Bepaal en leg het **werkgebied** vast (naam + afbakening, `werkgebied.scoping`). Schrijf alle
-output naar één analysemap: `analyses/<werkgebied-slug>/regelspraak/`. Bestaat er al een
-wetsanalyse-map voor dit werkgebied, gebruik die map (een `regelspraak/`-submap ernaast).
+Bepaal en leg het **werkgebied** vast (naam + afbakening, `werkgebied.scoping`). De afbakening is
+een **harde gate, geen formaliteit**: noteer concreet wat je **wél** en wat je **niet**
+formaliseert, met reden — met name de delen die RegelSpraak v2.3.0 niet native kan uitdrukken (bv.
+een iteratieve termijnberekening of een schakelbepaling) horen hier expliciet *buiten scope* te
+worden gezet en bij de validatiepunten te landen. Zonder een concrete afbakening ga je **niet**
+door naar stap 2: een lege of generieke `scoping` (zoals een herhaling van de werkgebied-naam) is
+een stopconditie, omdat de skill anders alles probeert te formaliseren en bij een taalgrens gaat
+improviseren. Schrijf alle output naar één analysemap: `analyses/<werkgebied-slug>/regelspraak/`.
+Bestaat er al een wetsanalyse-map voor dit werkgebied, gebruik die map (een `regelspraak/`-submap
+ernaast).
 
 Is de MCP niet beschikbaar én is er geen rapport, zeg dat eerlijk en werk verder met door de
 gebruiker aangeleverde tekst, met dezelfde brongetrouwheid.
@@ -201,6 +208,17 @@ Schrijf elke regel als letterlijke RegelSpraak in het veld `regelspraak_tekst` e
 een `herkomst` naar de bron-afleidingsregel (`regel_id` + `vindplaatsen`). Markeer
 interpretatiekeuzes in `twijfel`.
 
+**Terugkoppeling naar stap 2 — het objectmodel is niet onomkeerbaar bevroren.** Blijkt bij het
+schrijven van een regel dat het objectmodel een attribuut, parameter of feittype mist (bv. een
+`toepasselijke invorderingstermijn` of een `vervaldatum` om een termijn in te berekenen), keer dan
+terug naar **stap 2** en breid het model uit in een nieuwe GegevensSpraak-ronde. Misbruik **niet**
+een bestaand attribuut als opslagplek (een berekende maandentelling hoort niet in een jaartal-veld)
+en schuif het tekort **niet** weg naar de validatiepunten alsof het onoplosbaar is. Het
+checkpoint 2b bevriest het model alleen tussen rondes door, niet definitief: een ontbrekend gegeven
+ontdekt in stap 3 is een legitieme reden om stap 2 te heropenen. Raadpleeg bij twijfel over het
+juiste modelpatroon `references/vertaalpatronen.md` §5 (booleaan vs datum/duur, rolcheck vs
+lege-waarde, enumeratie vs parallelle kenmerken, de iteratiegrens).
+
 ## Stap 3b — Review-checkpoint na de regels
 
 Net als na stap 2: laat de regels door de analist valideren als dezelfde **iteratieve lus**,
@@ -266,6 +284,9 @@ de §-velden bij te stellen, op **Opslaan** te klikken, en de RegelSpraak-tekst 
 - Is het juiste **resultaatdeel** per regel gekozen (rekenregel → gelijkstelling-berekening,
   beslisregel → kenmerktoekenning/consistentieregel)?
 - Zijn parameters (vaste waarden) en attributen (per geval verschillend) uit elkaar gehouden?
+- **Wordt elke gedeclareerde parameter ook door een regel gebruikt?** De validator waarschuwt op
+  ongebruikte parameters/objecttypen; ontbreekt het gebruik, dan mist er een regel (voeg hem toe)
+  of is de declaratie overbodig (haal hem weg) — laat het niet als wees-declaratie staan.
 - Zijn interpretatiekeuzes, open normen en niet-formaliseerbare delen expliciet benoemd in
   `twijfel`/`validatiepunten` in plaats van weggepoetst?
 - Zijn beide review-checkpoints doorlopen tot akkoord (of bewust overgeslagen via

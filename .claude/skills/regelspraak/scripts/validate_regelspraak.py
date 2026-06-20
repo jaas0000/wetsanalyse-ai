@@ -179,6 +179,7 @@ def check_regels(data: dict) -> tuple[list[str], list[str]]:
 
     geziene_ids: set[str] = set()
     geziene_namen: set[str] = set()
+    alle_teksten: list[str] = []
 
     for r in regels:
         rid = r.get("id", "")
@@ -210,6 +211,7 @@ def check_regels(data: dict) -> tuple[list[str], list[str]]:
         if not tekst:
             fouten.append(f"[{rid or '?'}] Regel mist 'regelspraak_tekst'.")
         else:
+            alle_teksten.append(tekst)
             if not re.search(r"^\s*Regel\b", tekst):
                 waarschuwingen.append(f"[{rid or '?'}] regelspraak_tekst begint niet met 'Regel'.")
             if not re.search(r"\bgeldig\b", tekst):
@@ -220,6 +222,34 @@ def check_regels(data: dict) -> tuple[list[str], list[str]]:
 
         if not heeft_herkomst(r):
             waarschuwingen.append(f"[{rid or '?'}] Regel mist 'herkomst' (regel-id + vindplaatsen).")
+
+    # Gebruik-scan tegen het objectmodel: een gedeclareerde parameter/objecttype dat door geen
+    # enkele regel wordt aangeroepen, is een signaal dat er een regel ontbreekt (de meest
+    # voorkomende fout: termijn-parameters wel declareren, maar de rekenregel die ze consumeert
+    # niet schrijven). Alleen zinvol als er een index én regelteksten zijn.
+    #
+    # Matching is een bewust conservatieve heuristiek: case-insensitive substring van de volledige
+    # gedeclareerde naam in enige regelspraak_tekst. False-negatives bij afkorting/herformulering
+    # zijn acceptabel — dit is een waarschuwing, geen blokkerende fout (een gedeeld objectmodel
+    # mag breder zijn dan deze set regels).
+    #
+    # Buiten scope (geen betrouwbare statische check zonder expressie-parser): eenheid-/
+    # datatype-mismatch tussen een expressie en het resultaat-attribuut (bv. een maandentelling
+    # die naar een jaartal-attribuut wordt geschreven), en het strikt resolven van élke verwijzing
+    # in de vrije regeltekst. Die blijven een review-/validatiepunt-zaak.
+    if index and alle_teksten:
+        corpus = "\n".join(alle_teksten).lower()
+        for pnaam in sorted(n for n in bekende_parameters if n):
+            if pnaam.lower() not in corpus:
+                waarschuwingen.append(
+                    f"Parameter '{pnaam}' is gedeclareerd maar wordt door geen regel gebruikt "
+                    "(ontbreekt er een regel, of moet de parameter weg?)."
+                )
+        for onaam in sorted(n for n in bekende_objecttypen if n):
+            if onaam.lower() not in corpus:
+                waarschuwingen.append(
+                    f"Objecttype '{onaam}' is gedeclareerd maar wordt door geen regel gebruikt."
+                )
 
     return fouten, waarschuwingen
 
