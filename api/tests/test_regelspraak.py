@@ -7,7 +7,10 @@ afgeronde analyse, en de tekstexport.
 
 import pytest
 
-from app.contracts import BronInput, Feedback, JobState, StartRequest
+from conftest import FakeLLM, FakeWettenbank
+
+from app.contracts import BronInput, Feedback, FoutKlasse, JobState, StartRequest
+from app.engine.orchestrator import WetsanalyseEngine
 
 
 def _start_req(review: bool) -> StartRequest:
@@ -19,6 +22,22 @@ async def _tot_klaar(engine):
     job = await engine.create_job(_start_req(review=False), "test")
     await engine.run_initial(job.id)
     return job.id
+
+
+class _RsGeenHerkomstLLM(FakeLLM):
+    """Brongetrouw voor act-2/act-3, maar laat de `herkomst` weg in de RegelSpraak-output, zodat de
+    HARDE brongetrouwheid-check (herkomst verplicht) faalt. act-2/3 blijven ongemoeid (die dragen geen
+    objecttypen/regels), dus de analyse bereikt gewoon `klaar`."""
+
+    async def complete(self, system: str, user: str, schema=None):
+        res = await super().complete(system, user, schema)
+        if isinstance(res.data, dict):
+            for groep in ("objecttypen", "feittypen", "parameters", "domeinen"):
+                for item in res.data.get(groep) or []:
+                    item.pop("herkomst", None)
+            for regel in res.data.get("regels") or []:
+                regel.pop("herkomst", None)
+        return res
 
 
 async def test_regelspraak_autonoom_tot_rs_klaar(engine, store):
@@ -103,3 +122,84 @@ async def test_regelspraak_export_rs_en_md(engine, store):
     md = render_md(model)
     assert "# RegelSpraak-specificatie" in md
     assert "## 1. GegevensSpraak" in md
+
+
+# --- brongetrouwheid, retry en de akkoord-her-validatie (A4) ------------------
+
+async def test_regelspraak_brongetrouwheid_fout_ook_review_false(settings, store):
+    """Ontbrekende herkomst → job naar `fout` (ook in review:false); nooit stil een model opleveren."""
+    eng = WetsanalyseEngine(settings, store, _RsGeenHerkomstLLM(), FakeWettenbank())
+    job_id = await _tot_klaar(eng)
+    await eng.run_regelspraak(job_id, review=False)
+
+    job = await store.load_job(job_id)
+    assert job.state == JobState.fout
+    assert job.error.klasse == FoutKlasse.validatie
+    assert await store.lees_regelspraak(job_id) is None
+
+
+async def test_regelspraak_retry_hervat_rs_fase(settings, store):
+    """Retry herkent de rs-fase via current_activiteit en hervat in de review-state (niet act-2)."""
+    eng = WetsanalyseEngine(settings, store, _RsGeenHerkomstLLM(), FakeWettenbank())
+    job_id = await _tot_klaar(eng)
+    await eng.run_regelspraak(job_id, review=False)
+    assert (await store.load_job(job_id)).state == JobState.fout
+
+    await eng.retry(job_id)
+    job = await store.load_job(job_id)
+    assert job.state == JobState.wacht_review_rs_gegevens
+    assert job.current_activiteit == "rs-gegevens"
+
+
+async def test_regelspraak_akkoord_weigert_onbetrouwbaar_model(settings, store):
+    """A4: een via retry hervatte, brongetrouwheid-falende ronde mag met 'akkoord' niet promoveren."""
+    eng = WetsanalyseEngine(settings, store, _RsGeenHerkomstLLM(), FakeWettenbank())
+    job_id = await _tot_klaar(eng)
+    await eng.run_regelspraak(job_id, review=False)  # → fout (herkomst ontbreekt)
+    await eng.retry(job_id)                           # → wacht_review_rs_gegevens
+    assert (await store.load_job(job_id)).state == JobState.wacht_review_rs_gegevens
+
+    await eng.apply_feedback(job_id, Feedback(status="akkoord", activiteit="rs-gegevens"))
+    job = await store.load_job(job_id)
+    # Promotie geweigerd: terug naar fout i.p.v. door naar de regels-stap.
+    assert job.state == JobState.fout
+    assert job.error.klasse == FoutKlasse.validatie
+
+
+async def test_regelspraak_dubbele_claim_verliest(engine, store):
+    """Tweede claim_regelspraak op dezelfde job geeft None (backt de 409 op een dubbele POST)."""
+    job_id = await _tot_klaar(engine)
+    eerste = await engine.claim_regelspraak(job_id, review=False)
+    tweede = await engine.claim_regelspraak(job_id, review=False)
+    assert eerste is not None
+    assert tweede is None
+
+
+async def test_regelspraak_rondecap(engine, store, settings):
+    """De 6-rondencap forceert akkoord en promoveert; nooit een (max+1)-ronde."""
+    job_id = await _tot_klaar(engine)
+    await engine.run_regelspraak(job_id, review=True)
+    assert (await store.load_job(job_id)).state == JobState.wacht_review_rs_gegevens
+
+    for _ in range(settings.max_rondes):
+        if (await store.load_job(job_id)).state != JobState.wacht_review_rs_gegevens:
+            break
+        await engine.apply_feedback(
+            job_id,
+            Feedback(status="wijzigingen", activiteit="rs-gegevens", items={"ot1": "Pas aan."}),
+        )
+
+    assert await store.hoogste_ronde(job_id, "rs-gegevens") <= settings.max_rondes
+    # De cap heeft de GegevensSpraak afgesloten en doorgepromoveerd naar de regels-stap.
+    assert (await store.load_job(job_id)).state == JobState.wacht_review_rs_regels
+
+
+def test_merge_validatiepunten_union_en_ontdubbeling():
+    """A2: een revise mag eerder genoteerde validatiepunten niet wegvegen — union met behoud van
+    volgorde en ontdubbeling."""
+    from app.engine.regelspraak_steps import _merge_validatiepunten
+
+    assert _merge_validatiepunten(["a", "b"], ["b", "c"]) == ["a", "b", "c"]
+    assert _merge_validatiepunten(["a"], []) == ["a"]          # revise herhaalt niets → oud behouden
+    assert _merge_validatiepunten([], ["x"]) == ["x"]
+    assert _merge_validatiepunten(["a", "a"], ["a"]) == ["a"]  # dedupe, eerste voorkomen wint

@@ -17,6 +17,12 @@ const ALLE_STATES: JobState[] = [
   "bouwt",
   "klaar",
   "fout",
+  "rs-gegevens-runt",
+  "wacht-op-review-rs-gegevens",
+  "rs-regels-runt",
+  "wacht-op-review-rs-regels",
+  "rs-bouwt",
+  "rs-klaar",
 ];
 
 describe("state-classificatie", () => {
@@ -40,6 +46,18 @@ describe("state-classificatie", () => {
     expect(isTerminal("fout")).toBe(true);
   });
 
+  it("classificeert de RegelSpraak-vervolgstates", () => {
+    for (const s of ["rs-gegevens-runt", "rs-regels-runt", "rs-bouwt"] as JobState[]) {
+      expect(isRunning(s), s).toBe(true);
+      expect(isTerminal(s), s).toBe(false);
+    }
+    for (const s of ["wacht-op-review-rs-gegevens", "wacht-op-review-rs-regels"] as JobState[]) {
+      expect(isReview(s), s).toBe(true);
+      expect(isRunning(s), s).toBe(false);
+    }
+    expect(isTerminal("rs-klaar")).toBe(true);
+  });
+
   it("elke state is in precies één categorie", () => {
     for (const s of ALLE_STATES) {
       const n = [isReview(s), isRunning(s), isTerminal(s)].filter(Boolean).length;
@@ -50,6 +68,8 @@ describe("state-classificatie", () => {
   it("koppelt review-states aan hun activiteit", () => {
     expect(reviewActiviteit("wacht-op-review-act2")).toBe("2");
     expect(reviewActiviteit("wacht-op-review-act3")).toBe("3");
+    expect(reviewActiviteit("wacht-op-review-rs-gegevens")).toBe("rs-gegevens");
+    expect(reviewActiviteit("wacht-op-review-rs-regels")).toBe("rs-regels");
     expect(reviewActiviteit("queued")).toBeNull();
   });
 
