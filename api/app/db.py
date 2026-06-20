@@ -136,6 +136,43 @@ users = Table(
     Column("updated", _DT, nullable=False),
 )
 
+# Generieke runtime-config (key/value) — beheerbaar via /v1/admin/settings + /beheer. Eerste
+# sleutel: `capture_llm_calls` (bool). Bewust een aparte, kleine tabel zodat een toggle de hot
+# projects-rij niet raakt en latere instellingen er zonder migratie bij kunnen.
+app_settings = Table(
+    "app_settings",
+    metadata,
+    Column("key", String(64), primary_key=True),
+    Column("value", _JSON, nullable=True),
+    Column("updated", _DT, nullable=False),
+)
+
+# Eén rij per feitelijke LLM-call (incl. auto-correctie-herhalingen, de verwijzing-inventaris en
+# gefaalde pogingen). Legt de letterlijke prompt + ruwe respons vast voor prompt-/gedragsanalyse.
+# Apart van `rondes` (die alleen het uiteindelijke ronde-resultaat bewaart) en standaard leeg —
+# capture staat default uit (app_settings.capture_llm_calls).
+llm_calls = Table(
+    "llm_calls",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("project_slug", String(255), nullable=False),
+    Column("activiteit", String(16), nullable=False, default=""),
+    Column("ronde", Integer, nullable=False, default=0),
+    Column("poging", Integer, nullable=False, default=1),
+    Column("fase", String(32), nullable=False, default=""),
+    Column("model", String(128), nullable=False, default=""),
+    Column("provider", String(64), nullable=False, default=""),
+    Column("system_prompt", Text, nullable=False, default=""),
+    Column("user_prompt", Text, nullable=False, default=""),
+    Column("response_text", Text, nullable=False, default=""),
+    Column("tokens_in", Integer, nullable=False, default=0),
+    Column("tokens_out", Integer, nullable=False, default=0),
+    Column("ok", Boolean, nullable=False, default=True),
+    Column("error", Text, nullable=True),
+    Column("tijdstip", _DT, nullable=False),
+    Index("ix_llm_calls_project_slug_id", "project_slug", "id"),
+)
+
 
 # --- engine-beheer -------------------------------------------------------------
 

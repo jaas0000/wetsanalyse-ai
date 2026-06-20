@@ -337,3 +337,40 @@ async def test_wet_resolve_mcp_fout_geeft_502(admin_client, monkeypatch):
     monkeypatch.setattr("app.wetten.WettenbankClient", FakeClient)
     r = await admin_client.post("/v1/admin/wetten/BWBR0004770/resolve", headers=_H)
     assert r.status_code == 502
+
+
+# --- runtime-instellingen + LLM-call-capture -----------------------------------
+
+async def test_settings_default_uit_en_toggle(admin_client):
+    from app import app_settings
+    app_settings._wis_cache()
+    # Default: capture uit.
+    r = await admin_client.get("/v1/admin/settings", headers=_H)
+    assert r.status_code == 200 and r.json()["capture_llm_calls"] is False
+    # Aanzetten en teruglezen.
+    r = await admin_client.put("/v1/admin/settings", headers=_H, json={"capture_llm_calls": True})
+    assert r.status_code == 200 and r.json()["capture_llm_calls"] is True
+    assert (await admin_client.get("/v1/admin/settings", headers=_H)).json()["capture_llm_calls"] is True
+    app_settings._wis_cache()
+
+
+async def test_settings_en_llm_calls_vereisen_admin(admin_client):
+    assert (await admin_client.get("/v1/admin/settings")).status_code == 401
+    assert (await admin_client.get("/v1/admin/projects/p1/llm-calls")).status_code == 401
+
+
+async def test_llm_calls_endpoint_geeft_vastgelegde_calls(admin_client):
+    from app.deps import get_store
+    store = get_store()
+    await store.schrijf_llm_call({
+        "project_slug": "p1", "activiteit": "2", "ronde": 1, "poging": 1, "fase": "generatie",
+        "model": "m", "provider": "p", "system_prompt": "sys", "user_prompt": "usr",
+        "response_text": "resp", "tokens_in": 1, "tokens_out": 2, "ok": True,
+    })
+    r = await admin_client.get("/v1/admin/projects/p1/llm-calls", headers=_H)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert len(body) == 1 and body[0]["system_prompt"] == "sys"
+    assert body[0]["response_text"] == "resp" and body[0]["tijdstip"]
+    # Andere analyse: leeg.
+    assert (await admin_client.get("/v1/admin/projects/ander/llm-calls", headers=_H)).json() == []

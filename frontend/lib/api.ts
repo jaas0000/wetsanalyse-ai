@@ -5,7 +5,9 @@ import type {
   Analyse2,
   Analyse3,
   ApiError,
+  AppSettings,
   CreateAccepted,
+  LlmCall,
   Feedback,
   FeedbackAccepted,
   Job,
@@ -285,4 +287,27 @@ export async function changePassword(current: string, nieuw: string): Promise<vo
     body: JSON.stringify({ current, new: nieuw }),
   });
   if (!res.ok) throw await parseError(res);
+}
+
+// --- runtime-instellingen + LLM-call-capture (admin) ------------------------
+
+export async function getSettings(): Promise<AppSettings> {
+  const res = await fetch("/api/admin/settings", { cache: "no-store" });
+  return json<AppSettings>(res);
+}
+
+export async function setCaptureLlmCalls(aan: boolean): Promise<AppSettings> {
+  const res = await fetch("/api/admin/settings", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ capture_llm_calls: aan }),
+  });
+  return json<AppSettings>(res);
+}
+
+export async function getLlmCalls(projectId: string): Promise<LlmCall[]> {
+  const res = await fetch(`/api/admin/projects/${encodeURIComponent(projectId)}/llm-calls`, {
+    cache: "no-store",
+  });
+  return json<LlmCall[]>(res);
 }

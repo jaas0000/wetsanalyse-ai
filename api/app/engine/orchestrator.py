@@ -26,6 +26,7 @@ from ..contracts import (
     REVIEW_STATES, RUNNING_STATES, StartRequest,
 )
 from ..llm.base import LLMClient, LLMError
+from ..llm.capture import CapturingLLMClient, gebruik_context, werk_context_bij
 from ..llm.litellm_client import build_llm_client
 from .. import profiles
 from ..jobstore import IdConflict, JobStore
@@ -75,10 +76,13 @@ class WetsanalyseEngine:
         self.owner = uuid4().hex
 
     async def _llm_for(self, job: Job) -> LLMClient:
-        if self._llm_override is not None:
-            return self._llm_override
-        cfg = await profiles.resolve_config(job.model_profile, self.s)
-        return build_llm_client(cfg)
+        # Wrap met de capture-decorator: legt prompt + ruwe respons vast als de toggle aan staat
+        # (anders een dunne passthrough). De call-context zet de orchestrator per generatie.
+        inner = self._llm_override
+        if inner is None:
+            cfg = await profiles.resolve_config(job.model_profile, self.s)
+            inner = build_llm_client(cfg)
+        return CapturingLLMClient(inner, self.store)
 
     # --- publieke API -----------------------------------------------------
 
@@ -355,14 +359,15 @@ class WetsanalyseEngine:
         llm = await self._llm_for(job)
         per_bron: list[tuple[dict, dict, dict]] = []
         inv_in = inv_out = 0
-        for bb in bron_bases:
-            await self._set_fase(job, "verwijzingen-inventariseren")
-            inv_res = await self._met_retry(lambda bb=bb: steps.inventariseer_verwijzingen(llm, bb))
-            inv_in += inv_res.tokens_in
-            inv_out += inv_res.tokens_out
-            await self._set_fase(job, "verwijzingen-volgen")
-            opgehaald = await self._volg_verwijzingen(bb, inv_res.data)
-            per_bron.append((bb, inv_res.data, opgehaald))
+        with gebruik_context(project_slug=job.id, activiteit="2", ronde=ronde, fase="inventaris"):
+            for bb in bron_bases:
+                await self._set_fase(job, "verwijzingen-inventariseren")
+                inv_res = await self._met_retry(lambda bb=bb: steps.inventariseer_verwijzingen(llm, bb))
+                inv_in += inv_res.tokens_in
+                inv_out += inv_res.tokens_out
+                await self._set_fase(job, "verwijzingen-volgen")
+                opgehaald = await self._volg_verwijzingen(bb, inv_res.data)
+                per_bron.append((bb, inv_res.data, opgehaald))
 
         async def maak():
             bronnen, tin, tout, prov0 = [], 0, 0, None
@@ -398,13 +403,16 @@ class WetsanalyseEngine:
                 return
 
         await self._set_fase(job, "llm-generatie")
-        analyse, prov = await self._met_retry(maak)
-        pogingen = 0
-        # Auto-correctie regenereert UITSLUITEND op harde brongetrouwheid-schendingen.
-        while pogingen < self.s.max_autocorrectie and brongetrouwheid_check(analyse, activiteit):
-            pogingen += 1
-            await self._set_fase(job, "auto-correctie")
+        with gebruik_context(project_slug=job.id, activiteit=activiteit, ronde=ronde,
+                             poging=1, fase="generatie"):
             analyse, prov = await self._met_retry(maak)
+            pogingen = 0
+            # Auto-correctie regenereert UITSLUITEND op harde brongetrouwheid-schendingen.
+            while pogingen < self.s.max_autocorrectie and brongetrouwheid_check(analyse, activiteit):
+                pogingen += 1
+                werk_context_bij(poging=pogingen + 1, fase="auto-correctie")
+                await self._set_fase(job, "auto-correctie")
+                analyse, prov = await self._met_retry(maak)
         # Tel eenmalig de inventaris-tokens (fase 2a) bij de ronde — budget/usage-aggregatie.
         prov["tokens_in"] += extra_tokens[0]
         prov["tokens_out"] += extra_tokens[1]
@@ -572,12 +580,15 @@ class WetsanalyseEngine:
 
         fase = "regelspraak-gegevens-generatie" if stap == "rs-gegevens" else "regelspraak-regels-generatie"
         await self._set_fase(job, fase)
-        analyse, prov = await self._met_retry(maak)
-        pogingen = 0
-        while pogingen < self.s.max_autocorrectie and regelspraak_brongetrouwheid_check(analyse, stap, ingest):
-            pogingen += 1
-            await self._set_fase(job, "auto-correctie")
+        with gebruik_context(project_slug=job.id, activiteit=stap, ronde=ronde,
+                             poging=1, fase="generatie"):
             analyse, prov = await self._met_retry(maak)
+            pogingen = 0
+            while pogingen < self.s.max_autocorrectie and regelspraak_brongetrouwheid_check(analyse, stap, ingest):
+                pogingen += 1
+                werk_context_bij(poging=pogingen + 1, fase="auto-correctie")
+                await self._set_fase(job, "auto-correctie")
+                analyse, prov = await self._met_retry(maak)
 
         await self._set_fase(job, "brongetrouwheid-check")
         schendingen = regelspraak_brongetrouwheid_check(analyse, stap, ingest)
