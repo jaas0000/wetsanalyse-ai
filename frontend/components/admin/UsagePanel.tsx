@@ -39,7 +39,7 @@ export function UsagePanel() {
           <button
             key={g.key}
             onClick={() => setGroupBy(g.key)}
-            className={`rounded-md border px-3 py-1 text-xs font-medium transition-colors ${
+            className={`inline-flex min-h-[36px] items-center justify-center rounded-md border px-3 py-1.5 text-xs font-medium transition-colors ${
               groupBy === g.key
                 ? "border-accent/40 bg-accent/10 text-accent"
                 : "border-line bg-surface text-muted hover:bg-paper"

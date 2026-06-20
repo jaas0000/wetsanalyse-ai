@@ -265,7 +265,7 @@ export const DashboardCard = memo(function DashboardCard({ u }: { u: DashboardUp
             type="button"
             onClick={onRetry}
             disabled={bezig}
-            className="ml-auto shrink-0 rounded-md border border-accent/40 bg-accent/10 px-3 py-1 text-xs font-medium text-accent transition-colors hover:bg-accent/20 disabled:opacity-50"
+            className="ml-auto inline-flex min-h-[36px] shrink-0 items-center justify-center rounded-md border border-accent/40 bg-accent/10 px-3 py-1.5 text-xs font-medium text-accent transition-colors hover:bg-accent/20 disabled:opacity-50"
           >
             {bezig ? "Bezig…" : "Retry"}
           </button>
