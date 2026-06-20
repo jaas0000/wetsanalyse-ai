@@ -102,7 +102,7 @@ export function DashboardClient({ initieel }: { initieel: JobSummary[] }) {
           <p className="max-w-md text-sm text-muted">
             Zodra je een analyse start, verschijnt hier live de voortgang.
           </p>
-          <LinkButton href="/nieuw" className="mt-2">
+          <LinkButton href="/nieuw" className="mt-2 w-full sm:w-auto">
             Nieuwe analyse
           </LinkButton>
         </Card>
