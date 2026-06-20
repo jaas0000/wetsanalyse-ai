@@ -88,7 +88,12 @@ De **harde scheidingslijn**: alles met een token is server-only.
   hemelblauw `#007bc7` op wit, Fira Sans/Mono als vrij alternatief voor Rijksoverheid Sans,
   responsive 100/90/80 via root-font-size). `components/ui/` zijn de primitives (48px-knoppen/velden,
   platte cards, gecentreerde logobalk met het officiële `public/belastingdienst-logo.svg`,
-  `Vormelement`-signatuur). De JAS-klassekleuren in `lib/jas.ts` zijn de **exacte labelkleuren uit
+  `Vormelement`-signatuur). **Knoppen zijn mobile-first**: `Button`/`LinkButton` zijn bewust
+  breedte-neutraal (`inline-flex shrink-0`); actie-rijen lopen via `components/ui/ButtonRow.tsx`
+  (mobiel volle-breedte gestapeld, `sm:` naast elkaar). Staat een knop buiten een `ButtonRow`
+  (bv. naast een invoerveld), geef hem dan `className="w-full sm:w-auto"` en laat de container op
+  mobiel stapelen (`flex flex-col … sm:flex-row`) — geen vaste/`flex-wrap`-knoprijen die op smal
+  scherm overlopen. De JAS-klassekleuren in `lib/jas.ts` zijn de **exacte labelkleuren uit
   `docs/wa-table.png`**; job-state-kleuren in `lib/states.ts`.
 
 ## Regels (niet aan tornen)
