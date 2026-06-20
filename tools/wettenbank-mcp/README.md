@@ -180,7 +180,7 @@ Zoekt in het Basiswettenbestand op naam en/of filtert op type, rechtsgebied of m
 | `maxResultaten` | number |           | Maximum aantal resultaten (standaard: 10, maximum: 50) |
 | `peildatum`     | string |           | Versie geldig op datum `YYYY-MM-DD` (standaard: vandaag) |
 
-Minimaal één zoekcriterium is vereist (Zod `.refine()`). Meerwoordige titels zoeken met CQL `all` (alle woorden moeten voorkomen); één woord met `any`. `totaal` telt de geretourneerde (gededupliceerde) regelingen, `totaalBeschikbaar` het brontotaal (SRU `numberOfRecords`); `isVolledig: false` betekent dat het resultaat is afgekapt — verfijn de zoekopdracht.
+Minimaal één zoekcriterium is vereist (Zod `.refine()`). Meerwoordige titels zoeken met CQL `all` (alle woorden moeten voorkomen); één woord met `any`. `totaal` telt de geretourneerde (gededupliceerde) regelingen; `totaalBeschikbaar` is bij afkapping het brontotaal (ruwe SRU `numberOfRecords`) en bij `isVolledig` gelijk aan `totaal` (invariant: `totaalBeschikbaar >= totaal`); `isVolledig: false` betekent dat het resultaat is afgekapt — verfijn de zoekopdracht.
 
 **Resultaatformaat (JSON):**
 
