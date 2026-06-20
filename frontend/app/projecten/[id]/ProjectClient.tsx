@@ -64,7 +64,10 @@ export function ProjectClient({ initieel }: { initieel: Job }) {
 
   // SSE: open zolang het project niet terminaal is; elke update triggert een verse job-fetch.
   useEffect(() => {
-    if (isTerminal(job.state)) return;
+    // streamGen === 0 → eerste mount: een terminale analyse opent géén stream (niets te volgen).
+    // streamGen > 0 → geforceerde heropening (start regelspraak vanuit het terminale `klaar`): open
+    // ongeacht de — nu nog terminale — job.state, zodat de detailpagina de rs-overgang live oppikt.
+    if (streamGen === 0 && isTerminal(job.state)) return;
     const es = new EventSource(`/api/projects/${pathSegment(initieel.id)}/events`);
     esRef.current = es;
     es.onmessage = () => void refreshJob();
@@ -130,7 +133,8 @@ export function ProjectClient({ initieel }: { initieel: Job }) {
   async function onStartRegelspraak() {
     setActie("regelspraak");
     try {
-      await startRegelspraak(initieel.id, {});
+      const res = await startRegelspraak(initieel.id, {});
+      setJob((j) => ({ ...j, state: res.state })); // optimistisch: verlaat de klaar-kaart direct
       setStreamGen((n) => n + 1); // heropen de SSE-stream vanuit de terminale klaar-state
       await refreshJob();
     } catch (e) {
