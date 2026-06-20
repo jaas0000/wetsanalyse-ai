@@ -106,6 +106,25 @@ a {
   details > *:not(summary) {
     display: block !important;
   }
+  /* Entree-animaties uitzetten en op de eindstand zetten. Zonder dit print het via print-CSS
+     onthulde (op scherm verborgen) tabblad blanco: zijn `rise`-animatie (opacity 0 → 1,
+     fill-mode: both) startte nooit en blijft in een statische print-snapshot op opacity 0 hangen. */
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+  /* Scroll-containers laten doorlopen zodat brede tabellen/RegelSpraak-blokken niet worden
+     afgeknipt op papier. */
+  .overflow-x-auto,
+  .overflow-y-auto,
+  .overflow-auto,
+  pre {
+    overflow: visible !important;
+  }
   /* Badge-/klassekleuren ook op papier. */
   body {
     -webkit-print-color-adjust: exact;
