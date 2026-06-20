@@ -110,6 +110,12 @@ async def test_regelspraak_nog_niet_gereed_409(client):
     assert (await client.get("/v1/projects/klaar-art1/regelspraak")).status_code == 409
 
 
+async def test_regelspraak_export_nog_niet_gereed_409(client):
+    """Ook de .rs/.md-export geeft een nette 409 (geen 500) als er nog geen model is."""
+    assert (await client.get("/v1/projects/klaar-art1/regelspraak.rs")).status_code == 409
+    assert (await client.get("/v1/projects/klaar-art1/regelspraak.md")).status_code == 409
+
+
 async def test_regelspraak_start_alleen_vanuit_klaar_409(client):
     """Starten vanuit een niet-afgeronde analyse (queued) → 409."""
     r = await client.post("/v1/projects/bwbr1-art1/regelspraak", json={"review": False})
