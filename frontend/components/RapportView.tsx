@@ -3,9 +3,8 @@
 import { Card, Section } from "@/components/ui/Card";
 import { Melding } from "@/components/ui/Melding";
 import { JasBadge, Tag } from "@/components/ui/Badge";
-import { LinkButton } from "@/components/ui/Button";
 import { LedenLijst } from "@/components/LedenLijst";
-import { bronHref, pathSegment, wettenOverheidHref } from "@/lib/url";
+import { bronHref, wettenOverheidHref } from "@/lib/url";
 import { bronLabel, bronLabelMap, vindplaatsText } from "@/lib/bronnen";
 import type { Bron, Markering, Rapport, Verwijzing } from "@/lib/types";
 
@@ -47,7 +46,7 @@ function Veld({ label, waarde }: { label: string; waarde?: string }) {
 function BronSectie({ bron }: { bron: Bron }) {
   const markeringenPerKlasse = groepeer(bron.markeringen ?? []);
   return (
-    <Section title={bronLabel(bron)} subtitle={bron.bwbId}>
+    <Section title={bronLabel(bron)} subtitle={bron.bwbId} level={3}>
       <div className="space-y-6">
         <div className="flex flex-wrap gap-2">
           {bron.versiedatum && <Tag>versie {bron.versiedatum}</Tag>}
@@ -150,7 +149,7 @@ function BronSectie({ bron }: { bron: Bron }) {
   );
 }
 
-export function RapportView({ rapport, projectId }: { rapport: Rapport; projectId: string }) {
+export function RapportView({ rapport }: { rapport: Rapport }) {
   const wg = rapport.werkgebied ?? ({} as Rapport["werkgebied"]);
   const bronnen = rapport.bronnen ?? [];
   const labels = bronLabelMap(bronnen);
@@ -158,19 +157,12 @@ export function RapportView({ rapport, projectId }: { rapport: Rapport; projectI
 
   return (
     <div className="space-y-10">
-      {/* Kop — werkgebied */}
+      {/* Kop — werkgebied (fase-kop: h2) */}
       <Card className="p-6">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <h2 className="font-display text-2xl font-semibold text-lint">{wg.naam || "Wetsanalyse"}</h2>
-            <p className="mt-1 text-sm text-muted">
-              Werkgebied · {bronnen.length} bron{bronnen.length === 1 ? "" : "nen"}
-            </p>
-          </div>
-          <LinkButton href={`/api/projects/${pathSegment(projectId)}/rapport-md`} variant="secondary" className="w-full sm:w-auto">
-            Download .md
-          </LinkButton>
-        </div>
+        <h2 className="font-display text-xl font-semibold text-lint">{wg.naam || "Wetsanalyse"}</h2>
+        <p className="mt-1 text-sm text-muted">
+          Werkgebied · {bronnen.length} bron{bronnen.length === 1 ? "" : "nen"}
+        </p>
         {(hoofdvraag || wg.omschrijving || wg.scoping) && (
           <div className="mt-4 space-y-1.5 border-t border-line pt-4">
             <Veld label="Hoofdvraag" waarde={hoofdvraag} />
@@ -194,7 +186,7 @@ export function RapportView({ rapport, projectId }: { rapport: Rapport; projectI
 
       {/* Begrippen — gedeeld over het werkgebied */}
       {rapport.begrippen?.length > 0 && (
-        <Section title="Begrippen" count={rapport.begrippen.length} subtitle="activiteit 3 · gedeeld">
+        <Section title="Begrippen" count={rapport.begrippen.length} subtitle="activiteit 3 · gedeeld" level={3}>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             {rapport.begrippen.map((b) => (
               <Card key={b.id} className="p-4">
@@ -218,7 +210,7 @@ export function RapportView({ rapport, projectId }: { rapport: Rapport; projectI
 
       {/* Afleidingsregels — gedeeld over het werkgebied */}
       {rapport.afleidingsregels?.length > 0 && (
-        <Section title="Afleidingsregels" count={rapport.afleidingsregels.length} subtitle="activiteit 3 · gedeeld">
+        <Section title="Afleidingsregels" count={rapport.afleidingsregels.length} subtitle="activiteit 3 · gedeeld" level={3}>
           <div className="space-y-3">
             {rapport.afleidingsregels.map((r) => (
               <Card key={r.id} className="p-4">
@@ -244,7 +236,7 @@ export function RapportView({ rapport, projectId }: { rapport: Rapport; projectI
 
       {/* Validatiepunten */}
       {rapport.validatiepunten?.length > 0 && (
-        <Section title="Validatiepunten" count={rapport.validatiepunten.length}>
+        <Section title="Validatiepunten" count={rapport.validatiepunten.length} level={3}>
           <Card className="p-4">
             <ul className="list-inside list-disc space-y-1 text-sm text-muted">
               {rapport.validatiepunten.map((v, i) => (
@@ -260,7 +252,7 @@ export function RapportView({ rapport, projectId }: { rapport: Rapport; projectI
 
       {/* Aandachtspunten */}
       {rapport.aandachtspunten && (
-        <Section title="Aandachtspunten">
+        <Section title="Aandachtspunten" level={3}>
           <Card className="p-4">
             <p className="whitespace-pre-line text-sm leading-relaxed text-muted">
               {rapport.aandachtspunten}
@@ -302,7 +294,7 @@ function Reviewlog({ rapport }: { rapport: Rapport }) {
   if (blokken.length === 0) return null;
 
   return (
-    <Section title="Reviewlog">
+    <Section title="Reviewlog" level={3}>
       <div className="space-y-3">
         {blokken.map(({ key, data }) => (
           <details key={key} className="rounded-xl border border-line bg-surface/80 p-4">
