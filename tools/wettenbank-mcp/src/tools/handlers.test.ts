@@ -192,6 +192,20 @@ describe("handleZoek", () => {
     expect(res.isVolledig).toBe(false);
   });
 
+  it("houdt totaalBeschikbaar consistent met totaal bij ontdubbeling (volledig)", async () => {
+    // Twee ruwe records met dezelfde bwbId (verschillende toestanden) → 1 unieke regeling.
+    // numberOfRecords telt de ruwe records (2); alle binnen, dus volledig. totaalBeschikbaar
+    // mag dan niet de ruwe 2 melden (valse "er is meer") maar de ontdubbelde telling.
+    vi.mocked(sruRequest).mockResolvedValue(
+      sruXml(2, record("BWBR0000001", "Wet A") + record("BWBR0000001", "Wet A"))
+    );
+    const uit = JSON.parse(await handleZoek({ titel: "Wet A" }));
+    const res = ZoekOutputSchema.parse(uit);
+    expect(res.totaal).toBe(1);
+    expect(res.isVolledig).toBe(true);
+    expect(res.totaalBeschikbaar).toBe(1);
+  });
+
   it("gebruikt CQL 'all' bij meerwoordige titels en 'any' bij één woord", async () => {
     vi.mocked(sruRequest).mockResolvedValue(sruXml(1, record("BWBR0000001", "Wet milieubeheer")));
     await handleZoek({ titel: "Wet milieubeheer" });
