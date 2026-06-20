@@ -75,7 +75,7 @@ export function DashboardClient({ initieel }: { initieel: JobSummary[] }) {
             zit. Klik een teller om op status te filteren.
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           {TELLERS.map(({ key, label, kleur }) => {
             const actief = filters.status === key;
             return (
