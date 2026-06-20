@@ -531,6 +531,31 @@ export interface LoginVerifyResult {
   role: Role | "";
 }
 
+// --- runtime-instellingen + LLM-call-capture --------------------------------
+
+export interface AppSettings {
+  capture_llm_calls: boolean;
+}
+
+export interface LlmCall {
+  id: number;
+  project_slug: string;
+  activiteit: string;
+  ronde: number;
+  poging: number;
+  fase: string;
+  model: string;
+  provider: string;
+  system_prompt: string;
+  user_prompt: string;
+  response_text: string;
+  tokens_in: number;
+  tokens_out: number;
+  ok: boolean;
+  error: string | null;
+  tijdstip: string;
+}
+
 // --- API-fout doorgegeven door de BFF ---------------------------------------
 
 export interface ApiError {

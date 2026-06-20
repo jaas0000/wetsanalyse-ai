@@ -66,8 +66,11 @@ De **harde scheidingslijn**: alles met een token is server-only.
   delen de client-side **zoek-/filter-/sorteer-/pagineerlaag**: `lib/projectFilter.ts`
   (`filterEnSorteer`/`distinctWetten`/`paginate`) + `components/ProjectControls.tsx` +
   `components/Pagination.tsx`; statusgroepen via `statusBucket` in `lib/states.ts`.
-- `components/` — presentatie; `components/admin/` is het `/beheer`-scherm (achter het admin-token),
-  `components/ui/` zijn de primitives. De **cross-referenties** (`Verwijzing`-type in `lib/types.ts`)
+- `components/` — presentatie; `components/admin/` is het `/beheer`-scherm (achter het admin-token):
+  modelprofielen, wetten, gebruikers, token-verbruik én **`LlmCapturePanel`** (toggle voor het
+  vastleggen van LLM-calls + viewer per analyse-id; BFF-routes `/api/admin/settings` en
+  `/api/admin/projects/[id]/llm-calls`). `components/ui/` zijn de primitives. De **cross-referenties**
+  (`Verwijzing`-type in `lib/types.ts`)
   renderen puur in `RapportView.tsx` (Verwijzingen-sectie) en `ReviewPanel.tsx` (scope-feedback per
   verwijzing, via het bestaande per-id-feedbackmechanisme) uit de bestaande `/rapport`- en
   `/ronde`-data — er is **geen nieuwe BFF-route** voor nodig.

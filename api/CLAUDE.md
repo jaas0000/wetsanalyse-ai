@@ -59,8 +59,9 @@ triviale geval; het rapport heeft de vorm `{werkgebied, bronnen[], begrippen, af
   Fernet-versleuteling-at-rest van de API-key (master key uit `LLM_CONFIG_SECRET(_FILE)`).
   `usage.py` — read-only token-verbruik-aggregatie over `provenance`.
 - `db.py` — async SQLAlchemy-Core laag: engine-beheer + de tabeldefinities (`projects`, `rondes`,
-  `llm_profiles`, `wet_catalogus`). Portable types (`JSON`→`JSONB` op Postgres, `JSON` op SQLite-tests),
-  tz-aware datetimes (`aware()` normaliseert het naïeve SQLite-resultaat naar UTC).
+  `llm_profiles`, `wet_catalogus`, `users`, `app_settings`, `llm_calls`). Portable types
+  (`JSON`→`JSONB` op Postgres, `JSON` op SQLite-tests), tz-aware datetimes (`aware()` normaliseert
+  het naïeve SQLite-resultaat naar UTC).
 - `jobstore.py` — `JobStore`-Protocol (opslag-abstractie) + `IdConflict`. `postgres_store.py` —
   de SQLAlchemy/PostgreSQL-implementatie: gerichte kolom-writes, **ronde-immutabiliteit**, client-scoping,
   en de **state-CAS** (`claim`/`verleng_lease`/`lijst_verlopen_running`/`markeer_lease_loze_running`) via
@@ -81,6 +82,14 @@ triviale geval; het rapport heeft de vorm `{werkgebied, bronnen[], begrippen, af
 - `llm/` — `LLMClient`-protocol + LiteLLM-implementatie (provider = config; output-strategie + parse).
   `throttle.py` — proces-globale **concurrency-rem** (semafoor) op gelijktijdige LLM-calls
   (`WETSANALYSE_LLM_MAX_CONCURRENCY`), tegen zelf-veroorzaakte rate-limits; ingesteld in de lifespan.
+  `capture.py` — **LLM-call-capture**: een `CapturingLLMClient`-decorator die élke `complete()`
+  (incl. auto-correctie-herhalingen, de verwijzing-inventaris en gefaalde calls) best-effort vastlegt
+  in `llm_calls` (system/user-prompt + ruwe respons + metadata) wanneer de runtime-toggle
+  `capture_llm_calls` aan staat. De call-context (project/activiteit/ronde/poging/fase) komt uit een
+  `ContextVar` die de orchestrator rond elke generatie zet; `_llm_for` wrapt de client. Capture is
+  **default uit** en mag de analyse nooit breken. De toggle leeft in `app_settings.py` (key/value met
+  korte TTL-cache) en is beheerbaar via `/v1/admin/settings` + het /beheer-scherm. Inzien per analyse:
+  `GET /v1/admin/projects/{slug}/llm-calls`.
 - `engine/` — `prompts.py` (references verbatim + canonieke JAS-lijst uit validation), `steps.py`
   (LLM-stap + merge met brongetrouwe MCP-basis), `retry.py` (bounded backoff op transiënte
   LLM/MCP-fouten; honoreert **`Retry-After`** bij een 429, met plafond + jitter), `orchestrator.py`
@@ -108,7 +117,9 @@ triviale geval; het rapport heeft de vorm `{werkgebied, bronnen[], begrippen, af
   (`/profiles`, write-only API-key, `api_key_set` nooit de key zelf), default zetten, verbinding
   testen, `/usage` (token-verbruik), de wet-catalogus (`/wetten` CRUD + `/wetten/{bwbId}/resolve`)
   en het gebruikersbeheer (`/users` CRUD: aanmaken met eenmalig tijdelijk wachtwoord, rol/active
-  wijzigen, wachtwoord resetten; de laatste actieve beheerder is beschermd).
+  wijzigen, wachtwoord resetten; de laatste actieve beheerder is beschermd). Ook de runtime-instellingen
+  (`GET/PUT /settings`, o.a. de `capture_llm_calls`-toggle) en de vastgelegde LLM-calls per analyse
+  (`GET /projects/{slug}/llm-calls`).
   De engine bouwt per analyse de LLM-client uit het profiel van de job, dus runtime-wijzigingen
   werken zonder redeploy. De niet-admin keuzelijsten (`/v1/profiles`, `/v1/wetten`) staan in
   `routers/catalog.py` zodat de frontend de dropdowns zonder admin-token vult.

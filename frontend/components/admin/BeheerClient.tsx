@@ -20,6 +20,7 @@ import { ProfileEditor } from "./ProfileEditor";
 import { WetEditor } from "./WetEditor";
 import { UsagePanel } from "./UsagePanel";
 import { UsersPanel } from "./UsersPanel";
+import { LlmCapturePanel } from "./LlmCapturePanel";
 
 type EditState =
   | { open: false }
@@ -227,6 +228,8 @@ export function BeheerClient() {
       <UsersPanel />
 
       <UsagePanel />
+
+      <LlmCapturePanel />
     </div>
   );
 }

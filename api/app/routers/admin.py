@@ -25,8 +25,10 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
-from .. import profiles, usage, users, wetten
+from .. import app_settings, profiles, usage, users, wetten
 from ..auth import require_admin
+from ..deps import get_store
+from ..jobstore import JobStore
 from ..llm.litellm_client import build_llm_client
 from ..llm_profile import LlmProfile
 from ..ratelimit import rate_limited_admin_test
@@ -333,3 +335,64 @@ async def verwijder_user(userid: str):
         await users.delete_user(userid)
     except users.UserError as e:
         raise HTTPException(status_code=409, detail=str(e))
+
+
+# --- runtime-instellingen + LLM-call-capture -----------------------------------
+
+class SettingsOut(BaseModel):
+    capture_llm_calls: bool = False
+
+
+class SettingsIn(BaseModel):
+    capture_llm_calls: bool
+
+
+class LlmCallOut(BaseModel):
+    id: int
+    project_slug: str
+    activiteit: str = ""
+    ronde: int = 0
+    poging: int = 1
+    fase: str = ""
+    model: str = ""
+    provider: str = ""
+    system_prompt: str = ""
+    user_prompt: str = ""
+    response_text: str = ""
+    tokens_in: int = 0
+    tokens_out: int = 0
+    ok: bool = True
+    error: str | None = None
+    tijdstip: str = ""
+
+
+@router.get("/settings", response_model=SettingsOut)
+async def haal_settings(store: JobStore = Depends(get_store)):
+    return SettingsOut(capture_llm_calls=await app_settings.capture_enabled(store))
+
+
+@router.put("/settings", response_model=SettingsOut)
+async def zet_settings(body: SettingsIn, store: JobStore = Depends(get_store)):
+    await app_settings.set_capture(store, body.capture_llm_calls)
+    return SettingsOut(capture_llm_calls=await app_settings.capture_enabled(store))
+
+
+@router.get("/projects/{slug}/llm-calls", response_model=list[LlmCallOut])
+async def lijst_llm_calls(slug: str, store: JobStore = Depends(get_store)):
+    """Vastgelegde LLM-calls (prompt + ruwe respons) van één analyse, op volgorde. Admin-only."""
+    rijen = await store.lijst_llm_calls(slug)
+    out: list[LlmCallOut] = []
+    for r in rijen:
+        ts = r.get("tijdstip")
+        out.append(LlmCallOut(
+            id=r["id"], project_slug=r.get("project_slug", ""),
+            activiteit=r.get("activiteit", ""), ronde=r.get("ronde", 0),
+            poging=r.get("poging", 1), fase=r.get("fase", ""),
+            model=r.get("model", ""), provider=r.get("provider", ""),
+            system_prompt=r.get("system_prompt", ""), user_prompt=r.get("user_prompt", ""),
+            response_text=r.get("response_text", ""),
+            tokens_in=r.get("tokens_in", 0), tokens_out=r.get("tokens_out", 0),
+            ok=bool(r.get("ok", True)), error=r.get("error"),
+            tijdstip=ts.isoformat() if hasattr(ts, "isoformat") else (ts or ""),
+        ))
+    return out

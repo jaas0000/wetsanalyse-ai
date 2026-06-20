@@ -457,5 +457,63 @@ class PostgresStore:
     async def delete_project(self, job_id: str) -> bool:
         async with db.get_engine().begin() as conn:
             await conn.execute(delete(db.rondes).where(db.rondes.c.project_slug == job_id))
+            await conn.execute(delete(db.llm_calls).where(db.llm_calls.c.project_slug == job_id))
             res = await conn.execute(delete(db.projects).where(db.projects.c.slug == job_id))
         return res.rowcount == 1
+
+    # --- LLM-call-capture (prompt + ruwe respons, voor analyse) ---
+
+    async def schrijf_llm_call(self, call: dict) -> None:
+        """Leg één feitelijke LLM-call vast. Best-effort: capture mag de analyse nooit breken."""
+        waarden = {
+            "project_slug": call.get("project_slug") or "",
+            "activiteit": call.get("activiteit") or "",
+            "ronde": int(call.get("ronde") or 0),
+            "poging": int(call.get("poging") or 1),
+            "fase": call.get("fase") or "",
+            "model": call.get("model") or "",
+            "provider": call.get("provider") or "",
+            "system_prompt": call.get("system_prompt") or "",
+            "user_prompt": call.get("user_prompt") or "",
+            "response_text": call.get("response_text") or "",
+            "tokens_in": int(call.get("tokens_in") or 0),
+            "tokens_out": int(call.get("tokens_out") or 0),
+            "ok": bool(call.get("ok", True)),
+            "error": call.get("error"),
+            "tijdstip": db.utcnow(),
+        }
+        async with db.get_engine().begin() as conn:
+            await conn.execute(insert(db.llm_calls).values(**waarden))
+
+    async def lijst_llm_calls(self, project_slug: str) -> list[dict]:
+        async with db.get_engine().connect() as conn:
+            rows = (await conn.execute(
+                select(db.llm_calls)
+                .where(db.llm_calls.c.project_slug == project_slug)
+                .order_by(db.llm_calls.c.id)
+            )).mappings().all()
+        return [dict(r) for r in rows]
+
+    # --- generieke runtime-instellingen (key/value) ---
+
+    async def lees_app_setting(self, key: str):
+        async with db.get_engine().connect() as conn:
+            res = await conn.execute(
+                select(db.app_settings.c.value).where(db.app_settings.c.key == key)
+            )
+        row = res.first()
+        return row[0] if row is not None else None
+
+    async def schrijf_app_setting(self, key: str, value) -> None:
+        now = db.utcnow()
+        async with db.get_engine().begin() as conn:
+            bestaat = (await conn.execute(
+                select(db.app_settings.c.key).where(db.app_settings.c.key == key)
+            )).first()
+            if bestaat is None:
+                await conn.execute(insert(db.app_settings).values(key=key, value=value, updated=now))
+            else:
+                await conn.execute(
+                    update(db.app_settings).where(db.app_settings.c.key == key)
+                    .values(value=value, updated=now)
+                )
