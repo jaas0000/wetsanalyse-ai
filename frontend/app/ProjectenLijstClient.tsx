@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { StateBadge } from "@/components/ui/Badge";
 import { Button, LinkButton } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -37,8 +38,30 @@ function formatDatum(iso: string): string {
  *  (nieuwe analyses verschijnen vanzelf, statussen lopen mee, verwijderde rijen verdwijnen). Zoeken,
  *  filteren, sorteren en pagineren gebeuren client-side op de live lijst. */
 export function ProjectenLijstClient({ initieel }: { initieel: JobSummary[] }) {
+  const router = useRouter();
   const { items } = useProjectenStream(initieel);
   const all = [...items.values()];
+
+  // Re-sync de SSR-lijst bij terugkeer naar het tabblad/venster: een analyse die elders is aangemaakt
+  // (of de stand na een trage SSE-(her)verbinding) verschijnt zo meteen. Gethrottled zodat snel
+  // wisselen niet bij elke event een refetch triggert; de verse `initieel` wordt door
+  // `useProjectenStream` in de lijst opgenomen.
+  const laatsteRefresh = useRef(0);
+  useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState !== "visible") return;
+      const nu = Date.now();
+      if (nu - laatsteRefresh.current < 3000) return;
+      laatsteRefresh.current = nu;
+      router.refresh();
+    };
+    document.addEventListener("visibilitychange", refresh);
+    window.addEventListener("focus", refresh);
+    return () => {
+      document.removeEventListener("visibilitychange", refresh);
+      window.removeEventListener("focus", refresh);
+    };
+  }, [router]);
 
   const [filters, setFilters] = useState<ProjectFilters>(DEFAULT_FILTERS);
   const [page, setPage] = useState(1);

@@ -33,6 +33,23 @@ export function useProjectenStream(initieel: JobSummary[]) {
   );
   const [verbonden, setVerbonden] = useState(false);
 
+  // Voeg rijen toe wanneer een verse SSR-snapshot binnenkomt (na een `router.refresh()` of een
+  // focus-refresh): een net aangemaakte analyse verschijnt zo meteen, ook als de SSE-poll nog niet
+  // is binnengekomen. De `useState`-initializer draait maar één keer, dus zónder dit zou een refresh
+  // de lijst niet bijwerken. Alleen ONTBREKENDE rijen worden toegevoegd — bestaande rijen blijven van
+  // de (rijkere, live) SSE-status, zodat we de fase-/voortgangsvelden niet met de coarse summary
+  // overschrijven.
+  useEffect(() => {
+    if (initieel.length === 0) return;
+    setItems((prev) => {
+      const ontbrekend = initieel.filter((s) => !prev.has(s.id));
+      if (ontbrekend.length === 0) return prev;
+      const m = new Map(prev);
+      for (const s of ontbrekend) m.set(s.id, summaryNaarUpdate(s));
+      return m;
+    });
+  }, [initieel]);
+
   useEffect(() => {
     const es = new EventSource("/api/projects/events");
     es.onopen = () => setVerbonden(true);
