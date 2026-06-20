@@ -184,7 +184,7 @@ def regels_prompt(context: dict) -> tuple[str, str, dict, str]:
         + "\n\nOPDRACHT (RegelSpraak-regels): maak per afleidingsregel een Regel. Kies de juiste "
         "resultaatactie (rekenregel → Gelijkstelling-berekening; beslis-/specialisatieregel → "
         "Kenmerktoekenning of Consistentieregel). Leid de expressie af uit uitvoer-/invoervariabelen "
-        "+ parameters; gebruik uitsluitder de echte RegelSpraak-operatoren/predicaten. Geef elke "
+        "+ parameters; gebruik uitsluitend de echte RegelSpraak-operatoren/predicaten. Geef elke "
         "regel een stabiel id (rs1, …), een 'geldig'-regelversie, de letterlijke 'regelspraak_tekst', "
         "en een 'herkomst' (regel_id + vindplaatsen). Markeer interpretatiekeuzes in 'twijfel' en "
         "noteer aandachtspunten als validatiepunten."

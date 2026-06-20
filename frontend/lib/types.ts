@@ -301,7 +301,7 @@ export interface RsObjecttype {
   bezield?: boolean;
   attributen?: RsAttribuut[];
   kenmerken?: RsKenmerk[];
-  regelspraak_tekst: string;
+  regelspraak_tekst?: string;
   herkomst?: RegelspraakHerkomst;
   twijfel?: string;
 }
@@ -319,7 +319,7 @@ export interface RsFeittype {
   wederkerig?: boolean;
   rollen?: RsRol[];
   relatiebeschrijving?: string;
-  regelspraak_tekst: string;
+  regelspraak_tekst?: string;
   herkomst?: RegelspraakHerkomst;
 }
 
@@ -329,19 +329,19 @@ export interface RsParameter {
   lidwoord?: string;
   datatype: string;
   eenheid?: string;
-  regelspraak_tekst: string;
+  regelspraak_tekst?: string;
   herkomst?: RegelspraakHerkomst;
 }
 
 export interface RsDomein {
   naam: string;
-  regelspraak_tekst: string;
+  regelspraak_tekst?: string;
   herkomst?: RegelspraakHerkomst;
 }
 
 export interface RsEenheidssysteem {
   naam: string;
-  regelspraak_tekst: string;
+  regelspraak_tekst?: string;
 }
 
 export interface GegevensSpraak {
@@ -357,9 +357,11 @@ export interface GegevensSpraak {
 
 export interface RsRegel {
   id: string;
-  naam: string;
-  soort: string;
-  regelspraak_tekst: string;
+  // naam/soort/regelspraak_tekst komen van het LLM en zijn API-zijdig niet hard gevalideerd
+  // (regels is een ongetypeerde list); spiegel dat zwakke contract met optionele velden.
+  naam?: string;
+  soort?: string;
+  regelspraak_tekst?: string;
   herkomst?: RegelspraakHerkomst;
   twijfel?: string;
 }

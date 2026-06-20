@@ -266,8 +266,18 @@ async def start_regelspraak(
             detail=f"RegelSpraak start alleen vanuit een afgeronde analyse (klaar); nu: {p.state}",
         )
     review = body.review if body is not None else None
-    schedule(get_engine().run_regelspraak(project_id, review))
-    return CreateAccepted(id=project_id, naam=p.naam, state=JobState.rs_gegevens_runt)
+    # Claim synchroon (klaar → rs_gegevens_runt) vóór de 202: zo is de DB al niet-terminaal en kan
+    # de heropende events-stream niet meteen `done` krijgen; een verloren race (dubbele POST) geeft
+    # een eerlijke 409 i.p.v. een optimistische false-202.
+    engine = get_engine()
+    job = await engine.claim_regelspraak(project_id, review)
+    if job is None:
+        raise HTTPException(
+            status_code=409,
+            detail="RegelSpraak-fase is al gestart of de analyse is niet meer `klaar`.",
+        )
+    schedule(engine.run_regelspraak_fase(job))
+    return CreateAccepted(id=project_id, naam=p.naam, state=job.state)
 
 
 @router.get("/{project_id}/regelspraak", response_model=RegelspraakModel)

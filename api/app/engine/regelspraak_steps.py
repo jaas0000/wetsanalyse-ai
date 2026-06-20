@@ -29,6 +29,21 @@ def _prov(activiteit: str, ronde: int, res: LLMResult, prompt_hash: str, basis: 
     }
 
 
+def _merge_validatiepunten(oud: list, nieuw: list) -> list:
+    """Union van validatiepunten (lijst van strings) met behoud van volgorde en ontdubbeling.
+    Bij een revise herhaalt het LLM eerdere interpretatie-/twijfelsignalen niet altijd; die mogen niet
+    stil verdwijnen. Niet-hashbare punten (bv. dicts) worden best-effort op repr ontdubbeld."""
+    gezien: set = set()
+    samen: list = []
+    for punt in [*(oud or []), *(nieuw or [])]:
+        sleutel = punt if isinstance(punt, str) else repr(punt)
+        if sleutel in gezien:
+            continue
+        gezien.add(sleutel)
+        samen.append(punt)
+    return samen
+
+
 def _prov_basis(context: dict) -> dict:
     bronnen = context.get("bronnen") or []
     b = bronnen[0] if bronnen else {}
@@ -100,6 +115,10 @@ async def herzie(
             "werkgebied": context.get("werkgebied") or vorige.get("werkgebied") or {},
             "gegevensspraak_index": gegevensspraak_index(context.get("gegevensspraak") or {}),
             "regels": (res.data or {}).get("regels", []),
-            "validatiepunten": (res.data or {}).get("validatiepunten", []),
+            # Behoud de validatiepunten van de vorige ronde (twijfel-/interpretatiesignalen): mergen
+            # i.p.v. vervangen, zodat een revise die ze niet herhaalt ze niet stil weggooit.
+            "validatiepunten": _merge_validatiepunten(
+                vorige.get("validatiepunten") or [], (res.data or {}).get("validatiepunten", [])
+            ),
         }
     return model, _prov(stap, ronde, res, phash, _prov_basis(context))

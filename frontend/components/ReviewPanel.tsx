@@ -51,7 +51,7 @@ function itemsUitRegelspraak(act: "rs-gegevens" | "rs-regels", data: unknown): R
         regels: [
           { label: "Attributen", waarde: (o.attributen ?? []).map((a) => a.naam).join(", ") },
           { label: "Kenmerken", waarde: (o.kenmerken ?? []).map((k) => k.naam).join(", ") },
-          { label: "RegelSpraak", waarde: o.regelspraak_tekst },
+          { label: "RegelSpraak", waarde: o.regelspraak_tekst ?? "" },
         ],
         twijfel: o.twijfel,
       });
@@ -61,7 +61,7 @@ function itemsUitRegelspraak(act: "rs-gegevens" | "rs-regels", data: unknown): R
         id: f.id, titel: f.naam || f.id, klasse: "feittype", soort: "gegeven",
         regels: [
           { label: "Rollen", waarde: (f.rollen ?? []).map((r) => r.naam).join(", ") },
-          { label: "RegelSpraak", waarde: f.regelspraak_tekst },
+          { label: "RegelSpraak", waarde: f.regelspraak_tekst ?? "" },
         ],
       });
     }
@@ -70,7 +70,7 @@ function itemsUitRegelspraak(act: "rs-gegevens" | "rs-regels", data: unknown): R
         id: p.id, titel: p.naam || p.id, klasse: "parameter", soort: "gegeven",
         regels: [
           { label: "Datatype", waarde: p.datatype },
-          { label: "RegelSpraak", waarde: p.regelspraak_tekst },
+          { label: "RegelSpraak", waarde: p.regelspraak_tekst ?? "" },
         ],
       });
     }
@@ -79,7 +79,7 @@ function itemsUitRegelspraak(act: "rs-gegevens" | "rs-regels", data: unknown): R
   const regels = ((data as { regels?: RsRegel[] })?.regels ?? []) as RsRegel[];
   return regels.map((r) => ({
     id: r.id, titel: r.naam || r.id, klasse: r.soort, soort: "regel",
-    regels: [{ label: "RegelSpraak", waarde: r.regelspraak_tekst }],
+    regels: [{ label: "RegelSpraak", waarde: r.regelspraak_tekst ?? "" }],
     twijfel: r.twijfel,
   }));
 }

@@ -177,20 +177,36 @@ class WetsanalyseEngine:
             await self._guard(claimed, activiteit,
                               self._fase_rs_feedback(claimed, activiteit, ronde, feedback))
 
-    async def run_regelspraak(self, job_id: str, review: bool | None = None) -> None:
-        """On-demand: start de RegelSpraak-vervolgfase op een afgeronde (`klaar`) analyse.
-        Claim klaar → rs_gegevens_runt; zo niet klaar/al bezig, dan doet de claim niets."""
+    async def claim_regelspraak(self, job_id: str, review: bool | None = None) -> Job | None:
+        """Claim de RegelSpraak-vervolgfase **synchroon**: klaar → rs_gegevens_runt + veld-setup.
+        Retourneert de geclaimde job, of None als het project niet (meer) `klaar` is (al bezig /
+        verloren race). De aanroeper (router) schedulet daarna `run_regelspraak_fase`, zodat de
+        DB-state al niet-terminaal is vóór de 202 — geen optimistische false-202 en geen race waarin
+        de per-project events-stream meteen `done` stuurt."""
         job = await self.store.claim(
             job_id, {JobState.klaar}, JobState.rs_gegevens_runt, self.owner, self.s.lease_s
         )
         if job is None:
-            return
+            return None
         job.regelspraak_review = review if review is not None else job.review
         job.current_activiteit = "rs-gegevens"
         job.current_ronde = 0
         job.error = None
         await self._save(job)
+        return job
+
+    async def run_regelspraak_fase(self, job: Job) -> None:
+        """Draai de eerste rs-stap (GegevensSpraak) op een reeds via `claim_regelspraak` geclaimde job."""
         await self._guard(job, "rs-gegevens", self._fase_rs_gegevens_start(job))
+
+    async def run_regelspraak(self, job_id: str, review: bool | None = None) -> None:
+        """On-demand: start de RegelSpraak-vervolgfase op een afgeronde (`klaar`) analyse.
+        Dunne wrapper (claim + fase) voor aanroepers die de claim niet apart hoeven; de router
+        splitst de twee bewust om de claim synchroon vóór de 202 te leggen."""
+        job = await self.claim_regelspraak(job_id, review)
+        if job is None:
+            return
+        await self.run_regelspraak_fase(job)
 
     async def retry(self, job_id: str) -> None:
         job = await self.store.load_job(job_id)
