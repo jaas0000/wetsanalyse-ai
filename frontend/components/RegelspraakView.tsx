@@ -3,8 +3,6 @@
 import { Card, Section } from "@/components/ui/Card";
 import { Melding } from "@/components/ui/Melding";
 import { Tag } from "@/components/ui/Badge";
-import { LinkButton } from "@/components/ui/Button";
-import { pathSegment } from "@/lib/url";
 import type {
   RegelspraakHerkomst, RegelspraakModel, RsFeittype, RsObjecttype, RsParameter, RsRegel,
 } from "@/lib/types";
@@ -122,25 +120,23 @@ function RegelKaart({ r }: { r: RsRegel }) {
   );
 }
 
-export function RegelspraakView({ model, projectId }: { model: RegelspraakModel; projectId: string }) {
+export function RegelspraakView({ model }: { model: RegelspraakModel }) {
   const gs = model.gegevensspraak ?? {};
-  const id = pathSegment(projectId);
   return (
     <div className="space-y-6">
-      <Section title="RegelSpraak-specificatie" subtitle="GegevensSpraak + regels">
-        <div className="flex flex-wrap items-center gap-2">
-          {model.werkgebied?.naam && <Tag>{model.werkgebied.naam}</Tag>}
-          <LinkButton href={`/api/projects/${id}/regelspraak-rs`} variant="secondary">
-            Download .rs
-          </LinkButton>
-          <LinkButton href={`/api/projects/${id}/regelspraak-md`} variant="secondary">
-            Download .md
-          </LinkButton>
-        </div>
-      </Section>
+      {/* Fase-kop: h2 */}
+      <Card className="p-6">
+        <h2 className="font-display text-xl font-semibold text-lint">RegelSpraak-specificatie</h2>
+        <p className="mt-1 text-sm text-muted">GegevensSpraak + regels</p>
+        {model.werkgebied?.naam && (
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Tag>{model.werkgebied.naam}</Tag>
+          </div>
+        )}
+      </Card>
 
       {(gs.domeinen?.length ?? 0) > 0 && (
-        <Section title="Domeinen" count={gs.domeinen!.length}>
+        <Section title="Domeinen" count={gs.domeinen!.length} level={3}>
           <div className="space-y-3">
             {gs.domeinen!.map((d, i) => (
               <Card key={i} className="p-4">
@@ -154,7 +150,7 @@ export function RegelspraakView({ model, projectId }: { model: RegelspraakModel;
       )}
 
       {(gs.objecttypen?.length ?? 0) > 0 && (
-        <Section title="Objecttypen" count={gs.objecttypen!.length}>
+        <Section title="Objecttypen" count={gs.objecttypen!.length} level={3}>
           <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
             {gs.objecttypen!.map((o, i) => (
               <ObjecttypeKaart key={`${o.id}-${i}`} o={o} />
@@ -164,7 +160,7 @@ export function RegelspraakView({ model, projectId }: { model: RegelspraakModel;
       )}
 
       {(gs.feittypen?.length ?? 0) > 0 && (
-        <Section title="Feittypen" count={gs.feittypen!.length}>
+        <Section title="Feittypen" count={gs.feittypen!.length} level={3}>
           <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
             {gs.feittypen!.map((f, i) => (
               <FeittypeKaart key={`${f.id}-${i}`} f={f} />
@@ -174,7 +170,7 @@ export function RegelspraakView({ model, projectId }: { model: RegelspraakModel;
       )}
 
       {(gs.parameters?.length ?? 0) > 0 && (
-        <Section title="Parameters" count={gs.parameters!.length}>
+        <Section title="Parameters" count={gs.parameters!.length} level={3}>
           <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
             {gs.parameters!.map((p, i) => (
               <ParameterKaart key={`${p.id}-${i}`} p={p} />
@@ -184,7 +180,7 @@ export function RegelspraakView({ model, projectId }: { model: RegelspraakModel;
       )}
 
       {(model.regels?.length ?? 0) > 0 && (
-        <Section title="RegelSpraak-regels" count={model.regels.length}>
+        <Section title="RegelSpraak-regels" count={model.regels.length} level={3}>
           <div className="space-y-3">
             {model.regels.map((r, i) => (
               <RegelKaart key={`${r.id}-${i}`} r={r} />
@@ -194,7 +190,7 @@ export function RegelspraakView({ model, projectId }: { model: RegelspraakModel;
       )}
 
       {(model.validatiepunten?.length ?? 0) > 0 && (
-        <Section title="Validatiepunten" count={model.validatiepunten.length}>
+        <Section title="Validatiepunten" count={model.validatiepunten.length} level={3}>
           <Card className="p-4">
             <ul className="list-inside list-disc space-y-1 text-sm text-muted">
               {model.validatiepunten.map((v, i) => (

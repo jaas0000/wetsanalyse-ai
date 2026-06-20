@@ -6,6 +6,8 @@ import { StateBadge, Tag } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { ButtonRow } from "@/components/ui/ButtonRow";
 import { Card } from "@/components/ui/Card";
+import { Tabs } from "@/components/ui/Tabs";
+import { DownloadMenu, type DownloadItem } from "@/components/ui/DownloadMenu";
 import { Melding } from "@/components/ui/Melding";
 import { StatusTimeline } from "@/components/StatusTimeline";
 import { ReviewPanel } from "@/components/ReviewPanel";
@@ -48,6 +50,7 @@ export function ProjectClient({ initieel }: { initieel: Job }) {
   const [regelspraakBezig, setRegelspraakBezig] = useState(false);
   const [startFout, setStartFout] = useState<string | null>(null);
   const [actie, setActie] = useState<string | null>(null);
+  const [tab, setTab] = useState<"analyse" | "regelspraak">("analyse");
   // Wordt opgehoogd bij het starten van de regelspraak-fase, zodat de SSE-stream heropent vanuit
   // een (terminale) `klaar`-state.
   const [streamGen, setStreamGen] = useState(0);
@@ -184,6 +187,58 @@ export function ProjectClient({ initieel }: { initieel: Job }) {
   const heeftRonde = job.provenance.length > 0;
   const retryLabel = heeftRonde ? "Terug naar review" : "Opnieuw proberen";
 
+  // Eén download-menu voor het hele dossier: de gecombineerde .md (+ PDF via printen) als primaire
+  // acties, de losse exports als secundaire. RegelSpraak-items alleen ná de formaliseringsfase.
+  const seg = pathSegment(job.id);
+  const downloadItems: DownloadItem[] =
+    job.state === "rs-klaar"
+      ? [
+          { type: "link", label: "Volledig rapport (.md)", href: `/api/projects/${seg}/rapport-volledig`, primary: true },
+          { type: "action", label: "PDF (printen / opslaan)", onClick: () => window.print() },
+          { type: "divider" },
+          { type: "link", label: "Wetsanalyse (.md)", href: `/api/projects/${seg}/rapport-md` },
+          { type: "link", label: "RegelSpraak (.rs)", href: `/api/projects/${seg}/regelspraak-rs` },
+          { type: "link", label: "RegelSpraak (.md)", href: `/api/projects/${seg}/regelspraak-md` },
+        ]
+      : [
+          { type: "link", label: "Rapport (.md)", href: `/api/projects/${seg}/rapport-md`, primary: true },
+          { type: "action", label: "PDF (printen / opslaan)", onClick: () => window.print() },
+        ];
+
+  // Panelen per fase, zodat ze zowel in de tabs (rs-klaar) als los (klaar) herbruikbaar zijn.
+  const analysePaneel = rapport ? (
+    <RapportView rapport={rapport} />
+  ) : rapportFout ? (
+    <Melding type="fout" titel="Rapport kon niet worden geladen">
+      <p className="mt-1 text-sm">{rapportFout}</p>
+      <p className="mt-2 text-sm text-muted">
+        De analyse is klaar; alleen het ophalen van het rapport mislukte (vaak tijdelijk).
+      </p>
+      <div className="mt-3">
+        <Button variant="secondary" onClick={() => void laadRapport()} disabled={rapportBezig}>
+          {rapportBezig ? "Bezig…" : "Opnieuw proberen"}
+        </Button>
+      </div>
+    </Melding>
+  ) : (
+    <Card className="p-6 text-sm text-muted">Rapport laden…</Card>
+  );
+
+  const regelspraakPaneel = regelspraak ? (
+    <RegelspraakView model={regelspraak} />
+  ) : regelspraakFout ? (
+    <Melding type="fout" titel="RegelSpraak-model kon niet worden geladen">
+      <p className="mt-1 text-sm">{regelspraakFout}</p>
+      <div className="mt-3">
+        <Button variant="secondary" onClick={() => void laadRegelspraak()} disabled={regelspraakBezig}>
+          {regelspraakBezig ? "Bezig…" : "Opnieuw proberen"}
+        </Button>
+      </div>
+    </Melding>
+  ) : (
+    <Card className="p-6 text-sm text-muted">RegelSpraak-model laden…</Card>
+  );
+
   return (
     <div className="animate-rise space-y-6">
       {/* Kop */}
@@ -207,7 +262,8 @@ export function ProjectClient({ initieel }: { initieel: Job }) {
             {!job.review && <Tag>volautomatisch</Tag>}
           </div>
         </div>
-        <ButtonRow align="end">
+        <ButtonRow align="end" className="print:hidden">
+          {isKlaarachtig && <DownloadMenu items={downloadItems} />}
           {job.state === "fout" && (
             <Button
               variant="primary"
@@ -277,64 +333,41 @@ export function ProjectClient({ initieel }: { initieel: Job }) {
           onDelete={onDelete}
           verwijderBezig={actie === "delete"}
         />
+      ) : job.state === "rs-klaar" ? (
+        // Twee fasen, gescheiden in tabs — houdt de pagina overzichtelijk. Beide panelen blijven
+        // gemount (Tabs verbergt het inactieve), zodat printen/PDF het hele dossier toont.
+        <Tabs
+          active={tab}
+          onChange={(k) => setTab(k as "analyse" | "regelspraak")}
+          tabs={[
+            { key: "analyse", label: "Wetsanalyse", content: analysePaneel },
+            { key: "regelspraak", label: "RegelSpraak", content: regelspraakPaneel },
+          ]}
+        />
       ) : isKlaarachtig ? (
         <div className="space-y-6">
-          {rapport ? (
-            <RapportView rapport={rapport} projectId={job.id} />
-          ) : rapportFout ? (
-            <Melding type="fout" titel="Rapport kon niet worden geladen">
-              <p className="mt-1 text-sm">{rapportFout}</p>
-              <p className="mt-2 text-sm text-muted">
-                De analyse is klaar; alleen het ophalen van het rapport mislukte (vaak tijdelijk).
-              </p>
-              <div className="mt-3">
-                <Button variant="secondary" onClick={() => void laadRapport()} disabled={rapportBezig}>
-                  {rapportBezig ? "Bezig…" : "Opnieuw proberen"}
-                </Button>
-              </div>
-            </Melding>
-          ) : (
-            <Card className="p-6 text-sm text-muted">Rapport laden…</Card>
-          )}
+          {analysePaneel}
 
-          {job.state === "klaar" && (
-            <Card className="p-6">
-              <h2 className="font-display text-lg font-semibold text-lint">Formaliseren naar RegelSpraak</h2>
-              <p className="mt-1 max-w-prose text-sm text-muted">
-                Zet de begrippen en afleidingsregels van deze analyse om naar een uitvoerbare
-                specificatie in RegelSpraak/GegevensSpraak. De fase kent twee review-checkpoints
-                (objectmodel en regels), tenzij deze analyse volautomatisch draait.
-              </p>
+          <Card className="p-6 print:hidden">
+            <h2 className="font-display text-lg font-semibold text-lint">Formaliseren naar RegelSpraak</h2>
+            <p className="mt-1 max-w-prose text-sm text-muted">
+              Zet de begrippen en afleidingsregels van deze analyse om naar een uitvoerbare
+              specificatie in RegelSpraak/GegevensSpraak. De fase kent twee review-checkpoints
+              (objectmodel en regels), tenzij deze analyse volautomatisch draait.
+            </p>
+            <div className="mt-4">
+              <Button variant="primary" onClick={onStartRegelspraak} disabled={actie !== null}>
+                {actie === "regelspraak" ? "Starten…" : "Naar RegelSpraak"}
+              </Button>
+            </div>
+            {startFout && (
               <div className="mt-4">
-                <Button variant="primary" onClick={onStartRegelspraak} disabled={actie !== null}>
-                  {actie === "regelspraak" ? "Starten…" : "Naar RegelSpraak"}
-                </Button>
+                <Melding type="fout" titel="Starten mislukt">
+                  <p className="mt-1 text-sm">{startFout}</p>
+                </Melding>
               </div>
-              {startFout && (
-                <div className="mt-4">
-                  <Melding type="fout" titel="Starten mislukt">
-                    <p className="mt-1 text-sm">{startFout}</p>
-                  </Melding>
-                </div>
-              )}
-            </Card>
-          )}
-
-          {job.state === "rs-klaar" &&
-            (regelspraak ? (
-              <RegelspraakView model={regelspraak} projectId={job.id} />
-            ) : regelspraakFout ? (
-              <Melding type="fout" titel="RegelSpraak-model kon niet worden geladen">
-                <p className="mt-1 text-sm">{regelspraakFout}</p>
-                <div className="mt-3">
-                  <Button variant="secondary" onClick={() => void laadRegelspraak()} disabled={regelspraakBezig}>
-                    {regelspraakBezig ? "Bezig…" : "Opnieuw proberen"}
-                  </Button>
-                </div>
-              </Melding>
-            ) : (
-              <Card className="p-6 text-sm text-muted">RegelSpraak-model laden…</Card>
-            ))}
+            )}
+          </Card>
         </div>
       ) : job.state !== "fout" ? (
         <Card className="p-6">

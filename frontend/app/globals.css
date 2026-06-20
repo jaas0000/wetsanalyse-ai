@@ -88,3 +88,31 @@ a {
     transition-duration: 0.001ms !important;
   }
 }
+
+/* Printen / "Opslaan als PDF": het hele dossier op papier. Verberg de app-chrome (logobalk,
+   navigatie, footer; tablijst en knoppen dragen `print:hidden`), toon béide tabpanelen i.p.v.
+   alleen de actieve, en klap inklapbare blokken (reviewlog, audit) open. Behoud de
+   JAS-/badge-kleuren. */
+@media print {
+  header,
+  footer {
+    display: none !important;
+  }
+  /* Beide fasen tonen, ook de tab die op scherm verborgen is. */
+  [data-tabpanel][hidden] {
+    display: block !important;
+  }
+  /* Inklapbare detailblokken openvouwen zodat hun inhoud meeprint. */
+  details > *:not(summary) {
+    display: block !important;
+  }
+  /* Badge-/klassekleuren ook op papier. */
+  body {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  main {
+    padding: 0 !important;
+    max-width: none !important;
+  }
+}
