@@ -121,7 +121,7 @@ export function UsersPanel() {
         </Melding>
       )}
 
-      <form onSubmit={onAanmaken} className="mb-4 flex flex-wrap items-end gap-3">
+      <form onSubmit={onAanmaken} className="mb-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
         <Field label="Gebruikersnaam">
           <Input
             type="text"
@@ -149,7 +149,7 @@ export function UsersPanel() {
             <option value="beheerder">beheerder</option>
           </Select>
         </Field>
-        <Button type="submit">Gebruiker toevoegen</Button>
+        <Button type="submit" className="w-full sm:w-auto">Gebruiker toevoegen</Button>
       </form>
 
       {users === null ? (

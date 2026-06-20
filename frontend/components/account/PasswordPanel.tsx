@@ -82,7 +82,7 @@ export function PasswordPanel() {
               onChange={(e) => setHerhaling(e.target.value)}
             />
           </Field>
-          <Button type="submit" disabled={bezig}>
+          <Button type="submit" disabled={bezig} className="w-full sm:w-auto">
             {bezig ? "Bezig…" : "Wachtwoord wijzigen"}
           </Button>
         </form>

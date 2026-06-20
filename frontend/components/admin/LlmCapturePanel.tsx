@@ -91,8 +91,8 @@ export function LlmCapturePanel() {
         )}
       </Card>
 
-      <div className="mb-3 flex flex-wrap items-end gap-2">
-        <div className="min-w-[16rem] flex-1">
+      <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-end">
+        <div className="sm:min-w-[16rem] sm:flex-1">
           <span className="mb-1 block text-sm font-medium text-ink">Analyse-id</span>
           <Input
             value={projectId}
@@ -101,7 +101,12 @@ export function LlmCapturePanel() {
             onKeyDown={(e) => e.key === "Enter" && void ophalen()}
           />
         </div>
-        <Button variant="secondary" onClick={() => void ophalen()} disabled={laadt || !projectId.trim()}>
+        <Button
+          variant="secondary"
+          onClick={() => void ophalen()}
+          disabled={laadt || !projectId.trim()}
+          className="w-full sm:w-auto"
+        >
           {laadt ? "Ophalen…" : "Calls ophalen"}
         </Button>
       </div>

@@ -115,7 +115,7 @@ export function AccountClient() {
               <p className="text-sm text-muted">
                 Voer een geldige code uit je authenticator-app in om tweestapsverificatie uit te schakelen.
               </p>
-              <div className="flex flex-wrap items-end gap-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
                 <Field label="Code uit de app" hint="6 cijfers">
                   <Input
                     inputMode="numeric"
@@ -125,10 +125,16 @@ export function AccountClient() {
                     onChange={(e) => setUitschakelCode(e.target.value)}
                   />
                 </Field>
-                <Button type="submit" variant="danger" disabled={bezig}>
+                <Button type="submit" variant="danger" disabled={bezig} className="w-full sm:w-auto">
                   2FA uitschakelen
                 </Button>
-                <Button type="button" variant="ghost" onClick={() => setUitschakelCode("")} disabled={bezig}>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => setUitschakelCode("")}
+                  disabled={bezig}
+                  className="w-full sm:w-auto"
+                >
                   Annuleren
                 </Button>
               </div>
@@ -145,7 +151,7 @@ export function AccountClient() {
                 Handmatige sleutel:{" "}
                 <code className="rounded bg-surface px-1.5 py-0.5 font-mono text-xs">{secretUit(koppeling.uri)}</code>
               </p>
-              <form onSubmit={onBevestig} className="flex flex-wrap items-end gap-3">
+              <form onSubmit={onBevestig} className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
                 <Field label="Code uit de app" hint="6 cijfers">
                   <Input
                     inputMode="numeric"
@@ -155,10 +161,16 @@ export function AccountClient() {
                     onChange={(e) => setCode(e.target.value)}
                   />
                 </Field>
-                <Button type="submit" disabled={bezig}>
+                <Button type="submit" disabled={bezig} className="w-full sm:w-auto">
                   Bevestigen
                 </Button>
-                <Button type="button" variant="ghost" onClick={() => setKoppeling(null)} disabled={bezig}>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => setKoppeling(null)}
+                  disabled={bezig}
+                  className="w-full sm:w-auto"
+                >
                   Annuleren
                 </Button>
               </form>
