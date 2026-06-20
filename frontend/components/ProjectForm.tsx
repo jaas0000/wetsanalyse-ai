@@ -84,6 +84,10 @@ export function ProjectForm() {
     setBezig(true);
     try {
       const res = await createProject(body);
+      // Invalideer de Router Cache zodat een latere terugkeer naar `/` de nieuwe analyse meteen toont
+      // (anders serveert de cache de oude lijst). `bezig` blijft true tot de detailpagina rendert —
+      // samen met de route-`loading.tsx` geeft dat directe navigatiefeedback.
+      router.refresh();
       router.push(`/projecten/${pathSegment(res.id)}`);
     } catch (e) {
       if (isApiError(e)) {
