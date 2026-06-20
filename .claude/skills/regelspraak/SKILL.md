@@ -169,8 +169,8 @@ Dit is een **iteratieve lus** tot de analist akkoord is zonder opmerkingen. Lees
    `python "<skill>/scripts/review_server.py" --input regelspraak/werk/gegevensspraak/ronde-1/model.json --stap gegevensspraak --feedback-out regelspraak/werk/gegevensspraak/ronde-1/feedback.json --ronde 1`
    Ronde 2+: voeg `--ronde {N}` en `--vorige regelspraak/werk/gegevensspraak/ronde-{N-1}` toe.
 3. Geef de analist de URL (`http://localhost:3120`) en **rond je beurt af**: vraag de analist
-   de review te bekijken, per item of in het algemeen feedback te geven, en **"Akkoord"** of
-   **"Verstuur feedback"** te klikken. Ga niet zelf verder.
+   de review te bekijken, per item of in het algemeen desgewenst feedback te geven, en op de
+   **verstuurknop** te klikken (zonder feedback telt dat als akkoord). Ga niet zelf verder.
 4. Zodra de analist bevestigt: lees `regelspraak/werk/gegevensspraak/ronde-{N}/feedback.json`.
    - Bij `akkoord` **zonder** items en **zonder** algemene feedback: stop de server — ga door
      naar stap 3.

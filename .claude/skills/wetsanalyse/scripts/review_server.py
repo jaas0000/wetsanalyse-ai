@@ -2,9 +2,9 @@
 """Review-server voor de wetsanalyse-skill (human-in-the-loop checkpoint).
 
 Serveert een lokale reviewpagina met het tussenresultaat van activiteit 2 of 3.
-De analist geeft per item én in het algemeen feedback en klikt "Akkoord" of
-"Verstuur feedback"; de feedback wordt naar een JSON-bestand geschreven dat de
-skill daarna inleest en verwerkt.
+De analist geeft per item én in het algemeen desgewenst feedback en klikt op de
+verstuurknop (zonder feedback telt dat als akkoord); de feedback wordt naar een
+JSON-bestand geschreven dat de skill daarna inleest en verwerkt.
 
 Geen dependencies buiten de standaardbibliotheek.
 
@@ -202,7 +202,7 @@ def main():
     print(f"  Feedback:  {args.feedback_out}")
     if vorige:
         print(f"  Vorige:    {args.vorige}")
-    print(f"\n  Open de URL, geef feedback (of klik Akkoord) en verstuur.")
+    print(f"\n  Open de URL, geef desgewenst feedback en klik op de verstuurknop (leeg = akkoord).")
     print(f"  Druk daarna Ctrl+C of laat de skill verdergaan.\n")
     if not args.no_browser:
         try:

@@ -199,8 +199,8 @@ zijn relatief aan die analysemap.
    Ronde 2+: voeg `--ronde {N}` en `--vorige werk/activiteit-2/ronde-{N-1}` toe, zodat de
    analist per item zijn vorige feedback en de vorige versie ziet.
 3. Geef de analist de URL (`http://localhost:3118`) en **rond je beurt af**: vraag de
-   analist de review te bekijken, per item of in het algemeen feedback te geven, en
-   **"Akkoord"** of **"Verstuur feedback"** te klikken. Ga niet zelf verder.
+   analist de review te bekijken, per item of in het algemeen desgewenst feedback te geven,
+   en op de **verstuurknop** te klikken (zonder feedback telt dat als akkoord). Ga niet zelf verder.
 4. Zodra de analist bevestigt dat die klaar is: lees `werk/activiteit-2/ronde-{N}/feedback.json`.
    - Bij `akkoord` **zonder** items en **zonder** algemene feedback: stop de server, de lus
      is klaar — ga door naar activiteit 3.

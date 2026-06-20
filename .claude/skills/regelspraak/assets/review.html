@@ -85,8 +85,7 @@
 </header>
 <main id="main"></main>
 <div class="actions">
-  <button class="ok" id="btn-akkoord">Akkoord — geen wijzigingen</button>
-  <button class="primary" id="btn-verstuur">Verstuur feedback</button>
+  <button class="primary" id="btn-verstuur">Akkoord — geen wijzigingen</button>
   <span class="status" id="status">Concept wordt lokaal bewaard tijdens het typen.</span>
 </div>
 
@@ -326,7 +325,21 @@ function render() {
   html += renderAlgemeen();
   document.getElementById("main").innerHTML = html;
   restoreDraft();
-  document.querySelectorAll("textarea").forEach(t => t.addEventListener("input", saveDraft));
+  document.querySelectorAll("textarea").forEach(t =>
+    t.addEventListener("input", () => { saveDraft(); updateButton(); }));
+  updateButton();
+}
+
+// True zodra er ergens feedback staat (item-veld of het algemene veld).
+function heeftFeedback() {
+  const d = collect();
+  return Object.keys(d.items).length > 0 || d.algemeen.trim() !== "";
+}
+
+// Eén knop, label beweegt mee zodat zichtbaar is wat versturen doet.
+function updateButton() {
+  document.getElementById("btn-verstuur").textContent =
+    heeftFeedback() ? "Verstuur feedback" : "Akkoord — geen wijzigingen";
 }
 
 function collect() {
@@ -351,8 +364,10 @@ function restoreDraft() {
   } catch (e) {}
 }
 
-async function submit(status) {
-  const payload = Object.assign({ status: status, stap: STAP }, collect());
+async function submit() {
+  const data = collect();
+  const status = heeftFeedback() ? "wijzigingen" : "akkoord";
+  const payload = Object.assign({ status: status, stap: STAP }, data);
   const st = document.getElementById("status");
   st.textContent = "Versturen…"; st.className = "status";
   try {
@@ -369,8 +384,7 @@ async function submit(status) {
   }
 }
 
-document.getElementById("btn-akkoord").addEventListener("click", () => submit("akkoord"));
-document.getElementById("btn-verstuur").addEventListener("click", () => submit("wijzigingen"));
+document.getElementById("btn-verstuur").addEventListener("click", submit);
 render();
 </script>
 </body>

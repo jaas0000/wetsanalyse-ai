@@ -225,7 +225,8 @@ python "<skill>/scripts/review_server.py" \
 
 Default poort 3118. Start de server in de achtergrond, geef de analist de URL
 (`http://localhost:3118`), en **pauzeer**: rond je beurt af met een duidelijke instructie
-("Bekijk de review, geef feedback of klik Akkoord, en laat het me weten als je klaar bent").
+("Bekijk de review, geef desgewenst feedback en klik op de verstuurknop (leeg = akkoord), en
+laat het me weten als je klaar bent").
 Ga niet zelf door tot de analist bevestigt.
 
 ## Schema — `feedback.json` (door de viewer geschreven, per ronde)
