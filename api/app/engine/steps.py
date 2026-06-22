@@ -29,6 +29,8 @@ def _prov(activiteit: str, ronde: int, res: LLMResult, prompt_hash: str, basis: 
         "mcp_bronreferentie": basis.get("bronreferentie", ""),
         "tokens_in": res.tokens_in,
         "tokens_out": res.tokens_out,
+        "cache_read_in": res.cache_read_in,
+        "cache_write_in": res.cache_write_in,
     }
 
 

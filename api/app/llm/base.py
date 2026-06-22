@@ -33,6 +33,11 @@ class LlmConfig:
     timeout: float = 0.0
     # Harde cap op prompt-tokens (0 = auto-afleiden uit het model; onbekend → geen limiet).
     max_prompt_tokens: int = 0
+    # Prompt caching: markeer het (stabiele) system-blok als cachebaar (`cache_control: ephemeral`).
+    # De references vormen per fase een byte-stabiele prefix → cache-hit over bronnen/rondes heen.
+    # Provider-afhankelijk; bij een provider die het niet ondersteunt zet je deze vlag uit (env
+    # WETSANALYSE_LLM_PROMPT_CACHING=0) en valt alles terug op het oude gedrag.
+    prompt_caching: bool = True
 
 
 @dataclass
@@ -43,6 +48,11 @@ class LLMResult:
     output_strategie: str = ""
     tokens_in: int = 0
     tokens_out: int = 0
+    # Prompt-cache-telemetrie (provider-afhankelijk; 0 als de provider niet cachet of caching uit staat).
+    # cache_read_in = uit de cache geserveerde prompt-tokens (~0.1× kosten); cache_write_in = vers
+    # geschreven (~1.25×). `tokens_in` blijft de niet-gecachte rest, conform de provider-`usage`.
+    cache_read_in: int = 0
+    cache_write_in: int = 0
     ruwe_tekst: str = field(default="", repr=False)
 
 

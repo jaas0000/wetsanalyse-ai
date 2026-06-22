@@ -92,6 +92,11 @@ class Settings:
         # onbekend model → geen limiet). Bij overschrijding faalt de call snel en duidelijk i.p.v.
         # een rauwe provider-400. Aanbevolen: ~5–10% onder het context window van het profiel-model.
         self.llm_max_prompt_tokens = int(os.environ.get("WETSANALYSE_LLM_MAX_PROMPT_TOKENS", "0"))
+        # Prompt caching: markeer het stabiele system-blok (de references) als cachebaar zodat
+        # opeenvolgende bronnen/rondes binnen één fase de references uit de cache lezen i.p.v.
+        # ze elke call vol te betalen. Default aan; zet op 0 als de provider cache_control niet
+        # ondersteunt (dan valt alles terug op het oude gedrag, zonder regressie).
+        self.llm_prompt_caching = os.environ.get("WETSANALYSE_LLM_PROMPT_CACHING", "1") != "0"
 
         # Master key voor versleuteling-at-rest van via de admin-UI opgeslagen API-keys.
         # Geldige Fernet-key (32 url-safe base64-bytes); ontbreekt 'ie → geen key-opslag (fail-closed).

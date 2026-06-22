@@ -365,6 +365,9 @@ class RondeProvenance(BaseModel):
     mcp_bronreferentie: str = ""
     tokens_in: int = 0
     tokens_out: int = 0
+    # Prompt-cache-telemetrie (0 bij oudere rondes of als caching uit staat / de provider niet cachet).
+    cache_read_in: int = 0
+    cache_write_in: int = 0
     tijdstip: str = Field(default_factory=_now)
 
 

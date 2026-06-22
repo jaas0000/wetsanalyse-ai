@@ -63,6 +63,32 @@ class LiteLLMClient:
             pass
         return None
 
+    def _system_message(self, system: str) -> dict:
+        """Bouw het system-bericht. Met caching aan wordt het als één cachebaar content-block
+        gestuurd (`cache_control: ephemeral`): de references vormen per fase een byte-stabiele
+        prefix, dus volgende bronnen/rondes lezen 'm uit de cache i.p.v. opnieuw te betalen."""
+        if self.c.prompt_caching:
+            return {
+                "role": "system",
+                "content": [
+                    {"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}
+                ],
+            }
+        return {"role": "system", "content": system}
+
+    @staticmethod
+    def _cache_tokens(usage) -> tuple[int, int]:
+        """Lees cache-read/-write prompt-tokens defensief uit de provider-`usage` (vorm verschilt
+        per provider; ontbreekt → 0,0). Nooit een telemetrie-detail de call laten breken."""
+        if usage is None:
+            return 0, 0
+        read = getattr(usage, "cache_read_input_tokens", 0) or 0
+        write = getattr(usage, "cache_creation_input_tokens", 0) or 0
+        if not read:  # sommige providers nesten het onder prompt_tokens_details
+            details = getattr(usage, "prompt_tokens_details", None)
+            read = (getattr(details, "cached_tokens", 0) or 0) if details else 0
+        return int(read), int(write)
+
     def _tel_tokens(self, messages: list[dict]) -> int:
         """Model-bewuste token-telling; valt terug op een grove heuristiek (chars/4)."""
         try:
@@ -92,7 +118,7 @@ class LiteLLMClient:
                 + json.dumps(schema, ensure_ascii=False, indent=2)
             )
         messages = [
-            {"role": "system", "content": system},
+            self._system_message(system),
             {"role": "user", "content": user + schema_hint},
         ]
 
@@ -134,6 +160,7 @@ class LiteLLMClient:
                 ) from e
             raise
 
+        cache_read, cache_write = self._cache_tokens(usage)
         return LLMResult(
             data=data,
             model=getattr(resp, "model", self.c.model) or self.c.model,
@@ -141,6 +168,8 @@ class LiteLLMClient:
             output_strategie=self.c.output_strategy,
             tokens_in=tokens_in,
             tokens_out=tokens_out,
+            cache_read_in=cache_read,
+            cache_write_in=cache_write,
             ruwe_tekst=tekst,
         )
 

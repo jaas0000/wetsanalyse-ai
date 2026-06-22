@@ -50,10 +50,16 @@ async def usage_report(
                 continue
             sleutel = project_sleutel if group_by in _PROJECT_VELDEN else (prov.get(group_by) or "")
             g = groepen.setdefault(
-                sleutel or "", {"tokens_in": 0, "tokens_out": 0, "rondes": 0, "analyses": set()}
+                sleutel or "",
+                {"tokens_in": 0, "tokens_out": 0, "cache_read_in": 0, "cache_write_in": 0,
+                 "rondes": 0, "analyses": set()},
             )
             g["tokens_in"] += prov.get("tokens_in", 0) or 0
             g["tokens_out"] += prov.get("tokens_out", 0) or 0
+            # Prompt-cache-telemetrie (0 bij oudere rondes of caching uit): cache_read_in = uit de
+            # cache geserveerd (~0.1× kosten), cache_write_in = vers geschreven (~1.25×).
+            g["cache_read_in"] += prov.get("cache_read_in", 0) or 0
+            g["cache_write_in"] += prov.get("cache_write_in", 0) or 0
             g["rondes"] += 1
             g["analyses"].add(rij["slug"])
 
@@ -62,6 +68,8 @@ async def usage_report(
             "sleutel": sleutel,
             "tokens_in": g["tokens_in"],
             "tokens_out": g["tokens_out"],
+            "cache_read_in": g["cache_read_in"],
+            "cache_write_in": g["cache_write_in"],
             "rondes": g["rondes"],
             "analyses": len(g["analyses"]),
         }
@@ -71,6 +79,8 @@ async def usage_report(
     totaal = {
         "tokens_in": sum(r["tokens_in"] for r in rows),
         "tokens_out": sum(r["tokens_out"] for r in rows),
+        "cache_read_in": sum(r["cache_read_in"] for r in rows),
+        "cache_write_in": sum(r["cache_write_in"] for r in rows),
         "rondes": sum(r["rondes"] for r in rows),
         "analyses": sum(r["analyses"] for r in rows),
     }
