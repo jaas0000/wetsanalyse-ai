@@ -121,8 +121,11 @@ gebruiker aangeleverde tekst, met dezelfde brongetrouwheid.
 
 Bouw eerst het objectmodel; de regels (stap 3) hebben het nodig. Lees
 `references/gegevensspraak-referentie.md` voor de exacte syntax van elk onderdeel en
-`references/vertaalpatronen.md` voor de JAS-klasse → GegevensSpraak-afbeelding. In het kort,
-in deze volgorde:
+`references/vertaalpatronen.md` voor de JAS-klasse → GegevensSpraak-afbeelding. **Werkset-
+discipline:** laad de `references/` één keer aan het begin van de fase en herhaal ze niet per
+revisieronde; lees een afgeronde `werk/.../model.json` niet onnodig volledig opnieuw in maar
+werk gericht met de id's/herkomst. Bij een groot objectmodel of veel begrippen blijft de
+context zo binnen de perken. In het kort, in deze volgorde:
 
 1. **Eenheidssystemen en domeinen** die je hergebruikt (bv. `Bedrag` = Numeriek met 2
    decimalen, eenheid €; een enumeratie voor een limitatieve opsomming). Domeinen geven een
