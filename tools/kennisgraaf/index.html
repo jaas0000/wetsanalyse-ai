@@ -254,7 +254,7 @@
   const groepKleur = new Map();
   let ei = 0;
 
-  const SECTIE_KLEUREN = { wet: '#f1f5f9', hoofdstuk: '#94a3b8', deel: '#94a3b8', titel: '#94a3b8', afdeling: '#64748b', paragraaf: '#475569' };
+  const SECTIE_KLEUREN = { wet: '#f1f5f9', hoofdstuk: '#94a3b8', deel: '#94a3b8', titel: '#94a3b8', circulaire_divisie: '#94a3b8', afdeling: '#64748b', paragraaf: '#475569' };
 
   for (const n of raw.nodes) {
     if (n.type === 'intern') {
@@ -347,7 +347,7 @@
       actief.add(typeof l.target === 'object' ? l.target.id : l.target);
     }
     const gefNodes = raw.nodes.filter(n => {
-      if (n.type === 'intern') return true;
+      if (n.type === 'intern') return toonIsol || actief.has(n.id);
       if (n.type === 'sectie' || n.type === 'wet') return toonStructuur;
       if (!toonExtern) return false;
       if (!toonIsol && !actief.has(n.id)) return false;

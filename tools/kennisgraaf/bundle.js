@@ -49,3 +49,5 @@ writeFileSync(uitvoerPad, gebundeld, 'utf-8');
 const kb = Math.round(Buffer.byteLength(gebundeld, 'utf-8') / 1024);
 console.log(`Klaar: ${uitvoerPad} (${kb} KB)`);
 console.log('Stuur dit ene bestand op — ontvanger opent het in elke moderne browser.');
+console.log('Let op: de graaf-library (3d-force-graph) wordt van unpkg.com geladen, dus');
+console.log('voor het renderen is een internetverbinding nodig (de data zelf zit ingebed).');

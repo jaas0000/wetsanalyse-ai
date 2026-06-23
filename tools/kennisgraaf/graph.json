@@ -12,10 +12,10 @@
     ],
     "peildatum": "2026-06-23",
     "aantalNodes": 1351,
-    "aantalLinks": 1885,
+    "aantalLinks": 1889,
     "aantalInternArtikelen": 865,
     "aantalExternReferenties": 337,
-    "aantalStructuurLinks": 947,
+    "aantalStructuurLinks": 951,
     "aantalSectieNodes": 149
   },
   "nodes": [
@@ -6405,7 +6405,7 @@
       "bwbId": "BWBR0024096",
       "artikel": "14.4.5",
       "bronreferentie": "jci1.3:c:BWBR0024096&artikel=14.4.5&g=2026-01-01",
-      "grad": 5,
+      "grad": 6,
       "wet": "Leidraad Invordering 2008",
       "padVolledig": "Artikel 14 Tenuitvoerlegging van het dwangbevel > 14.4 Beslag onder derden > 14.4.5 Derdenbeslag op een vordering waar geen beslagvrije voet voor geldt",
       "aantalLeden": 1,
@@ -6424,7 +6424,7 @@
       "bwbId": "BWBR0024096",
       "artikel": "14.4.5.a",
       "bronreferentie": "jci1.3:c:BWBR0024096&artikel=14.4.5.a&g=2026-01-01",
-      "grad": 2,
+      "grad": 3,
       "wet": "Leidraad Invordering 2008",
       "padVolledig": "Artikel 14 Tenuitvoerlegging van het dwangbevel > 14.4 Beslag onder derden > 14.4.5.a Derdenbeslag en kosten van levensonderhoud",
       "aantalLeden": 1,
@@ -8552,7 +8552,7 @@
       "bwbId": "BWBR0024096",
       "artikel": "25.2.2",
       "bronreferentie": "jci1.3:c:BWBR0024096&artikel=25.2.2&g=2026-01-01",
-      "grad": 1,
+      "grad": 3,
       "wet": "Leidraad Invordering 2008",
       "padVolledig": "Artikel 25 Uitstel van betaling > 25.2 Uitstel in verband met bezwaar tegen een belastingaanslag > 25.2.2 Bezwaarschrift geldt als verzoek om uitstel; beroepschrift niet",
       "aantalLeden": 1,
@@ -8571,7 +8571,7 @@
       "bwbId": "BWBR0024096",
       "artikel": "25.2.2.a",
       "bronreferentie": "jci1.3:c:BWBR0024096&artikel=25.2.2.a&g=2026-01-01",
-      "grad": 1,
+      "grad": 2,
       "wet": "Leidraad Invordering 2008",
       "padVolledig": "Artikel 25 Uitstel van betaling > 25.2 Uitstel in verband met bezwaar tegen een belastingaanslag > 25.2.2.a Afzonderlijk verzoek om uitstel in verband met een bezwaarschrift",
       "aantalLeden": 1,
@@ -8590,7 +8590,7 @@
       "bwbId": "BWBR0024096",
       "artikel": "25.2.2.b",
       "bronreferentie": "jci1.3:c:BWBR0024096&artikel=25.2.2.b&g=2026-01-01",
-      "grad": 1,
+      "grad": 2,
       "wet": "Leidraad Invordering 2008",
       "padVolledig": "Artikel 25 Uitstel van betaling > 25.2 Uitstel in verband met bezwaar tegen een belastingaanslag > 25.2.2.b Nadere gegevens",
       "aantalLeden": 1,
@@ -10053,7 +10053,7 @@
       "bwbId": "BWBR0024096",
       "artikel": "26.2.15",
       "bronreferentie": "jci1.3:c:BWBR0024096&artikel=26.2.15&g=2026-01-01",
-      "grad": 3,
+      "grad": 4,
       "wet": "Leidraad Invordering 2008",
       "padVolledig": "Artikel 26 Kwijtschelding van belastingen > 26.2 Kwijtschelding van rijksbelastingen voor particulieren > 26.2.15 Woonlasten en kwijtschelding van belasting van voorhuwelijkse belastingschulden",
       "aantalLeden": 1,
@@ -10072,7 +10072,7 @@
       "bwbId": "BWBR0024096",
       "artikel": "26.2.15.a",
       "bronreferentie": "jci1.3:c:BWBR0024096&artikel=26.2.15.a&g=2026-01-01",
-      "grad": 1,
+      "grad": 2,
       "wet": "Leidraad Invordering 2008",
       "padVolledig": "Artikel 26 Kwijtschelding van belastingen > 26.2 Kwijtschelding van rijksbelastingen voor particulieren > 26.2.15.a Woonlasten van meerpersoonshuishoudens",
       "aantalLeden": 1,
@@ -25415,6 +25415,30 @@
       "target": "jci1.3:c:BWBR0024096&artikel=70cc.1",
       "soort": "structuur",
       "label": "bevat 70cc.1"
+    },
+    {
+      "source": "jci1.3:c:BWBR0024096&artikel=14.4.5",
+      "target": "jci1.3:c:BWBR0024096&artikel=14.4.5.a",
+      "soort": "structuur",
+      "label": "bevat 14.4.5.a"
+    },
+    {
+      "source": "jci1.3:c:BWBR0024096&artikel=25.2.2",
+      "target": "jci1.3:c:BWBR0024096&artikel=25.2.2.a",
+      "soort": "structuur",
+      "label": "bevat 25.2.2.a"
+    },
+    {
+      "source": "jci1.3:c:BWBR0024096&artikel=25.2.2",
+      "target": "jci1.3:c:BWBR0024096&artikel=25.2.2.b",
+      "soort": "structuur",
+      "label": "bevat 25.2.2.b"
+    },
+    {
+      "source": "jci1.3:c:BWBR0024096&artikel=26.2.15",
+      "target": "jci1.3:c:BWBR0024096&artikel=26.2.15.a",
+      "soort": "structuur",
+      "label": "bevat 26.2.15.a"
     },
     {
       "source": "wet:BWBR0024096",

@@ -424,9 +424,11 @@ async function main() {
   for (const { bwbId, citeertitel, artikelNummers, structuur } of wettenData) {
     const artikelSet = new Set(artikelNummers);
 
-    // Sub-artikel parent-child: "9.1" → parent "9" (alleen als parent ook een artikel-node is)
+    // Sub-artikel parent-child: "9.1" → parent "9", "25.2.2.a" → parent "25.2.2" (alleen
+    // als die directe ouder ook echt een artikel-node is). lastIndexOf geeft de DIRECTE
+    // ouder; indexOf zou bij diepe nesting de bovenste pakken en de link missen.
     for (const nr of artikelNummers) {
-      const dot = nr.indexOf(".");
+      const dot = nr.lastIndexOf(".");
       if (dot < 1) continue;
       const parentNr = nr.slice(0, dot);
       if (!artikelSet.has(parentNr)) continue;
