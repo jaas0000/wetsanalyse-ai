@@ -21,6 +21,24 @@ De drie container-images zijn **publiek** op GHCR (`ghcr.io/palmw01/wetsanalyse-
 `wettenbank-mcp`) en de database draait op `postgres:16` — OpenShift pullt alles zonder pull-secret.
 Niets te bouwen of te configureren dus.
 
+### Stap 0 — Repo ophalen + inloggen
+
+Dit pad werkt zo: **jij** cloont de repo lokaal en `oc` duwt de manifests naar je cluster
+(`oc apply -k` rendert de Kustomize-overlay client-side — de cluster hoeft de git-repo niet te kennen).
+Wil je juist dat de **cluster** de repo zelf volgt en automatisch synct, gebruik dan GitOps/ArgoCD
+(zie §8 route A) i.p.v. deze Snelstart.
+
+Heb je de `oc`-CLI nog niet: download 'm via de console rechtsboven → **? → Command line tools**. Dan:
+
+```
+git clone https://github.com/palmw01/wetsanalyse-ai.git
+cd wetsanalyse-ai
+oc login <cluster-url> --token=...      # console rechtsboven → je naam → "Copy login command"
+```
+
+De repo is publiek, dus het clonen vereist geen credentials. Voer de volgende stappen uit vanuit deze
+`wetsanalyse-ai`-map.
+
 ### Stap 1 — Geheimen genereren (op je eigen computer)
 
 Eén commando. Werkt in elke shell (bash, zsh, **fish**) — het is een gewoon scriptbestand, geen
