@@ -1,0 +1,23 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Simpelste echte uitrol: alles in ÉÉN namespace, kale PostgreSQL (geen operator, niets cluster-wide),
+# auth AAN. De vier secrets (api/frontend/mcp + de DB-secret wetsanalyse-db-app) maak je los aan via
+# Import YAML — zie INSTALL.md §3. Vul hieronder LLM_MODEL/LLM_API_BASE in.
+namespace: wetsanalyse
+
+resources:
+  - ../../base
+  - postgres-plain.yaml
+
+patches:
+  - target:
+      kind: ConfigMap
+      name: wetsanalyse-api-config
+    patch: |-
+      - op: replace
+        path: /data/LLM_MODEL
+        value: "claude-sonnet-4-6"
+      - op: replace
+        path: /data/LLM_API_BASE
+        value: "https://CHANGEME.services.ai.azure.com"

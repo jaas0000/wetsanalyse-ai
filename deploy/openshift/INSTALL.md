@@ -5,8 +5,102 @@ Stap-voor-stap uitrol van de wetsanalyse-stack (API · frontend · wettenbank-MC
 namespaced en draaien onder de **restricted-v2 SCC** (willekeurige UID + gid 0 — de images zijn daarop
 voorbereid). De database draait via de **CloudNativePG-operator** (PVC-storage, geen off-cluster backup).
 
-De manifesten staan in `deploy/openshift/` (Kustomize): `base/` + `overlays/{local,beproeving,managed-prod}`
-en de `components/postgres-cnpg`-database. Kies de overlay die bij je doel past.
+De manifesten staan in `deploy/openshift/` (Kustomize): `base/` + `overlays/{local,simpel,beproeving,managed-prod}`
+en de `components/postgres-cnpg`-database. Kies de overlay die bij je doel past. **Wil je het zo simpel
+mogelijk?** Volg de Snelstart hieronder (overlay `simpel`: één namespace, kale Postgres, geen operator).
+De genummerde hoofdstukken erna zijn de uitgebreide referentie (o.a. CNPG voor HA/productie).
+
+---
+
+## Snelstart — simpelste pad (overlay `simpel`)
+
+Eén namespace, kale PostgreSQL (geen operator, niets cluster-wide), auth aan. Je hebt alleen `oc`
+(ingelogd) nodig — of doe stap 2–4 via de webconsole (**Import YAML** + **`oc apply`** kun je mengen).
+
+**1. Project**
+
+```bash
+oc new-project wetsanalyse
+```
+
+**2. Geheimen** — genereer álle willekeurige waarden in één keer en schrijf ze naar een bestand. Vul
+daarna alleen je **Azure AI Foundry-key** in op de `<...>`-plek:
+
+```bash
+python3 - > wetsanalyse-secrets.yaml <<'PY'
+import secrets, base64, os
+A, B, C = (secrets.token_hex(24) for _ in range(3))   # frontend→API, admin, API→MCP
+D = secrets.token_hex(24)                              # DB-wachtwoord
+fernet = base64.urlsafe_b64encode(os.urandom(32)).decode()
+auth   = base64.b64encode(os.urandom(32)).decode()
+print(f"""apiVersion: v1
+kind: Secret
+metadata:
+  name: wetsanalyse-api-secrets
+stringData:
+  api_tokens: "frontend:{A}"
+  admin_tokens: "admin:{B}"
+  wettenbank_token: "{C}"
+  llm_api_key: "<PLAK-HIER-JE-AZURE-AI-FOUNDRY-KEY>"
+  llm_config_secret: "{fernet}"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: wetsanalyse-frontend-secrets
+stringData:
+  frontend_api_token: "{A}"
+  frontend_admin_token: "{B}"
+  frontend_auth_secret: "{auth}"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: wettenbank-mcp-secrets
+stringData:
+  mcp_auth_tokens: "api:{C}"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: wetsanalyse-db-app
+stringData:
+  password: "{D}"
+  uri: "postgresql://wetsanalyse:{D}@wetsanalyse-db-rw:5432/wetsanalyse"
+""")
+PY
+
+# Azure-key invullen, dan toepassen (of plak het bestand via console → Import YAML):
+oc apply -f wetsanalyse-secrets.yaml
+rm wetsanalyse-secrets.yaml          # geheimen niet laten rondslingeren
+```
+
+**3. LLM-config** — zet je model + endpoint in `overlays/simpel/kustomization.yaml` (staat nu op
+`CHANGEME`):
+
+```yaml
+- op: replace
+  path: /data/LLM_MODEL
+  value: "claude-sonnet-4-6"
+- op: replace
+  path: /data/LLM_API_BASE
+  value: "https://<jouw-resource>.services.ai.azure.com"
+```
+
+**4. Uitrollen + openen**
+
+```bash
+oc apply -k deploy/openshift/overlays/simpel
+oc get pods -w                                           # wacht tot alles Running/Ready
+oc get route wetsanalyse-frontend -o jsonpath='https://{.spec.host}/setup{"\n"}'
+```
+
+Open die `/setup`-URL → maak de eerste beheerder aan → klaar. Start de DB-pod niet (UID-/permissiefout
+onder restricted-v2 SCC)? Zie de kanttekening bij §4 / overlay `simpel`.
+
+> Liever volledig klikken? Doe stap 1–4 in de webconsole: Project aanmaken, de vier secrets via
+> **Import YAML**, en uitrollen via GitOps/ArgoCD of de gerenderde bundel (de console kan zelf geen
+> `kustomize build`) — zie §8.
 
 ---
 
@@ -58,9 +152,24 @@ oc create secret generic wettenbank-mcp-secrets \
   --from-literal=mcp_auth_tokens="client1:<mcp-bearer-token>"
 ```
 
-De **database**-connection-secret (`wetsanalyse-db-app`, sleutel `uri`) hoef je niet zelf te maken: de
-CloudNativePG-operator genereert die bij het aanmaken van het cluster. De API leest `uri` als
-`DATABASE_URL` en `app/db.py` normaliseert `postgresql://` automatisch naar de asyncpg-driver.
+De **database**-connection-secret heet `wetsanalyse-db-app` (sleutel `uri`); de API leest `uri` als
+`DATABASE_URL` en `app/db.py` normaliseert `postgresql://` automatisch naar de asyncpg-driver. Wie die
+secret maakt, hangt van je database-keuze af:
+
+- **CNPG** (beproeving/managed-prod): **niet zelf maken** — de CloudNativePG-operator genereert 'm bij
+  het aanmaken van het cluster (stap 4).
+- **Kale Postgres** (`simpel`-overlay): zelf aanmaken, met twee sleutels. De DB-pod leest `password`,
+  de API leest `uri` (met hetzelfde wachtwoord):
+
+  ```yaml
+  apiVersion: v1
+  kind: Secret
+  metadata:
+    name: wetsanalyse-db-app
+  stringData:
+    password: "<db-wachtwoord>"
+    uri: "postgresql://wetsanalyse:<db-wachtwoord>@wetsanalyse-db-rw:5432/wetsanalyse"
+  ```
 
 > De `local`-overlay genereert al deze secrets zelf met dev-waarden (auth uit) — sla deze stap dan over.
 
@@ -88,6 +197,9 @@ oc get secret wetsanalyse-db-app         # door de operator gegenereerd (bevat `
 # Learn/CRC (kale Postgres + dev-secrets, auth uit):
 oc apply -k deploy/openshift/overlays/local
 
+# Simpelste echte uitrol: één namespace, kale Postgres (geen operator), auth aan, secrets uit stap 3:
+oc apply -k deploy/openshift/overlays/simpel
+
 # Beproevings-cluster (CNPG, secrets uit stap 3):
 oc apply -k deploy/openshift/overlays/beproeving
 
@@ -95,7 +207,7 @@ oc apply -k deploy/openshift/overlays/beproeving
 oc apply -k deploy/openshift/overlays/managed-prod
 ```
 
-Vul vóór beproeving/managed-prod `LLM_MODEL`/`LLM_API_BASE` in de overlay-`kustomization.yaml` in.
+Vul vóór simpel/beproeving/managed-prod `LLM_MODEL`/`LLM_API_BASE` in de overlay-`kustomization.yaml` in.
 Controleer:
 
 ```bash
