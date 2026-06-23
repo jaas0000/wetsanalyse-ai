@@ -2,8 +2,7 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
 # Beproevings-cluster (eigen on-prem cluster). CloudNativePG voor de database; secrets worden buiten
-# Kustomize aangemaakt (zie INSTALL.md). Vul LLM_MODEL/LLM_API_BASE hieronder in en de CNPG-S3-
-# placeholders in components/postgres-cnpg/cluster.yaml (of patch ze hier).
+# Kustomize aangemaakt (zie INSTALL.md). Vul LLM_MODEL/LLM_API_BASE hieronder in.
 namespace: wetsanalyse-beproeving
 
 resources:
