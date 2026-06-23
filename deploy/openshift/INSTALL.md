@@ -17,6 +17,10 @@ De genummerde hoofdstukken erna zijn de uitgebreide referentie (o.a. CNPG voor H
 Eén namespace, kale PostgreSQL (geen operator, niets cluster-wide), auth aan. Vijf stappen. Je hebt
 alleen je **Azure AI Foundry-key** zelf nodig; al het andere wordt voor je gegenereerd.
 
+De drie container-images zijn **publiek** op GHCR (`ghcr.io/palmw01/wetsanalyse-api`, `-frontend`,
+`wettenbank-mcp`) en de database draait op `postgres:16` — OpenShift pullt alles zonder pull-secret.
+Niets te bouwen of te configureren dus.
+
 ### Stap 1 — Geheimen genereren (op je eigen computer)
 
 Eén commando. Werkt in elke shell (bash, zsh, **fish**) — het is een gewoon scriptbestand, geen
