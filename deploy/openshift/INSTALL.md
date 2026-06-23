@@ -3,10 +3,96 @@
 Stap-voor-stap uitrol van de wetsanalyse-stack (API · frontend · wettenbank-MCP · PostgreSQL) op een
 **namespace** van een gedeelde on-prem OpenShift-cluster. Geen cluster-admin nodig: alle objecten zijn
 namespaced en draaien onder de **restricted-v2 SCC** (willekeurige UID + gid 0 — de images zijn daarop
-voorbereid). De database draait via de **CloudNativePG-operator** met WAL-archivering + S3-backups.
+voorbereid). De database draait via de **CloudNativePG-operator** (PVC-storage, geen off-cluster backup).
 
-De manifesten staan in `deploy/openshift/` (Kustomize): `base/` + `overlays/{local,beproeving,managed-prod}`
-en de `components/postgres-cnpg`-database. Kies de overlay die bij je doel past.
+De manifesten staan in `deploy/openshift/` (Kustomize): `base/` + `overlays/{local,simpel,beproeving,managed-prod}`
+en de `components/postgres-cnpg`-database. Kies de overlay die bij je doel past. **Wil je het zo simpel
+mogelijk?** Volg de Snelstart hieronder (overlay `simpel`: één namespace, kale Postgres, geen operator).
+De genummerde hoofdstukken erna zijn de uitgebreide referentie (o.a. CNPG voor HA/productie).
+
+---
+
+## Snelstart — simpelste pad (overlay `simpel`)
+
+Eén namespace, kale PostgreSQL (geen operator, niets cluster-wide), auth aan. Vijf stappen. Je hebt
+alleen je **Azure AI Foundry-key** zelf nodig; al het andere wordt voor je gegenereerd.
+
+De drie container-images zijn **publiek** op GHCR (`ghcr.io/palmw01/wetsanalyse-api`, `-frontend`,
+`wettenbank-mcp`) en de database draait op `postgres:16` — OpenShift pullt alles zonder pull-secret.
+Niets te bouwen of te configureren dus.
+
+### Stap 0 — Repo ophalen + inloggen
+
+Dit pad werkt zo: **jij** cloont de repo lokaal en `oc` duwt de manifests naar je cluster
+(`oc apply -k` rendert de Kustomize-overlay client-side — de cluster hoeft de git-repo niet te kennen).
+Wil je juist dat de **cluster** de repo zelf volgt en automatisch synct, gebruik dan GitOps/ArgoCD
+(zie §8 route A) i.p.v. deze Snelstart.
+
+Heb je de `oc`-CLI nog niet: download 'm via de console rechtsboven → **? → Command line tools**. Dan:
+
+```
+git clone https://github.com/palmw01/wetsanalyse-ai.git
+cd wetsanalyse-ai
+oc login <cluster-url> --token=...      # console rechtsboven → je naam → "Copy login command"
+```
+
+De repo is publiek, dus het clonen vereist geen credentials. Voer de volgende stappen uit vanuit deze
+`wetsanalyse-ai`-map.
+
+### Stap 1 — Geheimen genereren (op je eigen computer)
+
+Eén commando. Werkt in elke shell (bash, zsh, **fish**) — het is een gewoon scriptbestand, geen
+heredoc. Geef je Azure-key als argument mee, dan is de uitvoer meteen compleet:
+
+```
+python3 deploy/openshift/gen-secrets.py "<azure-ai-foundry-key>" > secrets.yaml
+```
+
+(Laat je het argument weg, dan staat er een `<PLAK-HIER-…>`-plek in `secrets.yaml` die je nog invult.)
+Dit maakt vier secrets met onderling kloppende tokens + een vers DB-wachtwoord. **Niet committen.**
+
+### Stap 2 — Project aanmaken
+
+- **Console:** Home → Projects → **Create Project**, naam `wetsanalyse`.
+- **CLI:** `oc new-project wetsanalyse`
+
+### Stap 3 — Geheimen toepassen
+
+- **Console:** Workloads → Secrets → **Import YAML** → de inhoud van `secrets.yaml` plakken → Create.
+- **CLI:** `oc apply -f secrets.yaml`
+
+Verwijder daarna `secrets.yaml` (`rm secrets.yaml`) — de waarden zitten nu veilig in de cluster.
+
+### Stap 4 — Je model invullen
+
+Open `deploy/openshift/overlays/simpel/kustomization.yaml` en zet je model + endpoint (staan nu op
+`CHANGEME`):
+
+```yaml
+- op: replace
+  path: /data/LLM_MODEL
+  value: "claude-sonnet-4-6"
+- op: replace
+  path: /data/LLM_API_BASE
+  value: "https://<jouw-resource>.services.ai.azure.com"
+```
+
+### Stap 5 — Uitrollen en openen
+
+```
+oc apply -k deploy/openshift/overlays/simpel
+oc get pods -w        # wacht tot alle pods Running/Ready zijn (Ctrl-C om te stoppen)
+oc get route wetsanalyse-frontend -o jsonpath='https://{.spec.host}/setup{"\n"}'
+```
+
+Open de geprinte `/setup`-URL → maak de eerste beheerder aan → je bent live.
+
+> **Liever 100% klikken (geen `oc`)?** Stap 1 doe je nog op je computer (alleen Python nodig); stap
+> 2–5 kunnen volledig in de webconsole. Voor stap 5 kan de console geen `kustomize build` — gebruik
+> dan OpenShift GitOps/ArgoCD of een vooraf gerenderde bundel (zie §8).
+
+> **DB-pod start niet** (UID-/permissiefout onder restricted-v2 SCC)? Dan heeft je cluster een
+> arbitrary-UID-image nodig i.p.v. `postgres:16` — zie de kanttekening bij overlay `simpel` in §4.
 
 ---
 
@@ -16,7 +102,6 @@ en de `components/postgres-cnpg`-database. Kies de overlay die bij je doel past.
 - **CloudNativePG-operator** cluster-wide aanwezig (door het platformteam):
   `oc get crd clusters.postgresql.cnpg.io` moet bestaan. Zo niet → gebruik de `local`-overlay
   (kale Postgres) of vraag het platformteam de operator te installeren.
-- **S3-bucket + credentials** voor de WAL/backups (alleen voor beproeving/managed-prod).
 - **Images** op GHCR: `ghcr.io/palmw01/{wetsanalyse-api,wetsanalyse-frontend,wettenbank-mcp}`.
   Zijn die privé, maak dan een image-pull-secret en koppel die aan de `default`-serviceaccount:
   `oc create secret docker-registry ghcr --docker-server=ghcr.io --docker-username=<u> --docker-password=<token>`
@@ -57,16 +142,26 @@ oc create secret generic wetsanalyse-frontend-secrets \
 # MCP: per-client bearer-tokens.
 oc create secret generic wettenbank-mcp-secrets \
   --from-literal=mcp_auth_tokens="client1:<mcp-bearer-token>"
-
-# S3-credentials voor de CNPG-backups (alleen beproeving/managed-prod).
-oc create secret generic wetsanalyse-db-backup-s3 \
-  --from-literal=ACCESS_KEY_ID="<key>" \
-  --from-literal=ACCESS_SECRET_KEY="<secret>"
 ```
 
-De **database**-connection-secret (`wetsanalyse-db-app`, sleutel `uri`) hoef je niet zelf te maken: de
-CloudNativePG-operator genereert die bij het aanmaken van het cluster. De API leest `uri` als
-`DATABASE_URL` en `app/db.py` normaliseert `postgresql://` automatisch naar de asyncpg-driver.
+De **database**-connection-secret heet `wetsanalyse-db-app` (sleutel `uri`); de API leest `uri` als
+`DATABASE_URL` en `app/db.py` normaliseert `postgresql://` automatisch naar de asyncpg-driver. Wie die
+secret maakt, hangt van je database-keuze af:
+
+- **CNPG** (beproeving/managed-prod): **niet zelf maken** — de CloudNativePG-operator genereert 'm bij
+  het aanmaken van het cluster (stap 4).
+- **Kale Postgres** (`simpel`-overlay): zelf aanmaken, met twee sleutels. De DB-pod leest `password`,
+  de API leest `uri` (met hetzelfde wachtwoord):
+
+  ```yaml
+  apiVersion: v1
+  kind: Secret
+  metadata:
+    name: wetsanalyse-db-app
+  stringData:
+    password: "<db-wachtwoord>"
+    uri: "postgresql://wetsanalyse:<db-wachtwoord>@wetsanalyse-db-rw:5432/wetsanalyse"
+  ```
 
 > De `local`-overlay genereert al deze secrets zelf met dev-waarden (auth uit) — sla deze stap dan over.
 
@@ -74,17 +169,17 @@ CloudNativePG-operator genereert die bij het aanmaken van het cluster. De API le
 
 ## 4. Database (CloudNativePG)
 
-Vul vóór het uitrollen de S3-placeholders in `components/postgres-cnpg/cluster.yaml`
-(`destinationPath`, `endpointURL`) in, of patch ze in je overlay. Na `oc apply -k` (stap 5) maakt de
-operator het cluster aan:
+Na `oc apply -k` (stap 5) maakt de operator het cluster aan (de database leunt op de PVC-storage;
+er is geen S3-backup geconfigureerd):
 
 ```bash
 oc get cluster wetsanalyse-db            # wacht tot "Cluster in healthy state"
 oc get secret wetsanalyse-db-app         # door de operator gegenereerd (bevat `uri`)
-oc get backup,scheduledbackup            # WAL-archivering + dagelijkse base-backup
 ```
 
-Controleer in de pod-logs dat WAL-archivering naar S3 loopt (`oc logs wetsanalyse-db-1 -c postgres`).
+> Geen off-cluster backup: wil je die later toch, voeg dan een `spec.backup.barmanObjectStore` +
+> `ScheduledBackup` toe in `components/postgres-cnpg/cluster.yaml` en maak de secret
+> `wetsanalyse-db-backup-s3` (`ACCESS_KEY_ID`/`ACCESS_SECRET_KEY`) aan.
 
 ---
 
@@ -94,6 +189,9 @@ Controleer in de pod-logs dat WAL-archivering naar S3 loopt (`oc logs wetsanalys
 # Learn/CRC (kale Postgres + dev-secrets, auth uit):
 oc apply -k deploy/openshift/overlays/local
 
+# Simpelste echte uitrol: één namespace, kale Postgres (geen operator), auth aan, secrets uit stap 3:
+oc apply -k deploy/openshift/overlays/simpel
+
 # Beproevings-cluster (CNPG, secrets uit stap 3):
 oc apply -k deploy/openshift/overlays/beproeving
 
@@ -101,7 +199,7 @@ oc apply -k deploy/openshift/overlays/beproeving
 oc apply -k deploy/openshift/overlays/managed-prod
 ```
 
-Vul vóór beproeving/managed-prod `LLM_MODEL`/`LLM_API_BASE` in de overlay-`kustomization.yaml` in.
+Vul vóór simpel/beproeving/managed-prod `LLM_MODEL`/`LLM_API_BASE` in de overlay-`kustomization.yaml` in.
 Controleer:
 
 ```bash
@@ -138,8 +236,9 @@ oc exec deploy/wetsanalyse-api -- python -c "import urllib.request,json; \
 - **Secret-rotatie**: werk de `Secret` bij en `oc rollout restart` de betreffende Deployment
   (de app leest de `*_FILE`-bestanden opnieuw bij herstart). Voor het DB-wachtwoord: CNPG beheert
   dat zelf; gebruik de operator-procedure i.p.v. handmatig.
-- **Backup-restore-test**: maak periodiek een nieuw cluster `bootstrap.recovery` vanuit de
-  S3-backup en controleer de data — een backup die je nooit terugzet, is geen backup.
+- **Geen off-cluster backup**: de database leunt op de PVC; de CNPG-operator herstelt instances
+  binnen het cluster, maar er is geen S3-restore. Wil je dat wel, configureer dan eerst de
+  `barmanObjectStore` (zie §4).
 - **Schalen**: HPA (managed-prod) schaalt de API/frontend op CPU. Let op de **per-replica**
   LLM-concurrency-rem en rate-limit (in-process; schaalt lineair mee — zie `api/CLAUDE.md`).
 - **Observability**: alle logs gaan naar stdout/stderr → de cluster-logging/SIEM vangt ze op.
@@ -151,7 +250,7 @@ oc exec deploy/wetsanalyse-api -- python -c "import urllib.request,json; \
 | Pod `CreateContainerConfigError` | Een `Secret` ontbreekt of mist een sleutel → check stap 3 (`oc describe pod …`). |
 | Pod start niet, SCC/`runAsNonRoot`-fout | Verkeerde/oude image → herbouw met de arbitrary-UID-Dockerfile (gid 0, `chmod -R g=u`). |
 | API-log: kan niet verbinden met de DB | `wetsanalyse-db-app`-secret bestaat niet → CNPG-cluster nog niet `healthy` (stap 4). |
-| CNPG-cluster niet `healthy` | `oc describe cluster wetsanalyse-db` + `oc logs wetsanalyse-db-1` (vaak S3-credentials/endpoint fout). |
+| CNPG-cluster niet `healthy` | `oc describe cluster wetsanalyse-db` + `oc logs wetsanalyse-db-1` (vaak storage/SCC). |
 | SSE-stream valt na ~60s weg | Route-timeout-annotatie ontbreekt of een tussenliggende proxy buffert → check de Route. |
 | Frontend onbereikbaar via Route | NetworkPolicy-routerlabel klopt niet → `oc get ns openshift-ingress --show-labels` en pas `networkpolicy.yaml` aan. |
 
@@ -176,8 +275,8 @@ edit-rechten in de namespace nodig.
    met de **exacte sleutelnamen** (die worden de bestandsnamen op `/run/secrets`): voor
    `wetsanalyse-api-secrets` de sleutels `api_tokens`, `admin_tokens`, `wettenbank_token`,
    `llm_api_key`, `llm_config_secret`; verder `wetsanalyse-frontend-secrets`
-   (`frontend_api_token`, `frontend_admin_token`), `wettenbank-mcp-secrets` (`mcp_auth_tokens`) en
-   `wetsanalyse-db-backup-s3` (`ACCESS_KEY_ID`, `ACCESS_SECRET_KEY`). Sneller gaat het via **Import YAML**:
+   (`frontend_api_token`, `frontend_admin_token`) en `wettenbank-mcp-secrets` (`mcp_auth_tokens`).
+   Sneller gaat het via **Import YAML**:
 
    ```yaml
    apiVersion: v1
@@ -197,7 +296,7 @@ edit-rechten in de namespace nodig.
 
 3. **Database (CNPG)** — Operators → **Installed Operators** → CloudNativePG → tab *Cluster* →
    **Create Cluster** (formulier of YAML), of plak `components/postgres-cnpg/cluster.yaml` via Import
-   YAML (vul eerst de S3-placeholders in). Wacht tot het cluster *healthy* is in de Cluster-weergave;
+   YAML. Wacht tot het cluster *healthy* is in de Cluster-weergave;
    onder Workloads → Secrets verschijnt dan automatisch `wetsanalyse-db-app`.
 
 4. **Uitrollen — kies één route:**

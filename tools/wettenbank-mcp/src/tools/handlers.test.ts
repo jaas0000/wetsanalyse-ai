@@ -154,6 +154,63 @@ describe("handleStructuur", () => {
   });
 });
 
+describe("circulaire met geneste circulaire.divisie (Leidraad-vorm)", () => {
+  // Bepaling "9" draagt geneste sub-divisies (9.1 → 9.1.1, en 9.2); "1" is een leaf.
+  const CIRCULAIRE = `<?xml version="1.0" encoding="UTF-8"?>
+<toestand bwb-id="BWBR0099999">
+  <circulaire>
+    <circulaire-tekst>
+      <circulaire.divisie>
+        <kop><label>Artikel</label><nr>9</nr><titel>Betalingstermijnen</titel></kop>
+        <tekst><al>Inleidende tekst van artikel 9.</al></tekst>
+        <circulaire.divisie>
+          <kop><nr>9.1</nr><titel>Afwijking</titel></kop>
+          <tekst><al>Tekst van 9.1.</al></tekst>
+          <circulaire.divisie>
+            <kop><nr>9.1.1</nr><titel>Detail</titel></kop>
+            <tekst><al>Tekst van 9.1.1.</al></tekst>
+          </circulaire.divisie>
+        </circulaire.divisie>
+        <circulaire.divisie>
+          <kop><nr>9.2</nr><titel>Tweede</titel></kop>
+          <tekst><al>Tekst van 9.2.</al></tekst>
+        </circulaire.divisie>
+      </circulaire.divisie>
+      <circulaire.divisie>
+        <kop><label>Artikel</label><nr>1</nr><titel>Inleiding</titel></kop>
+        <tekst><al>Leaf-bepaling zonder sub-divisies.</al></tekst>
+      </circulaire.divisie>
+    </circulaire-tekst>
+  </circulaire>
+</toestand>`;
+
+  beforeEach(() => {
+    vi.mocked(haalWetstekstOp).mockResolvedValue({
+      rawXml: CIRCULAIRE,
+      doc: parseXmlDoc(CIRCULAIRE, "test"),
+      regeling: { ...REGELING, type: "beleidsregel" },
+    });
+  });
+
+  it("structuur toont de geneste sub-divisies en valideert tegen het schema", async () => {
+    const uit = JSON.parse(await handleStructuur({ bwbId: "BWBR0099999" }));
+    const res = StructuurOutputSchema.parse(uit);
+    const circTekst = res.structuur.find((n) => n.type === "circulaire-tekst");
+    expect(circTekst?.artikelen).toEqual(["1"]); // leaf-divisie blijft platte string
+    const d9 = circTekst?.secties?.find((n) => n.nr === "9");
+    expect(d9?.type).toBe("circulaire_divisie");
+    expect(d9?.artikelen).toEqual(["9.2"]);
+    expect(d9?.secties?.find((n) => n.nr === "9.1")?.artikelen).toEqual(["9.1.1"]);
+  });
+
+  it("artikel 9.1 krijgt het juiste hiërarchische pad (ouder-divisie, geen 'Artikel 1')", async () => {
+    const uit = JSON.parse(await handleArtikel({ bwbId: "BWBR0099999", artikel: "9.1" }));
+    const res = ArtikelOutputSchema.parse(uit);
+    expect(res.pad).toBe("Artikel 9 Betalingstermijnen > 9.1 Afwijking");
+    expect(res.pad).not.toContain("Artikel 1 Inleiding");
+  });
+});
+
 describe("handleZoek", () => {
   const sruXml = (numberOfRecords: number, records: string) => `<?xml version="1.0"?>
 <searchRetrieveResponse

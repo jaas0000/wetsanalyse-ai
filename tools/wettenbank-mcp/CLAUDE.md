@@ -62,7 +62,7 @@ beveiliging* verderop); het stdio-pad raakt ze niet aan.
 | Tool | Purpose |
 |------|---------|
 | `wettenbank_zoek` | Search by title, rechtsgebied, ministerie, or regelingsoort — returns `{ formaat, totaal, totaalBeschikbaar, isVolledig, regelingen[] }`. `totaal` = de (ontdubbelde) regelingen in dít antwoord; `totaalBeschikbaar` = bij afkapping het brontotaal (ruwe SRU `numberOfRecords`), bij `isVolledig` gelijk aan `totaal` (invariant: `totaalBeschikbaar >= totaal`); `isVolledig=false` = afgekapt. Meerwoordige titels zoeken met CQL `all` (alle woorden) i.p.v. `any`. |
-| `wettenbank_structuur` | Table of contents of a law — returns `{ formaat, type?, structuur[] }` (no article text). Optionele inputs `diepte` (afgekapte nodes krijgen `ingekort: true`) en `sectie` (filter op nr of titel-substring) voor zeer grote wetten. |
+| `wettenbank_structuur` | Table of contents of a law — returns `{ formaat, type?, structuur[] }` (no article text). Optionele inputs `diepte` (afgekapte nodes krijgen `ingekort: true`) en `sectie` (filter op nr of titel-substring) voor zeer grote wetten. Bij circulaires (Leidraad) verschijnt een geneste `circulaire.divisie` mét sub-divisies als eigen sectie (`type: "circulaire_divisie"`) met de sub-bepalingen (9.1, 9.1.1, …) als `artikelen`/`secties` eronder; een divisie zónder sub-divisies blijft een platte artikelstring — zie de bwb-parser-noot over `circulaire.divisie`. |
 | `wettenbank_artikel` | Fetch one article — returns `{ formaat, citeertitel, type?, pad?, sectie?, leden[{lid, tekst, bronreferentie, verwijzingen?}], bronreferentie, waarschuwing? }`. Per lid is `verwijzingen` (optioneel) de lijst getagde intref/extref met `{soort, target, label, bwbIdDoel?, extern}` — náást de inline-Markdown-links in `tekst` (zie *bwb-parser*). Artikelnummers matchen case-insensitief/getrimd; bij dubbele nummers (bijlage) wordt het eerste exemplaar gebruikt mét `waarschuwing`. |
 | `wettenbank_zoekterm` | Full-text search within a law — returns `{ formaat, citeertitel, artikelen[{artikel, aantalTreffers, leden, bronreferentie, pad?, tekst?, formaat?}] }`; `pad`/`tekst` alleen bij `includeerTekst=true` |
 
@@ -183,6 +183,17 @@ collector spiegelt de render-logica (blocks winnen van content) om dubbeltelling
   lid(eren) plus `subdivisies: NormalizedArtikel[]` voor geneste niveaus. `processNode` daalt
   recursief af, zodat elk niveau (ook ≥3 diep) een eigen node met volledig sectiepad én tekst krijgt
   — geen platslaan, geen tekstverlies. Dit raakt de Leidraad Invordering 2008 (792 geneste divisies).
+  Let op: een `circulaire.divisie` draagt zijn nesting in **`subdivisies`**, niet in `children` —
+  consumenten die de boom aflopen (zoals `bouwStructuurNodes` in `tools/structuur.ts`) moeten dat
+  veld expliciet volgen, anders verdwijnen sub-bepalingen als 9.1/9.1.1 stil. `bouwStructuurNodes`
+  behandelt een divisie daarom als hybride: mét `subdivisies` → eigen sectie met de geneste niveaus
+  eronder, zónder → leaf-artikelnummer bij de ouder.
+- **Pad-opbouw bij geneste divisies (`repository-client.ts`):** `bouwContainerLabel` leest het
+  **directe** kind-`<kop>` (niet een `getElementsByTagName`-descendant) — een container zonder eigen
+  kop (`<circulaire-tekst>`) zou anders de kop van de eerste diepere bepaling oppakken en een foute
+  ouder in `pad` zetten ("Artikel 1 …" boven 9.1). `circulaire.divisie` staat in `CONTAINER_TAGS_DOM`
+  zodat een omvattende bepaling ("Artikel 9 …") als pad-segment voor haar sub-divisies meetelt;
+  de artikel-match (`zoekArtikelElementen`) gebruikt eveneens het directe kind-`<kop>`.
 - `renderTableToMarkdown` legt cellen in een raster dat `colspan`/`rowspan` respecteert (elke rij
   exact `cols` kolommen), escapet `|` in celtekst, fabriceert bij ontbrekende `<thead>` géén
   dubbele rij, en scheidt meerdere `<al>` in één cel. Inline refs zonder target renderen als

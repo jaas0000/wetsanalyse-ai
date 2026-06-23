@@ -5,8 +5,9 @@
 # (postgresql://user:pass@host:5432/wetsanalyse) — de API leest die als DATABASE_URL (db.py
 # normaliseert naar de asyncpg-driver).
 #
-# S3-backup/WAL: de placeholders (destinationPath/endpointURL) worden per omgeving gepatcht in de
-# overlay; de credentials staan in de secret `wetsanalyse-db-backup-s3` (buiten Kustomize aangemaakt).
+# Geen S3-backup/WAL-archivering: de database leunt op de PVC-storage. Wil je er later toch
+# off-cluster backups bij, voeg dan een `spec.backup.barmanObjectStore` + `ScheduledBackup` toe
+# (plus de secret `wetsanalyse-db-backup-s3`).
 apiVersion: postgresql.cnpg.io/v1
 kind: Cluster
 metadata:
@@ -24,34 +25,3 @@ spec:
 
   storage:
     size: 5Gi
-
-  backup:
-    retentionPolicy: "30d"
-    barmanObjectStore:
-      destinationPath: "s3://CHANGEME-bucket/wetsanalyse-db"
-      endpointURL: "https://CHANGEME-s3-endpoint"
-      s3Credentials:
-        accessKeyId:
-          name: wetsanalyse-db-backup-s3
-          key: ACCESS_KEY_ID
-        secretAccessKey:
-          name: wetsanalyse-db-backup-s3
-          key: ACCESS_SECRET_KEY
-      wal:
-        compression: gzip
-      data:
-        compression: gzip
----
-# Periodieke base-backup (de WAL-archivering loopt continu via de barmanObjectStore hierboven).
-apiVersion: postgresql.cnpg.io/v1
-kind: ScheduledBackup
-metadata:
-  name: wetsanalyse-db-daily
-  labels:
-    app.kubernetes.io/part-of: wetsanalyse
-spec:
-  # Elke dag 02:30 (CNPG-cron: sec min uur dom maand dow).
-  schedule: "0 30 2 * * *"
-  backupOwnerReference: self
-  cluster:
-    name: wetsanalyse-db
