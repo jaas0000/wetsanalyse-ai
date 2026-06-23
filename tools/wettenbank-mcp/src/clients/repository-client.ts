@@ -178,15 +178,33 @@ export function extraheerDocMetadata(doc: DomDocument): DocMetadata {
   return { citeertitel, versiedatum };
 }
 
-// Tags die structurele containers vormen (directe ancestors in het hiërarchisch pad)
+// Tags die structurele containers vormen (directe ancestors in het hiërarchisch pad).
+// circulaire.divisie hoort erbij zodat een omvattende Leidraad-bepaling (bijv. "Artikel 9")
+// als pad-segment voor zijn sub-divisies (9.1, 9.1.1) meetelt.
 const CONTAINER_TAGS_DOM = new Set([
   "boek", "deel", "hoofdstuk", "titel", "afdeling", "paragraaf", "subparagraaf",
-  "circulaire-tekst",
+  "circulaire-tekst", "circulaire.divisie",
 ]);
 
-/** Extraheert het leesbare label van een container-element via zijn <kop>. */
+/** Eerste direct kind-element met deze tagnaam (geen descendant-zoektocht). */
+function directKind(el: DomElement, tagName: string): DomElement | null {
+  for (let i = 0; i < el.childNodes.length; i++) {
+    const child = el.childNodes.item(i);
+    if (child.nodeType === 1 && (child as DomElement).tagName === tagName) {
+      return child as DomElement;
+    }
+  }
+  return null;
+}
+
+/**
+ * Extraheert het leesbare label van een container-element via zijn DIRECTE kind-<kop>.
+ * Een descendant-zoektocht (getElementsByTagName) zou voor een container zonder eigen
+ * kop (zoals <circulaire-tekst>) de kop van de eerste diepere bepaling oppakken en zo
+ * een verkeerde ouder in het pad zetten.
+ */
 function bouwContainerLabel(el: DomElement): string | null {
-  const kop = el.getElementsByTagName("kop").item(0);
+  const kop = directKind(el, "kop");
   if (!kop) return null;
   const label = getElText(kop, "label");
   const nr    = getElText(kop, "nr");
@@ -221,7 +239,9 @@ export function zoekArtikelElementen(
   const tag = elem.tagName;
 
   if (tag === "artikel" || tag === "circulaire.divisie") {
-    const nr = getElText(elem.getElementsByTagName("kop").item(0), "nr");
+    // Direct kind-<kop>: bij een geneste circulaire.divisie zou een descendant-query
+    // de kop van een sub-divisie kunnen oppakken en zo het verkeerde nummer matchen.
+    const nr = getElText(directKind(elem, "kop"), "nr");
     if (normaliseerNr(nr) === normaliseerNr(artikelnummer)) {
       treffers.push({ element: elem, containerPad: huidigPad });
     }
@@ -258,7 +278,7 @@ export function verzamelArtikelnummers(el: DomNode): string[] {
     if (node.nodeType !== 1) return;
     const elem = node as DomElement;
     if (elem.tagName === "artikel" || elem.tagName === "circulaire.divisie") {
-      const nr = getElText(elem.getElementsByTagName("kop").item(0), "nr");
+      const nr = getElText(directKind(elem, "kop"), "nr");
       if (nr) nummers.push(nr);
     }
     for (let i = 0; i < elem.childNodes.length; i++) loop(elem.childNodes.item(i));

@@ -42,22 +42,75 @@ type ContainerLike = NormalizedNode & {
 };
 
 /**
+ * Een circulaire.divisie (Leidraad) is hybride: een bepaling die zelf een leaf kan
+ * zijn én geneste sub-divisies (9 → 9.1 → 9.1.1) draagt. Die nesting zit in het veld
+ * `subdivisies` (niet `children`).
+ */
+// Géén type-predicaat (`node is NormalizedArtikel`): bij negatie (`!heeftSubdivisies`)
+// zou TS dat als negatief predicaat afleiden en een al-NormalizedArtikel-array tot
+// `never[]` versmallen. Een platte boolean houdt de element-typen intact.
+function heeftSubdivisies(node: NormalizedNode): boolean {
+  return (
+    node.type === "circulaire_divisie" &&
+    Array.isArray((node as NormalizedArtikel).subdivisies) &&
+    (node as NormalizedArtikel).subdivisies!.length > 0
+  );
+}
+
+/**
+ * Bouwt de structuurnode(s) voor een circulaire.divisie. Zonder sub-divisies is de
+ * divisie een leaf-bepaling: de ouder neemt ze als artikelnummer op, dus geen eigen
+ * node ([]). Mét sub-divisies wordt ze een eigen sectie met de geneste niveaus
+ * eronder — leaf-subdivisies als `artikelen`, dieper geneste recursief als `secties`.
+ */
+function bouwDivisieNodes(div: NormalizedArtikel): StructuurNode[] {
+  const subs = div.subdivisies ?? [];
+  if (subs.length === 0) return [];
+
+  const directeArtikelen = subs
+    .filter((s) => !heeftSubdivisies(s))
+    .map((s) => s.nr)
+    .filter((nr): nr is string => Boolean(nr));
+
+  const subSecties = subs
+    .filter((s) => heeftSubdivisies(s))
+    .flatMap((s) => bouwDivisieNodes(s));
+
+  return [
+    {
+      type: div.type,
+      nr: div.nr ?? "",
+      ...(div.titel && { titel: div.titel }),
+      ...(directeArtikelen.length > 0 && { artikelen: directeArtikelen }),
+      ...(subSecties.length > 0 && { secties: subSecties }),
+    },
+  ];
+}
+
+/**
  * Traverseert de genormaliseerde boom en bouwt de structuurhiërarchie.
  */
 export function bouwStructuurNodes(node: NormalizedNode): StructuurNode[] {
-  if (ARTIKEL_TYPES.has(node.type)) return [];
+  // circulaire.divisie (Leidraad): hybride leaf/container — apart behandeld zodat de
+  // geneste sub-divisies in de inhoudsopgave verschijnen i.p.v. te verdwijnen.
+  if (node.type === "circulaire_divisie") {
+    return bouwDivisieNodes(node as NormalizedArtikel);
+  }
+  if (node.type === "artikel") return [];
   if (!("children" in node) || !node.children) return [];
 
   const container = node as ContainerLike;
 
   if (CONTAINER_TYPES.has(node.type)) {
+    // Leaf-bepalingen: gewone artikelen én circulaire.divisies zónder sub-divisies.
     const directeArtikelen = container.children
-      .filter((c) => ARTIKEL_TYPES.has(c.type))
+      .filter((c) => c.type === "artikel" || (c.type === "circulaire_divisie" && !heeftSubdivisies(c)))
       .map((c) => (c as NormalizedArtikel).nr)
       .filter((nr): nr is string => Boolean(nr));
 
+    // Sub-secties: echte containers én divisies mét geneste sub-divisies.
     const subSecties = container.children
-      .filter((c) => CONTAINER_TYPES.has(c.type))
+      .filter((c) => CONTAINER_TYPES.has(c.type) || heeftSubdivisies(c))
       .flatMap((c) => bouwStructuurNodes(c));
 
     const structuurNode: StructuurNode = {
@@ -84,6 +137,9 @@ function bouwPlatteArtikelStructuur(node: NormalizedNode): StructuurNode[] {
     if (ARTIKEL_TYPES.has(n.type)) {
       const nr = (n as NormalizedArtikel).nr;
       if (nr) artikelen.push(nr);
+      // Een circulaire.divisie kan zelf geneste sub-divisies dragen; ook die platslaan
+      // i.p.v. ze stil te laten vallen (geen verlies in de fallback).
+      (n as NormalizedArtikel).subdivisies?.forEach(verzamel);
       return;
     }
     if ("children" in n && n.children) {
