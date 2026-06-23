@@ -14,68 +14,36 @@ De genummerde hoofdstukken erna zijn de uitgebreide referentie (o.a. CNPG voor H
 
 ## Snelstart — simpelste pad (overlay `simpel`)
 
-Eén namespace, kale PostgreSQL (geen operator, niets cluster-wide), auth aan. Je hebt alleen `oc`
-(ingelogd) nodig — of doe stap 2–4 via de webconsole (**Import YAML** + **`oc apply`** kun je mengen).
+Eén namespace, kale PostgreSQL (geen operator, niets cluster-wide), auth aan. Vijf stappen. Je hebt
+alleen je **Azure AI Foundry-key** zelf nodig; al het andere wordt voor je gegenereerd.
 
-**1. Project**
+### Stap 1 — Geheimen genereren (op je eigen computer)
 
-```bash
-oc new-project wetsanalyse
+Eén commando. Werkt in elke shell (bash, zsh, **fish**) — het is een gewoon scriptbestand, geen
+heredoc. Geef je Azure-key als argument mee, dan is de uitvoer meteen compleet:
+
+```
+python3 deploy/openshift/gen-secrets.py "<azure-ai-foundry-key>" > secrets.yaml
 ```
 
-**2. Geheimen** — genereer álle willekeurige waarden in één keer en schrijf ze naar een bestand. Vul
-daarna alleen je **Azure AI Foundry-key** in op de `<...>`-plek:
+(Laat je het argument weg, dan staat er een `<PLAK-HIER-…>`-plek in `secrets.yaml` die je nog invult.)
+Dit maakt vier secrets met onderling kloppende tokens + een vers DB-wachtwoord. **Niet committen.**
 
-```bash
-python3 - > wetsanalyse-secrets.yaml <<'PY'
-import secrets, base64, os
-A, B, C = (secrets.token_hex(24) for _ in range(3))   # frontend→API, admin, API→MCP
-D = secrets.token_hex(24)                              # DB-wachtwoord
-fernet = base64.urlsafe_b64encode(os.urandom(32)).decode()
-auth   = base64.b64encode(os.urandom(32)).decode()
-print(f"""apiVersion: v1
-kind: Secret
-metadata:
-  name: wetsanalyse-api-secrets
-stringData:
-  api_tokens: "frontend:{A}"
-  admin_tokens: "admin:{B}"
-  wettenbank_token: "{C}"
-  llm_api_key: "<PLAK-HIER-JE-AZURE-AI-FOUNDRY-KEY>"
-  llm_config_secret: "{fernet}"
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: wetsanalyse-frontend-secrets
-stringData:
-  frontend_api_token: "{A}"
-  frontend_admin_token: "{B}"
-  frontend_auth_secret: "{auth}"
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: wettenbank-mcp-secrets
-stringData:
-  mcp_auth_tokens: "api:{C}"
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: wetsanalyse-db-app
-stringData:
-  password: "{D}"
-  uri: "postgresql://wetsanalyse:{D}@wetsanalyse-db-rw:5432/wetsanalyse"
-""")
-PY
+### Stap 2 — Project aanmaken
 
-# Azure-key invullen, dan toepassen (of plak het bestand via console → Import YAML):
-oc apply -f wetsanalyse-secrets.yaml
-rm wetsanalyse-secrets.yaml          # geheimen niet laten rondslingeren
-```
+- **Console:** Home → Projects → **Create Project**, naam `wetsanalyse`.
+- **CLI:** `oc new-project wetsanalyse`
 
-**3. LLM-config** — zet je model + endpoint in `overlays/simpel/kustomization.yaml` (staat nu op
+### Stap 3 — Geheimen toepassen
+
+- **Console:** Workloads → Secrets → **Import YAML** → de inhoud van `secrets.yaml` plakken → Create.
+- **CLI:** `oc apply -f secrets.yaml`
+
+Verwijder daarna `secrets.yaml` (`rm secrets.yaml`) — de waarden zitten nu veilig in de cluster.
+
+### Stap 4 — Je model invullen
+
+Open `deploy/openshift/overlays/simpel/kustomization.yaml` en zet je model + endpoint (staan nu op
 `CHANGEME`):
 
 ```yaml
@@ -87,20 +55,22 @@ rm wetsanalyse-secrets.yaml          # geheimen niet laten rondslingeren
   value: "https://<jouw-resource>.services.ai.azure.com"
 ```
 
-**4. Uitrollen + openen**
+### Stap 5 — Uitrollen en openen
 
-```bash
+```
 oc apply -k deploy/openshift/overlays/simpel
-oc get pods -w                                           # wacht tot alles Running/Ready
+oc get pods -w        # wacht tot alle pods Running/Ready zijn (Ctrl-C om te stoppen)
 oc get route wetsanalyse-frontend -o jsonpath='https://{.spec.host}/setup{"\n"}'
 ```
 
-Open die `/setup`-URL → maak de eerste beheerder aan → klaar. Start de DB-pod niet (UID-/permissiefout
-onder restricted-v2 SCC)? Zie de kanttekening bij §4 / overlay `simpel`.
+Open de geprinte `/setup`-URL → maak de eerste beheerder aan → je bent live.
 
-> Liever volledig klikken? Doe stap 1–4 in de webconsole: Project aanmaken, de vier secrets via
-> **Import YAML**, en uitrollen via GitOps/ArgoCD of de gerenderde bundel (de console kan zelf geen
-> `kustomize build`) — zie §8.
+> **Liever 100% klikken (geen `oc`)?** Stap 1 doe je nog op je computer (alleen Python nodig); stap
+> 2–5 kunnen volledig in de webconsole. Voor stap 5 kan de console geen `kustomize build` — gebruik
+> dan OpenShift GitOps/ArgoCD of een vooraf gerenderde bundel (zie §8).
+
+> **DB-pod start niet** (UID-/permissiefout onder restricted-v2 SCC)? Dan heeft je cluster een
+> arbitrary-UID-image nodig i.p.v. `postgres:16` — zie de kanttekening bij overlay `simpel` in §4.
 
 ---
 
