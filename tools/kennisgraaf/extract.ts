@@ -543,7 +543,6 @@ async function main() {
       if (!data) continue;
       const nr = artikelNummers[i]!;
       const sourceId = `jci1.3:c:${bwbId}&artikel=${nr}`;
-      const gezieneDoelen = new Set<string>();
 
       for (const lid of data.leden) {
         if (!lid.verwijzingen?.length) continue;
@@ -556,12 +555,12 @@ async function main() {
               ? stripJciSuffix(v.target, nodes)
               : externNodeId(v.target, v.bwbIdDoel);
 
-          if (!targetId || targetId === effectiveSource || gezieneDoelen.has(targetId)) continue;
-          gezieneDoelen.add(targetId);
+          // Dedup uitsluitend op effectiveSource→targetId (linkSet): lid-knopen die
+          // naar hetzelfde doel verwijzen krijgen elk hun eigen kant.
+          if (!targetId || targetId === effectiveSource) continue;
 
           const linkKey = `${effectiveSource}→${targetId}`;
           if (linkSet.has(linkKey)) continue;
-          linkSet.add(linkKey);
 
           // Bepaal linktype
           let soort: "intref" | "extref" | "koppeling";
@@ -572,6 +571,18 @@ async function main() {
           } else {
             soort = "extref";
           }
+
+          // Onresolveerbare intref/koppeling: een doel zonder &artikel= dat (anders dan
+          // een bestaande sectie-knoop) niet bestaat → geen dangling "Art. ?"-knoop of
+          // -kant materialiseren. Extref houdt z'n hele-wet-knoop (gelabeld op wetNaam).
+          if (
+            (soort === "intref" || soort === "koppeling") &&
+            !nodes.has(targetId) &&
+            !targetId.includes("&artikel=")
+          ) {
+            continue;
+          }
+          linkSet.add(linkKey);
 
           links.push({ source: effectiveSource, target: targetId, soort, label: v.label });
           outDegree.set(effectiveSource, (outDegree.get(effectiveSource) ?? 0) + 1);

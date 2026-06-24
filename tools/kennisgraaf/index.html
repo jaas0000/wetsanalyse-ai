@@ -330,7 +330,7 @@
 <div id="graph-wrap"></div>
 <div id="tooltip"></div>
 
-<script src="https://unpkg.com/3d-force-graph/dist/3d-force-graph.min.js"></script>
+<script src="https://unpkg.com/3d-force-graph@1.80.0/dist/3d-force-graph.min.js"></script>
 <script>
 (async function () {
 
@@ -443,8 +443,7 @@
     .d3VelocityDecay(0.35)
     .warmupTicks(80)
     .onNodeClick(handleClick)
-    .onNodeHover(handleHover)
-    .onBackgroundClick(() => {});
+    .onNodeHover(handleHover);
 
   pasFilter();
   // Na layout: stel correcte canvasafmetingen in en centreer de graaf
@@ -715,6 +714,13 @@
     document.getElementById('zoek-next').disabled = zoekIndex >= zoekResultaten.length - 1;
   }
 
+  function beweegCameraNaar(node) {
+    if (node.x == null) return;
+    const dist = 100;
+    const r = 1 + dist / (Math.hypot(node.x || 1, node.y || 1, node.z || 1));
+    Graph.cameraPosition({ x: node.x * r, y: node.y * r, z: node.z * r }, node, 1000);
+  }
+
   function navigeerNaar(node, index, switchTab) {
     zoekIndex = index;
     updateNavTeller();
@@ -726,11 +732,7 @@
     const actEl = document.querySelector(`.zoek-resultaat[data-idx="${index}"]`);
     if (actEl) actEl.scrollIntoView({ block: 'nearest' });
 
-    if (node.x != null) {
-      const dist = 100;
-      const r = 1 + dist / (Math.hypot(node.x || 1, node.y || 1, node.z || 1));
-      Graph.cameraPosition({ x: node.x * r, y: node.y * r, z: node.z * r }, node, 1000);
-    }
+    beweegCameraNaar(node);
 
     vulKnoopInhoud(node);
     if (switchTab) activeerTab('knoop');
@@ -856,11 +858,7 @@
   function handleClick(node) {
     vulKnoopInhoud(node);
     activeerTab('knoop');
-    if (node.x != null) {
-      const dist = 100;
-      const r = 1 + dist / (Math.hypot(node.x || 1, node.y || 1, node.z || 1));
-      Graph.cameraPosition({ x: node.x * r, y: node.y * r, z: node.z * r }, node, 1000);
-    }
+    beweegCameraNaar(node);
   }
 
   // ── 9. Tab-wisseling (linkerzijbalk) ─────────────────────────────────────────
