@@ -37,18 +37,6 @@
     }
     #filters input[type=checkbox] { accent-color: #4a8fd4; width: 13px; height: 13px; cursor: pointer; }
     .filter-sep { width: 1px; height: 18px; background: #1d3a5e; flex-shrink: 0; }
-    #search-wrap { display: flex; align-items: center; gap: 6px; margin-left: auto; flex-shrink: 0; }
-    #search-wrap span { font-size: 12px; color: #a8c4e0; }
-    #search {
-      background: #0d1f3c; border: 1px solid #2a4a72; color: #d9e6f2;
-      font-size: 12px; padding: 3px 8px; border-radius: 4px; width: 130px; outline: none;
-    }
-    #search:focus { border-color: #4a8fd4; }
-    #btn-reset {
-      background: none; border: 1px solid #2a4a72; color: #a8c4e0;
-      font-size: 11px; padding: 3px 8px; border-radius: 4px; cursor: pointer;
-    }
-    #btn-reset:hover { border-color: #4a8fd4; color: #d9e6f2; }
 
     /* ── Sidebar ── */
     #sidebar {
@@ -60,7 +48,7 @@
       display: flex; border-bottom: 1px solid #1d3a5e; flex-shrink: 0;
     }
     .tab-btn {
-      flex: 1; padding: 9px 4px; font-size: 11px; font-weight: 600;
+      flex: 1; padding: 8px 2px; font-size: 10.5px; font-weight: 600;
       background: none; border: none; border-bottom: 2px solid transparent;
       color: #6a8daa; cursor: pointer; transition: color .15s; white-space: nowrap;
     }
@@ -70,6 +58,63 @@
       display: none; flex: 1; overflow-y: auto; padding: 12px; font-size: 12px; line-height: 1.6;
     }
     .tab-panel.active { display: block; }
+
+    /* Zoek-tab: eigen layout zodat controls boven blijven en resultaten scrollen */
+    #tab-zoek { padding: 0; overflow: hidden; }
+    #tab-zoek.active { display: flex; flex-direction: column; }
+    #zoek-controls { flex-shrink: 0; padding: 10px 12px 8px; border-bottom: 1px solid #1d3a5e; }
+    #zoek-input-wrap { display: flex; gap: 6px; margin-bottom: 8px; }
+    #zoek-input {
+      flex: 1; background: #0d1f3c; border: 1px solid #2a4a72; color: #d9e6f2;
+      font-size: 12px; padding: 5px 8px; border-radius: 4px; outline: none;
+    }
+    #zoek-input:focus { border-color: #4a9eff; }
+    #zoek-clear {
+      background: none; border: 1px solid #2a4a72; color: #6a8daa;
+      font-size: 12px; padding: 4px 8px; border-radius: 4px; cursor: pointer; flex-shrink: 0;
+    }
+    #zoek-clear:hover { color: #d9e6f2; border-color: #4a9eff; }
+    #zoek-wet {
+      width: 100%; background: #0d1f3c; border: 1px solid #2a4a72; color: #d9e6f2;
+      font-size: 11px; padding: 4px 6px; border-radius: 4px; margin-bottom: 8px; outline: none;
+    }
+    #zoek-geavanceerd-toggle {
+      font-size: 10px; color: #6a8daa; cursor: pointer; user-select: none;
+      margin-bottom: 4px; display: flex; align-items: center; gap: 4px;
+    }
+    #zoek-geavanceerd-toggle:hover { color: #a8c4e0; }
+    #zoek-geavanceerd { display: none; margin-top: 6px; }
+    .zoek-veld-label { font-size: 10px; color: #6a8daa; margin-bottom: 2px; }
+    .zoek-veld {
+      width: 100%; background: #0d1f3c; border: 1px solid #1d3a5e; color: #d9e6f2;
+      font-size: 11px; padding: 4px 6px; border-radius: 3px; margin-bottom: 7px; outline: none;
+    }
+    .zoek-veld:focus { border-color: #2a4a72; }
+    #zoek-nav {
+      display: none; align-items: center; gap: 4px;
+      padding: 6px 12px; border-bottom: 1px solid #1d3a5e; font-size: 11px; color: #a8c4e0;
+      flex-shrink: 0;
+    }
+    #zoek-nav button {
+      background: none; border: 1px solid #2a4a72; color: #a8c4e0;
+      padding: 2px 9px; border-radius: 3px; cursor: pointer; font-size: 12px;
+    }
+    #zoek-nav button:hover:not(:disabled) { border-color: #4a9eff; color: #d9e6f2; }
+    #zoek-nav button:disabled { opacity: .3; cursor: default; }
+    #zoek-nav-teller { min-width: 54px; text-align: center; font-size: 11px; }
+    #zoek-count-label { margin-left: auto; font-size: 10px; color: #6a8daa; }
+    #zoek-resultaten { flex: 1; overflow-y: auto; padding: 6px 0; }
+    .zoek-resultaat {
+      padding: 7px 12px; cursor: pointer; border-bottom: 1px solid #0a1628;
+    }
+    .zoek-resultaat:hover { background: #0d2040; }
+    .zoek-resultaat.actief { background: #0d2040; border-left: 2px solid #4a9eff; padding-left: 10px; }
+    .zoek-res-label { font-size: 12px; color: #d9e6f2; font-weight: 600; display: flex; align-items: baseline; gap: 6px; }
+    .zoek-res-wet { font-size: 10px; color: #6ee7b7; font-weight: 400; }
+    .zoek-res-groep { font-size: 10px; color: #6a8daa; font-weight: 400; }
+    .zoek-res-snippet { font-size: 10px; color: #6a8daa; margin-top: 2px; line-height: 1.4; }
+    .zoek-res-snippet mark { background: none; color: #ffd166; font-weight: 600; }
+    #zoek-geen { padding: 24px 12px; font-size: 11px; color: #3a5272; text-align: center; }
 
     /* ── Graaf ── */
     #graph-wrap { position: fixed; top: 82px; left: 260px; right: 0; bottom: 0; }
@@ -97,6 +142,7 @@
     .lid-blok { margin-bottom: 8px; }
     .lid-nr { font-size: 10px; font-weight: 700; color: #6a8daa; margin-bottom: 2px; }
     .lid-tekst { font-size: 11px; color: #c8ddf0; line-height: 1.55; white-space: pre-wrap; word-break: break-word; }
+    .lid-tekst mark { background: #1a2e00; color: #ffd166; border-radius: 2px; }
     .link-item { font-size: 11px; padding: 2px 0; border-bottom: 1px solid #0d1f3c; color: #a8c4e0; }
     .link-item .arrow { color: #4a8fd4; margin: 0 3px; }
     .link-item.extref .arrow { color: #e07800; }
@@ -164,12 +210,6 @@
   <label><input type="checkbox" id="show-structuur"> Structuur</label>
   <div class="filter-sep"></div>
   <label><input type="checkbox" id="show-isolated" checked> Geïsoleerde artikelen</label>
-  <div id="search-wrap">
-    <span>Zoek:</span>
-    <input type="text" id="search" placeholder="art. nr of tekst">
-    <span id="search-count" style="font-size:11px;color:#6ee7b7;display:none"></span>
-    <button id="btn-reset">Reset</button>
-  </div>
 </div>
 
 <div id="sidebar">
@@ -177,6 +217,7 @@
     <button class="tab-btn active" data-tab="overzicht">Overzicht</button>
     <button class="tab-btn" data-tab="knoop">Knoop</button>
     <button class="tab-btn" data-tab="legenda">Legenda</button>
+    <button class="tab-btn" data-tab="zoek">Zoek</button>
   </div>
 
   <div id="tab-overzicht" class="tab-panel active"></div>
@@ -199,6 +240,32 @@
   </div>
 
   <div id="tab-legenda" class="tab-panel"></div>
+
+  <div id="tab-zoek" class="tab-panel">
+    <div id="zoek-controls">
+      <div id="zoek-input-wrap">
+        <input type="text" id="zoek-input" placeholder="artikel nr of tekst…" autocomplete="off" spellcheck="false">
+        <button id="zoek-clear" title="Wissen">✕</button>
+      </div>
+      <select id="zoek-wet"><option value="">Alle wetten</option></select>
+      <div id="zoek-geavanceerd-toggle">▸ Geavanceerd zoeken</div>
+      <div id="zoek-geavanceerd">
+        <div class="zoek-veld-label">Artikelnummer</div>
+        <input type="text" class="zoek-veld" id="zoek-art" placeholder="bijv. 9 of 9.1" autocomplete="off">
+        <div class="zoek-veld-label">Tekst bevat (AND)</div>
+        <input type="text" class="zoek-veld" id="zoek-tekst" placeholder="bijv. betalingsregeling" autocomplete="off">
+        <div class="zoek-veld-label">Groep / hoofdstuk bevat</div>
+        <input type="text" class="zoek-veld" id="zoek-groep" placeholder="bijv. Hoofdstuk V" autocomplete="off">
+      </div>
+    </div>
+    <div id="zoek-nav">
+      <button id="zoek-prev" title="Vorig resultaat">◀</button>
+      <span id="zoek-nav-teller"></span>
+      <button id="zoek-next" title="Volgend resultaat">▶</button>
+      <span id="zoek-count-label"></span>
+    </div>
+    <div id="zoek-resultaten"></div>
+  </div>
 </div>
 
 <div id="graph-wrap"></div>
@@ -229,7 +296,6 @@
   const meta = raw.metadata ?? {};
   const wetten = meta.wetten ?? (meta.wet ? [{ bwbId: meta.bwbId ?? '', citeertitel: meta.wet }] : []);
   const wettenOrder = wetten.map(w => w.bwbId);
-  const wetNamenMap = new Map(wetten.map(w => [w.bwbId, w.citeertitel]));
 
   const titelTekst = wetten.length > 1
     ? wetten.map(w => w.citeertitel).join(' + ')
@@ -249,12 +315,11 @@
     '#e07800','#c77dff','#2ec4b6','#f472b6','#e879f9','#a3e635','#fbbf24','#fb923c',
   ];
   const KOPPELING_KLEUR = '#ffd166';
+  const SECTIE_KLEUREN = { wet: '#f1f5f9', hoofdstuk: '#94a3b8', deel: '#94a3b8', titel: '#94a3b8', circulaire_divisie: '#94a3b8', afdeling: '#64748b', paragraaf: '#475569' };
 
   const wetPalTellers = new Map(wettenOrder.map((id, i) => [id, { palIdx: Math.min(i, WET_PALS.length - 1), counter: 0 }]));
   const groepKleur = new Map();
   let ei = 0;
-
-  const SECTIE_KLEUREN = { wet: '#f1f5f9', hoofdstuk: '#94a3b8', deel: '#94a3b8', titel: '#94a3b8', circulaire_divisie: '#94a3b8', afdeling: '#64748b', paragraaf: '#475569' };
 
   for (const n of raw.nodes) {
     if (n.type === 'intern') {
@@ -272,8 +337,7 @@
 
   for (const n of raw.nodes) {
     if (n.type === 'wet') {
-      n.baseColor = '#f1f5f9';
-      n.val = 30;
+      n.baseColor = '#f1f5f9'; n.val = 30;
     } else if (n.type === 'sectie') {
       n.baseColor = SECTIE_KLEUREN[n.sectieType] ?? '#64748b';
       n.val = n.sectieType === 'hoofdstuk' || n.sectieType === 'deel' || n.sectieType === 'titel' ? 18 : 10;
@@ -356,34 +420,115 @@
     Graph.graphData({ nodes: gefNodes, links: gefLinks });
   }
 
-  // ── 6. Zoeken / markeren ──────────────────────────────────────────────────────
+  // ── 6. Zoeken ────────────────────────────────────────────────────────────────
 
-  let zoekActief = false;
+  let zoekResultaten = [];
+  let zoekIndex = 0;
+  let zoekTerm = '';   // laatste eenvoudige zoekterm (voor highlight)
+  let zoekTimer = null;
+
+  // Wet-opties vullen
+  const zoekWetSel = document.getElementById('zoek-wet');
+  for (const w of wetten) {
+    const opt = document.createElement('option');
+    opt.value = w.bwbId;
+    opt.textContent = w.citeertitel;
+    zoekWetSel.appendChild(opt);
+  }
+
+  function escRe(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+
+  function maakSnippet(leden, term) {
+    if (!term || !leden?.length) return '';
+    const re = new RegExp(escRe(term), 'gi');
+    for (const l of leden) {
+      const tekst = l.tekst.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').replace(/[*#]/g, '');
+      if (re.test(tekst)) {
+        const idx = tekst.toLowerCase().indexOf(term.toLowerCase());
+        const start = Math.max(0, idx - 35);
+        const end = Math.min(tekst.length, idx + term.length + 45);
+        const fragment = (start > 0 ? '…' : '') + tekst.slice(start, end) + (end < tekst.length ? '…' : '');
+        return fragment.replace(new RegExp(escRe(term), 'gi'), m => `<mark>${m}</mark>`);
+      }
+    }
+    return '';
+  }
+
+  function maakSnippetMulti(leden, termen) {
+    for (const term of termen) {
+      const s = maakSnippet(leden, term);
+      if (s) return s;
+    }
+    return '';
+  }
 
   function pasZoek() {
-    const term = document.getElementById('search').value.trim().toLowerCase();
-    const gd = Graph.graphData();
+    const wetFilter   = document.getElementById('zoek-wet').value;
+    const geavanceerd = document.getElementById('zoek-geavanceerd').style.display !== 'none';
 
-    if (!term) {
-      zoekActief = false;
-      for (const n of gd.nodes) n.color = n.baseColor;
-      Graph.nodeColor('color');
-      document.getElementById('search-count').style.display = 'none';
-      return;
+    let termen = [];
+    let artFilter = '';
+    let groepFilter = '';
+
+    if (geavanceerd) {
+      artFilter   = document.getElementById('zoek-art').value.trim().toLowerCase();
+      const tekst = document.getElementById('zoek-tekst').value.trim().toLowerCase();
+      groepFilter = document.getElementById('zoek-groep').value.trim().toLowerCase();
+      if (tekst) termen = tekst.split(/\s+AND\s+|\s+/i).filter(Boolean);
+      zoekTerm = termen[0] ?? artFilter ?? '';
+    } else {
+      const raw_term = document.getElementById('zoek-input').value.trim().toLowerCase();
+      zoekTerm = raw_term;
+      if (!raw_term) { resetZoekKleuren(); zoekResultaten = []; bouwResultatenLijst(); return; }
+      artFilter = raw_term.replace(/^art\.?\s*/i, '');
+      termen = [raw_term];
     }
-    zoekActief = true;
-    const artNr = term.replace(/^art\.?\s*/i, '').toLowerCase();
 
-    const trefferIds = new Set(
-      gd.nodes.filter(n =>
-        (n.artikel && n.artikel.toLowerCase() === artNr) ||
-        (term.length > 2 && n.label.toLowerCase() === `art. ${artNr}`) ||
-        (term.length > 3 && n.group && n.group.toLowerCase().includes(term)) ||
-        (term.length > 3 && n.wet && n.wet.toLowerCase().includes(term)) ||
-        (term.length > 2 && n.leden?.some(l => l.tekst.toLowerCase().includes(term)))
-      ).map(n => n.id)
-    );
+    if (!artFilter && !termen.length && !groepFilter) {
+      resetZoekKleuren(); zoekResultaten = []; bouwResultatenLijst(); return;
+    }
 
+    const scored = [];
+    for (const n of raw.nodes) {
+      if (n.type === 'sectie' || n.type === 'wet') continue;
+      if (wetFilter && n.bwbId !== wetFilter) continue;
+
+      let score = 0;
+
+      // Artikelnummer
+      if (artFilter) {
+        if (n.artikel && n.artikel.toLowerCase() === artFilter) score += 100;
+        else if (n.artikel && n.artikel.toLowerCase().startsWith(artFilter)) score += 60;
+      }
+
+      // Tekst in leden (AND: alle termen moeten matchen)
+      if (termen.length) {
+        const match = termen.every(t =>
+          n.leden?.some(l => l.tekst.toLowerCase().includes(t)) ||
+          n.label.toLowerCase().includes(t) ||
+          n.group?.toLowerCase().includes(t)
+        );
+        if (match) {
+          // Hogere score als meer termen matchen in leden
+          const hits = termen.filter(t => n.leden?.some(l => l.tekst.toLowerCase().includes(t))).length;
+          score += hits * 30 + (termen.length - hits) * 10;
+        } else if (!artFilter) continue;
+      }
+
+      // Groep/hoofdstuk
+      if (groepFilter && n.group?.toLowerCase().includes(groepFilter)) score += 20;
+      else if (groepFilter && !score) continue;
+
+      if (score > 0) scored.push({ n, score });
+    }
+
+    scored.sort((a, b) => b.score - a.score);
+    zoekResultaten = scored.map(s => s.n);
+    zoekIndex = 0;
+
+    // Graaf kleuren
+    const trefferIds = new Set(zoekResultaten.map(n => n.id));
+    const gd = Graph.graphData();
     const burenIds = new Set();
     for (const l of gd.links) {
       const s = typeof l.source === 'object' ? l.source.id : l.source;
@@ -392,34 +537,126 @@
       if (trefferIds.has(t)) burenIds.add(s);
     }
     for (const n of gd.nodes) {
-      if (trefferIds.has(n.id))    n.color = n.baseColor;
-      else if (burenIds.has(n.id)) n.color = '#ffffff';
-      else                         n.color = '#1a2540';
+      n.color = trefferIds.has(n.id) ? n.baseColor
+              : burenIds.has(n.id)   ? '#ffffff'
+              : '#1a2540';
     }
     Graph.nodeColor('color');
 
-    const countEl = document.getElementById('search-count');
-    if (trefferIds.size > 0) {
-      countEl.textContent = trefferIds.size + ' resultaat' + (trefferIds.size !== 1 ? 'en' : '');
-      countEl.style.display = 'inline';
-    } else {
-      countEl.style.display = 'none';
-    }
+    bouwResultatenLijst();
 
-    const eerste = gd.nodes.find(n => trefferIds.has(n.id));
-    if (eerste?.x != null) {
-      const dist = 120;
-      const r = 1 + dist / (Math.hypot(eerste.x || 1, eerste.y || 1, eerste.z || 1));
-      Graph.cameraPosition({ x: eerste.x * r, y: eerste.y * r, z: eerste.z * r }, eerste, 1800);
-    }
+    // Navigeer naar eerste resultaat
+    if (zoekResultaten.length) navigeerNaar(zoekResultaten[0], 0, false);
+  }
+
+  function resetZoekKleuren() {
+    for (const n of Graph.graphData().nodes) n.color = n.baseColor;
+    Graph.nodeColor('color');
   }
 
   function resetZoek() {
-    document.getElementById('search').value = '';
-    document.getElementById('search-count').style.display = 'none';
-    zoekActief = false;
-    for (const n of Graph.graphData().nodes) n.color = n.baseColor;
-    Graph.nodeColor('color');
+    document.getElementById('zoek-input').value = '';
+    document.getElementById('zoek-art').value = '';
+    document.getElementById('zoek-tekst').value = '';
+    document.getElementById('zoek-groep').value = '';
+    zoekTerm = '';
+    zoekResultaten = [];
+    zoekIndex = 0;
+    resetZoekKleuren();
+    bouwResultatenLijst();
+  }
+
+  function bouwResultatenLijst() {
+    const container = document.getElementById('zoek-resultaten');
+    const nav = document.getElementById('zoek-nav');
+
+    if (!zoekResultaten.length) {
+      nav.style.display = 'none';
+      const wasTyping = document.getElementById('zoek-input').value.trim() ||
+                        document.getElementById('zoek-tekst').value.trim() ||
+                        document.getElementById('zoek-art').value.trim();
+      container.innerHTML = wasTyping
+        ? '<div id="zoek-geen">Geen resultaten gevonden.</div>'
+        : '';
+      return;
+    }
+
+    // Nav-balk
+    nav.style.display = 'flex';
+    const teller = zoekResultaten.length;
+    document.getElementById('zoek-count-label').textContent =
+      teller + ' resultaat' + (teller !== 1 ? 'en' : '');
+    updateNavTeller();
+
+    // Resultatenlijst (max 50)
+    const max = Math.min(zoekResultaten.length, 50);
+    const snippetTermen = zoekTerm ? [zoekTerm] :
+      [document.getElementById('zoek-tekst').value.trim().toLowerCase()].filter(Boolean);
+
+    container.innerHTML = '';
+    for (let i = 0; i < max; i++) {
+      const n = zoekResultaten[i];
+      const snippet = maakSnippetMulti(n.leden, snippetTermen);
+      const wetKort = n.wet ? n.wet.replace(/\s+\d{4}$/, '') : '';
+      const groepKort = n.group ? (n.group.length > 30 ? n.group.slice(0, 28) + '…' : n.group) : '';
+
+      const div = document.createElement('div');
+      div.className = 'zoek-resultaat' + (i === zoekIndex ? ' actief' : '');
+      div.dataset.idx = i;
+      div.innerHTML =
+        `<div class="zoek-res-label">${n.label}` +
+        (wetKort ? `<span class="zoek-res-wet">${wetKort}</span>` : '') +
+        `</div>` +
+        (groepKort ? `<div class="zoek-res-groep">${groepKort}</div>` : '') +
+        (snippet ? `<div class="zoek-res-snippet">${snippet}</div>` : '');
+      div.addEventListener('click', () => navigeerNaar(n, i, true));
+      container.appendChild(div);
+    }
+    if (zoekResultaten.length > 50) {
+      const meer = document.createElement('div');
+      meer.style.cssText = 'padding:6px 12px;font-size:10px;color:#3a5272';
+      meer.textContent = `… en ${zoekResultaten.length - 50} meer`;
+      container.appendChild(meer);
+    }
+  }
+
+  function updateNavTeller() {
+    const teller = document.getElementById('zoek-nav-teller');
+    teller.textContent = zoekResultaten.length
+      ? `${zoekIndex + 1} / ${zoekResultaten.length}` : '';
+    document.getElementById('zoek-prev').disabled = zoekIndex <= 0;
+    document.getElementById('zoek-next').disabled = zoekIndex >= zoekResultaten.length - 1;
+  }
+
+  function navigeerNaar(node, index, switchTab) {
+    zoekIndex = index;
+    updateNavTeller();
+
+    // Markeer actief in lijst
+    document.querySelectorAll('.zoek-resultaat').forEach(el => {
+      el.classList.toggle('actief', parseInt(el.dataset.idx) === index);
+    });
+
+    // Scroll resultaat in beeld
+    const actEl = document.querySelector(`.zoek-resultaat[data-idx="${index}"]`);
+    if (actEl) actEl.scrollIntoView({ block: 'nearest' });
+
+    // Camera
+    if (node.x != null) {
+      const dist = 100;
+      const r = 1 + dist / (Math.hypot(node.x || 1, node.y || 1, node.z || 1));
+      Graph.cameraPosition({ x: node.x * r, y: node.y * r, z: node.z * r }, node, 1000);
+    }
+
+    // Knoop-inhoud vullen
+    vulKnoopInhoud(node);
+    if (switchTab) activeerTab('knoop');
+  }
+
+  // Debounced zoek-trigger
+  function triggerZoek() {
+    clearTimeout(zoekTimer);
+    zoekTimer = setTimeout(pasZoek, 280);
   }
 
   // ── 7. Tooltip ────────────────────────────────────────────────────────────────
@@ -455,8 +692,12 @@
       .trim();
   }
 
-  function handleClick(node) {
-    // Vul knoop-inhoud
+  function highlightTerm(tekst, term) {
+    if (!term || term.length < 2) return tekst;
+    return tekst.replace(new RegExp(escRe(term), 'gi'), m => `<mark>${m}</mark>`);
+  }
+
+  function vulKnoopInhoud(node) {
     document.getElementById('info-label').textContent = node.label;
     document.getElementById('info-group').textContent = node.group;
     document.getElementById('info-ref').textContent   = node.bronreferentie;
@@ -474,7 +715,8 @@
     const tekstEl = document.getElementById('info-tekst');
     if (node.leden?.length) {
       tekstEl.innerHTML = node.leden.map(l => {
-        const tekst = mdNaarTekst(l.tekst);
+        let tekst = mdNaarTekst(l.tekst);
+        if (zoekTerm) tekst = highlightTerm(tekst, zoekTerm);
         const lidLabel = node.aantalLeden > 1 ? `Lid ${l.lid}` : 'Tekst';
         return `<div class="lid-blok"><div class="lid-nr">${lidLabel}</div><div class="lid-tekst">${tekst}</div></div>`;
       }).join('');
@@ -514,14 +756,13 @@
     if (!html) html = '<span style="color:#6a8daa">Geen verwijzingen</span>';
     document.getElementById('info-links').innerHTML = html;
 
-    // Toon inhoud, verberg placeholder
     document.getElementById('knoop-placeholder').style.display = 'none';
     document.getElementById('knoop-inhoud').style.display = 'block';
+  }
 
-    // Schakel naar knoop-tab
+  function handleClick(node) {
+    vulKnoopInhoud(node);
     activeerTab('knoop');
-
-    // Camera inzoomen
     if (node.x != null) {
       const dist = 100;
       const r = 1 + dist / (Math.hypot(node.x || 1, node.y || 1, node.z || 1));
@@ -536,6 +777,7 @@
       b.classList.toggle('active', b.dataset.tab === naam));
     document.querySelectorAll('.tab-panel').forEach(p =>
       p.classList.toggle('active', p.id === 'tab-' + naam));
+    if (naam === 'zoek') setTimeout(() => document.getElementById('zoek-input').focus(), 50);
   }
   document.querySelectorAll('.tab-btn').forEach(b =>
     b.addEventListener('click', () => activeerTab(b.dataset.tab)));
@@ -591,10 +833,10 @@
     const wln = m.wetten ?? (m.wet ? [{ bwbId: m.bwbId ?? '', citeertitel: m.wet }] : []);
     const nIntern = raw.nodes.filter(n => n.type === 'intern').length;
     const nExtern = raw.nodes.filter(n => n.type === 'extern').length;
-    const nIntref   = raw.links.filter(l => l.soort === 'intref').length;
-    const nKop      = raw.links.filter(l => l.soort === 'koppeling').length;
-    const nExtref   = raw.links.filter(l => l.soort === 'extref').length;
-    const nStruct   = raw.links.filter(l => l.soort === 'structuur').length;
+    const nIntref = raw.links.filter(l => l.soort === 'intref').length;
+    const nKop    = raw.links.filter(l => l.soort === 'koppeling').length;
+    const nExtref = raw.links.filter(l => l.soort === 'extref').length;
+    const nStruct = raw.links.filter(l => l.soort === 'structuur').length;
     let html = '';
     for (const w of wln) {
       html += `<div class="meta-row"><strong>${w.citeertitel}</strong></div>`;
@@ -616,8 +858,40 @@
   document.getElementById('show-extern').addEventListener('change', pasFilter);
   document.getElementById('show-structuur').addEventListener('change', pasFilter);
   document.getElementById('show-isolated').addEventListener('change', pasFilter);
-  document.getElementById('search').addEventListener('input', pasZoek);
-  document.getElementById('btn-reset').addEventListener('click', resetZoek);
+
+  // Zoek-tab
+  document.getElementById('zoek-input').addEventListener('input', triggerZoek);
+  document.getElementById('zoek-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter') {
+      if (zoekResultaten.length) {
+        const next = (zoekIndex + 1) % zoekResultaten.length;
+        navigeerNaar(zoekResultaten[next], next, false);
+      }
+      e.preventDefault();
+    }
+    if (e.key === 'Escape') resetZoek();
+  });
+  document.getElementById('zoek-clear').addEventListener('click', resetZoek);
+  document.getElementById('zoek-wet').addEventListener('change', pasZoek);
+  document.getElementById('zoek-art').addEventListener('input', triggerZoek);
+  document.getElementById('zoek-tekst').addEventListener('input', triggerZoek);
+  document.getElementById('zoek-groep').addEventListener('input', triggerZoek);
+
+  document.getElementById('zoek-prev').addEventListener('click', () => {
+    if (zoekIndex > 0) navigeerNaar(zoekResultaten[zoekIndex - 1], zoekIndex - 1, false);
+  });
+  document.getElementById('zoek-next').addEventListener('click', () => {
+    if (zoekIndex < zoekResultaten.length - 1) navigeerNaar(zoekResultaten[zoekIndex + 1], zoekIndex + 1, false);
+  });
+
+  document.getElementById('zoek-geavanceerd-toggle').addEventListener('click', () => {
+    const el = document.getElementById('zoek-geavanceerd');
+    const tog = document.getElementById('zoek-geavanceerd-toggle');
+    const open = el.style.display !== 'none';
+    el.style.display = open ? 'none' : 'block';
+    tog.textContent = (open ? '▸' : '▾') + ' Geavanceerd zoeken';
+    if (!open) document.getElementById('zoek-art').focus();
+  });
 
 })();
 </script>
