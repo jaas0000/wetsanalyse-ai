@@ -49120,8 +49120,11 @@
       const div = document.createElement('div');
       div.className = 'zoek-resultaat' + (i === zoekIndex ? ' actief' : '');
       div.dataset.idx = i;
+      const displayLabel = n.artikel && n.id.includes('&lid=')
+        ? `Art. ${n.artikel} — ${n.label}`
+        : n.label;
       div.innerHTML =
-        `<div class="zoek-res-label">${n.label}` +
+        `<div class="zoek-res-label">${displayLabel}` +
         (wetKort ? `<span class="zoek-res-wet">${wetKort}</span>` : '') +
         `</div>` +
         (groepKort ? `<div class="zoek-res-groep">${groepKort}</div>` : '') +
