@@ -37,18 +37,51 @@
     }
     #filters input[type=checkbox] { accent-color: #4a8fd4; width: 13px; height: 13px; cursor: pointer; }
     .filter-sep { width: 1px; height: 18px; background: #1d3a5e; flex-shrink: 0; }
-
-    /* ── Sidebar ── */
-    #sidebar {
-      position: fixed; top: 82px; left: 0; bottom: 0; width: 260px;
-      background: #070f20; border-right: 1px solid #1d3a5e;
-      display: flex; flex-direction: column; z-index: 10;
+    #btn-reset-view {
+      margin-left: auto; flex-shrink: 0;
+      background: none; border: 1px solid #1d3a5e; color: #6a8daa;
+      font-size: 11px; padding: 3px 10px; border-radius: 3px; cursor: pointer;
+      white-space: nowrap;
     }
+    #btn-reset-view:hover { border-color: #4a9eff; color: #d9e6f2; }
+
+    /* ── Sidebar-wrappers (outer) ── */
+    #sb-links-outer {
+      position: fixed; top: 82px; left: 0; bottom: 0;
+      display: flex; flex-direction: row; z-index: 10;
+    }
+    #sb-rechts-outer {
+      position: fixed; top: 82px; right: 0; bottom: 0;
+      display: flex; flex-direction: row; z-index: 10;
+    }
+
+    /* ── Toggle-strips ── */
+    .sb-toggle {
+      width: 20px; flex-shrink: 0;
+      background: #090e1d; border: none;
+      color: #3a5272; cursor: pointer; font-size: 10px;
+      display: flex; align-items: center; justify-content: center;
+      transition: color 0.15s, background 0.15s;
+    }
+    .sb-toggle:hover { color: #a8c4e0; background: #0d1f3c; }
+    #toggle-links  { border-left: 1px solid #1d3a5e; order: 2; }
+    #toggle-rechts { border-right: 1px solid #1d3a5e; order: 1; }
+
+    /* ── Linkerzijbalk ── */
+    #sidebar-links {
+      width: 260px; overflow: hidden;
+      background: #070f20; border-right: 1px solid #1d3a5e;
+      display: flex; flex-direction: column;
+      transition: width 0.2s ease;
+      order: 1;
+    }
+    #sidebar-links.ingeklapt { width: 0; }
+
     #tab-bar {
       display: flex; border-bottom: 1px solid #1d3a5e; flex-shrink: 0;
     }
     .tab-btn {
-      flex: 1; padding: 8px 2px; font-size: 10.5px; font-weight: 600;
+      flex: 1; padding: 8px 2px; font-size: 11px; font-weight: 600;
       background: none; border: none; border-bottom: 2px solid transparent;
       color: #6a8daa; cursor: pointer; transition: color .15s; white-space: nowrap;
     }
@@ -59,9 +92,21 @@
     }
     .tab-panel.active { display: block; }
 
-    /* Zoek-tab: eigen layout zodat controls boven blijven en resultaten scrollen */
-    #tab-zoek { padding: 0; overflow: hidden; }
-    #tab-zoek.active { display: flex; flex-direction: column; }
+    /* ── Rechterzijbalk ── */
+    #sidebar-rechts {
+      width: 280px; overflow: hidden;
+      background: #070f20; border-left: 1px solid #1d3a5e;
+      display: flex; flex-direction: column;
+      transition: width 0.2s ease;
+      order: 2;
+    }
+    #sidebar-rechts.ingeklapt { width: 0; }
+
+    #zoek-header {
+      font-size: 10px; font-weight: 700; color: #4a9eff;
+      padding: 9px 12px 8px; border-bottom: 1px solid #1d3a5e;
+      flex-shrink: 0; text-transform: uppercase; letter-spacing: .07em;
+    }
     #zoek-controls { flex-shrink: 0; padding: 10px 12px 8px; border-bottom: 1px solid #1d3a5e; }
     #zoek-input-wrap { display: flex; gap: 6px; margin-bottom: 8px; }
     #zoek-input {
@@ -117,7 +162,12 @@
     #zoek-geen { padding: 24px 12px; font-size: 11px; color: #3a5272; text-align: center; }
 
     /* ── Graaf ── */
-    #graph-wrap { position: fixed; top: 82px; left: 260px; right: 0; bottom: 0; }
+    #graph-wrap {
+      position: fixed; top: 82px; bottom: 0;
+      left: 280px;  /* 260 + 20 toggle */
+      right: 300px; /* 280 + 20 toggle */
+      transition: left 0.2s ease, right 0.2s ease;
+    }
 
     /* ── Knoop-tab ── */
     #knoop-placeholder {
@@ -210,38 +260,47 @@
   <label><input type="checkbox" id="show-structuur"> Structuur</label>
   <div class="filter-sep"></div>
   <label><input type="checkbox" id="show-isolated" checked> Geïsoleerde artikelen</label>
+  <button id="btn-reset-view" title="Camera terugzetten naar beginstand">↺ Reset weergave</button>
 </div>
 
-<div id="sidebar">
-  <div id="tab-bar">
-    <button class="tab-btn active" data-tab="overzicht">Overzicht</button>
-    <button class="tab-btn" data-tab="knoop">Knoop</button>
-    <button class="tab-btn" data-tab="legenda">Legenda</button>
-    <button class="tab-btn" data-tab="zoek">Zoek</button>
-  </div>
-
-  <div id="tab-overzicht" class="tab-panel active"></div>
-
-  <div id="tab-knoop" class="tab-panel">
-    <div id="knoop-placeholder">Klik op een knoop in de graaf om details te zien.</div>
-    <div id="knoop-inhoud" style="display:none">
-      <h2 id="info-label"></h2>
-      <div class="badge-row">
-        <span id="info-group" class="group-badge"></span>
-        <span id="info-wet" class="wet-badge" style="display:none"></span>
-      </div>
-      <div id="info-ref" class="ref"></div>
-      <div id="info-pad" class="ref" style="display:none"></div>
-      <div class="stat">Verbindingen: <strong id="info-grad"></strong></div>
-      <hr class="panel-hr">
-      <div id="info-tekst"></div>
-      <div id="info-links"></div>
+<!-- Linkerzijbalk -->
+<div id="sb-links-outer">
+  <div id="sidebar-links">
+    <div id="tab-bar">
+      <button class="tab-btn active" data-tab="overzicht">Overzicht</button>
+      <button class="tab-btn" data-tab="knoop">Knoop</button>
+      <button class="tab-btn" data-tab="legenda">Legenda</button>
     </div>
+
+    <div id="tab-overzicht" class="tab-panel active"></div>
+
+    <div id="tab-knoop" class="tab-panel">
+      <div id="knoop-placeholder">Klik op een knoop in de graaf om details te zien.</div>
+      <div id="knoop-inhoud" style="display:none">
+        <h2 id="info-label"></h2>
+        <div class="badge-row">
+          <span id="info-group" class="group-badge"></span>
+          <span id="info-wet" class="wet-badge" style="display:none"></span>
+        </div>
+        <div id="info-ref" class="ref"></div>
+        <div id="info-pad" class="ref" style="display:none"></div>
+        <div class="stat">Verbindingen: <strong id="info-grad"></strong></div>
+        <hr class="panel-hr">
+        <div id="info-tekst"></div>
+        <div id="info-links"></div>
+      </div>
+    </div>
+
+    <div id="tab-legenda" class="tab-panel"></div>
   </div>
+  <button id="toggle-links" class="sb-toggle" title="Paneel in-/uitklappen">◀</button>
+</div>
 
-  <div id="tab-legenda" class="tab-panel"></div>
-
-  <div id="tab-zoek" class="tab-panel">
+<!-- Rechterzijbalk (zoeken) -->
+<div id="sb-rechts-outer">
+  <button id="toggle-rechts" class="sb-toggle" title="Paneel in-/uitklappen">▶</button>
+  <div id="sidebar-rechts">
+    <div id="zoek-header">Zoeken</div>
     <div id="zoek-controls">
       <div id="zoek-input-wrap">
         <input type="text" id="zoek-input" placeholder="artikel nr of tekst…" autocomplete="off" spellcheck="false">
@@ -424,10 +483,9 @@
 
   let zoekResultaten = [];
   let zoekIndex = 0;
-  let zoekTerm = '';   // laatste eenvoudige zoekterm (voor highlight)
+  let zoekTerm = '';
   let zoekTimer = null;
 
-  // Wet-opties vullen
   const zoekWetSel = document.getElementById('zoek-wet');
   for (const w of wetten) {
     const opt = document.createElement('option');
@@ -495,13 +553,11 @@
 
       let score = 0;
 
-      // Artikelnummer
       if (artFilter) {
         if (n.artikel && n.artikel.toLowerCase() === artFilter) score += 100;
         else if (n.artikel && n.artikel.toLowerCase().startsWith(artFilter)) score += 60;
       }
 
-      // Tekst in leden (AND: alle termen moeten matchen)
       if (termen.length) {
         const match = termen.every(t =>
           n.leden?.some(l => l.tekst.toLowerCase().includes(t)) ||
@@ -509,13 +565,11 @@
           n.group?.toLowerCase().includes(t)
         );
         if (match) {
-          // Hogere score als meer termen matchen in leden
           const hits = termen.filter(t => n.leden?.some(l => l.tekst.toLowerCase().includes(t))).length;
           score += hits * 30 + (termen.length - hits) * 10;
         } else if (!artFilter) continue;
       }
 
-      // Groep/hoofdstuk
       if (groepFilter && n.group?.toLowerCase().includes(groepFilter)) score += 20;
       else if (groepFilter && !score) continue;
 
@@ -526,7 +580,6 @@
     zoekResultaten = scored.map(s => s.n);
     zoekIndex = 0;
 
-    // Graaf kleuren
     const trefferIds = new Set(zoekResultaten.map(n => n.id));
     const gd = Graph.graphData();
     const burenIds = new Set();
@@ -544,8 +597,6 @@
     Graph.nodeColor('color');
 
     bouwResultatenLijst();
-
-    // Navigeer naar eerste resultaat
     if (zoekResultaten.length) navigeerNaar(zoekResultaten[0], 0, false);
   }
 
@@ -581,14 +632,12 @@
       return;
     }
 
-    // Nav-balk
     nav.style.display = 'flex';
     const teller = zoekResultaten.length;
     document.getElementById('zoek-count-label').textContent =
       teller + ' resultaat' + (teller !== 1 ? 'en' : '');
     updateNavTeller();
 
-    // Resultatenlijst (max 50)
     const max = Math.min(zoekResultaten.length, 50);
     const snippetTermen = zoekTerm ? [zoekTerm] :
       [document.getElementById('zoek-tekst').value.trim().toLowerCase()].filter(Boolean);
@@ -632,28 +681,23 @@
     zoekIndex = index;
     updateNavTeller();
 
-    // Markeer actief in lijst
     document.querySelectorAll('.zoek-resultaat').forEach(el => {
       el.classList.toggle('actief', parseInt(el.dataset.idx) === index);
     });
 
-    // Scroll resultaat in beeld
     const actEl = document.querySelector(`.zoek-resultaat[data-idx="${index}"]`);
     if (actEl) actEl.scrollIntoView({ block: 'nearest' });
 
-    // Camera
     if (node.x != null) {
       const dist = 100;
       const r = 1 + dist / (Math.hypot(node.x || 1, node.y || 1, node.z || 1));
       Graph.cameraPosition({ x: node.x * r, y: node.y * r, z: node.z * r }, node, 1000);
     }
 
-    // Knoop-inhoud vullen
     vulKnoopInhoud(node);
     if (switchTab) activeerTab('knoop');
   }
 
-  // Debounced zoek-trigger
   function triggerZoek() {
     clearTimeout(zoekTimer);
     zoekTimer = setTimeout(pasZoek, 280);
@@ -770,19 +814,45 @@
     }
   }
 
-  // ── 9. Tab-wisseling ─────────────────────────────────────────────────────────
+  // ── 9. Tab-wisseling (linkerzijbalk) ─────────────────────────────────────────
 
   function activeerTab(naam) {
     document.querySelectorAll('.tab-btn').forEach(b =>
       b.classList.toggle('active', b.dataset.tab === naam));
     document.querySelectorAll('.tab-panel').forEach(p =>
       p.classList.toggle('active', p.id === 'tab-' + naam));
-    if (naam === 'zoek') setTimeout(() => document.getElementById('zoek-input').focus(), 50);
   }
   document.querySelectorAll('.tab-btn').forEach(b =>
     b.addEventListener('click', () => activeerTab(b.dataset.tab)));
 
-  // ── 10. Legenda ───────────────────────────────────────────────────────────────
+  // ── 10. Sidebar toggles ───────────────────────────────────────────────────────
+
+  const gw = document.getElementById('graph-wrap');
+
+  function toggleLinks() {
+    const sbL = document.getElementById('sidebar-links');
+    const btn = document.getElementById('toggle-links');
+    const open = sbL.classList.toggle('ingeklapt');  // open = true als ingeklapt
+    gw.style.left  = open ? '20px' : '280px';
+    btn.textContent = open ? '▶' : '◀';
+  }
+
+  function toggleRechts() {
+    const sbR = document.getElementById('sidebar-rechts');
+    const btn = document.getElementById('toggle-rechts');
+    const open = sbR.classList.toggle('ingeklapt');
+    gw.style.right = open ? '20px' : '300px';
+    btn.textContent = open ? '◀' : '▶';
+  }
+
+  // ── 11. Reset weergave ───────────────────────────────────────────────────────
+
+  function resetWeergave() {
+    Graph.zoomToFit(500, 30);
+    resetZoekKleuren();
+  }
+
+  // ── 12. Legenda ───────────────────────────────────────────────────────────────
 
   function bouwLegenda() {
     let html = '';
@@ -826,7 +896,7 @@
   }
   bouwLegenda();
 
-  // ── 11. Overzicht ─────────────────────────────────────────────────────────────
+  // ── 13. Overzicht ─────────────────────────────────────────────────────────────
 
   function bouwMeta() {
     const m = raw.metadata ?? {};
@@ -851,7 +921,7 @@
   }
   bouwMeta();
 
-  // ── 12. Event-listeners ───────────────────────────────────────────────────────
+  // ── 14. Event-listeners ───────────────────────────────────────────────────────
 
   document.getElementById('show-intern').addEventListener('change', pasFilter);
   document.getElementById('show-koppeling').addEventListener('change', pasFilter);
@@ -859,7 +929,10 @@
   document.getElementById('show-structuur').addEventListener('change', pasFilter);
   document.getElementById('show-isolated').addEventListener('change', pasFilter);
 
-  // Zoek-tab
+  document.getElementById('toggle-links').addEventListener('click', toggleLinks);
+  document.getElementById('toggle-rechts').addEventListener('click', toggleRechts);
+  document.getElementById('btn-reset-view').addEventListener('click', resetWeergave);
+
   document.getElementById('zoek-input').addEventListener('input', triggerZoek);
   document.getElementById('zoek-input').addEventListener('keydown', e => {
     if (e.key === 'Enter') {
