@@ -47097,7 +47097,16 @@
       if (!toonIsol && !actief.has(n.id)) return false;
       return true;
     });
-    Graph.graphData({ nodes: gefNodes, links: gefLinks });
+    // Alleen links tonen waarvan beide eindpunten zichtbaar zijn; anders gooit
+    // 3d-force-graph "node not found" en stopt het renderen (bv. een intref naar
+    // een sectie-knoop terwijl Structuur uit staat).
+    const zichtbaar = new Set(gefNodes.map(n => n.id));
+    const veiligeLinks = gefLinks.filter(l => {
+      const s = typeof l.source === 'object' ? l.source.id : l.source;
+      const t = typeof l.target === 'object' ? l.target.id : l.target;
+      return zichtbaar.has(s) && zichtbaar.has(t);
+    });
+    Graph.graphData({ nodes: gefNodes, links: veiligeLinks });
   }
 
   // ── 6. Zoeken ────────────────────────────────────────────────────────────────
