@@ -488,7 +488,8 @@
 
   let zoekResultaten = [];
   let zoekIndex = 0;
-  let zoekTerm = '';
+  let zoekTerm = '';     // eerste tekstterm (enkelvoudige fallback)
+  let zoekTermen = [];   // alle teksttermen (voor multi-highlight)
   let zoekTimer = null;
 
   const zoekWetSel = document.getElementById('zoek-wet');
@@ -538,10 +539,12 @@
       const tekst = document.getElementById('zoek-tekst').value.trim().toLowerCase();
       groepFilter = document.getElementById('zoek-groep').value.trim().toLowerCase();
       if (tekst) termen = tekst.split(/\s+AND\s+|\s+/i).filter(Boolean);
-      zoekTerm = termen[0] ?? artFilter ?? '';
+      zoekTermen = termen;
+      zoekTerm = termen[0] ?? '';
     } else {
       const raw_term = document.getElementById('zoek-input').value.trim().toLowerCase();
       zoekTerm = raw_term;
+      zoekTermen = raw_term ? [raw_term] : [];
       if (!raw_term) { resetZoekKleuren(); zoekResultaten = []; bouwResultatenLijst(); return; }
       artFilter = raw_term.replace(/^art\.?\s*/i, '');
       termen = [raw_term];
@@ -616,6 +619,7 @@
     document.getElementById('zoek-tekst').value = '';
     document.getElementById('zoek-groep').value = '';
     zoekTerm = '';
+    zoekTermen = [];
     zoekResultaten = [];
     zoekIndex = 0;
     resetZoekKleuren();
@@ -644,7 +648,7 @@
     updateNavTeller();
 
     const max = Math.min(zoekResultaten.length, 50);
-    const snippetTermen = zoekTerm ? [zoekTerm] :
+    const snippetTermen = zoekTermen.length ? zoekTermen :
       [document.getElementById('zoek-tekst').value.trim().toLowerCase()].filter(Boolean);
 
     container.innerHTML = '';
@@ -765,7 +769,7 @@
     if (node.leden?.length) {
       tekstEl.innerHTML = node.leden.map(l => {
         let tekst = mdNaarTekst(l.tekst);
-        if (zoekTerm) tekst = highlightTerm(tekst, zoekTerm);
+        for (const t of zoekTermen) tekst = highlightTerm(tekst, t);
         const lidLabel = node.aantalLeden > 1 ? `Lid ${l.lid}` : 'Tekst';
         return `<div class="lid-blok"><div class="lid-nr">${lidLabel}</div><div class="lid-tekst">${tekst}</div></div>`;
       }).join('');
