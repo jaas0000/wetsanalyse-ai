@@ -276,9 +276,30 @@ function extractGroep(pad?: string): string {
 }
 
 function stripJciSuffix(jci: string, nodeMap?: ReadonlyMap<string, unknown>): string {
-  const withoutDate = jci.replace(/&[gz]=[^&]*/g, "");
-  if (nodeMap?.has(withoutDate)) return withoutDate;
-  return withoutDate.replace(/&lid=[^&]*/g, "");
+  const zonderDatum = jci.replace(/&[gz]=[^&]*/g, "");
+  const base = zonderDatum.split("&")[0]!; // jci1.3:c:BWBRxxxx
+  const artikel = zonderDatum.match(/&artikel=([^&]+)/)?.[1];
+
+  if (artikel) {
+    // Canonieke artikelknoop: base&artikel=N[&lid=M], zónder pad-prefix (hoofdstuk/afdeling/…).
+    // Het id wordt heropgebouwd, dus elk overig segment (datum, hoofdstuk, paragraaf, …) valt weg.
+    const lid = zonderDatum.match(/&lid=([^&]+)/)?.[1];
+    const metLid = `${base}&artikel=${artikel}${lid ? `&lid=${lid}` : ""}`;
+    if (nodeMap?.has(metLid)) return metLid;
+    return `${base}&artikel=${artikel}`;
+  }
+
+  // Geen artikel: verwijzing naar een hele sectie → laatste pad-segment → sectie-knoop.
+  if (nodeMap) {
+    const segmenten = [...zonderDatum.matchAll(/&([a-z]+)=([^&]+)/gi)];
+    const laatste = segmenten[segmenten.length - 1];
+    const bwbId = base.match(/c:(BWBR\d+)/i)?.[1];
+    if (laatste && bwbId) {
+      const sectieId = `${bwbId}#${laatste[1]}-${laatste[2]}`;
+      if (nodeMap.has(sectieId)) return sectieId;
+    }
+  }
+  return zonderDatum;
 }
 
 function externNodeId(target: string, bwbIdDoel?: string): string {
