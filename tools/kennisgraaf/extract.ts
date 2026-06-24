@@ -241,13 +241,24 @@ function bouwHierarchie(
   }
 }
 
-function collectArtikelen(nodes: StructuurNode[]): string[] {
-  const result: string[] = [];
-  for (const node of nodes) {
-    if (node.artikelen) result.push(...node.artikelen);
-    if (node.secties) result.push(...collectArtikelen(node.secties));
+function collectArtikelen(sns: StructuurNode[]): { nummers: string[]; containers: Set<string> } {
+  const nummers: string[] = [];
+  const containers = new Set<string>();
+
+  function traverse(nodes: StructuurNode[]) {
+    for (const sn of nodes) {
+      if (sn.type === "circulaire_divisie" && sn.nr &&
+          (sn.secties?.length || sn.artikelen?.length)) {
+        containers.add(sn.nr);
+        nummers.push(sn.nr);
+      }
+      if (sn.artikelen) nummers.push(...sn.artikelen);
+      if (sn.secties) traverse(sn.secties);
+    }
   }
-  return [...new Set(result)];
+
+  traverse(sns);
+  return { nummers: [...new Set(nummers)], containers };
 }
 
 function extractGroep(pad?: string): string {
@@ -264,8 +275,10 @@ function extractGroep(pad?: string): string {
   return top ?? parts[0] ?? "Overig";
 }
 
-function stripJciSuffix(jci: string): string {
-  return jci.replace(/&lid=[^&]*/g, "").replace(/&g=[^&]*/g, "");
+function stripJciSuffix(jci: string, nodeMap?: ReadonlyMap<string, unknown>): string {
+  const withoutDate = jci.replace(/&[gz]=[^&]*/g, "");
+  if (nodeMap?.has(withoutDate)) return withoutDate;
+  return withoutDate.replace(/&lid=[^&]*/g, "");
 }
 
 function externNodeId(target: string, bwbIdDoel?: string): string {
@@ -347,6 +360,7 @@ async function main() {
     bwbId: string;
     citeertitel: string;
     artikelNummers: string[];
+    containers: Set<string>;
     artikelData: (ArtikelOutput | null)[];
     structuur: StructuurNode[];
   }
@@ -359,14 +373,15 @@ async function main() {
       bwbId,
     })) as StructuurOutput;
     const citeertitel = structuurResult.citeertitel;
-    const artikelNummers = collectArtikelen(structuurResult.structuur);
+    const { nummers: artikelNummers, containers } = collectArtikelen(structuurResult.structuur);
     console.log(`  ${citeertitel}`);
-    console.log(`  ${artikelNummers.length} artikelen gevonden\n`);
+    console.log(`  ${artikelNummers.length} artikelen gevonden (waarvan ${containers.size} containers)\n`);
 
     let done = 0;
     const artikelData = (await withConcurrency(
       artikelNummers,
       async (nr) => {
+        if (containers.has(nr)) return null; // Container: geen MCP-aanroep
         const data = (await callTool(client, "wettenbank_artikel", {
           bwbId,
           artikel: nr,
@@ -381,7 +396,7 @@ async function main() {
     )) as (ArtikelOutput | null)[];
     console.log("\n");
 
-    wettenData.push({ bwbId, citeertitel, artikelNummers, artikelData, structuur: structuurResult.structuur });
+    wettenData.push({ bwbId, citeertitel, artikelNummers, containers, artikelData, structuur: structuurResult.structuur });
   }
 
   // 3. Graph opbouwen
@@ -420,7 +435,48 @@ async function main() {
     }
   }
 
-  // 3a-bis. Structuurlinks: wet-nodes + hiërarchie (wet → sectie → artikel)
+  // 3a-bis. Aparte knopen voor genummerde leden van reguliere artikelen
+  const allContainers = new Map<string, Set<string>>(
+    wettenData.map(({ bwbId, containers }) => [bwbId, containers])
+  );
+  const lidOuders = new Set<string>(); // node-IDs waarvan leden overgezet zijn naar lid-knopen
+
+  for (const [nodeId, node] of [...nodes]) {
+    if (node.type !== "intern") continue;
+    if (allContainers.get(node.bwbId ?? "")?.has(node.artikel ?? "")) continue;
+    if (!node.leden?.length) continue;
+    const genummerd = node.leden.filter((l) => l.lid !== "");
+    if (genummerd.length < 2) continue; // 0 of 1 genummerd lid → inline houden
+
+    for (const l of genummerd) {
+      const lidId = `jci1.3:c:${node.bwbId}&artikel=${node.artikel}&lid=${l.lid}`;
+      nodes.set(lidId, {
+        id: lidId,
+        label: `Lid ${l.lid}`,
+        group: node.group,
+        type: "intern",
+        bwbId: node.bwbId,
+        artikel: node.artikel,
+        bronreferentie: `jci1.3:c:${node.bwbId}&artikel=${node.artikel}&lid=${l.lid}&g=${peildatum}`,
+        grad: 0,
+        wet: node.wet,
+        aantalLeden: 1,
+        leden: [{ lid: l.lid, tekst: l.tekst }],
+      });
+      const key = `${nodeId}→${lidId}`;
+      if (!linkSet.has(key)) {
+        linkSet.add(key);
+        links.push({ source: nodeId, target: lidId, soort: "structuur", label: `Lid ${l.lid}` });
+        outDegree.set(nodeId, (outDegree.get(nodeId) ?? 0) + 1);
+        inDegree.set(lidId,   (inDegree.get(lidId)   ?? 0) + 1);
+      }
+    }
+    lidOuders.add(nodeId);
+    node.leden = [];
+    node.aantalLeden = 0;
+  }
+
+  // 3a-ter. Structuurlinks: wet-nodes + hiërarchie (wet → sectie → artikel)
   for (const { bwbId, citeertitel, artikelNummers, structuur } of wettenData) {
     const artikelSet = new Set(artikelNummers);
 
@@ -470,16 +526,19 @@ async function main() {
 
       for (const lid of data.leden) {
         if (!lid.verwijzingen?.length) continue;
+        // Gebruik lid-node als bron als die aangemaakt is in 3a-bis
+        const lidNodeId = lid.lid ? `jci1.3:c:${bwbId}&artikel=${nr}&lid=${lid.lid}` : sourceId;
+        const effectiveSource = nodes.has(lidNodeId) ? lidNodeId : sourceId;
         for (const v of lid.verwijzingen) {
           const targetId =
             v.soort === "intref"
-              ? stripJciSuffix(v.target)
+              ? stripJciSuffix(v.target, nodes)
               : externNodeId(v.target, v.bwbIdDoel);
 
-          if (!targetId || targetId === sourceId || gezieneDoelen.has(targetId)) continue;
+          if (!targetId || targetId === effectiveSource || gezieneDoelen.has(targetId)) continue;
           gezieneDoelen.add(targetId);
 
-          const linkKey = `${sourceId}→${targetId}`;
+          const linkKey = `${effectiveSource}→${targetId}`;
           if (linkSet.has(linkKey)) continue;
           linkSet.add(linkKey);
 
@@ -493,8 +552,8 @@ async function main() {
             soort = "extref";
           }
 
-          links.push({ source: sourceId, target: targetId, soort, label: v.label });
-          outDegree.set(sourceId, (outDegree.get(sourceId) ?? 0) + 1);
+          links.push({ source: effectiveSource, target: targetId, soort, label: v.label });
+          outDegree.set(effectiveSource, (outDegree.get(effectiveSource) ?? 0) + 1);
           inDegree.set(targetId, (inDegree.get(targetId) ?? 0) + 1);
 
           // Koppeling-doel: intern node in een andere wet uit onze set
@@ -554,12 +613,15 @@ async function main() {
   }
 
   // 3c. Tweede pass: intern nodes zonder leden opnieuw ophalen
+  //     (containers en lid-ouders overslaan — die hebben bewust lege leden)
   const ontbrekend = [...nodes.values()].filter(
     (n) =>
       n.type === "intern" &&
       n.artikel &&
       n.artikel !== "?" &&
-      (!n.leden || n.leden.length === 0)
+      (!n.leden || n.leden.length === 0) &&
+      !allContainers.get(n.bwbId ?? "")?.has(n.artikel!) &&
+      !lidOuders.has(n.id)
   );
   if (ontbrekend.length > 0) {
     console.log(`Tweede pass: ${ontbrekend.length} artikelen zonder tekst opnieuw ophalen...`);

@@ -767,12 +767,18 @@
 
     const tekstEl = document.getElementById('info-tekst');
     if (node.leden?.length) {
-      tekstEl.innerHTML = node.leden.map(l => {
-        let tekst = mdNaarTekst(l.tekst);
-        for (const t of zoekTermen) tekst = highlightTerm(tekst, t);
-        const lidLabel = node.aantalLeden > 1 ? `Lid ${l.lid}` : 'Tekst';
-        return `<div class="lid-blok"><div class="lid-nr">${lidLabel}</div><div class="lid-tekst">${tekst}</div></div>`;
-      }).join('');
+      const heeftJuridischeLeden = node.aantalLeden > 1 &&
+        !(node.wet ?? '').toLowerCase().includes('leidraad');
+      tekstEl.innerHTML = node.leden
+        .filter(l => l.tekst && l.tekst.trim())
+        .map(l => {
+          let tekst = mdNaarTekst(l.tekst);
+          for (const t of zoekTermen) tekst = highlightTerm(tekst, t);
+          const lidLabel = heeftJuridischeLeden ? `Lid ${l.lid}` : null;
+          return `<div class="lid-blok">` +
+            (lidLabel ? `<div class="lid-nr">${lidLabel}</div>` : '') +
+            `<div class="lid-tekst">${tekst}</div></div>`;
+        }).join('');
     } else if (node.type === 'wet') {
       tekstEl.innerHTML = `<div class="lid-tekst" style="color:#a78bfa">Wet — overkoepelende structuurknoop</div>`;
     } else if (node.type === 'sectie') {
@@ -781,7 +787,12 @@
     } else if (node.wetNaam) {
       tekstEl.innerHTML = `<div class="lid-tekst" style="color:#6a8daa">Externe wet: ${node.wetNaam}</div>`;
     } else {
-      tekstEl.innerHTML = '';
+      if (node.type === 'intern') {
+        tekstEl.innerHTML =
+          '<div class="lid-tekst" style="color:#6a8daa">Structuurknoop — zie sub-artikelen of leden</div>';
+      } else {
+        tekstEl.innerHTML = '';
+      }
     }
 
     const links = linksVanNode.get(node.id) ?? [];
