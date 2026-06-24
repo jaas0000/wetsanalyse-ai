@@ -442,14 +442,16 @@
     .d3AlphaDecay(0.025)
     .d3VelocityDecay(0.35)
     .warmupTicks(80)
-    .onEngineStop(() => { if (!initZoomKlaar) { Graph.zoomToFit(400, 30); initZoomKlaar = true; } })
     .onNodeClick(handleClick)
     .onNodeHover(handleHover)
     .onBackgroundClick(() => {});
 
-  let initZoomKlaar = false;
-
   pasFilter();
+  // Na layout: stel correcte canvasafmetingen in en centreer de graaf
+  requestAnimationFrame(() => {
+    Graph.width(gw.offsetWidth).height(gw.offsetHeight);
+    setTimeout(() => Graph.zoomToFit(600, 50), 1800);
+  });
 
   // ── 5. Filter ─────────────────────────────────────────────────────────────────
 
