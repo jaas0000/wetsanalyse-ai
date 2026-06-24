@@ -48976,8 +48976,17 @@
     let artFilter = '';
     let groepFilter = '';
 
+    let lidFilter = '';
+    const splitLid = f => {
+      const m = f.match(/^(.+?)\s+lid\s+(\S+)$/i);
+      return m ? { art: m[1].trim(), lid: m[2].trim() } : { art: f, lid: '' };
+    };
+
     if (geavanceerd) {
-      artFilter   = document.getElementById('zoek-art').value.trim().toLowerCase();
+      const artRaw = document.getElementById('zoek-art').value.trim().toLowerCase();
+      const { art: artParsed, lid: lidParsed } = splitLid(artRaw);
+      artFilter   = artParsed;
+      lidFilter   = lidParsed;
       const tekst = document.getElementById('zoek-tekst').value.trim().toLowerCase();
       groepFilter = document.getElementById('zoek-groep').value.trim().toLowerCase();
       if (tekst) termen = tekst.split(/\s+AND\s+|\s+/i).filter(Boolean);
@@ -48988,7 +48997,10 @@
       zoekTerm = raw_term;
       zoekTermen = raw_term ? [raw_term] : [];
       if (!raw_term) { resetZoekKleuren(); zoekResultaten = []; bouwResultatenLijst(); return; }
-      artFilter = raw_term.replace(/^art\.?\s*/i, '');
+      const stripped = raw_term.replace(/^art\.?\s*/i, '');
+      const { art: artParsed, lid: lidParsed } = splitLid(stripped);
+      artFilter = artParsed;
+      lidFilter  = lidParsed;
       termen = [raw_term];
     }
 
@@ -49006,6 +49018,11 @@
       if (artFilter) {
         if (n.artikel && n.artikel.toLowerCase() === artFilter) score += 100;
         else if (n.artikel && n.artikel.toLowerCase().startsWith(artFilter)) score += 60;
+        if (lidFilter) {
+          const knoopLid = n.leden?.[0]?.lid;
+          if (knoopLid !== undefined && knoopLid.toLowerCase() === lidFilter) score += 50;
+          else if (score > 0) score -= 40;
+        }
       }
 
       if (termen.length) {
