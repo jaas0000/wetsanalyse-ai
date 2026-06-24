@@ -442,9 +442,12 @@
     .d3AlphaDecay(0.025)
     .d3VelocityDecay(0.35)
     .warmupTicks(80)
+    .onEngineStop(() => { if (!initZoomKlaar) { Graph.zoomToFit(400, 30); initZoomKlaar = true; } })
     .onNodeClick(handleClick)
     .onNodeHover(handleHover)
     .onBackgroundClick(() => {});
+
+  let initZoomKlaar = false;
 
   pasFilter();
 
@@ -832,9 +835,10 @@
   function toggleLinks() {
     const sbL = document.getElementById('sidebar-links');
     const btn = document.getElementById('toggle-links');
-    const open = sbL.classList.toggle('ingeklapt');  // open = true als ingeklapt
+    const open = sbL.classList.toggle('ingeklapt');
     gw.style.left  = open ? '20px' : '280px';
     btn.textContent = open ? '▶' : '◀';
+    setTimeout(() => Graph.width(gw.offsetWidth).height(gw.offsetHeight), 220);
   }
 
   function toggleRechts() {
@@ -843,6 +847,7 @@
     const open = sbR.classList.toggle('ingeklapt');
     gw.style.right = open ? '20px' : '300px';
     btn.textContent = open ? '◀' : '▶';
+    setTimeout(() => Graph.width(gw.offsetWidth).height(gw.offsetHeight), 220);
   }
 
   // ── 11. Reset weergave ───────────────────────────────────────────────────────
