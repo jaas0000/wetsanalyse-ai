@@ -30,7 +30,9 @@ def is_transient(e: BaseException) -> bool:
     from ..wettenbank import WettenbankError
 
     if isinstance(e, WettenbankError):
-        return True
+        # Client-/permanente MCP-fouten (bv. niet-bestaand artikel of onbekende wet) worden
+        # niet beter van herhalen; alleen zonder of met transiënte klasse retryen.
+        return getattr(e, "klasse", None) not in {"client", "permanent"}
     return type(e).__name__ in _TRANSIENTE_LLM_NAMEN
 
 

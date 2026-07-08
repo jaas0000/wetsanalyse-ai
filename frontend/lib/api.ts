@@ -6,6 +6,7 @@ import type {
   Analyse3,
   ApiError,
   AppSettings,
+  ArtikelInfo,
   CreateAccepted,
   LlmCall,
   Feedback,
@@ -32,6 +33,7 @@ import type {
   WetIn,
   WetOut,
   WetResolveResult,
+  WetStructuur,
 } from "./types";
 import { pathSegment } from "./url";
 
@@ -132,6 +134,21 @@ export async function listModelProfiles(): Promise<ProfileChoice[]> {
 export async function listWetten(): Promise<WetChoice[]> {
   const res = await fetch("/api/wetten", { cache: "no-store" });
   return json<WetChoice[]>(res);
+}
+
+/** Afgeplatte artikellijst van een wet — voedt de artikel-combobox (API cachet per uur). */
+export async function getWetStructuur(bwbId: string): Promise<WetStructuur> {
+  const res = await fetch(`/api/wetten/${pathSegment(bwbId)}/structuur`, { cache: "no-store" });
+  return json<WetStructuur>(res);
+}
+
+/** Ledeninfo + opschrift/snippet van één artikel — voedt de lid-keuzelijst. */
+export async function getArtikelInfo(bwbId: string, artikel: string): Promise<ArtikelInfo> {
+  const res = await fetch(
+    `/api/wetten/${pathSegment(bwbId)}/artikelen/${pathSegment(artikel)}`,
+    { cache: "no-store" },
+  );
+  return json<ArtikelInfo>(res);
 }
 
 // --- Admin: LLM-modelprofielen + verbruik -----------------------------------

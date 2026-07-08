@@ -21,7 +21,8 @@ export function Field({ label, hint, required, error, children }: FieldProps) {
 }
 
 // Rijkshuisstijl: formulierveld min. hoogte 48px, lichte radius, lintblauwe focus-ring.
-const inputBase =
+// Geëxporteerd zodat samengestelde velden (zoals de Combobox) dezelfde veldstijl dragen.
+export const inputBase =
   "w-full min-h-[48px] rounded-field border border-line bg-paper px-3 py-2 text-sm text-ink placeholder:text-faint focus:border-lint focus:outline-none focus:ring-2 focus:ring-lint/30";
 
 export function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {

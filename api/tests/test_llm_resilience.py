@@ -162,3 +162,62 @@ def test_prompt_too_large_niet_transient():
 
     # Niet-transiënt → wordt door met_retry niet 5× herhaald.
     assert is_transient(PromptTooLargeError("te groot")) is False
+
+
+# --- #4 MCP-foutklasse: client-fouten (niet-bestaand artikel) niet retryen ---
+
+def test_wettenbank_client_fout_niet_transient():
+    from app.wettenbank import WettenbankError
+
+    assert is_transient(WettenbankError("artikel niet gevonden", klasse="client")) is False
+    assert is_transient(WettenbankError("regeling bestaat niet", klasse="permanent")) is False
+    # Zonder klasse (transportfout) of met transiënte klasse blijft retryen het gedrag.
+    assert is_transient(WettenbankError("fetch failed")) is True
+    assert is_transient(WettenbankError("SRU 503", klasse="transient")) is True
+
+
+async def test_met_retry_stopt_direct_op_client_fout(monkeypatch):
+    import app.engine.retry as r
+    from app.wettenbank import WettenbankError
+
+    monkeypatch.setattr(r.asyncio, "sleep", lambda s: pytest.fail("mag niet slapen"))
+    pogingen = 0
+
+    async def maak():
+        nonlocal pogingen
+        pogingen += 1
+        raise WettenbankError("Artikel 999 niet gevonden", klasse="client")
+
+    with pytest.raises(WettenbankError):
+        await met_retry(maak, max_retries=3, backoff=0.1)
+    assert pogingen == 1  # geen backoff-loop op een permanente client-fout
+
+
+def test_parse_zet_foutklasse_op_wettenbank_error():
+    """De MCP stuurt de fout als JSON {"fout","foutCode","klasse"} in het text-block;
+    _parse moet de klasse op de exceptie zetten (best-effort: geen JSON → None)."""
+    import json
+
+    from app.wettenbank import WettenbankClient, WettenbankError
+
+    class Block:
+        type = "text"
+
+        def __init__(self, text: str) -> None:
+            self.text = text
+
+    class Result:
+        isError = True
+
+        def __init__(self, text: str) -> None:
+            self.content = [Block(text)]
+
+    payload = json.dumps({"fout": "Artikel 999 niet gevonden", "foutCode": "ARTIKEL_NIET_GEVONDEN", "klasse": "client"})
+    with pytest.raises(WettenbankError) as ei:
+        WettenbankClient._parse("wettenbank_artikel", Result(payload))
+    assert ei.value.klasse == "client"
+    assert "Artikel 999 niet gevonden" in str(ei.value)
+
+    with pytest.raises(WettenbankError) as ei:
+        WettenbankClient._parse("wettenbank_artikel", Result("kale foutmelding, geen JSON"))
+    assert ei.value.klasse is None

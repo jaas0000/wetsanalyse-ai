@@ -58,10 +58,15 @@ def get_store() -> JobStore:
 
 
 @lru_cache
+def get_wettenbank() -> WettenbankClient:
+    return WettenbankClient(get_settings())
+
+
+@lru_cache
 def get_engine():
     from .engine.orchestrator import WetsanalyseEngine
 
     settings = get_settings()
     # Geen vaste LLM-client meer: de engine resolveert per analyse het modelprofiel (uit de store) en
     # bouwt de adapter dan pas. Zo pakt het runtime-beheer (admin-UI) wijzigingen direct op.
-    return WetsanalyseEngine(settings, get_store(), None, WettenbankClient(settings))
+    return WetsanalyseEngine(settings, get_store(), None, get_wettenbank())

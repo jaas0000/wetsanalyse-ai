@@ -5,12 +5,15 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { ButtonRow } from "@/components/ui/ButtonRow";
 import { Card } from "@/components/ui/Card";
+import { Combobox } from "@/components/ui/Combobox";
 import { Field, Input, Select, Textarea } from "@/components/ui/Field";
 import { Melding } from "@/components/ui/Melding";
-import { createProject, isApiError, listModelProfiles, listWetten } from "@/lib/api";
+import { createProject, getArtikelInfo, isApiError, listModelProfiles, listWetten } from "@/lib/api";
+import { bestaatArtikel } from "@/lib/artikelFilter";
 import { buildStartRequest, legeBron, projectSchema, type BronFormValue } from "@/lib/projectForm";
 import { pathSegment } from "@/lib/url";
-import type { ProfileChoice, WetChoice } from "@/lib/types";
+import { useWetStructuren, type StructuurEntry } from "@/lib/useWetStructuur";
+import type { ArtikelInfo, ProfileChoice, WetChoice } from "@/lib/types";
 
 export function ProjectForm() {
   const router = useRouter();
@@ -23,6 +26,13 @@ export function ProjectForm() {
   const [wetten, setWetten] = useState<WetChoice[] | null>(null);
   // Het werkgebied: één of meer bronnen (wet + artikel + lid).
   const [bronnen, setBronnen] = useState<BronFormValue[]>([legeBron()]);
+  const heeftCatalogus = wetten !== null && wetten.length > 0;
+  // Wetsstructuur per BWB-id (gedeeld over rijen op dezelfde wet) voor de artikel-combobox;
+  // een catalogus-keuze is meteen compleet, vrije-tekst-invoer wordt gedebounced.
+  const structuren = useWetStructuren(
+    bronnen.map((b) => b.bwbId ?? ""),
+    { direct: heeftCatalogus },
+  );
 
   useEffect(() => {
     let levend = true;
@@ -79,6 +89,20 @@ export function ProjectForm() {
       return;
     }
 
+    // Pre-check tegen de geladen wetsstructuur (bewust niet in het Zod-schema — dat is puur):
+    // een artikel dat niet in de wet bestaat, faalt hier direct i.p.v. pas tijdens de run.
+    const structuurFouten: Record<string, string> = {};
+    parsed.data.bronnen.forEach((b, i) => {
+      const entry = structuren[(b.bwbId ?? "").trim()];
+      if (entry?.status === "geladen" && entry.structuur && !bestaatArtikel(entry.structuur.artikelen, b.artikel)) {
+        structuurFouten[`bronnen.${i}.artikel`] = "Artikel bestaat niet in deze wet — kies uit de lijst";
+      }
+    });
+    if (Object.keys(structuurFouten).length > 0) {
+      setVeldFout(structuurFouten);
+      return;
+    }
+
     const body = buildStartRequest(parsed.data);
 
     setBezig(true);
@@ -101,8 +125,6 @@ export function ProjectForm() {
     }
   }
 
-  const heeftCatalogus = wetten !== null && wetten.length > 0;
-
   return (
     <Card className="p-6">
       <form onSubmit={onSubmit} className="space-y-5">
@@ -116,59 +138,19 @@ export function ProjectForm() {
           {veldFout.bronnen && <Melding type="fout">{veldFout.bronnen}</Melding>}
 
           {bronnen.map((b, i) => (
-            <div
+            <BronRij
               key={i}
-              className="grid grid-cols-1 gap-3 rounded-lg border border-line bg-paper/60 p-3 sm:grid-cols-[1fr_auto_auto_auto]"
-            >
-              <Field label="Wet" error={veldFout[`bronnen.${i}.bwbId`]}>
-                {heeftCatalogus ? (
-                  <Select value={b.bwbId} onChange={(e) => updateBron(i, { bwbId: e.target.value })}>
-                    <option value="">— kies een wet —</option>
-                    {wetten!.map((w) => (
-                      <option key={w.bwbId} value={w.bwbId}>
-                        {w.naam || w.bwbId}
-                      </option>
-                    ))}
-                  </Select>
-                ) : (
-                  <Input
-                    value={b.bwbId}
-                    onChange={(e) => updateBron(i, { bwbId: e.target.value })}
-                    placeholder="BWBR0004770"
-                    autoComplete="off"
-                  />
-                )}
-              </Field>
-              <Field label="Artikel" required error={veldFout[`bronnen.${i}.artikel`]}>
-                <Input
-                  value={b.artikel}
-                  onChange={(e) => updateBron(i, { artikel: e.target.value })}
-                  placeholder="9"
-                  autoComplete="off"
-                  className="sm:w-24"
-                />
-              </Field>
-              <Field label="Lid" hint="optioneel" error={veldFout[`bronnen.${i}.lid`]}>
-                <Input
-                  value={b.lid}
-                  onChange={(e) => updateBron(i, { lid: e.target.value })}
-                  placeholder="2"
-                  autoComplete="off"
-                  className="sm:w-20"
-                />
-              </Field>
-              <div className="flex items-end">
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={() => verwijderBron(i)}
-                  disabled={bronnen.length === 1}
-                  aria-label="Bron verwijderen"
-                >
-                  ×
-                </Button>
-              </div>
-            </div>
+              bron={b}
+              entry={structuren[(b.bwbId ?? "").trim()]}
+              heeftCatalogus={heeftCatalogus}
+              wetten={wetten}
+              foutBwbId={veldFout[`bronnen.${i}.bwbId`]}
+              foutArtikel={veldFout[`bronnen.${i}.artikel`]}
+              foutLid={veldFout[`bronnen.${i}.lid`]}
+              onUpdate={(patch) => updateBron(i, patch)}
+              onVerwijder={() => verwijderBron(i)}
+              verwijderDisabled={bronnen.length === 1}
+            />
           ))}
           <Button type="button" variant="secondary" onClick={voegBronToe}>
             + Bron toevoegen
@@ -241,5 +223,148 @@ export function ProjectForm() {
         </ButtonRow>
       </form>
     </Card>
+  );
+}
+
+interface BronRijProps {
+  bron: BronFormValue;
+  entry?: StructuurEntry;
+  heeftCatalogus: boolean;
+  wetten: WetChoice[] | null;
+  foutBwbId?: string;
+  foutArtikel?: string;
+  foutLid?: string;
+  onUpdate: (patch: Partial<BronFormValue>) => void;
+  onVerwijder: () => void;
+  verwijderDisabled: boolean;
+}
+
+/**
+ * Eén bron-rij (wet + artikel + lid). Is de wetsstructuur geladen, dan wordt artikel een
+ * combobox met autocomplete en lid een keuzelijst met de echte leden (+ een bevestigings-
+ * regel met opschrift en tekstsnippet). Faalt de structuur- of artikelinfo-lookup, dan
+ * degradeert de rij naar de vrije-tekstvelden — het formulier blijft altijd bruikbaar.
+ */
+function BronRij({
+  bron, entry, heeftCatalogus, wetten,
+  foutBwbId, foutArtikel, foutLid,
+  onUpdate, onVerwijder, verwijderDisabled,
+}: BronRijProps) {
+  const bwbId = (bron.bwbId ?? "").trim();
+  const artikel = (bron.artikel ?? "").trim();
+  const items = entry?.status === "geladen" ? entry.structuur?.artikelen ?? null : null;
+  const [info, setInfo] = useState<ArtikelInfo | null>(null);
+
+  // Zodra het getypte/gekozen artikel in de structuur bestaat: ledeninfo ophalen voor de
+  // lid-keuzelijst + bevestigingsregel. Kort gedebounced tegen churn bij doortypen (9 → 9a).
+  useEffect(() => {
+    setInfo(null);
+    if (!items) return;
+    const canoniek = items.find((it) => it.artikel.toLowerCase() === artikel.toLowerCase())?.artikel;
+    if (!canoniek) return;
+    let levend = true;
+    const t = setTimeout(() => {
+      getArtikelInfo(bwbId, canoniek)
+        .then((i) => levend && setInfo(i))
+        .catch(() => {
+          /* lid blijft vrije invoer */
+        });
+    }, 300);
+    return () => {
+      levend = false;
+      clearTimeout(t);
+    };
+  }, [bwbId, artikel, items]);
+
+  const artikelHint =
+    entry?.status === "laden" ? "artikelen laden…" :
+    entry?.status === "fout" ? "lijst niet beschikbaar — vrije invoer" : undefined;
+
+  return (
+    <div className="grid grid-cols-1 gap-3 rounded-lg border border-line bg-paper/60 p-3 sm:grid-cols-[1fr_auto_auto_auto]">
+      <Field label="Wet" error={foutBwbId}>
+        {heeftCatalogus ? (
+          <Select
+            value={bron.bwbId}
+            onChange={(e) => onUpdate({ bwbId: e.target.value, artikel: "", lid: "" })}
+          >
+            <option value="">— kies een wet —</option>
+            {wetten!.map((w) => (
+              <option key={w.bwbId} value={w.bwbId}>
+                {w.naam || w.bwbId}
+              </option>
+            ))}
+          </Select>
+        ) : (
+          <Input
+            value={bron.bwbId}
+            onChange={(e) => onUpdate({ bwbId: e.target.value, artikel: "", lid: "" })}
+            placeholder="BWBR0004770"
+            autoComplete="off"
+          />
+        )}
+      </Field>
+      <Field label="Artikel" required hint={artikelHint} error={foutArtikel}>
+        {items ? (
+          <Combobox
+            value={bron.artikel}
+            onChange={(t) => onUpdate({ artikel: t, lid: "" })}
+            items={items}
+            placeholder="9"
+            className="sm:w-32"
+          />
+        ) : (
+          <Input
+            value={bron.artikel}
+            onChange={(e) => onUpdate({ artikel: e.target.value, lid: "" })}
+            placeholder="9"
+            autoComplete="off"
+            className="sm:w-32"
+          />
+        )}
+      </Field>
+      <Field label="Lid" hint="optioneel" error={foutLid}>
+        {info ? (
+          <Select
+            value={bron.lid}
+            onChange={(e) => onUpdate({ lid: e.target.value })}
+            className="sm:w-36"
+          >
+            <option value="">Hele artikel</option>
+            {info.leden.map((l) => (
+              <option key={l} value={l}>
+                Lid {l}
+              </option>
+            ))}
+          </Select>
+        ) : (
+          <Input
+            value={bron.lid}
+            onChange={(e) => onUpdate({ lid: e.target.value })}
+            placeholder="2"
+            autoComplete="off"
+            className="sm:w-20"
+          />
+        )}
+      </Field>
+      <div className="flex items-end">
+        <Button
+          type="button"
+          variant="secondary"
+          onClick={onVerwijder}
+          disabled={verwijderDisabled}
+          aria-label="Bron verwijderen"
+        >
+          ×
+        </Button>
+      </div>
+      {info && (
+        <p className="text-xs text-muted sm:col-span-4">
+          <span className="font-medium text-ink">{info.opschrift || `Artikel ${info.artikel}`}</span>
+          {info.pad ? ` · ${info.pad}` : ""}
+          {info.snippet ? ` — ${info.snippet}` : ""}
+        </p>
+      )}
+    </div>
   );
 }

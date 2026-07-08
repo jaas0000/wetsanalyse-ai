@@ -15,7 +15,16 @@ from .config import Settings
 
 
 class WettenbankError(RuntimeError):
-    """Ophalen mislukte of leverde niets — de job moet stoppen, niet doorgaan."""
+    """Ophalen mislukte of leverde niets — de job moet stoppen, niet doorgaan.
+
+    `klasse` draagt de MCP-foutklasse (transient/permanent/client/onbekend) zodat de
+    aanroeper permanente client-fouten (bv. niet-bestaand artikel) kan onderscheiden
+    van tijdelijke haperingen; None als de klasse niet uit de respons te halen was.
+    """
+
+    def __init__(self, message: str, *, klasse: str | None = None) -> None:
+        super().__init__(message)
+        self.klasse = klasse
 
 
 def _diepste_fout(e: BaseException) -> BaseException:
@@ -67,7 +76,17 @@ class WettenbankClient:
         if not teksten:
             raise WettenbankError(f"MCP gaf geen tekst terug voor {tool}")
         if getattr(result, "isError", False):
-            raise WettenbankError(f"MCP-fout voor {tool}: {teksten[0]}")
+            # De MCP-server stuurt de fout als JSON-payload {"fout", "foutCode"?, "klasse"?};
+            # de klasse best-effort meenemen zodat retry/routers client-fouten herkennen.
+            klasse = None
+            try:
+                payload = json.loads(teksten[0])
+                if isinstance(payload, dict):
+                    k = payload.get("klasse")
+                    klasse = k if isinstance(k, str) else None
+            except json.JSONDecodeError:
+                pass
+            raise WettenbankError(f"MCP-fout voor {tool}: {teksten[0]}", klasse=klasse)
         try:
             data = json.loads(teksten[0])
         except json.JSONDecodeError as e:

@@ -388,6 +388,30 @@ export interface WetChoice {
   naam: string;
 }
 
+// Wetsstructuur + artikelinfo voor het analyseformulier (artikel-autocomplete, lid-keuze).
+// Gespiegeld van WetStructuurOut/ArtikelInfoOut in api/app/routers/catalog.py.
+export interface ArtikelChoice {
+  artikel: string;
+  pad: string;
+}
+
+export interface WetStructuur {
+  bwbId: string;
+  citeertitel: string;
+  versiedatum: string;
+  artikelen: ArtikelChoice[];
+}
+
+export interface ArtikelInfo {
+  bwbId: string;
+  artikel: string;
+  citeertitel: string;
+  opschrift: string;
+  pad: string;
+  leden: string[];
+  snippet: string;
+}
+
 // --- Admin: wet-catalogus ---------------------------------------------------
 
 export interface WetIn {
