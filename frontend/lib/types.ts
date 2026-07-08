@@ -47,11 +47,16 @@ export interface RegelspraakStart {
 }
 
 export interface Feedback {
-  status: "akkoord" | "wijzigingen";
+  // "akkoord-afronden" = akkoord op activiteit 2 én daar afronden (geen activiteit 3);
+  // alleen geldig op activiteit "2" en zonder opmerkingen.
+  status: "akkoord" | "wijzigingen" | "akkoord-afronden";
   activiteit: Activiteit;
   items: Record<string, string>;
   algemeen: string;
 }
+
+// Analyse-omvang: "act2" = bewust afgerond zonder activiteit 3 (kan later alsnog).
+export type Scope = "volledig" | "act2";
 
 // --- Responses --------------------------------------------------------------
 
@@ -76,6 +81,7 @@ export interface JobSummary {
   // Verrijking voor de eerste (SSR-)render van het dashboard; daarna live via de aggregate-SSE.
   current_fase: string | null;
   model_profile: string;
+  scope: Scope;
   tokens_in: number;
   tokens_out: number;
 }
@@ -113,6 +119,7 @@ export interface Job {
   analysefocus: string;
   client_id: string;
   regelspraak_review?: boolean | null;
+  scope: Scope;
   current_activiteit: Activiteit | null;
   current_ronde: number;
   waarschuwingen: string[];
@@ -498,6 +505,7 @@ export interface DashboardUpdate {
   naam: string;
   bronnen: BronInput[];
   state: JobState;
+  scope: Scope;
   current_activiteit: Activiteit | null;
   current_ronde: number;
   current_fase: string | null;

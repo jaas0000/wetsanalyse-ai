@@ -212,6 +212,36 @@ class WetsanalyseEngine:
             return
         await self.run_regelspraak_fase(job)
 
+    async def claim_act3(self, job_id: str) -> Job | None:
+        """Claim on-demand activiteit 3 op een act2-only-afgeronde analyse: klaar → act3_runt.
+        Scope gaat meteen terug naar "volledig": zodra geclaimd is de state niet meer `klaar`,
+        en het bestaande retry-pad (r3>0 → wacht-op-review-act3, anders wacht-op-review-act2)
+        herstelt een gefaalde run dan ongewijzigd. De router checkt scope=="act2" vóór de claim."""
+        job = await self.store.claim(
+            job_id, {JobState.klaar}, JobState.act3_runt, self.owner, self.s.lease_s
+        )
+        if job is None:
+            return None
+        job.scope = "volledig"
+        job.current_activiteit = "3"
+        job.current_ronde = 0
+        job.error = None
+        await self._save(job)
+        return job
+
+    async def run_act3_fase(self, job: Job) -> None:
+        """Draai activiteit 3 op een reeds via `claim_act3` geclaimde job (review erft `job.review`);
+        na de act3-review/akkoord wordt het rapport langs het normale pad herbouwd."""
+        await self._guard(job, "act3", self._fase_act3_start(job))
+
+    async def run_act3(self, job_id: str) -> None:
+        """On-demand: voer activiteit 3 alsnog uit op een act2-only-afgeronde analyse.
+        Dunne wrapper (claim + fase); de router splitst de twee om de claim vóór de 202 te leggen."""
+        job = await self.claim_act3(job_id)
+        if job is None:
+            return
+        await self.run_act3_fase(job)
+
     async def retry(self, job_id: str) -> None:
         job = await self.store.load_job(job_id)
         if job is None or job.state != JobState.fout:
@@ -286,6 +316,15 @@ class WetsanalyseEngine:
         await self._genereer_act2_vers(job, 1, bron_bases)
 
     async def _fase_feedback(self, job: Job, activiteit: str, ronde: int, feedback) -> None:
+        if feedback.status == "akkoord-afronden":
+            # Bewust afronden ná activiteit 2 (contract-validatie borgt: alleen act 2, zonder
+            # opmerkingen). Zelfde promotie-garantie als akkoord, maar rechtstreeks naar het
+            # rapport; scope="act2" markeert de analyse als act2-only (RegelSpraak-gate + UI).
+            if not await self._herassert_brongetrouw(job, activiteit):
+                return
+            job.scope = "act2"
+            await self._bouw_rapport(job)
+            return
         if feedback.is_akkoord_zonder_opmerkingen() or ronde >= self.s.max_rondes:
             if not await self._herassert_brongetrouw(job, activiteit):
                 return  # onbetrouwbare (via retry hervatte) ronde → fout i.p.v. promoveren
@@ -307,17 +346,22 @@ class WetsanalyseEngine:
 
     async def _advance_akkoord(self, job: Job, activiteit: str) -> None:
         if activiteit == "2":
-            job.state = JobState.act3_runt
-            await self._save(job)
-            llm = await self._llm_for(job)
-            act2 = await self._context_act2(job)
-
-            async def maak():
-                return await steps.genereer_act3(llm, 1, act2)
-
-            await self._afronden_ronde(job, "3", 1, maak)
+            await self._fase_act3_start(job)
         else:
             await self._bouw_rapport(job)
+
+    async def _fase_act3_start(self, job: Job) -> None:
+        """Start activiteit 3 (ronde 1) op de goedgekeurde act-2 — vanuit de normale flow
+        (`_advance_akkoord`) of on-demand (`run_act3_fase` op een act2-only-`klaar`)."""
+        job.state = JobState.act3_runt
+        await self._save(job)
+        llm = await self._llm_for(job)
+        act2 = await self._act2_akkoord(job)
+
+        async def maak():
+            return await steps.genereer_act3(llm, 1, act2)
+
+        await self._afronden_ronde(job, "3", 1, maak)
 
     async def _herassert_brongetrouw(self, job: Job, activiteit: str) -> bool:
         """Her-bevestig de HARDE brongetrouwheid-invariant vóór een akkoord-promotie. Een ronde die
@@ -350,8 +394,15 @@ class WetsanalyseEngine:
         return {"naam": job.naam, "hoofdvraag": job.analysefocus or "", "omschrijving": "", "scoping": ""}
 
     async def _context_act2(self, job: Job) -> dict:
-        """De act-2-aggregaat van ronde 1 (brongetrouwe bronnen) — context voor act-3 en revise."""
+        """De act-2-aggregaat van ronde 1 (brongetrouwe bronnen) — merge-basis voor act-2-revise."""
         return await self.store.lees_analyse(job.id, "2", 1) or {}
+
+    async def _act2_akkoord(self, job: Job) -> dict:
+        """De goedgekeurde act-2 = de hóógste ronde (herziene rondes zijn volledige, brongetrouwe
+        aggregaten dankzij de revise-merge) — de input voor act-3. Ronde 1 nemen zou de
+        review-feedback op act-2 negeren."""
+        n = await self.store.hoogste_ronde(job.id, "2")
+        return await self.store.lees_analyse(job.id, "2", n) or {}
 
     async def _genereer_act2_vers(self, job: Job, ronde: int, bron_bases: list[dict]) -> None:
         """Verse act-2: per bron de verwijzing-inventaris (fase 2a) + begrensde fetch (één keer),
@@ -468,6 +519,8 @@ class WetsanalyseEngine:
 
     async def _reviewlog(self, job: Job, activiteit: str) -> str:
         n = await self.store.hoogste_ronde(job.id, activiteit)
+        if n == 0:
+            return ""  # activiteit niet uitgevoerd (act2-only-afronding) — geen log-regel
         if not job.review:
             return f"Review overgeslagen (review:false); {n} ronde(n) autonoom gegenereerd."
         if n <= 1:

@@ -91,7 +91,12 @@ export const DashboardCard = memo(function DashboardCard({ u }: { u: DashboardUp
   // In de RegelSpraak-fase (lopend, of een fout die daar optrad) tonen we de rs-pijplijn; de
   // analyse is dan al afgerond.
   const inRsFase = RS_STATES.includes(u.state) || (isFout && RS_ACTIVITEITEN.includes(u.current_activiteit ?? ""));
-  const stations = inRsFase ? RS_STATIONS : STATIONS;
+  // Bij een act2-only-afronding (scope "act2") zijn de act3-stations nooit bereikt — laat ze weg.
+  // Tijdens een on-demand act3-run is de scope alweer "volledig", dus dan klopt de volle pijplijn.
+  const basisStations = u.scope === "act2"
+    ? STATIONS.filter((s) => s.key !== "act3" && s.key !== "rev3")
+    : STATIONS;
+  const stations = inRsFase ? RS_STATIONS : basisStations;
   const idx = stationIndex(stations, u.state);
   const foutIdx = inRsFase
     ? u.current_activiteit === "rs-regels" ? 2 : 0 // rs-gegevens=0, rs-regels=2 in RS_STATIONS

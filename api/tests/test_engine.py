@@ -122,6 +122,92 @@ async def test_wijzigingen_maakt_nieuwe_ronde(engine, store):
     assert await store.hoogste_ronde(job.id, "2") == 2
 
 
+async def test_akkoord_afronden_stopt_na_act2(engine, store):
+    """"akkoord-afronden" in de act2-review rondt de analyse af zonder activiteit 3:
+    state klaar, scope act2, rapport zonder begrippen en zonder act3-reviewlog."""
+    job = await engine.create_job(_start_req(review=True), "test")
+    await engine.run_initial(job.id)
+    assert (await store.load_job(job.id)).state == JobState.wacht_review_act2
+
+    await engine.apply_feedback(job.id, Feedback(status="akkoord-afronden", activiteit="2"))
+    job = await store.load_job(job.id)
+    assert job.state == JobState.klaar
+    assert job.scope == "act2"
+    assert await store.hoogste_ronde(job.id, "3") == 0
+
+    rapport = await store.lees_rapport(job.id)
+    assert rapport["bronnen"][0]["markeringen"]           # act2-inhoud is er
+    assert rapport["begrippen"] == []                     # geen act3-inhoud
+    assert rapport["afleidingsregels"] == []
+    assert rapport["reviewlog"]["activiteit3"]["samenvatting"] == ""
+
+
+async def test_act3_on_demand_maakt_analyse_volledig(engine, store):
+    """Na een act2-only-afronding voert run_act3 activiteit 3 alsnog uit: scope terug naar
+    volledig en het rapport wordt herbouwd mét begrippen."""
+    job = await engine.create_job(_start_req(review=True), "test")
+    await engine.run_initial(job.id)
+    await engine.apply_feedback(job.id, Feedback(status="akkoord-afronden", activiteit="2"))
+    assert (await store.load_job(job.id)).scope == "act2"
+
+    await engine.run_act3(job.id)
+    job = await store.load_job(job.id)
+    # job.review is True → act3 pauzeert eerst in review; akkoord rondt af.
+    assert job.state == JobState.wacht_review_act3
+    await engine.apply_feedback(job.id, Feedback(status="akkoord", activiteit="3"))
+
+    job = await store.load_job(job.id)
+    assert job.state == JobState.klaar
+    assert job.scope == "volledig"
+    assert await store.hoogste_ronde(job.id, "3") == 1
+    rapport = await store.lees_rapport(job.id)
+    assert rapport["begrippen"][0]["naam"] == "belastingplichtige"
+
+
+async def test_act3_claim_alleen_vanuit_klaar(engine, store):
+    """claim_act3 is een CAS op `klaar`: op een lopende/review-job geeft hij None."""
+    job = await engine.create_job(_start_req(review=True), "test")
+    await engine.run_initial(job.id)  # → wacht_review_act2
+    assert await engine.claim_act3(job.id) is None
+
+
+async def test_act3_gebruikt_hoogste_act2_ronde(engine, store, monkeypatch):
+    """De act3-input is de hóógste (goedgekeurde) act2-ronde, niet ronde 1 — anders zou
+    review-feedback op act2 genegeerd worden."""
+    from app.engine import steps
+
+    gezien: dict = {}
+    echte = steps.genereer_act3
+
+    async def capteer(llm, ronde, context):
+        gezien["context"] = context
+        return await echte(llm, ronde, context)
+
+    monkeypatch.setattr(steps, "genereer_act3", capteer)
+
+    job = await engine.create_job(_start_req(review=True), "test")
+    await engine.run_initial(job.id)
+    await engine.apply_feedback(
+        job.id, Feedback(status="wijzigingen", activiteit="2", items={"m1": "herzie"})
+    )
+    assert await store.hoogste_ronde(job.id, "2") == 2
+    await engine.apply_feedback(job.id, Feedback(status="akkoord", activiteit="2"))
+
+    ronde2 = await store.lees_analyse(job.id, "2", 2)
+    assert gezien["context"] == ronde2
+
+
+def test_feedback_akkoord_afronden_validatie():
+    """akkoord-afronden kan alleen op activiteit 2 en zonder opmerkingen."""
+    with pytest.raises(ValueError):
+        Feedback(status="akkoord-afronden", activiteit="3")
+    with pytest.raises(ValueError):
+        Feedback(status="akkoord-afronden", activiteit="2", items={"m1": "toch iets"})
+    with pytest.raises(ValueError):
+        Feedback(status="akkoord-afronden", activiteit="2", algemeen="opmerking")
+    Feedback(status="akkoord-afronden", activiteit="2")  # geldig
+
+
 async def test_feedback_buiten_review_doet_niets(engine, store):
     job = await engine.create_job(_start_req(review=True), "test")
     await engine.apply_feedback(job.id, Feedback(status="akkoord", activiteit="2"))

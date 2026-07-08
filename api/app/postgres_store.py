@@ -31,7 +31,7 @@ from .project import Project, RondeData
 # Velden die save_job mag overschrijven. Bewust ZONDER owner/lease_until: die worden uitsluitend
 # door claim()/verleng_lease() beheerd, zodat een stale Job-snapshot de lease nooit kan overschrijven.
 _STATE_FIELDS = (
-    "state", "current_activiteit", "current_ronde", "waarschuwingen",
+    "state", "scope", "current_activiteit", "current_ronde", "waarschuwingen",
     "error", "provenance", "bronnen", "review",
     "model_profile", "analysefocus", "client_id", "regelspraak_review",
 )
@@ -66,6 +66,7 @@ def _row_to_project(row) -> Project:
         model_profile=m["model_profile"] or "",
         client_id=m["client_id"] or "",
         state=JobState(m["state"]),
+        scope=m.get("scope") or "volledig",
         current_activiteit=m["current_activiteit"],
         current_ronde=m["current_ronde"] or 0,
         current_fase=m["current_fase"],
@@ -198,6 +199,7 @@ class PostgresStore:
                     model_profile=project.model_profile,
                     client_id=project.client_id,
                     state=project.state.value,
+                    scope=project.scope,
                     current_ronde=project.current_ronde,
                     waarschuwingen=[],
                     provenance=[],

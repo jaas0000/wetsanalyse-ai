@@ -56,6 +56,8 @@ projects = Table(
     Column("model_profile", String(128), nullable=False, default=""),
     Column("client_id", String(128), nullable=False, default=""),
     Column("state", String(32), nullable=False),
+    # Analyse-omvang: "volledig" of "act2" (bewust afgerond zonder activiteit 3).
+    Column("scope", String(16), nullable=False, default="volledig"),
     # Ruim genoeg voor de regelspraak-codes ("rs-gegevens"/"rs-regels") náást "2"/"3".
     Column("current_activiteit", String(16), nullable=True),
     Column("current_ronde", Integer, nullable=False, default=0),
@@ -255,6 +257,11 @@ async def reconcile_schema() -> None:
             await conn.exec_driver_sql(f"ALTER TABLE projects ADD COLUMN regelspraak {typ}")
         if "regelspraak_review" not in bestaande:
             await conn.exec_driver_sql("ALTER TABLE projects ADD COLUMN regelspraak_review BOOLEAN")
+        # Analyse-omvang ("volledig"/"act2"): idempotent toevoegen; bestaande rijen = volledig.
+        if "scope" not in bestaande:
+            await conn.exec_driver_sql(
+                "ALTER TABLE projects ADD COLUMN scope VARCHAR(16) NOT NULL DEFAULT 'volledig'"
+            )
         # current_activiteit/rondes.activiteit verbreed (rs-codes). Alleen op Postgres relevant —
         # SQLite handhaaft de VARCHAR-lengte niet. Idempotent.
         if is_pg:

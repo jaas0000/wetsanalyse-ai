@@ -132,6 +132,11 @@ export function ProjectenLijstClient({ initieel }: { initieel: JobSummary[] }) {
                       </td>
                       <td className="px-4 py-3">
                         <StateBadge state={p.state} />
+                        {p.scope === "act2" && (
+                          <span className="ml-1.5 text-xs text-faint" title="Afgerond zonder activiteit 3">
+                            act. 2
+                          </span>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-xs text-muted">{formatDatum(p.updated)}</td>
                     </tr>

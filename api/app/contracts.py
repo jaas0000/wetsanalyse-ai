@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 def _now() -> str:
@@ -163,10 +163,22 @@ class Analyse3(BaseModel):
 # --- Feedback (door de API geschreven in wacht-op-review-*) -------------------
 
 class Feedback(BaseModel):
-    status: Literal["akkoord", "wijzigingen"]
+    # "akkoord-afronden" = akkoord op activiteit 2 én de analyse daar afronden (geen act 3);
+    # de keuze is daarmee auditeerbaar in de rondes-tabel. Alleen geldig op activiteit "2",
+    # zonder opmerkingen (wie nog wijzigingen heeft, rondt eerst een nieuwe ronde af).
+    status: Literal["akkoord", "wijzigingen", "akkoord-afronden"]
     activiteit: Literal["2", "3", "rs-gegevens", "rs-regels"]
     items: dict[str, str] = Field(default_factory=dict)
     algemeen: str = Field(default="", max_length=5000)
+
+    @model_validator(mode="after")
+    def _valideer_afronden(self) -> "Feedback":
+        if self.status == "akkoord-afronden":
+            if self.activiteit != "2":
+                raise ValueError("akkoord-afronden kan alleen op activiteit 2")
+            if self.items or self.algemeen.strip():
+                raise ValueError("akkoord-afronden kan niet samen met opmerkingen")
+        return self
 
     @field_validator("items")
     @classmethod
@@ -291,6 +303,9 @@ class Job(BaseModel):
     client_id: str = ""
     # Of de regelspraak-fase met review-checkpoints draait. None = nog niet gestart / erft job.review.
     regelspraak_review: bool | None = None
+    # "act2" = bewust afgerond zonder activiteit 3 (via akkoord-afronden); gaat terug naar
+    # "volledig" zodra activiteit 3 alsnog on-demand geclaimd wordt.
+    scope: Literal["volledig", "act2"] = "volledig"
     current_activiteit: Literal["2", "3", "rs-gegevens", "rs-regels"] | None = None
     current_ronde: int = 0
     waarschuwingen: list[str] = Field(default_factory=list)
@@ -321,6 +336,7 @@ class JobSummary(BaseModel):
     # pas na de eerste SSE-tick. Daarna verrijkt de aggregate-SSE deze velden live.
     current_fase: str | None = None
     model_profile: str = ""
+    scope: Literal["volledig", "act2"] = "volledig"
     tokens_in: int = 0
     tokens_out: int = 0
 

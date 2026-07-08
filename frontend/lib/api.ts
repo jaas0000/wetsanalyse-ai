@@ -106,6 +106,12 @@ export async function getRonde(
   return json<Analyse2 | Analyse3>(res);
 }
 
+/** Voer activiteit 3 alsnog uit op een analyse die na activiteit 2 is afgerond (scope act2). */
+export async function startAct3(id: string): Promise<CreateAccepted> {
+  const res = await fetch(`/api/projects/${pathSegment(id)}/act3`, { method: "POST" });
+  return json<CreateAccepted>(res);
+}
+
 export async function startRegelspraak(id: string, body: RegelspraakStart = {}): Promise<CreateAccepted> {
   const res = await fetch(`/api/projects/${pathSegment(id)}/regelspraak`, {
     method: "POST",

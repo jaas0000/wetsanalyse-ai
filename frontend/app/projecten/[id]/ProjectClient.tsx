@@ -14,7 +14,7 @@ import { ReviewPanel } from "@/components/ReviewPanel";
 import { RapportView } from "@/components/RapportView";
 import { RegelspraakView } from "@/components/RegelspraakView";
 import {
-  getProject, getRapport, getRegelspraak, startRegelspraak, retryProject, deleteProject, isApiError,
+  getProject, getRapport, getRegelspraak, startAct3, startRegelspraak, retryProject, deleteProject, isApiError,
 } from "@/lib/api";
 import { isTerminal, reviewActiviteit } from "@/lib/states";
 import { pathSegment } from "@/lib/url";
@@ -159,6 +159,31 @@ export function ProjectClient({ initieel }: { initieel: Job }) {
     setActie(null);
   }
 
+  async function onStartAct3() {
+    setActie("act3");
+    setStartFout(null);
+    try {
+      const res = await startAct3(initieel.id);
+      setJob((j) => ({ ...j, state: res.state, scope: "volledig" })); // optimistisch: verlaat de klaar-kaart direct
+      setStreamGen((n) => n + 1); // heropen de SSE-stream vanuit de terminale klaar-state
+      await refreshJob();
+    } catch (e) {
+      if (isApiError(e) && e.status === 429) {
+        setStartFout(
+          e.retryAfter
+            ? `Te veel verzoeken; probeer het over ${e.retryAfter} s opnieuw.`
+            : "Te veel verzoeken; probeer het zo opnieuw.",
+        );
+      } else if (isApiError(e) && e.status === 409) {
+        setStartFout("Activiteit 3 is al gestart of de analyse is niet meer afgerond; de pagina ververst.");
+        await refreshJob();
+      } else {
+        setStartFout(isApiError(e) ? e.detail : (e as Error).message);
+      }
+    }
+    setActie(null);
+  }
+
   async function onRetry() {
     setActie("retry");
     try {
@@ -260,6 +285,7 @@ export function ProjectClient({ initieel }: { initieel: Job }) {
             ))}
             {job.model_profile && <Tag>{job.model_profile}</Tag>}
             {!job.review && <Tag>volautomatisch</Tag>}
+            {job.scope === "act2" && <Tag>alleen activiteit 2</Tag>}
           </div>
         </div>
         <ButtonRow align="end" className="print:hidden">
@@ -348,26 +374,50 @@ export function ProjectClient({ initieel }: { initieel: Job }) {
         <div className="space-y-6">
           {analysePaneel}
 
-          <Card className="p-6 print:hidden">
-            <h2 className="font-display text-lg font-semibold text-lint">Formaliseren naar RegelSpraak</h2>
-            <p className="mt-1 max-w-prose text-sm text-muted">
-              Zet de begrippen en afleidingsregels van deze analyse om naar een uitvoerbare
-              specificatie in RegelSpraak/GegevensSpraak. De fase kent twee review-checkpoints
-              (objectmodel en regels), tenzij deze analyse volautomatisch draait.
-            </p>
-            <div className="mt-4">
-              <Button variant="primary" onClick={onStartRegelspraak} disabled={actie !== null}>
-                {actie === "regelspraak" ? "Starten…" : "Naar RegelSpraak"}
-              </Button>
-            </div>
-            {startFout && (
+          {job.scope === "act2" ? (
+            <Card className="p-6 print:hidden">
+              <h2 className="font-display text-lg font-semibold text-lint">Activiteit 3 uitvoeren</h2>
+              <p className="mt-1 max-w-prose text-sm text-muted">
+                Deze analyse is afgerond na activiteit 2 (markeren &amp; classificeren). Stel alsnog
+                de begrippen en afleidingsregels (activiteit 3) vast op basis van de goedgekeurde
+                markeringen; daarna wordt het rapport aangevuld en komt ook RegelSpraak beschikbaar.
+                {job.review && " De stap kent een review-checkpoint."}
+              </p>
               <div className="mt-4">
-                <Melding type="fout" titel="Starten mislukt">
-                  <p className="mt-1 text-sm">{startFout}</p>
-                </Melding>
+                <Button variant="primary" onClick={onStartAct3} disabled={actie !== null}>
+                  {actie === "act3" ? "Starten…" : "Activiteit 3 uitvoeren"}
+                </Button>
               </div>
-            )}
-          </Card>
+              {startFout && (
+                <div className="mt-4">
+                  <Melding type="fout" titel="Starten mislukt">
+                    <p className="mt-1 text-sm">{startFout}</p>
+                  </Melding>
+                </div>
+              )}
+            </Card>
+          ) : (
+            <Card className="p-6 print:hidden">
+              <h2 className="font-display text-lg font-semibold text-lint">Formaliseren naar RegelSpraak</h2>
+              <p className="mt-1 max-w-prose text-sm text-muted">
+                Zet de begrippen en afleidingsregels van deze analyse om naar een uitvoerbare
+                specificatie in RegelSpraak/GegevensSpraak. De fase kent twee review-checkpoints
+                (objectmodel en regels), tenzij deze analyse volautomatisch draait.
+              </p>
+              <div className="mt-4">
+                <Button variant="primary" onClick={onStartRegelspraak} disabled={actie !== null}>
+                  {actie === "regelspraak" ? "Starten…" : "Naar RegelSpraak"}
+                </Button>
+              </div>
+              {startFout && (
+                <div className="mt-4">
+                  <Melding type="fout" titel="Starten mislukt">
+                    <p className="mt-1 text-sm">{startFout}</p>
+                  </Melding>
+                </div>
+              )}
+            </Card>
+          )}
         </div>
       ) : job.state !== "fout" ? (
         <Card className="p-6">

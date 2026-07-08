@@ -126,6 +126,37 @@ async def test_rapport_nog_niet_gereed_409(client):
     assert (await client.get("/v1/projects/bwbr1-art1/rapport")).status_code == 409
 
 
+async def test_act3_en_regelspraak_scope_gates(client):
+    """On-demand act3 kan alleen op een act2-only-afgeronde analyse; regelspraak juist niet."""
+    from app.deps import get_store
+
+    # klaar + scope volledig → act3 is al uitgevoerd → 409.
+    r = await client.post("/v1/projects/klaar-art1/act3")
+    assert r.status_code == 409 and "al uitgevoerd" in r.json()["detail"]
+    # niet-klaar → 409.
+    assert (await client.post("/v1/projects/bwbr1-art1/act3")).status_code == 409
+
+    # Een act2-only-afgeronde analyse: regelspraak geweigerd, act3 gaat van start (202).
+    await get_store().save_job(
+        Job(id="act2-only", state=JobState.klaar, scope="act2",
+            bronnen=[], client_id="anonymous")
+    )
+    r = await client.post("/v1/projects/act2-only/regelspraak")
+    assert r.status_code == 409 and "activiteit 3" in r.json()["detail"]
+    r = await client.post("/v1/projects/act2-only/act3")
+    assert r.status_code == 202 and r.json()["state"] == "act3-runt"
+    # De 202 schedulet de act3-fase als achtergrondtaak; netjes afkappen zodat die niet
+    # ná de fixture-teardown nog de (dan gesloten) test-DB raakt.
+    from app.deps import drain_tasks
+    await drain_tasks()
+
+
+async def test_scope_in_lijst(client):
+    """JobSummary draagt de scope zodat lijst/dashboard act2-only kunnen kenmerken."""
+    per_id = {j["id"]: j for j in (await client.get("/v1/projects")).json()}
+    assert per_id["klaar-art1"]["scope"] == "volledig"
+
+
 async def test_verwijderen_states(client):
     """Verwijderen mag vanuit een eindstaat én een review-pauze, niet vanuit een lopende state."""
     # queued (lopend) → 409

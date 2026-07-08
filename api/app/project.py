@@ -37,6 +37,8 @@ class Project(BaseModel):
     client_id: str = ""
 
     state: JobState = JobState.queued
+    # "act2" = bewust afgerond zonder activiteit 3; terug naar "volledig" bij de on-demand act3-claim.
+    scope: Literal["volledig", "act2"] = "volledig"
     current_activiteit: Literal["2", "3", "rs-gegevens", "rs-regels"] | None = None
     current_ronde: int = 0
     # Observerend, voor het live dashboard: de fijnmazige fase BINNEN een runt/bouwt-state
@@ -79,6 +81,7 @@ class Project(BaseModel):
             analysefocus=self.analysefocus,
             client_id=self.client_id,
             regelspraak_review=self.regelspraak_review,
+            scope=self.scope,
             state=self.state,
             current_activiteit=self.current_activiteit,
             current_ronde=self.current_ronde,

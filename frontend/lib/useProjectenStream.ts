@@ -10,6 +10,7 @@ export function summaryNaarUpdate(s: JobSummary): DashboardUpdate {
     naam: s.naam,
     bronnen: s.bronnen ?? [],
     state: s.state,
+    scope: s.scope ?? "volledig",
     current_activiteit: null,
     current_ronde: 0,
     current_fase: s.current_fase ?? null,

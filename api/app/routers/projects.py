@@ -78,6 +78,7 @@ async def lijst_projecten(
             id=p.slug, naam=p.naam, state=p.state,
             bronnen=p.bronnen, updated=p.updated.isoformat(),
             current_fase=p.current_fase, model_profile=p.model_profile,
+            scope=p.scope,
             tokens_in=sum(r.tokens_in for r in p.provenance),
             tokens_out=sum(r.tokens_out for r in p.provenance),
         )
@@ -94,6 +95,7 @@ def _dashboard_payload(p) -> dict:
         "naam": p.naam,
         "bronnen": [b.model_dump() for b in p.bronnen],
         "state": p.state,
+        "scope": p.scope,
         "current_activiteit": p.current_activiteit,
         "current_ronde": p.current_ronde,
         "current_fase": p.current_fase,
@@ -250,6 +252,37 @@ async def project_ronde(
     return data
 
 
+# --- Activiteit 3 alsnog (on-demand op een act2-only-afgeronde analyse) -------
+
+@router.post("/{project_id}/act3", status_code=status.HTTP_202_ACCEPTED,
+             response_model=CreateAccepted)
+async def start_act3(project_id: str, client_id: str = Depends(rate_limited_client)):
+    """Voer activiteit 3 alsnog uit op een analyse die met "akkoord-afronden" na activiteit 2
+    is afgerond. Geen body: de review-instelling erft van de analyse zelf (`job.review`)."""
+    store = get_store()
+    p = await _project_or_404(store, project_id, client_id)
+    if p.state != JobState.klaar:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Activiteit 3 start alleen vanuit een afgeronde analyse (klaar); nu: {p.state}",
+        )
+    if p.scope != "act2":
+        raise HTTPException(
+            status_code=409,
+            detail="Activiteit 3 is al uitgevoerd voor deze analyse.",
+        )
+    # Claim synchroon (klaar → act3_runt) vóór de 202 — zelfde motivatie als bij regelspraak.
+    engine = get_engine()
+    job = await engine.claim_act3(project_id)
+    if job is None:
+        raise HTTPException(
+            status_code=409,
+            detail="Activiteit 3 is al gestart of de analyse is niet meer `klaar`.",
+        )
+    schedule(engine.run_act3_fase(job))
+    return CreateAccepted(id=project_id, naam=p.naam, state=job.state)
+
+
 # --- RegelSpraak-vervolgfase (on-demand op een afgeronde analyse) -------------
 
 @router.post("/{project_id}/regelspraak", status_code=status.HTTP_202_ACCEPTED,
@@ -264,6 +297,12 @@ async def start_regelspraak(
         raise HTTPException(
             status_code=409,
             detail=f"RegelSpraak start alleen vanuit een afgeronde analyse (klaar); nu: {p.state}",
+        )
+    if p.scope == "act2":
+        raise HTTPException(
+            status_code=409,
+            detail="Deze analyse is afgerond zonder activiteit 3 (geen begrippen/afleidingsregels "
+                   "om te formaliseren); voer eerst activiteit 3 uit.",
         )
     review = body.review if body is not None else None
     # Claim synchroon (klaar → rs_gegevens_runt) vóór de 202: zo is de DB al niet-terminaal en kan

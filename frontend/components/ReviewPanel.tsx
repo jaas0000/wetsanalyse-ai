@@ -176,7 +176,7 @@ export function ReviewPanel({
   const [laadFout, setLaadFout] = useState<string | null>(null);
   const [opmerkingen, setOpmerkingen] = useState<Record<string, string>>({});
   const [algemeen, setAlgemeen] = useState("");
-  const [bezig, setBezig] = useState<null | "akkoord" | "wijzigingen">(null);
+  const [bezig, setBezig] = useState<null | Feedback["status"]>(null);
   const [fout, setFout] = useState<string | null>(null);
 
   const ronde = job.current_ronde || 1;
@@ -213,7 +213,7 @@ export function ReviewPanel({
     };
   }, [job.id, activiteit, ronde]);
 
-  async function verstuur(status: "akkoord" | "wijzigingen") {
+  async function verstuur(status: Feedback["status"]) {
     setFout(null);
     const ingevuld: Record<string, string> = {};
     for (const [k, v] of Object.entries(opmerkingen)) if (v.trim()) ingevuld[k] = v.trim();
@@ -260,6 +260,12 @@ export function ReviewPanel({
         Beoordeel elk item. Laat een veld leeg als je akkoord bent. Bij twijfel van de analyse staat
         een geel kader. Kies daarna <em>Akkoord</em> (door naar de volgende fase) of{" "}
         <em>Wijzigingen indienen</em> (nieuwe ronde met jouw opmerkingen).
+        {activiteit === "2" && (
+          <>
+            {" "}Wil je alleen de markeringen en classificaties vastleggen, kies dan{" "}
+            <em>Akkoord — afronden zonder act. 3</em>; activiteit 3 kan later alsnog.
+          </>
+        )}
       </p>
 
       {laadFout && (
@@ -374,6 +380,17 @@ export function ReviewPanel({
           >
             {bezig === "wijzigingen" ? "Versturen…" : "Wijzigen"}
           </Button>
+          {activiteit === "2" && (
+            <Button
+              variant="secondary"
+              onClick={() => verstuur("akkoord-afronden")}
+              disabled={bezig !== null || verwijderBezig || !items}
+              title="Keur activiteit 2 goed en rond de analyse hier af — begrippen en afleidingsregels (activiteit 3) worden niet opgesteld; dat kan later alsnog."
+              className="w-full sm:w-auto"
+            >
+              {bezig === "akkoord-afronden" ? "Versturen…" : "Akkoord — afronden zonder act. 3"}
+            </Button>
+          )}
           <Button
             onClick={() => verstuur("akkoord")}
             disabled={bezig !== null || verwijderBezig || !items}
