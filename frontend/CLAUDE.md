@@ -56,8 +56,18 @@ De **harde scheidingslijn**: alles met een token is server-only.
   spiegelt — verzin daar geen fasen bij; brongetrouw geldt ook in de UI). **De analyse-eenheid is
   het werkgebied met meerdere bronnen:** een analyse draagt `bronnen[]` (wet+artikel+lid),
   activiteit 2 rendert per bron, activiteit 3 is werkgebied-breed met cross-bron `vindplaatsen`.
+  Het act-3-contract is **begrip-id-gebouwd** (`RegelUitvoer`/`RegelInvoer`/`RegelParameter`/
+  `RegelVoorwaarde`, `BegripRelatie`/`BegripHerkomst`) en `StartRequest.begrippenlijst` draagt een
+  optionele aangeleverde begrippenlijst (`BegripInvoer[]`).
   `lib/bronnen.ts` centraliseert de bron-labels, de `vindplaatsen`-weergave en de wet-afleiding;
-  het analyseformulier (`ProjectForm`/`lib/projectForm.ts`) heeft herhaalbare bron-rijen.
+  `lib/begrippen.ts` centraliseert de **begrip-graaf-weergave** (id→naam, herkomst-label,
+  regelvelden als begripnamen) voor `ReviewPanel`/`RapportView`;
+  het analyseformulier (`ProjectForm`/`lib/projectForm.ts`) heeft herhaalbare bron-rijen, een
+  **artikel-combobox met autocomplete + lid-keuzelijst** (wetsstructuur via `lib/useWetStructuur.ts`
+  + `lib/artikelFilter.ts` + `components/ui/Combobox.tsx`; degradeert naar vrije invoer als de
+  lookup faalt) en een inklapbaar blok **"Bestaande begrippenlijst (optioneel)"** (plak/upload;
+  client-side parser `parseBegrippenlijst` in `lib/projectForm.ts` — JSON, CSV met kopregel, of
+  `naam; definitie`-regels).
 - `app/**/page.tsx` (Server Components) — data ophalen via `lib/server.ts`; interactie delegeren naar
   een `*Client.tsx` Client Component (bv. `app/projecten/[id]/ProjectClient.tsx`). `app/page.tsx`
   (home) en `app/dashboard` renderen server-side de projectlijst en delegeren naar resp.
@@ -74,6 +84,13 @@ De **harde scheidingslijn**: alles met een token is server-only.
   renderen puur in `RapportView.tsx` (Verwijzingen-sectie) en `ReviewPanel.tsx` (scope-feedback per
   verwijzing, via het bestaande per-id-feedbackmechanisme) uit de bestaande `/rapport`- en
   `/ronde`-data — er is **geen nieuwe BFF-route** voor nodig.
+- **Act2-only afronden + act3 on-demand.** `ReviewPanel.tsx` biedt bij activiteit 2 de knop
+  **"Akkoord — afronden zonder act. 3"** (feedback-status `akkoord-afronden`; alleen geldig op
+  activiteit 2 zonder opmerkingen — het API-contract valideert dat). De analyse krijgt dan
+  `scope: "act2"` (`Scope`-type in `lib/types.ts`); `DashboardCard` past de stationsweergave
+  daarop aan. Op zo'n act2-only rapport toont `ProjectClient.tsx` de knop **"Activiteit 3
+  uitvoeren"** (`startAct3` in `lib/api.ts` → BFF-route `app/api/projects/[id]/act3/route.ts`),
+  waarna de SSE-stream heropent.
 - **RegelSpraak-vervolgfase.** Op een afgeronde analyse (`klaar`) toont `ProjectClient.tsx` een knop
   **"Naar RegelSpraak"** (`startRegelspraak`); daarna heropent het de SSE-stream (`streamGen`) omdat
   `klaar` terminaal is. De rs-states (`rs-gegevens-runt`/`wacht-op-review-rs-gegevens`/`rs-regels-runt`/
@@ -126,7 +143,10 @@ De **harde scheidingslijn**: alles met een token is server-only.
   (de eenmalige-registratie-proxy staat daarom op `/api/setup`).
 - **Geen vrije model-string of dwingende wet-lijst in de UI.** Het modelprofiel kies je uit de live
   `/api/profiles`-dropdown; de wet-dropdown (`/api/wetten`) is een gemak — is de catalogus leeg, dan
-  val je terug op vrije BWB-id-invoer. De API blijft elke geldige BWB-id accepteren.
+  val je terug op vrije BWB-id-invoer. Hetzelfde geldt voor de artikel-autocomplete en lid-keuze
+  (`/api/wetten/[bwbId]/structuur` en `/api/wetten/[bwbId]/artikelen/[artikel]`): faalt de
+  structuur-lookup, dan degradeert de rij naar vrije tekstvelden. De API blijft elke geldige
+  BWB-id accepteren.
 - **Huisstijl via tokens, niet hardcoded.** Kleur en typografie lopen via de tokens in
   `app/globals.css` + `tailwind.config.ts` (en `lib/jas.ts`/`lib/states.ts` voor de badges) — strooi
   geen losse hex-waarden door componenten. Het officiële logo-asset (`public/belastingdienst-logo.svg`)

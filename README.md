@@ -18,8 +18,10 @@ en aannames — zichtbaar maken in plaats van schijnzekerheid te produceren.
 | **regelspraak-skill** | `.claude/skills/regelspraak/` | Vervolgskill: formaliseert de geduide begrippen + afleidingsregels naar **RegelSpraak + GegevensSpraak** (Belastingdienst/ALEF). Levert een `model.json` (HTML-viewer; `.rs`/Markdown als export). Werkt vanuit een afgerond `rapport.json` of standalone vanaf wettekst. |
 | **wetsanalyse-api** | `api/` | Headless REST-backend (FastAPI) die dezelfde werkstroom als de skill aanbiedt als async API, met PostgreSQL als jobstore. Stuurt de LLM aan via beheerbare modelprofielen. Biedt ook de RegelSpraak-formaliseringsfase als on-demand vervolg (`POST /v1/projects/{id}/regelspraak`). |
 | **frontend** | `frontend/` | Webapp (Next.js) bovenop de API: analyse aanmaken, live voortgang, de review-lus, het rapport, de **RegelSpraak-fase** (knop "Naar RegelSpraak" + model-weergave), een live **`/dashboard`** (alle analyses tot op functieniveau), en een **`/beheer`-scherm** om LLM-modelprofielen, gebruikers en token-verbruik te beheren. Zit achter een **login** (userid + wachtwoord, rollen, optionele 2FA). Vormgegeven volgens de **Rijkshuisstijl** (Belastingdienst-stijlvak). |
+| **kennisgraaf** | `tools/kennisgraaf/` | 3D-verwijzingsgraaf van de JCI-links in de Invorderingswet 1990 + Leidraad Invordering 2008, met zoekpaneel (artikel + lid). Open het standalone HTML-bestand of draai `npm run serve` (poort 4567); graaf-data hergenereren via `npm run extract` → `graph.json` → `npm run bundle`. |
 | **analyses** | `analyses/` | Output: per analyse een eindrapport plus `werk/`-tussenbestanden (en desgewenst een `regelspraak/`-submap met het RegelSpraak-`model.json`). |
-| **docs** | `docs/` | Methodische onderbouwing (handleiding, leidraad, JAS-kader). |
+| **deploy** | `deploy/openshift/` | Kustomize-manifests om de hele stack (API · frontend · MCP · PostgreSQL) op OpenShift uit te rollen (overlays `local`/`simpel`/`beproeving`/`managed-prod`); zie `deploy/openshift/INSTALL.md`. |
+| **docs** | `docs/` | Methodische onderbouwing (handleiding, leidraad, JAS-kader) + `docs/architectuur/` (interactieve architectuurplaat en het kennisgraaf/GraphRAG-ontwerpdoc). |
 
 Er zijn dus **twee manieren** om een analyse te draaien: interactief via de wetsanalyse-skill in
 Claude Code (skill + MCP + `analyses/`), of als dienst via de **API + webapp** (`api/` + `frontend/`).
@@ -37,10 +39,15 @@ artikel + lid + bronreferentie — en doorloopt:
    relevantie-gate) — zodat brondefinities en afwijkende hoofdregels brongetrouw meewegen.
 2. **Activiteit 2 — markeren & classificeren**: relevante wetsformuleringen markeren en elk een
    van de dertien JAS-klassen geven (rechtssubject, rechtsbetrekking, voorwaarde, afleidingsregel, …).
-3. **Activiteit 3 — betekenis vaststellen**: begrippen (met definitie, voorbeeld, relaties) en
-   afleidingsregels (beslis-, reken- en specialisatieregels) vastleggen. Een afleidingsregel wordt
-   *geannoteerd* (type, in-/uitvoer, parameters, voorwaarden); de uitvoerbare formulering volgt pas
-   in de regelspraak-stap, zodat er één bron van waarheid voor de regel is.
+3. **Activiteit 3 — betekenis vaststellen**: eerst de begrippen (3a: definitie, voorbeeld,
+   relaties, gekoppeld aan de activiteit-2-markeringen waarop ze berusten), daarna de
+   afleidingsregels (3b: beslis-, reken- en specialisatieregels) — met de begrippen als
+   **bouwstenen**: uitvoer, invoer, parameters en voorwaarden verwijzen per begrip-id. Een
+   bestaande begrippenlijst kan als suggestieve invoer worden aangeleverd; per begrip wordt
+   dan de herkomst geregistreerd (hergebruikt/aangepast/nieuw). Een afleidingsregel wordt
+   *geannoteerd*; de uitvoerbare formulering volgt pas in de regelspraak-stap, zodat er één
+   bron van waarheid voor de regel is. Desgewenst kan de analyse ook al ná activiteit 2
+   worden afgerond en activiteit 3 later alsnog draaien.
 4. **Rapport** — `rapport.json` als primaire bron, gepresenteerd via een lokale HTML-viewer
    (poort 3119) met bewerkbare §4-velden en een exportknop voor Markdown.
 5. **RegelSpraak (optioneel vervolg)** — de regelspraak-skill zet het rapport om naar GegevensSpraak +
@@ -99,11 +106,15 @@ regelspraak-skill leest het `rapport.json` in en bouwt het objectmodel + de rege
 Naast de skill kun je de analyse als zelfstandige dienst draaien:
 
 - **`api/`** — headless FastAPI-backend met dezelfde JAS-werkstroom als async REST-API
-  (`POST /v1/projects` → polling/SSE), PostgreSQL als jobstore, en per-client bearer-auth. Op een
-  afgeronde analyse start `POST /v1/projects/{id}/regelspraak` de RegelSpraak-formaliseringsfase
+  (`POST /v1/projects` → polling/SSE), PostgreSQL als jobstore, en per-client bearer-auth. Een
+  analyse kan ook al na activiteit 2 worden afgerond (`scope: "act2"`); activiteit 3 volgt dan
+  desgewenst later via `POST /v1/projects/{id}/act3`. Op een afgeronde analyse start
+  `POST /v1/projects/{id}/regelspraak` de RegelSpraak-formaliseringsfase
   (eigen artefact via `GET …/regelspraak`, met `.rs`/`.md`-export). Zie
   [`api/README.md`](api/README.md) en [`api/CLAUDE.md`](api/CLAUDE.md).
-- **`frontend/`** — Next.js-webapp (BFF) erbovenop: analyses aanmaken, voortgang volgen, de
+- **`frontend/`** — Next.js-webapp (BFF) erbovenop: analyses aanmaken (wet-dropdown met
+  **artikel-autocomplete + lid-keuze**, en optioneel een **bestaande begrippenlijst** plakken of
+  uploaden als suggestieve act-3-invoer), voortgang volgen, de
   human-in-the-loop review-lus, het rapport bekijken, de **RegelSpraak-fase** starten en het model
   bekijken/downloaden, en een live **`/dashboard`** dat alle analyses
   tot op functieniveau (de engine-stap binnen een state) toont. Vormgegeven volgens de
@@ -126,7 +137,10 @@ de profielen live ophaalt. Het admin-scherm zit achter een **apart admin-token**
 seeden alleen het eerste default-profiel.
 
 Beide draaien als Docker/Portainer-stacks achter Nginx Proxy Manager (CI bouwt de images en doet de
-stack-redeploy); de detail-instructies staan in de respectievelijke `CLAUDE.md`-bestanden.
+stack-redeploy); de detail-instructies staan in de respectievelijke `CLAUDE.md`-bestanden. Daarnaast
+is er een **OpenShift-pad**: `deploy/openshift/` bevat Kustomize-manifests voor de hele stack op een
+namespace van een gedeeld cluster (overlays `local`/`simpel`/`beproeving`/`managed-prod`, database
+via kale Postgres of de CloudNativePG-operator) — zie [`deploy/openshift/INSTALL.md`](deploy/openshift/INSTALL.md).
 
 ## Databron & licentie
 

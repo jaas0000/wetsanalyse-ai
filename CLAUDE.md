@@ -16,9 +16,11 @@ inhoudelijke `references/`/`scripts/`. De samenwerkende delen:
 2. **`.claude/skills/wetsanalyse/`** — de inhoudelijke skill die de analyse uitvoert (activiteit 2:
    markeren + classificeren in JAS-klassen; activiteit 3: begrippen + afleidingsregels) en een
    `rapport.json` oplevert die via een HTML-viewer wordt gepresenteerd. Markdown is beschikbaar
-   als afgeleid exportformaat. De skill *gebruikt* de MCP als bron. Activiteit 3 **annoteert** een
-   afleidingsregel (type, uitvoer-/invoervariabelen, parameters, voorwaarden, vindplaats) maar
-   schrijft de regel niet uit in een (pseudo)regeltaal — die uitvoerbare formulering is de taak van
+   als afgeleid exportformaat. De skill *gebruikt* de MCP als bron. Activiteit 3 is **twee-staps**
+   (3a begrippen → 3b regels): de begrippen zijn de bouwstenen, en een afleidingsregel wordt
+   **geannoteerd** met begrip-id's (uitvoer/invoer/parameters/voorwaarden verwijzen per
+   `begrip_id`, plus vindplaats en `markering_ids`) maar niet uitgeschreven in een
+   (pseudo)regeltaal — die uitvoerbare formulering is de taak van
    de regelspraak-skill, zodat er één bron van waarheid voor de regel is.
 3. **`.claude/skills/regelspraak/`** — de **vervolgskill** die de geduide afleidingsregels en
    begrippen formaliseert naar een uitvoerbare specificatie in **RegelSpraak + GegevensSpraak**
@@ -35,10 +37,15 @@ inhoudelijke `references/`/`scripts/`. De samenwerkende delen:
 5. **`api/`** — headless FastAPI-backend die dezelfde JAS-werkstroom als async REST-API aanbiedt
    (PostgreSQL-jobstore, per-client bearer-auth). Heeft een eigen `CLAUDE.md` + `README.md` — lees die
    bij werk *in* de API. Het LLM wordt aangestuurd via **benoemde modelprofielen** (in de database, beheerbaar
-   via `/v1/admin/profiles`); de env-`LLM_*`-waarden seeden alleen het eerste default-profiel. Naast
-   de analyse biedt de API ook de **RegelSpraak-formaliseringsfase** als on-demand vervolg op een
-   afgeronde analyse (`POST /v1/projects/{id}/regelspraak`).
-6. **`frontend/`** — Next.js-webapp (BFF) bovenop de API: analyses aanmaken/reviewen, een live
+   via `/v1/admin/profiles`); de env-`LLM_*`-waarden seeden alleen het eerste default-profiel. Een
+   analyse kan met feedback-status `akkoord-afronden` al ná activiteit 2 afgerond worden
+   (`scope: "act2"`); activiteit 3 volgt dan desgewenst later via `POST /v1/projects/{id}/act3`.
+   Naast de analyse biedt de API ook de **RegelSpraak-formaliseringsfase** als on-demand vervolg
+   op een afgeronde volledige analyse (`POST /v1/projects/{id}/regelspraak`).
+6. **`frontend/`** — Next.js-webapp (BFF) bovenop de API: analyses aanmaken (wet-dropdown met
+   **artikel-autocomplete + lid-keuze** via de wetsstructuur, en optioneel een **bestaande
+   begrippenlijst** plakken/uploaden als suggestieve act-3-invoer) en reviewen (incl. de knop
+   "Akkoord — afronden zonder act. 3" en het later alsnog starten van activiteit 3), een live
    **`/dashboard`** dat alle analyses tot op functieniveau (de engine-stap binnen een state) volgt
    via een aggregate-SSE-stream, en de modelprofielen, de **wet-catalogus** (BWB-id + naam,
    selecteerbaar via dropdown bij een nieuwe analyse) en het token-verbruik beheren via het
@@ -51,13 +58,24 @@ inhoudelijke `references/`/`scripts/`. De samenwerkende delen:
    JAS-klassekleuren uit `docs/wa-table.png`. Op een afgeronde analyse kan de gebruiker met
    **"Naar RegelSpraak"** de formaliseringsfase starten en het RegelSpraak-model bekijken/downloaden.
    Heeft een eigen `CLAUDE.md` + `README.md` — lees die bij werk *in* de frontend.
+7. **`tools/kennisgraaf/`** — standalone 3D-verwijzingsgraaf van de JCI-links in de
+   Invorderingswet 1990 + Leidraad Invordering 2008 (aparte knopen voor sub-artikelen en leden,
+   zoekpaneel op artikel + lid). Statische viewer: open het gecommitte standalone HTML-bestand of
+   `npm run serve` (poort 4567); data hergenereren via `npm run extract` (via de MCP) →
+   `graph.json` → `npm run bundle`. Het bijbehorende GraphRAG-ontwerp staat in
+   `docs/architectuur/kennisgraaf-graphrag-ontwerp.md` (ontwerp, geen code).
+8. **`deploy/openshift/`** — Kustomize-manifests om de hele stack (API · frontend · MCP ·
+   PostgreSQL) op een OpenShift-namespace uit te rollen: `base/` + overlays
+   `local`/`simpel`/`beproeving`/`managed-prod`, `components/postgres-cnpg` (CloudNativePG) en
+   `gen-secrets.py`. Lees `deploy/openshift/INSTALL.md` bij werk aan de uitrol; de
+   Portainer/NPM-route blijft daarnaast bestaan (zie de CLAUDE.md's van api/frontend/MCP).
 
 De skill is geen vervanger van de analist: de kern is interpretatiekeuzes **expliciet** maken,
 inclusief twijfel en aannames. Brongetrouwheid is niet onderhandelbaar — werk alleen met
 letterlijk opgehaalde wettekst, citeer letterlijk, en houd elke markering/begrip/regel
 herleidbaar naar artikel + lid + `bronreferentie` (jci-uri).
 
-## De drie delen hangen via paden samen
+## De onderdelen hangen via paden samen
 
 Dit is een verzameling losse onderdelen, geen monorepo met één buildsysteem. Het bindmiddel
 zijn **projectrelatieve paden**, zodat de map portabel is tussen machines/OS'en:
@@ -118,10 +136,15 @@ kernstructuur die meerdere bestanden raakt:
   beleid volgen (diepte-cap 1 + relevantie-gate; delegaties bounded). Ze worden vastgelegd als
   `verwijzingen`-array in `analyse.json` (aparte as náást de markeringen) en horen bij het
   activiteit-2 checkpoint; begrippen koppelen via `bron_verwijzing` aan een definitie-verwijzing.
-- **Activiteit 2 → checkpoint → Activiteit 3 → checkpoint → rapport.** Na elke activiteit
+- **Activiteit 2 → checkpoint → Activiteit 3 (3a begrippen → 3b regels) → checkpoint →
+  rapport.** De analist kan bij het act-2-checkpoint ook kiezen voor *afronden zonder
+  activiteit 3* (in het dienst-spoor: feedback-status `akkoord-afronden` → `scope: "act2"`;
+  activiteit 3 kan later alsnog). Na elke activiteit
   is er een **iteratief human-in-the-loop review**: de skill schrijft
   `werk/activiteit-{2,3}/ronde-{N}/analyse.json`, draait eerst `scripts/validate_analyse.py`
-  als mechanische pre-check (ongeldige JAS-klassen, ontbrekende id's e.d.; exit 2 blokkeert
+  als mechanische pre-check (ongeldige JAS-klassen, ontbrekende id's e.d.; bij activiteit 3
+  met `--act2` voor de dekkingscheck markering → begrip en desgewenst `--begrippenlijst`
+  voor de herkomst-checks; exit 2 blokkeert
   tot correctie), start daarna `scripts/review_server.py` (lokale webpagina op poort 3118,
   alleen stdlib; vanaf ronde 2 met `--ronde N --vorige <ronde-N-1>`), pauzeert, en verwerkt
   daarna `werk/activiteit-{2,3}/ronde-{N}/feedback.json`. Is er feedback, dan schrijft de
@@ -142,9 +165,13 @@ kernstructuur die meerdere bestanden raakt:
 
 Inhoudelijke regels die je moet kennen voordat je classificeert of begrippen opstelt:
 `references/jas-klassen-referentie.md` (de dertien JAS-klassen — verzin er geen),
-`references/begrippen-en-afleidingsregels-opstellen.md` (incl. werkgebied-breed hergebruik en
-ontdubbeling — homoniemen splitsen, synoniemen samenvoegen; een afleidingsregel wordt **geannoteerd**,
-niet uitgeschreven — geen pseudo-`formulering` meer) en `references/verwijzingen-volgen.md`
+`references/begrippen-en-afleidingsregels-opstellen.md` (act 3 is twee-staps: eerst begrippen,
+dán regels met de begrippen als bouwstenen via begrip-id's; werkgebied-breed hergebruik en
+ontdubbeling — homoniemen splitsen, synoniemen samenvoegen; begrippen dragen
+`is_interpretatie`/`relaties`/`markering_ids` en — bij een aangeleverde bestaande
+begrippenlijst (`werk/begrippenlijst.json`, suggestief) — een `herkomst`
+(hergebruikt/aangepast/nieuw); een afleidingsregel wordt **geannoteerd**,
+niet uitgeschreven — geen pseudo-`formulering`) en `references/verwijzingen-volgen.md`
 (het volg-beleid voor cross-referenties: functies, diepte/relevantie-grens, bounded delegaties;
 een gevolgde delegatie/definitie kan promoveren tot een eigen bron in het werkgebied). Het
 datacontract van `analyse.json`/`rapport.json` (werkgebied + bronnen) staat in
@@ -191,4 +218,6 @@ naar RegelSpraak/GegevensSpraak) in `.claude/skills/regelspraak/`.
 `leidraad.pages.md`, en `docs/wetsanalyse-rijk/` (hoofdstukken over JAS en het kader). Raadpleeg
 deze bij inhoudelijke vragen over de methode; de skill-`references/` zijn de operationele
 samenvatting daarvan. `docs/architectuur/wetsanalyse-architectuur.html` is een interactieve
-architectuurplaat (API · MCP · frontend tot functieniveau), in dezelfde styling als de frontend.
+architectuurplaat (API · MCP · frontend tot functieniveau), in dezelfde styling als de frontend;
+`docs/architectuur/kennisgraaf-graphrag-ontwerp.md` is het ontwerpdoc voor de kennisgraaf als
+GraphRAG-retrieval-substraat (status: ontwerp, nog geen code buiten `tools/kennisgraaf/`).
