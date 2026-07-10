@@ -40,12 +40,12 @@ RUN apt-get update \
     && apt-get upgrade -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
-# CVE-2026-53655: tar@7.5.15 gebundeld door npm zelf; upgrade npm zodat tar@>=7.5.16 meegaat.
-RUN npm install -g npm@11.17.0 && npm cache clean --force
-
-# Alleen productie-dependencies in de runtime-image.
+# Alleen productie-dependencies in de runtime-image. npm is daarna niet meer nodig
+# (CMD draait `node dist/index.js`): verwijder het volledig, zodat de door npm gebundelde
+# deps (tar, undici, …) geen CVE-alerts meer opleveren in de Trivy-scan zonder ooit te draaien.
 COPY package*.json ./
-RUN npm ci --omit=dev && npm cache clean --force
+RUN npm ci --omit=dev && npm cache clean --force \
+    && rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
 
 # Gecompileerde JS uit de build-fase.
 COPY --from=builder /app/dist ./dist

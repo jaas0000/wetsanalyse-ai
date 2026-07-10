@@ -39,8 +39,10 @@ RUN apt-get update \
     && apt-get upgrade -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
-# CVE-2026-53655: tar@7.5.15 gebundeld door npm zelf; upgrade npm zodat tar@>=7.5.16 meegaat.
-RUN npm install -g npm@11.17.0 && npm cache clean --force
+# De standalone-runtime draait `node server.js` en gebruikt npm nergens. Verwijder npm
+# (incl. npx-shims) volledig uit de image: de door npm gebundelde deps (tar, undici, …)
+# blijven anders CVE-alerts opleveren in de Trivy-scan zonder ooit te draaien.
+RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
 
 # Non-root + OpenShift-proof: lid van groep 0 i.p.v. een eigen gid. OpenShift restricted-v2 draait
 # met een WILLEKEURIGE UID + gid 0, dus de bestanden zijn groep-root-eigendom met groep=gebruiker-
