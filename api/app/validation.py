@@ -38,6 +38,7 @@ def _load_skill_module(naam: str):
 _validate = _load_skill_module("validate_analyse")
 GELDIGE_JAS_KLASSEN: set[str] = _validate.GELDIGE_JAS_KLASSEN  # canonieke bron (drift-fix)
 GELDIGE_REGELTYPEN: set[str] = _validate.GELDIGE_REGELTYPEN
+BEGRIP_PLICHTIGE_KLASSEN: set[str] = _validate.BEGRIP_PLICHTIGE_KLASSEN
 
 # RegelSpraak-pre-check (gedeeld met de skill): dezelfde mechanische controles als
 # validate_regelspraak.py — geen drift tussen het skill- en het dienst-spoor.
@@ -57,16 +58,28 @@ _OVERLAPT_MET_HARD = (
 )
 
 
-def schema_check(data: dict, activiteit: str) -> tuple[list[str], list[str]]:
+def schema_check(
+    data: dict,
+    activiteit: str,
+    *,
+    act2: dict | None = None,
+    begrippenlijst: dict | None = None,
+) -> tuple[list[str], list[str]]:
     """Zachte schema/volledigheidscheck — delegeert naar de skill-functies.
 
     Waarschuwingen die de harde brongetrouwheid_check al dekt (citaat, vindplaats) worden
     uitgefilterd om dubbele meldingen in de review te voorkomen.
+
+    Voor activiteit 3 activeren `act2` (de goedgekeurde act-2-analyse) de dekkings- en
+    markering-id-checks en `begrippenlijst` (de aangeleverde lijst) de herkomst-checks —
+    zelfde patroon als `regelspraak_schema_check` met `ingest`.
     """
     if activiteit == "2":
         fouten, waarschuwingen = _validate.check_activiteit_2(data)
     else:
-        fouten, waarschuwingen = _validate.check_activiteit_3(data)
+        fouten, waarschuwingen = _validate.check_activiteit_3(
+            data, act2=act2, begrippenlijst=begrippenlijst
+        )
     waarschuwingen = [
         w for w in waarschuwingen if not any(m in w for m in _OVERLAPT_MET_HARD)
     ]

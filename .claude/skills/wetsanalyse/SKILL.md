@@ -232,21 +232,40 @@ over **alle bronnen** heen. Cruciaal is **hergebruik en ontdubbeling**:
 - **Begrip→begrip:** gebruik in een begripsomschrijving al eerder gedefinieerde begrippen en
   noteer die in `verwijst_naar_begrippen`.
 
-**3a Begrippen.** Maak per uniek, betekenisdragend element (vooral rechtssubjecten,
-rechtsobjecten, rechtsbetrekkingen, rechtsfeiten en variabelen) een begrip met: een
-**voorkeursterm** (`naam`) + eventuele `synoniemen`, een **definitie** (hergebruik een
-*brondefinitie* letterlijk als die er is; anders formuleer je een werkdefinitie en markeer je
-dat als interpretatie), een kort **voorbeeld**, **kenmerken/relaties** (bv. "rechtssubject X
-is rechthebbende van rechtsbetrekking Y"), en de **`vindplaatsen`** over de bronnen waarop het
-berust (traceerbaarheid). Steunt een begrip op een gevolgde verwijzing (bv. een hergebruikte
-brondefinitie), wijs daar dan naar met `bron_verwijzing`.
+**Bestaande begrippenlijst (optioneel).** Heeft de gebruiker een bestaande begrippenlijst
+aangeleverd (bestand of geplakte tekst), normaliseer die dan éérst naar
+`werk/begrippenlijst.json` (schema in `references/review-checkpoints.md`; alleen `naam` is
+verplicht, nummer id's als `ab1..`; ook bij CSV- of regeltekst-invoer maak jij daar dit
+JSON-formaat van). De lijst is **suggestief**: hergebruik waar de betekenis past, wijk
+gemotiveerd af waar de wettekst dat vraagt, en registreer per begrip de `herkomst`
+(`hergebruikt`/`aangepast`/`nieuw`). Brongetrouwheid gaat vóór de lijst.
 
-**3b Afleidingsregels.** Leg per regel vast: een **naam**, het **type** (beslisregel →
-ja/nee of waar/onwaar; rekenregel → een berekend bedrag/getal; specialisatieregel →
-behoort tot doelgroep), de **uitvoervariabele**, de **invoervariabelen** en **parameters**,
-en de **voorwaarden**. Verwijs naar de bron(nen) via `vindplaatsen`. Houd parameters (vaste
-waarden) en variabelen (per geval verschillend) uit elkaar. Je **annoteert** de regel hier;
-de uitvoerbare formulering komt in de vervolgstap `regelspraak` (één bron van waarheid).
+Werk in twee deelstappen — eerst álle begrippen, dan de regels mét die begrippen:
+
+**3a Begrippen.** Maak per uniek, betekenisdragend element (vooral rechtssubjecten,
+rechtsobjecten, rechtsbetrekkingen, rechtsfeiten, variabelen en parameters) een begrip met:
+een **voorkeursterm** (`naam`, volgens de naamgevings-vuistregels uit de referentie) +
+eventuele `synoniemen`, een **definitie** (hergebruik een *brondefinitie* letterlijk als die
+er is; anders formuleer je een werkdefinitie en zet je `is_interpretatie: true`), een kort
+**voorbeeld**, **`relaties`** (gestructureerd: relatie met `doel_begrip`, of kenmerk), de
+**`vindplaatsen`** over de bronnen én de **`markering_ids`** van de activiteit-2-markeringen
+waarop het berust (dekking: elke markering van een begrip-plichtige klasse landt in ≥1
+begrip). Steunt een begrip op een gevolgde verwijzing (bv. een hergebruikte brondefinitie),
+wijs daar dan naar met `bron_verwijzing`. Maak hier ook alvast een begrip voor elke uitkomst
+die een afleidingsregel gaat vaststellen (vaak een Variabele) — 3b heeft die nodig.
+
+**3b Afleidingsregels.** De begrippen uit 3a zijn de **bouwstenen** van elke regel. Leg per
+regel vast: een **naam** (actieve werkwoordsvorm: *bepalen …*, *vaststellen …*), het **type**
+(beslisregel → ja/nee of waar/onwaar; rekenregel → een berekend bedrag/getal;
+specialisatieregel → behoort tot doelgroep), de **`uitvoer`** (`{begrip_id, toelichting}` —
+verplicht: het begrip dat de regel vaststelt), de **`invoer`** (`[{begrip_id, toelichting}]`)
+en **`parameters`** (`[{begrip_id, waarde, eenheid, geldigheid, vindplaats, toelichting}]`),
+en de **`voorwaarden`** (`[{tekst, begrip_ids, verbinding}]`, verbinding = EN/OF t.o.v. de
+vorige). Verwijs naar de bron(nen) via `vindplaatsen` + `markering_ids` (de
+Afleidingsregel-markeringen). Houd parameters (vaste waarden) en variabelen (per geval
+verschillend) uit elkaar; afgeleide begrippen hergebruik je als invoer van vervolgregels
+(ketens). Ontbreekt een benodigd begrip, vul 3a aan. Je **annoteert** de regel hier; de
+uitvoerbare formulering komt in de vervolgstap `regelspraak` (één bron van waarheid).
 
 ## Stap 3b — Review-checkpoint na activiteit 3
 
@@ -258,8 +277,10 @@ opmerkingen (zie `references/review-checkpoints.md`). Met `N` = rondenummer:
    `bronnen`-index (`{bron_id, label}` per bron, gekopieerd uit act-2, zodat `vindplaatsen`
    leesbaar zijn), en de werkgebied-brede `begrippen` + `afleidingsregels` (met **stabiele
    id's**) en concept-validatiepunten. Overschrijf eerdere rondes niet.
-1b. Voer de pre-check uit:
-   `python "<skill>/scripts/validate_analyse.py" --input werk/activiteit-3/ronde-{N}/analyse.json --activiteit 3`
+1b. Voer de pre-check uit, mét de act-2-analyse (voor de dekkingscheck) en — indien
+   aangeleverd — de begrippenlijst (voor de herkomst-checks):
+   `python "<skill>/scripts/validate_analyse.py" --input werk/activiteit-3/ronde-{N}/analyse.json --activiteit 3 --act2 werk/activiteit-2/ronde-{M}/analyse.json [--begrippenlijst werk/begrippenlijst.json]`
+   (met `M` = de hoogste act-2-ronde)
    - Exit 2 (fouten): herstel vóórdat je de server start.
      Bij `WETSANALYSE_NO_REVIEW=1`: log de fouten maar blokkeer niet — ga door.
    - Exit 1 (waarschuwingen): ga door; toon als context bij de review.
@@ -345,6 +366,11 @@ Na bevestiging van de analist is het rapport gereed.
 - Zijn de uitgaande verwijzingen geïnventariseerd, geclassificeerd naar functie en gevolgd
   volgens beleid (diepte-cap + relevantie-gate)? Steunt elke hergebruikte brondefinitie via
   `bron_verwijzing` op een opgehaalde verwijzing?
+- Landt elke begrip-plichtige markering uit activiteit 2 via `markering_ids` in een begrip
+  (of afleidingsregel), en verwijst elke regel via `uitvoer`/`invoer`/`parameters` naar
+  bestaande begrippen (geen losse, ongedefinieerde variabelen)?
+- Is bij een aangeleverde begrippenlijst per begrip de `herkomst` geregistreerd
+  (hergebruikt/aangepast/nieuw, met motivatie bij aangepast)?
 - Zijn interpretatiekeuzes en twijfel expliciet benoemd in plaats van weggepoetst?
 - Zijn beide iteratieve review-checkpoints doorlopen tot de analist akkoord was zonder
   opmerkingen (of bewust overgeslagen via `WETSANALYSE_NO_REVIEW`), en is de feedback per

@@ -52,6 +52,8 @@ projects = Table(
     # Het werkgebied bevat meerdere bronnen: list[{bwbId, artikel, lid}] als JSON.
     Column("bronnen", _JSON, nullable=False, default=list),
     Column("analysefocus", Text, nullable=False, default=""),
+    # Aangeleverde bestaande begrippenlijst (suggestieve act-3-invoer): list[BegripInvoer] als JSON.
+    Column("begrippenlijst", _JSON, nullable=False, default=list),
     Column("review", Boolean, nullable=False, default=True),
     Column("model_profile", String(128), nullable=False, default=""),
     Column("client_id", String(128), nullable=False, default=""),
@@ -257,6 +259,13 @@ async def reconcile_schema() -> None:
             await conn.exec_driver_sql(f"ALTER TABLE projects ADD COLUMN regelspraak {typ}")
         if "regelspraak_review" not in bestaande:
             await conn.exec_driver_sql("ALTER TABLE projects ADD COLUMN regelspraak_review BOOLEAN")
+        # Aangeleverde begrippenlijst: idempotent toevoegen; bestaande rijen = lege lijst.
+        if "begrippenlijst" not in bestaande:
+            typ = "JSONB" if is_pg else "JSON"
+            default = "'[]'::jsonb" if is_pg else "'[]'"
+            await conn.exec_driver_sql(
+                f"ALTER TABLE projects ADD COLUMN begrippenlijst {typ} NOT NULL DEFAULT {default}"
+            )
         # Analyse-omvang ("volledig"/"act2"): idempotent toevoegen; bestaande rijen = volledig.
         if "scope" not in bestaande:
             await conn.exec_driver_sql(

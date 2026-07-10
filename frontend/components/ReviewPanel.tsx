@@ -8,6 +8,9 @@ import { JasBadge } from "@/components/ui/Badge";
 import { Textarea } from "@/components/ui/Field";
 import { LedenLijst } from "@/components/LedenLijst";
 import { getRonde, sendFeedback, isApiError } from "@/lib/api";
+import {
+  begripNaamMap, herkomstLabel, regelVelden, relatiesText, verwijstNaarText,
+} from "@/lib/begrippen";
 import { bronLabelMap, vindplaatsText } from "@/lib/bronnen";
 import type {
   Activiteit, Analyse2, Analyse3, Bron, Feedback, GegevensSpraak, Job, Lid, RsRegel,
@@ -130,14 +133,24 @@ function items2of3(act: "2" | "3", data: Analyse2 | Analyse3): ReviewItem[] {
   }
   const a = data as Analyse3;
   const labels = bronLabelMap(a.bronnen);
+  const namen = begripNaamMap(a.begrippen);
   const begrippen: ReviewItem[] = (a.begrippen ?? []).map((b) => ({
     id: b.id,
     titel: b.naam || b.id,
     klasse: b.klasse,
     regels: [
       { label: "Synoniemen", waarde: (b.synoniemen ?? []).join(", ") },
-      { label: "Definitie", waarde: b.definitie },
+      {
+        label: "Definitie",
+        waarde: b.definitie + (b.is_interpretatie ? " [interpretatie]" : ""),
+      },
+      { label: "Grondformulering", waarde: b.grondformulering },
       { label: "Kenmerken", waarde: b.kenmerken },
+      { label: "Relaties", waarde: relatiesText(b.relaties, namen) },
+      { label: "Verwijst naar", waarde: verwijstNaarText(b.verwijst_naar_begrippen, namen) },
+      { label: "Bron-verwijzing", waarde: b.bron_verwijzing ?? "" },
+      { label: "Markeringen", waarde: (b.markering_ids ?? []).join(", ") },
+      { label: "Herkomst", waarde: herkomstLabel(b.herkomst) + (b.herkomst?.motivatie ? ` — ${b.herkomst.motivatie}` : "") },
       { label: "Vindplaats", waarde: vindplaatsText(b.vindplaatsen, labels) },
     ],
     twijfel: b.twijfel,
@@ -147,9 +160,8 @@ function items2of3(act: "2" | "3", data: Analyse2 | Analyse3): ReviewItem[] {
     titel: r.naam || r.id,
     klasse: r.type,
     regels: [
-      { label: "Uitvoer", waarde: r.uitvoervariabele },
-      { label: "Invoer", waarde: r.invoervariabelen },
-      { label: "Voorwaarden", waarde: r.voorwaarden },
+      ...regelVelden(r, namen),
+      { label: "Markeringen", waarde: (r.markering_ids ?? []).join(", ") },
       { label: "Vindplaats", waarde: vindplaatsText(r.vindplaatsen, labels) },
     ],
     twijfel: r.twijfel,

@@ -32,11 +32,25 @@ export interface BronInput {
   lid?: string | null;
 }
 
+/** Eén begrip uit een aangeleverde (bestaande) begrippenlijst — suggestieve act-3-invoer. */
+export interface BegripInvoer {
+  id?: string; // bij ontbreken nummert de API door: ab1..abN
+  naam: string;
+  synoniemen?: string[];
+  definitie?: string;
+  klasse?: string;
+  bron?: string;
+  toelichting?: string;
+}
+
 export interface StartRequest {
   bronnen: BronInput[];
   naam?: string;
   omschrijving?: string;
   analysefocus?: string | null; // hoofdvraag
+  // Bestaande begrippenlijst (optioneel, suggestief): act 3 hergebruikt waar de betekenis past
+  // en registreert per begrip de herkomst (hergebruikt/aangepast/nieuw).
+  begrippenlijst?: BegripInvoer[] | null;
   review: boolean;
   model_profile?: string | null;
 }
@@ -171,18 +185,36 @@ export interface Markering {
   twijfel: string;
 }
 
+/** Gestructureerd kenmerk/relatie van een begrip. */
+export interface BegripRelatie {
+  soort: string; // relatie | kenmerk
+  beschrijving: string;
+  doel_begrip?: string | null; // begrip-id bij soort=relatie
+}
+
+/** Herkomst t.o.v. een aangeleverde begrippenlijst (suggestief hergebruik). */
+export interface BegripHerkomst {
+  status: string; // hergebruikt | aangepast | nieuw
+  aangeleverd_id: string;
+  motivatie: string;
+}
+
 export interface Begrip {
   id: string;
   naam: string; // voorkeursterm
   synoniemen: string[];
   klasse: string;
   definitie: string;
+  is_interpretatie?: boolean; // true = eigen werkdefinitie i.p.v. letterlijke brondefinitie
   grondformulering: string;
   voorbeeld: string;
   kenmerken: string;
+  relaties?: BegripRelatie[];
   vindplaatsen: Vindplaats[];
+  markering_ids?: string[]; // act-2-markeringen waarop het begrip berust
   verwijst_naar_begrippen: string[];
   bron_verwijzing?: string;
+  herkomst?: BegripHerkomst | null;
   twijfel: string;
 }
 
@@ -204,15 +236,43 @@ export interface Verwijzing {
   volgen?: boolean;
 }
 
+/** Wat de regel afleidt — een begrip (de begrippen zijn de bouwstenen van regels). */
+export interface RegelUitvoer {
+  begrip_id: string;
+  toelichting: string;
+}
+
+export interface RegelInvoer {
+  begrip_id: string;
+  toelichting: string;
+}
+
+export interface RegelParameter {
+  begrip_id: string;
+  waarde: string; // leeg = staat in een (nog niet geanalyseerde) delegatie
+  eenheid: string;
+  geldigheid: string;
+  vindplaats: Vindplaats;
+  toelichting: string;
+}
+
+export interface RegelVoorwaarde {
+  tekst: string;
+  begrip_ids: string[];
+  verbinding: string; // EN | OF | "" (koppeling met de vórige voorwaarde)
+}
+
 export interface Afleidingsregel {
   id: string;
   naam: string;
   type: string;
-  uitvoervariabele: string;
-  invoervariabelen: string;
-  parameters: string;
-  voorwaarden: string;
+  uitvoer: RegelUitvoer;
+  invoer: RegelInvoer[];
+  parameters: RegelParameter[];
+  voorwaarden: RegelVoorwaarde[];
+  toelichting: string;
   vindplaatsen: Vindplaats[];
+  markering_ids?: string[]; // Afleidingsregel-markering(en) uit act 2
   twijfel: string;
 }
 

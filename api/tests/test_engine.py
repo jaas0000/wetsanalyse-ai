@@ -5,7 +5,7 @@ import pytest
 from sqlalchemy import update
 
 from app import db
-from app.contracts import BronInput, Feedback, Job, JobState, StartRequest
+from app.contracts import BegripInvoer, BronInput, Feedback, Job, JobState, StartRequest
 from app.engine.orchestrator import WetsanalyseEngine
 from app.wettenbank import WettenbankError
 
@@ -37,6 +37,53 @@ async def test_autonoom_loopt_door_tot_klaar(engine, store):
     assert rapport["begrippen"][0]["naam"] == "belastingplichtige"
     assert len(job.provenance) == 2
     assert job.provenance[0].model == "fake-model"
+
+
+async def test_act3_twee_staps_hernummert_nieuwe_begrippen(engine, store):
+    """De 3b-'nieuwe_begrippen' worden deterministisch doorgenummerd (nb1 → b2) en alle
+    regel-referenties (uitvoer/invoer/voorwaarden) gaan mee naar het nieuwe id."""
+    job = await engine.create_job(_start_req(review=False), "test")
+    await engine.run_initial(job.id)
+
+    rapport = await store.lees_rapport(job.id)
+    assert [b["id"] for b in rapport["begrippen"]] == ["b1", "b2"]
+    assert rapport["begrippen"][1]["naam"] == "aangifteplicht"
+    assert rapport["begrippen"][1]["verwijst_naar_begrippen"] == ["b1"]
+    regel = rapport["afleidingsregels"][0]
+    assert regel["uitvoer"]["begrip_id"] == "b2"
+    assert regel["invoer"][0]["begrip_id"] == "b1"
+    assert regel["voorwaarden"][0]["begrip_ids"] == ["b1"]
+
+
+async def test_begrippenlijst_landt_in_prompt_en_herkomst(engine, store):
+    """Een aangeleverde begrippenlijst krijgt genormaliseerde id's (ab1..) en bereikt de
+    3a-prompt; de herkomst-registratie komt terug in het rapport."""
+    req = StartRequest(
+        bronnen=[BronInput(bwbId="BWBR9999999", artikel="1")], review=False,
+        begrippenlijst=[BegripInvoer(naam="belastingplichtige", definitie="bestaande definitie")],
+    )
+    job = await engine.create_job(req, "test")
+    assert job.begrippenlijst[0].id == "ab1"
+    await engine.run_initial(job.id)
+
+    rapport = await store.lees_rapport(job.id)
+    herkomst = rapport["begrippen"][0]["herkomst"]
+    assert herkomst["status"] == "hergebruikt"
+    assert herkomst["aangeleverd_id"] == "ab1"
+
+
+async def test_omschrijving_bereikt_werkgebied(engine, store):
+    """De projectomschrijving wordt niet meer weggegooid: hij landt in het werkgebied-blok
+    (en daarmee in de act-3-prompt en het rapport)."""
+    req = StartRequest(
+        bronnen=[BronInput(bwbId="BWBR9999999", artikel="1")], review=False,
+        omschrijving="Domeincontext over aangifteplicht",
+    )
+    job = await engine.create_job(req, "test")
+    await engine.run_initial(job.id)
+
+    rapport = await store.lees_rapport(job.id)
+    assert rapport["werkgebied"]["omschrijving"] == "Domeincontext over aangifteplicht"
 
 
 async def test_verwijzingen_in_rapport_met_fetch(engine, store):
@@ -179,9 +226,9 @@ async def test_act3_gebruikt_hoogste_act2_ronde(engine, store, monkeypatch):
     gezien: dict = {}
     echte = steps.genereer_act3
 
-    async def capteer(llm, ronde, context):
+    async def capteer(llm, ronde, context, **kwargs):
         gezien["context"] = context
-        return await echte(llm, ronde, context)
+        return await echte(llm, ronde, context, **kwargs)
 
     monkeypatch.setattr(steps, "genereer_act3", capteer)
 
@@ -368,15 +415,17 @@ async def test_autocorrectie_negeert_zachte_schemafouten(settings, store, monkey
 
     settings.max_autocorrectie = 2
     monkeypatch.setattr(orch, "brongetrouwheid_check", lambda d, a: [])
-    monkeypatch.setattr(orch, "schema_check", lambda d, a: (["zachte schemafout"], []))
+    monkeypatch.setattr(orch, "schema_check",
+                        lambda d, a, **kw: (["zachte schemafout"], []))
 
     llm = FakeLLM()
     eng = WetsanalyseEngine(settings, store, llm, FakeWettenbank())
     job = await eng.create_job(_start_req(review=False), "test")
     await eng.run_initial(job.id)
 
-    # Verwijzing-inventaris (fase 2a) + act2 + act3; geen extra hergeneratie ondanks de zachte fout.
-    assert llm.calls == 3
+    # Verwijzing-inventaris (fase 2a) + act2 + act3a + act3b; geen extra hergeneratie
+    # ondanks de zachte fout.
+    assert llm.calls == 4
     assert (await store.load_job(job.id)).state == JobState.klaar
 
 

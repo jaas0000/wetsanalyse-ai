@@ -16,6 +16,9 @@ Exitcodes:
 
 Gebruik:
   python validate_analyse.py --input analyse.json --activiteit 2|3
+  # activiteit 3, met dekkingscheck tegen act-2 en herkomst-check tegen een aangeleverde lijst:
+  python validate_analyse.py --input act3.json --activiteit 3 \
+      --act2 act2.json --begrippenlijst begrippenlijst.json
 """
 
 import argparse
@@ -43,6 +46,27 @@ GELDIGE_JAS_KLASSEN = {
 }
 
 GELDIGE_REGELTYPEN = {"beslisregel", "rekenregel", "specialisatieregel"}
+
+# Markeringen van deze klassen horen via `markering_ids` in ≥1 begrip te landen (dekking
+# act 2 → act 3). Afleidingsregel-markeringen landen in ≥1 afleidingsregel. De overige
+# klassen (Voorwaarde, Operator, Tijds-/Plaatsaanduiding, Delegatie, Brondefinitie) zijn
+# niet begrip-plichtig: die landen in regel-voorwaarden, definities of verwijzingen.
+BEGRIP_PLICHTIGE_KLASSEN = {
+    "Rechtssubject",
+    "Rechtsobject",
+    "Rechtsbetrekking",
+    "Rechtsfeit",
+    "Variabele en variabelewaarde",
+    "Parameter en parameterwaarde",
+}
+
+GELDIGE_HERKOMST_STATUS = {"hergebruikt", "aangepast", "nieuw"}
+GELDIGE_RELATIE_SOORT = {"relatie", "kenmerk"}
+GELDIGE_VERBINDING = {"EN", "OF", ""}
+
+# Begripsnamen beginnen niet met een lidwoord of ontkenning (methode: begrippen zijn de
+# bouwstenen voor afleidingsregels; taalpatronen leveren de lidwoorden/ontkenningen).
+_NAAM_VERBODEN_START = ("de ", "het ", "een ", "geen ", "niet ")
 
 GELDIGE_VERWIJZING_FUNCTIES = {
     "definitie", "schakel", "delegatie", "intra-artikel", "informatief",
@@ -242,14 +266,89 @@ def check_vindplaatsen(item: dict, iid: str, soort: str, bron_ids: set[str]) -> 
     return waarschuwingen
 
 
-def check_activiteit_3(data: dict) -> tuple[list[str], list[str]]:
+def _norm_naam(naam: str) -> str:
+    """Genormaliseerde vorm voor naam-uniciteit: NFC, lowercase, samengevouwen whitespace."""
+    return " ".join(unicodedata.normalize("NFC", naam).lower().split())
+
+
+def _lijkt_werkwoordsvorm(naam: str) -> bool:
+    """Heuristiek: begint de (regel)naam met een actieve werkwoordsvorm (infinitief op -en)?"""
+    eerste = naam.strip().split()[0].lower() if naam.strip() else ""
+    return len(eerste) > 3 and eerste.endswith("en")
+
+
+def _act2_markeringen(act2: dict | None) -> dict[str, str]:
+    """Markering-id → klasse over alle bronnen van de act-2-analyse."""
+    index: dict[str, str] = {}
+    for bron in ((act2 or {}).get("bronnen") or []):
+        for m in (bron.get("markeringen") or []):
+            if m.get("id"):
+                index[m["id"]] = m.get("klasse", "")
+    return index
+
+
+def _object_items(
+    item: dict, veld: str, iid: str, soort: str, fouten: list[str],
+) -> list[dict]:
+    """Lijstveld dat objecten hoort te bevatten: niet-objecten worden een schemafout
+    (bv. oud-schema strings) in plaats van een crash; de rest wordt teruggegeven."""
+    waarde = item.get(veld) or []
+    if not isinstance(waarde, list):
+        fouten.append(
+            f"[{iid or '?'}] {soort}: '{veld}' is geen lijst — verwacht een lijst van objecten."
+        )
+        return []
+    goede: list[dict] = []
+    for x in waarde:
+        if isinstance(x, dict):
+            goede.append(x)
+        else:
+            fouten.append(
+                f"[{iid or '?'}] {soort}: '{veld}' bevat een item dat geen object is "
+                "(oud schema met vrije tekst? — gebruik de gestructureerde vorm)."
+            )
+    return goede
+
+
+def _check_begrip_refs(
+    item: dict, iid: str, soort: str, veld: str, begrip_ids: set[str], refs: list[str],
+) -> list[str]:
+    """Fouten voor referenties naar niet-bestaande begrip-id's."""
+    fouten: list[str] = []
+    for ref in refs:
+        if ref and ref not in begrip_ids:
+            fouten.append(
+                f"[{iid or '?'}] {soort}: '{veld}' verwijst naar onbekend begrip-id '{ref}'."
+            )
+    return fouten
+
+
+def check_activiteit_3(
+    data: dict,
+    act2: dict | None = None,
+    begrippenlijst: dict | None = None,
+) -> tuple[list[str], list[str]]:
     fouten: list[str] = []
     waarschuwingen: list[str] = []
 
     geziene_ids: set[str] = set()
     bron_ids = {b.get("bron_id") for b in (data.get("bronnen") or []) if b.get("bron_id")}
 
-    for b in (data.get("begrippen") or []):
+    begrippen = data.get("begrippen") or []
+    regels = data.get("afleidingsregels") or []
+
+    # Pre-pass: alle begrip-id's (voor dangling-checks) + genormaliseerde naam-index.
+    begrip_ids = {b.get("id") for b in begrippen if b.get("id")}
+    naam_index: dict[str, str] = {}   # genormaliseerde naam → begrip-id
+
+    markering_index = _act2_markeringen(act2)
+    gedekte_markeringen: set[str] = set()
+
+    aangeleverde_ids = {
+        b.get("id") for b in ((begrippenlijst or {}).get("begrippen") or []) if b.get("id")
+    }
+
+    for b in begrippen:
         bid = b.get("id", "")
         if not bid:
             fouten.append("Begrip heeft geen 'id' (verplicht voor feedback-koppeling).")
@@ -258,8 +357,26 @@ def check_activiteit_3(data: dict) -> tuple[list[str], list[str]]:
                 fouten.append(f"Id '{bid}' komt meerdere keren voor (begrip of afleidingsregel).")
             geziene_ids.add(bid)
 
-        if not (b.get("naam") or "").strip():
+        naam = (b.get("naam") or "").strip()
+        if not naam:
             fouten.append(f"[{bid or '?'}] Begrip heeft geen 'naam'.")
+        else:
+            norm = _norm_naam(naam)
+            if norm in naam_index:
+                fouten.append(
+                    f"[{bid or '?'}] Begripsnaam '{naam}' is niet uniek "
+                    f"(botst met begrip '{naam_index[norm]}'). De voorkeursterm is uniek "
+                    "per werkgebied — voeg samen (synoniemen) of splits met een "
+                    "onderscheidende naam (homoniemen)."
+                )
+            else:
+                naam_index[norm] = bid or "?"
+
+            if naam.lower().startswith(_NAAM_VERBODEN_START):
+                waarschuwingen.append(
+                    f"[{bid or '?'}] Begripsnaam '{naam}' begint met een lidwoord of "
+                    "ontkenning — laat dat weg (naamgevings-vuistregel)."
+                )
 
         klasse = b.get("klasse", "")
         if not klasse:
@@ -269,8 +386,14 @@ def check_activiteit_3(data: dict) -> tuple[list[str], list[str]]:
                 f"[{bid or '?'}] Klasse op begrip is geen geldige JAS-klasse: '{klasse}'."
             )
 
-        if not (b.get("definitie") or "").strip():
+        definitie = (b.get("definitie") or "").strip()
+        if not definitie:
             waarschuwingen.append(f"[{bid or '?'}] Begrip heeft geen 'definitie'.")
+        elif naam and _norm_naam(naam) in _norm_naam(definitie):
+            waarschuwingen.append(
+                f"[{bid or '?'}] De begripsnaam '{naam}' komt voor in de eigen definitie — "
+                "gebruik de naam niet in de eigen definitie (wel eerder gedefinieerde begrippen)."
+            )
 
         waarschuwingen.extend(check_vindplaatsen(b, bid, "Begrip", bron_ids))
 
@@ -279,7 +402,84 @@ def check_activiteit_3(data: dict) -> tuple[list[str], list[str]]:
                 f"[{bid or '?'}] Leeg 'bron_verwijzing' — laat het veld weg of vul een id in."
             )
 
-    for r in (data.get("afleidingsregels") or []):
+        fouten.extend(_check_begrip_refs(
+            b, bid, "Begrip", "verwijst_naar_begrippen", begrip_ids,
+            [x for x in (b.get("verwijst_naar_begrippen") or []) if x],
+        ))
+
+        for rel in _object_items(b, "relaties", bid, "Begrip", fouten):
+            rsoort = rel.get("soort", "")
+            if rsoort and rsoort not in GELDIGE_RELATIE_SOORT:
+                waarschuwingen.append(
+                    f"[{bid or '?'}] Onbekende relatie-soort '{rsoort}' (verwacht: relatie, kenmerk)."
+                )
+            doel = rel.get("doel_begrip")
+            if doel:
+                fouten.extend(_check_begrip_refs(
+                    b, bid, "Begrip", "relaties.doel_begrip", begrip_ids, [doel],
+                ))
+
+        # Koppeling met act 2 (alleen toetsbaar met --act2).
+        for mid in (b.get("markering_ids") or []):
+            if markering_index and mid not in markering_index:
+                fouten.append(
+                    f"[{bid or '?'}] markering_ids verwijst naar onbekende markering '{mid}'."
+                )
+            gedekte_markeringen.add(mid)
+
+        # Herkomst t.o.v. de aangeleverde begrippenlijst (alleen met --begrippenlijst).
+        herkomst = b.get("herkomst")
+        if herkomst is not None and not isinstance(herkomst, dict):
+            fouten.append(
+                f"[{bid or '?'}] Begrip: 'herkomst' is geen object "
+                "(verwacht: status/aangeleverd_id/motivatie)."
+            )
+            herkomst = None
+        if begrippenlijst is not None:
+            if not herkomst:
+                waarschuwingen.append(
+                    f"[{bid or '?'}] Geen 'herkomst' terwijl een begrippenlijst is "
+                    "aangeleverd — registreer hergebruikt/aangepast/nieuw."
+                )
+        if herkomst:
+            status = herkomst.get("status", "")
+            if status not in GELDIGE_HERKOMST_STATUS:
+                waarschuwingen.append(
+                    f"[{bid or '?'}] Onbekende herkomst-status '{status}' "
+                    "(verwacht: hergebruikt, aangepast, nieuw)."
+                )
+            elif status in ("hergebruikt", "aangepast"):
+                aid = (herkomst.get("aangeleverd_id") or "").strip()
+                if not aid:
+                    waarschuwingen.append(
+                        f"[{bid or '?'}] herkomst '{status}' zonder 'aangeleverd_id'."
+                    )
+                elif aangeleverde_ids and aid not in aangeleverde_ids:
+                    waarschuwingen.append(
+                        f"[{bid or '?'}] herkomst.aangeleverd_id '{aid}' staat niet in de "
+                        "aangeleverde begrippenlijst."
+                    )
+                if status == "aangepast" and not (herkomst.get("motivatie") or "").strip():
+                    waarschuwingen.append(
+                        f"[{bid or '?'}] herkomst 'aangepast' zonder 'motivatie' — de "
+                        "afwijking is een interpretatiekeuze die motivering vraagt."
+                    )
+
+    # Homoniem-signalering: dezelfde grondformulering onder meerdere begrippen is legitiem
+    # (homoniemen splitsen), maar hoort een bewuste keuze te zijn — informeer de reviewer.
+    grond_index: dict[str, list[str]] = {}
+    for b in begrippen:
+        grond = _norm_naam(b.get("grondformulering") or "")
+        if grond:
+            grond_index.setdefault(grond, []).append(b.get("id") or "?")
+    for grond, ids in grond_index.items():
+        if len(ids) > 1:
+            waarschuwingen.append(
+                f"Grondformulering '{grond}' levert meerdere begrippen op ({', '.join(ids)}) — "
+                "controleer dat dit bewust gesplitste homoniemen zijn met onderscheidende namen."
+            )
+
+    for r in regels:
         rid = r.get("id", "")
         if not rid:
             fouten.append("Afleidingsregel heeft geen 'id' (verplicht voor feedback-koppeling).")
@@ -288,8 +488,14 @@ def check_activiteit_3(data: dict) -> tuple[list[str], list[str]]:
                 fouten.append(f"Id '{rid}' komt meerdere keren voor (begrip of afleidingsregel).")
             geziene_ids.add(rid)
 
-        if not (r.get("naam") or "").strip():
+        naam = (r.get("naam") or "").strip()
+        if not naam:
             fouten.append(f"[{rid or '?'}] Afleidingsregel heeft geen 'naam'.")
+        elif not _lijkt_werkwoordsvorm(naam):
+            waarschuwingen.append(
+                f"[{rid or '?'}] Regelnaam '{naam}' begint niet met een actieve "
+                "werkwoordsvorm (bv. 'bepalen …', 'berekenen …', 'vaststellen …')."
+            )
 
         regeltype = r.get("type", "")
         if not regeltype:
@@ -303,7 +509,86 @@ def check_activiteit_3(data: dict) -> tuple[list[str], list[str]]:
                 "Gebruik: beslisregel, rekenregel of specialisatieregel."
             )
 
+        # De regel gebruikt de begrippen als bouwstenen: uitvoer is verplicht en elk
+        # gerefereerd begrip moet bestaan.
+        uitvoer = r.get("uitvoer") or {}
+        if not isinstance(uitvoer, dict):
+            fouten.append(
+                f"[{rid or '?'}] Afleidingsregel: 'uitvoer' is geen object "
+                "(oud schema met vrije tekst? — verwacht: begrip_id/toelichting)."
+            )
+            uitvoer = {}
+        uitvoer_id = (uitvoer.get("begrip_id") or "").strip()
+        if not uitvoer_id:
+            fouten.append(
+                f"[{rid or '?'}] Afleidingsregel heeft geen 'uitvoer.begrip_id' — maak eerst "
+                "een begrip voor wat de regel afleidt en verwijs daarnaar."
+            )
+        else:
+            fouten.extend(_check_begrip_refs(
+                r, rid, "Afleidingsregel", "uitvoer.begrip_id", begrip_ids, [uitvoer_id],
+            ))
+
+        invoer = _object_items(r, "invoer", rid, "Afleidingsregel", fouten)
+        fouten.extend(_check_begrip_refs(
+            r, rid, "Afleidingsregel", "invoer.begrip_id", begrip_ids,
+            [(i.get("begrip_id") or "").strip() for i in invoer],
+        ))
+
+        parameters = _object_items(r, "parameters", rid, "Afleidingsregel", fouten)
+        fouten.extend(_check_begrip_refs(
+            r, rid, "Afleidingsregel", "parameters.begrip_id", begrip_ids,
+            [(p.get("begrip_id") or "").strip() for p in parameters],
+        ))
+
+        if not invoer and not parameters:
+            waarschuwingen.append(
+                f"[{rid or '?'}] Afleidingsregel heeft geen 'invoer' en geen 'parameters' — "
+                "waaruit wordt de uitvoer afgeleid?"
+            )
+
+        voorwaarden = _object_items(r, "voorwaarden", rid, "Afleidingsregel", fouten)
+        for vw in voorwaarden:
+            fouten.extend(_check_begrip_refs(
+                r, rid, "Afleidingsregel", "voorwaarden.begrip_ids", begrip_ids,
+                [x for x in (vw.get("begrip_ids") or []) if x],
+            ))
+            verbinding = vw.get("verbinding", "")
+            if verbinding not in GELDIGE_VERBINDING:
+                waarschuwingen.append(
+                    f"[{rid or '?'}] Onbekende voorwaarde-verbinding '{verbinding}' "
+                    "(verwacht: EN, OF of leeg)."
+                )
+        if regeltype == "beslisregel" and not voorwaarden:
+            waarschuwingen.append(
+                f"[{rid or '?'}] Beslisregel zonder 'voorwaarden' — waarop wordt beslist?"
+            )
+
         waarschuwingen.extend(check_vindplaatsen(r, rid, "Afleidingsregel", bron_ids))
+
+        for mid in (r.get("markering_ids") or []):
+            if markering_index and mid not in markering_index:
+                fouten.append(
+                    f"[{rid or '?'}] markering_ids verwijst naar onbekende markering '{mid}'."
+                )
+            gedekte_markeringen.add(mid)
+
+    # Dekkingscheck act 2 → act 3 (alleen met --act2): elke begrip-plichtige markering hoort
+    # via markering_ids in een begrip te landen; elke Afleidingsregel-markering in een regel.
+    if markering_index:
+        for mid, klasse in markering_index.items():
+            if mid in gedekte_markeringen:
+                continue
+            if klasse in BEGRIP_PLICHTIGE_KLASSEN:
+                waarschuwingen.append(
+                    f"Markering '{mid}' ({klasse}) landt in geen enkel begrip "
+                    "(markering_ids) — dekking act 2 → act 3 onvolledig."
+                )
+            elif klasse == "Afleidingsregel":
+                waarschuwingen.append(
+                    f"Markering '{mid}' (Afleidingsregel) landt in geen enkele "
+                    "afleidingsregel (markering_ids)."
+                )
 
     return fouten, waarschuwingen
 
@@ -317,23 +602,35 @@ def main() -> None:
                         help="Pad naar analyse.json")
     parser.add_argument("--activiteit", choices=["2", "3"], required=True,
                         help="Activiteit 2 of 3")
+    parser.add_argument("--act2", type=Path, default=None,
+                        help="Pad naar de act-2 analyse.json (activeert de dekkingscheck "
+                             "act 2 → act 3; alleen zinvol bij --activiteit 3)")
+    parser.add_argument("--begrippenlijst", type=Path, default=None,
+                        help="Pad naar de aangeleverde begrippenlijst.json (activeert de "
+                             "herkomst-checks; alleen zinvol bij --activiteit 3)")
     args = parser.parse_args()
 
-    if not args.input.exists():
-        print(f"FOUT: bestand niet gevonden: {args.input}", file=sys.stderr)
-        sys.exit(2)
+    def _lees_json(pad: Path, label: str) -> dict:
+        if not pad.exists():
+            print(f"FOUT: {label} niet gevonden: {pad}", file=sys.stderr)
+            sys.exit(2)
+        try:
+            return json.loads(pad.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as e:
+            print(f"FOUT: ongeldige JSON in {pad}: {e}", file=sys.stderr)
+            sys.exit(2)
 
-    try:
-        data = json.loads(args.input.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as e:
-        print(f"FOUT: ongeldige JSON in {args.input}: {e}", file=sys.stderr)
-        sys.exit(2)
+    data = _lees_json(args.input, "bestand")
 
     if args.activiteit == "2":
         fouten, waarschuwingen = check_activiteit_2(data)
         context = f"{len(data.get('bronnen') or [])} bron(nen)"
     else:
-        fouten, waarschuwingen = check_activiteit_3(data)
+        act2 = _lees_json(args.act2, "act-2-analyse") if args.act2 else None
+        begrippenlijst = (
+            _lees_json(args.begrippenlijst, "begrippenlijst") if args.begrippenlijst else None
+        )
+        fouten, waarschuwingen = check_activiteit_3(data, act2=act2, begrippenlijst=begrippenlijst)
         context = (data.get("werkgebied") or {}).get("naam", "?")
 
     print(f"\n  Pre-check analyse.json - activiteit {args.activiteit}, werkgebied {context}")

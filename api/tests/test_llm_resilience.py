@@ -110,27 +110,38 @@ async def test_met_retry_plafonneert_backoff(monkeypatch):
     assert all(s <= 12.5 for s in slaapjes)
 
 
-# --- #3 context-window: afgeslankte act-3-prompt + pre-flight token-guard ---
+# --- #3 context-window: act-3-prompts + pre-flight token-guard ---
 
-def test_act3_prompt_bevat_geen_volledige_leden():
-    """Act-3 werkt op de markeringen, niet op de volledige wettekst — dat houdt de
-    werkgebied-brede prompt binnen het context window."""
-    from app.engine.prompts import act3_prompt
+def test_act3_prompts_dragen_ledentekst_en_markeringen():
+    """Act-3 krijgt bewust de volledige leden-tekst mee (definities dicht op de bron); het
+    context-window-risico wordt door de prompt-token-guard gevangen, niet door trimmen."""
+    from app.engine.prompts import act3_begrippen_prompt, act3_regels_prompt
 
     context = {
         "werkgebied": {"naam": "WG"},
         "bronnen": [{
             "bron_id": "br1", "label": "Wet X art. 1", "bwbId": "BWBR1", "artikel": "1",
-            "leden": [{"lid": "1", "tekst": "UNIEKE_LEDEN_TEKST_XYZ hoort niet in de act-3-prompt"}],
-            "markeringen": [{"id": "m1", "bron_id": "br1", "formulering": "MARKERING_ABC",
-                             "klasse": "Rechtssubject", "vindplaats": "lid 1"}],
+            "leden": [{"lid": "1", "tekst": "UNIEKE_LEDEN_TEKST_XYZ voedt de definities"}],
+            "markeringen": [
+                {"id": "m1", "bron_id": "br1", "formulering": "MARKERING_ABC",
+                 "klasse": "Rechtssubject", "vindplaats": "lid 1"},
+                {"id": "m2", "bron_id": "br1", "formulering": "REGEL_MARKERING_DEF",
+                 "klasse": "Afleidingsregel", "vindplaats": "lid 1"},
+            ],
             "verwijzingen": [],
         }],
     }
-    _system, user, _schema, _h = act3_prompt(context)
-    assert "UNIEKE_LEDEN_TEKST_XYZ" not in user   # volledige leden-tekst is eruit
+    _system, user, _schema, _h = act3_begrippen_prompt(context)
+    assert "UNIEKE_LEDEN_TEKST_XYZ" in user       # leden-tekst gaat mee
     assert "MARKERING_ABC" in user                # markeringen blijven de basis
     assert "br1" in user                          # bron-index aanwezig voor vindplaatsen
+
+    begrippen = [{"id": "b1", "naam": "x", "klasse": "Rechtssubject", "definitie": "d"}]
+    _system, user, _schema, _h = act3_regels_prompt(context, begrippen)
+    assert "UNIEKE_LEDEN_TEKST_XYZ" in user       # ook 3b ziet de wettekst
+    assert "REGEL_MARKERING_DEF" in user          # regel-relevante markering gaat mee
+    assert "MARKERING_ABC" not in user            # niet-regel-relevante klasse is eruit gefilterd
+    assert '"b1"' in user                         # de 3a-begrippen zijn de bouwstenen
 
 
 def test_prompt_guard_werpt_bij_overschrijding():

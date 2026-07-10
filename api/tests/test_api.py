@@ -176,6 +176,25 @@ async def test_input_limiet_422(client):
     assert r.status_code == 422
 
 
+async def test_begrippenlijst_caps_422(client):
+    """De caps op de aangeleverde begrippenlijst (max 300 items, naam ≤200, definitie ≤2000)
+    worden door Pydantic geweigerd (422), vóór de engine wordt geraakt."""
+    bron = [{"bwbId": "BWBR1", "artikel": "1"}]
+    te_veel = [{"naam": f"begrip {i}"} for i in range(301)]
+    r = await client.post("/v1/projects", json={"bronnen": bron, "begrippenlijst": te_veel})
+    assert r.status_code == 422
+    r = await client.post("/v1/projects",
+                          json={"bronnen": bron, "begrippenlijst": [{"naam": "x" * 201}]})
+    assert r.status_code == 422
+    r = await client.post("/v1/projects",
+                          json={"bronnen": bron,
+                                "begrippenlijst": [{"naam": "ok", "definitie": "x" * 2001}]})
+    assert r.status_code == 422
+    # Een begrip zonder naam is ongeldig (naam is het enige verplichte veld).
+    r = await client.post("/v1/projects", json={"bronnen": bron, "begrippenlijst": [{"naam": ""}]})
+    assert r.status_code == 422
+
+
 async def test_leeg_artikel_422(client):
     """Een leeg `artikel` wordt door Pydantic geweigerd (422), vóór MCP/LLM geraakt worden."""
     r = await client.post("/v1/projects", json={"artikel": "", "bwbId": "BWBR1"})

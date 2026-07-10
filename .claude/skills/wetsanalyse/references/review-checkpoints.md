@@ -151,22 +151,42 @@ Activiteit 3 is **werkgebied-breed**: één gedeelde begrippenlijst + afleidings
       "naam": "berekend bijdrage-inkomen",
       "synoniemen": [],
       "klasse": "Variabele en variabelewaarde",
-      "definitie": "<brondefinitie of [interpretatie]>",
+      "definitie": "<brondefinitie letterlijk, of eigen werkdefinitie>",
+      "is_interpretatie": false,
       "grondformulering": "bijdrage-inkomen",
       "voorbeeld": "...",
-      "kenmerken": "<kenmerken/relaties>",
+      "kenmerken": "<vrije toelichting op kenmerken>",
+      "relaties": [
+        { "soort": "relatie", "beschrijving": "is rechthebbende van", "doel_begrip": "b2" },
+        { "soort": "kenmerk", "beschrijving": "ingangsdatum waarop de rechtsbetrekking geldig wordt", "doel_begrip": null }
+      ],
       "vindplaatsen": [{ "bron_id": "br1", "lid": "2" }],
+      "markering_ids": ["m3", "m7"],
       "verwijst_naar_begrippen": ["b2", "b3"],
       "bron_verwijzing": "v1",
+      "herkomst": { "status": "hergebruikt", "aangeleverd_id": "ab4", "motivatie": "" },
       "twijfel": "..."
     }
   ],
   "afleidingsregels": [
     {
       "id": "r1", "naam": "bepalen berekend bijdrage-inkomen", "type": "rekenregel",
-      "uitvoervariabele": "...", "invoervariabelen": "...", "parameters": "...",
-      "voorwaarden": "...",
-      "vindplaatsen": [{ "bron_id": "br1", "lid": "2" }], "twijfel": "..."
+      "uitvoer": { "begrip_id": "b1", "toelichting": "" },
+      "invoer": [{ "begrip_id": "b2", "toelichting": "loon uit dienstbetrekking over het jaar" }],
+      "parameters": [
+        {
+          "begrip_id": "b9", "waarde": "5,32", "eenheid": "%", "geldigheid": "2026",
+          "vindplaats": { "bron_id": "br2", "lid": "1" },
+          "toelichting": "waarde wordt bij ministeriële regeling vastgesteld"
+        }
+      ],
+      "voorwaarden": [
+        { "tekst": "de verzekeringsplichtige geniet loon uit dienstbetrekking", "begrip_ids": ["b4", "b2"], "verbinding": "" }
+      ],
+      "toelichting": "",
+      "vindplaatsen": [{ "bron_id": "br1", "lid": "2" }],
+      "markering_ids": ["m12"],
+      "twijfel": "..."
     }
   ],
   "validatiepunten": ["<aandachtspunt 1>", "<aandachtspunt 2>"]
@@ -179,24 +199,88 @@ activiteit 2. Daarmee blijft de act-3-review zelfstandig leesbaar (de viewer too
 
 Het **begrip-schema** volgt WetsTaal §14 en boek stap 3:
 
-- `naam` is de **voorkeursterm** (uniek per werkgebied). `synoniemen` zijn alternatieve
-  termen die naar **hetzelfde** begrip verwijzen (synoniemen samenvoegen tot één begrip).
+- `naam` is de **voorkeursterm** (uniek per werkgebied — validatiefout bij dubbele namen).
+  `synoniemen` zijn alternatieve termen die naar **hetzelfde** begrip verwijzen (synoniemen
+  samenvoegen tot één begrip); een synoniem mag niet samenvallen met de naam van een ánder begrip.
+- `is_interpretatie` is `true` wanneer de definitie (deels) een eigen werkdefinitie is in
+  plaats van een letterlijk hergebruikte brondefinitie. Dit maakt de interpretatiekeuze
+  machine-leesbaar en telbaar voor de aandachtspunten; licht de keuze toe in `twijfel`.
 - `grondformulering` is de letterlijke wetformulering waaruit het begrip is afgeleid. Dit
   maakt **homoniemen** herleidbaar: dezelfde formulering met een andere betekenis levert
   **aparte** begrippen op (bv. *bijdrage-inkomen* → *berekend bijdrage-inkomen*,
   *bijdrage-inkomen na beoordeling op nihilstelling*, *…op maximumstelling*).
+- `relaties` legt kenmerken en relaties **gestructureerd** vast: `soort` ∈ `relatie | kenmerk`;
+  bij een relatie wijst `doel_begrip` naar het gerelateerde begrip-id, bij een kenmerk is
+  `doel_begrip` `null`. Het vrije-tekstveld `kenmerken` blijft beschikbaar voor toelichting.
+- `markering_ids` koppelt het begrip aan de activiteit-2-markeringen waarop het berust.
+  Dit borgt de dekking: elke markering van een **begrip-plichtige klasse** (Rechtssubject,
+  Rechtsobject, Rechtsbetrekking, Rechtsfeit, Variabele en variabelewaarde, Parameter en
+  parameterwaarde) hoort in minstens één begrip te landen; een Afleidingsregel-markering in
+  minstens één afleidingsregel. Voorwaarde- en Operator-markeringen landen in de
+  `voorwaarden` van regels; Brondefinitie voedt de `definitie`; Tijds-/Plaatsaanduiding en
+  Delegatie zijn niet begrip-plichtig.
 - `verwijst_naar_begrippen` lijst de begrip-id's op die in de begripsomschrijving worden
   gebruikt ("gebruik in een begrip(somschrijving) al eerder gedefinieerde begrippen").
 - `vindplaatsen` is een **absolute**, cross-bron lijst `[{bron_id, lid}]`: een begrip dat
   over meerdere bronnen geldt (hergebruik) somt ze allemaal op.
 - `bron_verwijzing` mag naar een verwijzing-id in **elke** bron wijzen (bv. een hergebruikte
   brondefinitie). De afhankelijke wijst naar zijn bron; de verwijzing houdt zelf geen lijst bij.
+- `herkomst` is alleen relevant wanneer een **bestaande begrippenlijst** is aangeleverd
+  (zie hieronder): `status` ∈ `hergebruikt | aangepast | nieuw`; `aangeleverd_id` (verplicht
+  bij hergebruikt/aangepast) wijst naar het aangeleverde begrip; `motivatie` (verplicht bij
+  aangepast) legt uit waarom is afgeweken. Ontbreekt het veld, dan geldt het begrip als nieuw.
 
-Afleidingsregels gebruiken de gemaakte begrippen en dragen eveneens `vindplaatsen`.
+Het **afleidingsregel-schema** maakt de methodische eis hard dat regels de gemaakte
+begrippen als bouwstenen gebruiken:
+
+- `uitvoer.begrip_id` is **verplicht**: de regel leidt een begrip af (maak dus eerst het
+  begrip voor de uitkomst — vaak een Variabele — en verwijs ernaar). Afgeleide begrippen
+  worden in vervolgregels als `invoer` hergebruikt (ketens).
+- `invoer[]` en `parameters[]` verwijzen elk met `begrip_id` naar een bestaand begrip;
+  `toelichting` is vrije tekst. Parameters dragen daarnaast `waarde`, `eenheid` en
+  `geldigheid` (leeg laten als de waarde in een nog niet geanalyseerde gedelegeerde
+  regeling staat — noteer dat in `toelichting`/`twijfel`) en een eigen `vindplaats`.
+- `voorwaarden[]` zijn condities in **letterlijke of parafraserende tekst** (`tekst`), met
+  de betrokken begrippen in `begrip_ids` en `verbinding` ∈ `EN | OF | ""` (de logische
+  koppeling met de vórige voorwaarde; negatie hoort in de tekst zelf). Geen pseudo-regeltaal:
+  de uitvoerbare formulering blijft de taak van de vervolgstap regelspraak.
+- `markering_ids` koppelt de regel aan de Afleidingsregel-markering(en) uit activiteit 2.
 
 Gebruik **stabiele id's** (`m1`, `v1`, `b1`, `r1`, …) en houd ze stabiel tussen rondes.
 `build_rapport_json.py` controleert na de merge of elke `bron_verwijzing` naar een bestaande
-verwijzing wijst en of elke `vindplaatsen.bron_id` een bestaande bron is.
+verwijzing wijst, of elke `vindplaatsen.bron_id` een bestaande bron is, of elk `begrip_id`
+in regelvelden naar een bestaand begrip wijst en of elke `markering_ids`-entry bestaat.
+
+## Bestaande begrippenlijst als invoer (optioneel)
+
+De analist kan een bestaande begrippenlijst meegeven (bv. uit een eerder werkgebied of een
+organisatie-begrippenkader). De lijst is **suggestief**, niet normatief: hergebruik een
+aangeleverd begrip waar de betekenis past, wijk gemotiveerd af waar de wettekst dat vraagt.
+De methode blijft leidend — brongetrouwheid en de eigen interpretatiekeuzes gaan vóór de lijst.
+
+Normaliseer de aangeleverde lijst naar `werk/begrippenlijst.json`:
+
+```json
+{
+  "begrippen": [
+    {
+      "id": "ab1",
+      "naam": "verzekeringsplichtige",
+      "synoniemen": [],
+      "definitie": "...",
+      "klasse": "",
+      "bron": "Begrippenkader Zvw v2.1",
+      "toelichting": ""
+    }
+  ]
+}
+```
+
+Alleen `naam` is verplicht; nummer ontbrekende id's als `ab1..abN`. Registreer vervolgens op
+élk begrip in de analyse het `herkomst`-veld: `hergebruikt` (naam+definitie overgenomen),
+`aangepast` (aangeleverd begrip als vertrekpunt, maar bijgesteld — motiveer waarom) of
+`nieuw` (geen passend aangeleverd begrip). Zo ziet de reviewer precies wat met de
+aangeleverde lijst is gedaan.
 
 ## De server starten
 

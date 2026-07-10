@@ -22,8 +22,8 @@ from .config import Settings
 import re
 
 from .contracts import (
-    Analyse2, Analyse3, BronInput, Feedback, Job, JobState, QUOTA_VRIJE_STATES, RUNNING_STATES,
-    RondeProvenance,
+    Analyse2, Analyse3, BegripInvoer, BronInput, Feedback, Job, JobState, QUOTA_VRIJE_STATES,
+    RUNNING_STATES, RondeProvenance,
 )
 from .jobstore import IdConflict
 from .project import Project, RondeData
@@ -62,6 +62,7 @@ def _row_to_project(row) -> Project:
         omschrijving=m["omschrijving"] or "",
         bronnen=[BronInput(**b) for b in (m["bronnen"] or [])],
         analysefocus=m["analysefocus"] or "",
+        begrippenlijst=[BegripInvoer(**b) for b in (m.get("begrippenlijst") or [])],
         review=m["review"],
         model_profile=m["model_profile"] or "",
         client_id=m["client_id"] or "",
@@ -177,7 +178,11 @@ class PostgresStore:
             async with db.get_engine().begin() as conn:
                 await self._handhaaf_active_quota(conn, job.client_id, max_active)
                 await conn.execute(insert(db.projects).values(
-                    slug=job.id, created=now, updated=now, **_state_values(job)
+                    slug=job.id, created=now, updated=now,
+                    # Create-time invoer buiten _STATE_FIELDS (save_job schrijft die nooit terug).
+                    omschrijving=job.omschrijving,
+                    begrippenlijst=[b.model_dump() for b in job.begrippenlijst],
+                    **_state_values(job),
                 ))
         except IntegrityError:
             raise IdConflict(f"slug bestaat al: {job.id}")
@@ -195,6 +200,7 @@ class PostgresStore:
                     omschrijving=project.omschrijving,
                     bronnen=[b.model_dump() for b in project.bronnen],
                     analysefocus=project.analysefocus,
+                    begrippenlijst=[b.model_dump() for b in project.begrippenlijst],
                     review=project.review,
                     model_profile=project.model_profile,
                     client_id=project.client_id,

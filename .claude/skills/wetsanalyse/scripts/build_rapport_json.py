@@ -176,9 +176,12 @@ def main() -> None:
 
     # Referentiële integriteit over de bronnen heen. Hier (na het mergen) is het volledige
     # beeld bekend; validate_analyse.py kan dit per los bestand niet over de activiteiten heen
-    # checken. Twee controles:
+    # checken. Vier controles:
     #   1. bron_verwijzing op een begrip/regel → een bestaande verwijzing-id in één van de bronnen;
-    #   2. elke vindplaatsen.bron_id → een bestaande bron.
+    #   2. elke vindplaatsen.bron_id → een bestaande bron;
+    #   3. elke markering_ids-verwijzing → een bestaande act-2-markering;
+    #   4. elke begrip-id in de regelvelden (uitvoer/invoer/parameters/voorwaarden) en in
+    #      verwijst_naar_begrippen/relaties → een bestaand begrip.
     bron_ids = {b.get("bron_id") for b in bronnen if b.get("bron_id")}
     verwijzing_ids = {
         v.get("id")
@@ -186,7 +189,19 @@ def main() -> None:
         for v in (b.get("verwijzingen") or [])
         if v.get("id")
     }
+    markering_ids = {
+        m.get("id")
+        for b in bronnen
+        for m in (b.get("markeringen") or [])
+        if m.get("id")
+    }
+    begrip_ids = {b.get("id") for b in rapport["begrippen"] if b.get("id")}
     problemen: list[str] = []
+
+    def check_begrip_ref(enkelvoud: str, iid: str, veld: str, ref) -> None:
+        if ref and ref not in begrip_ids:
+            problemen.append(f"{enkelvoud} '{iid}' → onbekend begrip-id '{ref}' in {veld}")
+
     for groep, enkelvoud in (("begrippen", "begrip"), ("afleidingsregels", "afleidingsregel")):
         for item in rapport[groep]:
             iid = item.get("id", "?")
@@ -197,6 +212,32 @@ def main() -> None:
                 bid = vp.get("bron_id")
                 if bid and bid not in bron_ids:
                     problemen.append(f"{enkelvoud} '{iid}' → onbekende vindplaats-bron_id '{bid}'")
+            for mid in (item.get("markering_ids") or []):
+                if mid and mid not in markering_ids:
+                    problemen.append(f"{enkelvoud} '{iid}' → onbekende markering '{mid}'")
+
+    for b in rapport["begrippen"]:
+        iid = b.get("id", "?")
+        for ref in (b.get("verwijst_naar_begrippen") or []):
+            check_begrip_ref("begrip", iid, "verwijst_naar_begrippen", ref)
+        for rel in (b.get("relaties") or []):
+            if isinstance(rel, dict):
+                check_begrip_ref("begrip", iid, "relaties.doel_begrip", rel.get("doel_begrip"))
+
+    for r in rapport["afleidingsregels"]:
+        iid = r.get("id", "?")
+        uitvoer = r.get("uitvoer") or {}
+        if isinstance(uitvoer, dict):
+            check_begrip_ref("afleidingsregel", iid, "uitvoer", uitvoer.get("begrip_id"))
+        for veld in ("invoer", "parameters"):
+            for item in (r.get(veld) or []):
+                if isinstance(item, dict):
+                    check_begrip_ref("afleidingsregel", iid, veld, item.get("begrip_id"))
+        for vw in (r.get("voorwaarden") or []):
+            if isinstance(vw, dict):
+                for ref in (vw.get("begrip_ids") or []):
+                    check_begrip_ref("afleidingsregel", iid, "voorwaarden", ref)
+
     if problemen:
         print("Let op: dangling referenties (controleer act-2/act-3):")
         for p in problemen:

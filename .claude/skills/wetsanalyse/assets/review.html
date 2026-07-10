@@ -191,6 +191,60 @@ function esc(s) {
     .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
+// --- act-3-helpers: begrippen zijn de bouwstenen van regels (id → naam-weergave) ---
+const BEGRIP_NAAM = {};
+(A.begrippen || []).forEach(b => { if (b && b.id) BEGRIP_NAAM[b.id] = b.naam || b.id; });
+
+function bref(id) {
+  if (!id) return "";
+  const n = BEGRIP_NAAM[id];
+  return n && n !== id ? `${n} (${id})` : id;
+}
+
+function invoerText(invoer) {
+  return (invoer || [])
+    .map(i => bref(i.begrip_id) + (i.toelichting ? ` — ${i.toelichting}` : ""))
+    .join("; ");
+}
+
+function parametersText(params) {
+  return (params || []).map(p => {
+    const delen = [bref(p.begrip_id)];
+    if (p.waarde) delen.push(`= ${p.waarde}${p.eenheid ? " " + p.eenheid : ""}`);
+    else delen.push("(waarde in delegatie)");
+    if (p.geldigheid) delen.push(`[${p.geldigheid}]`);
+    if (p.toelichting) delen.push(`— ${p.toelichting}`);
+    return delen.join(" ");
+  }).join("; ");
+}
+
+function voorwaardenText(vws) {
+  return (vws || []).map((v, i) => {
+    const prefix = i > 0 && v.verbinding ? `${v.verbinding} ` : "";
+    const ids = (v.begrip_ids || []).map(bref).join(", ");
+    return prefix + (v.tekst || "") + (ids ? ` [${ids}]` : "");
+  }).join(" · ");
+}
+
+function uitvoerText(uitvoer) {
+  if (!uitvoer || !uitvoer.begrip_id) return "";
+  return bref(uitvoer.begrip_id) + (uitvoer.toelichting ? ` — ${uitvoer.toelichting}` : "");
+}
+
+function relatiesText(relaties) {
+  return (relaties || []).map(r => {
+    const doel = r.doel_begrip ? ` → ${bref(r.doel_begrip)}` : "";
+    return `${r.soort ? r.soort + ": " : ""}${r.beschrijving || ""}${doel}`;
+  }).join("; ");
+}
+
+function herkomstText(h) {
+  if (!h || !h.status) return "";
+  let t = h.aangeleverd_id ? `${h.status} (${h.aangeleverd_id})` : h.status;
+  if (h.motivatie) t += ` — ${h.motivatie}`;
+  return t;
+}
+
 function metaLine(label, value) {
   if (!value) return "";
   return `<div><span class="lbl">${esc(label)}:</span> ${esc(value)}</div>`;
@@ -212,9 +266,11 @@ function vorigeBlok(id, velden) {
     inner += `<div class="meta"><span class="lbl">Jouw vorige feedback:</span> ${esc(fbVorig)}</div>`;
   }
   if (itVorig) {
+    // Derde tuple-element (optioneel) is een formatter voor gestructureerde velden.
     const rows = velden
-      .filter(([, k]) => itVorig[k])
-      .map(([label, k]) => `<span class="lbl">${esc(label)}</span><span>${esc(itVorig[k])}</span>`)
+      .map(([label, k, fmt]) => [label, fmt ? fmt(itVorig[k]) : itVorig[k]])
+      .filter(([, waarde]) => waarde)
+      .map(([label, waarde]) => `<span class="lbl">${esc(label)}</span><span>${esc(waarde)}</span>`)
       .join("");
     if (rows) inner += `<div class="grid" style="margin-top:6px">${rows}</div>`;
   }
@@ -330,19 +386,27 @@ function renderBegrippen() {
     <div class="item">
       <div class="top"><span class="id">#${esc(b.id)}</span>
         <span class="chip">${esc(b.klasse)}</span>
+        ${b.herkomst && b.herkomst.status ? `<span class="chip">${esc(b.herkomst.status)}</span>` : ""}
         <strong>${esc(b.naam)}</strong></div>
       <div class="grid">
         ${(b.synoniemen && b.synoniemen.length) ? `<span class="lbl">Synoniemen</span><span>${esc(b.synoniemen.join(", "))}</span>` : ""}
-        ${b.definitie ? `<span class="lbl">Definitie</span><span>${esc(b.definitie)}</span>` : ""}
+        ${b.definitie ? `<span class="lbl">Definitie</span><span>${esc(b.definitie + (b.is_interpretatie ? " [interpretatie]" : ""))}</span>` : ""}
         ${b.grondformulering ? `<span class="lbl">Grondformulering</span><span>${esc(b.grondformulering)}</span>` : ""}
         ${b.voorbeeld ? `<span class="lbl">Voorbeeld</span><span>${esc(b.voorbeeld)}</span>` : ""}
-        ${b.kenmerken ? `<span class="lbl">Kenmerken/relaties</span><span>${esc(b.kenmerken)}</span>` : ""}
+        ${b.kenmerken ? `<span class="lbl">Kenmerken</span><span>${esc(b.kenmerken)}</span>` : ""}
+        ${relatiesText(b.relaties) ? `<span class="lbl">Relaties</span><span>${esc(relatiesText(b.relaties))}</span>` : ""}
+        ${(b.verwijst_naar_begrippen && b.verwijst_naar_begrippen.length) ? `<span class="lbl">Verwijst naar</span><span>${esc(b.verwijst_naar_begrippen.map(bref).join(", "))}</span>` : ""}
+        ${b.bron_verwijzing ? `<span class="lbl">Bron-verwijzing</span><span>${esc(b.bron_verwijzing)}</span>` : ""}
+        ${(b.markering_ids && b.markering_ids.length) ? `<span class="lbl">Markeringen</span><span>${esc(b.markering_ids.join(", "))}</span>` : ""}
+        ${herkomstText(b.herkomst) ? `<span class="lbl">Herkomst</span><span>${esc(herkomstText(b.herkomst))}</span>` : ""}
         ${vindplaatsText(b.vindplaatsen) ? `<span class="lbl">Vindplaats</span><span>${esc(vindplaatsText(b.vindplaatsen))}</span>` : ""}
         ${b.twijfel ? `<span class="lbl">Twijfel/aanname</span><span>${esc(b.twijfel)}</span>` : ""}
       </div>
       ${fb(b.id)}
       ${vorigeBlok(b.id, [["Naam", "naam"], ["Klasse", "klasse"],
-        ["Definitie", "definitie"], ["Kenmerken/relaties", "kenmerken"],
+        ["Definitie", "definitie"], ["Kenmerken", "kenmerken"],
+        ["Relaties", "relaties", relatiesText],
+        ["Herkomst", "herkomst", herkomstText],
         ["Twijfel/aanname", "twijfel"]])}
     </div>`).join("");
   return `<div class="panel"><h2>Begrippen — gedeeld over het werkgebied (${(A.begrippen||[]).length})</h2>${items}</div>`;
@@ -355,19 +419,21 @@ function renderRegels() {
         <span class="chip">${esc(r.type || "afleidingsregel")}</span>
         <strong>${esc(r.naam)}</strong></div>
       <div class="grid">
-        ${r.uitvoervariabele ? `<span class="lbl">Uitvoer</span><span>${esc(r.uitvoervariabele)}</span>` : ""}
-        ${r.invoervariabelen ? `<span class="lbl">Invoer</span><span>${esc(r.invoervariabelen)}</span>` : ""}
-        ${r.parameters ? `<span class="lbl">Parameters</span><span>${esc(r.parameters)}</span>` : ""}
-        ${r.voorwaarden ? `<span class="lbl">Voorwaarden</span><span>${esc(r.voorwaarden)}</span>` : ""}
+        ${uitvoerText(r.uitvoer) ? `<span class="lbl">Uitvoer</span><span>${esc(uitvoerText(r.uitvoer))}</span>` : ""}
+        ${invoerText(r.invoer) ? `<span class="lbl">Invoer</span><span>${esc(invoerText(r.invoer))}</span>` : ""}
+        ${parametersText(r.parameters) ? `<span class="lbl">Parameters</span><span>${esc(parametersText(r.parameters))}</span>` : ""}
+        ${voorwaardenText(r.voorwaarden) ? `<span class="lbl">Voorwaarden</span><span>${esc(voorwaardenText(r.voorwaarden))}</span>` : ""}
+        ${r.toelichting ? `<span class="lbl">Toelichting</span><span>${esc(r.toelichting)}</span>` : ""}
+        ${(r.markering_ids && r.markering_ids.length) ? `<span class="lbl">Markeringen</span><span>${esc(r.markering_ids.join(", "))}</span>` : ""}
         ${vindplaatsText(r.vindplaatsen) ? `<span class="lbl">Vindplaats</span><span>${esc(vindplaatsText(r.vindplaatsen))}</span>` : ""}
         ${r.twijfel ? `<span class="lbl">Twijfel/aanname</span><span>${esc(r.twijfel)}</span>` : ""}
       </div>
-      ${r.formulering ? `<pre>${esc(r.formulering)}</pre>` : ""}
       ${fb(r.id)}
       ${vorigeBlok(r.id, [["Naam", "naam"], ["Type", "type"],
-        ["Uitvoer", "uitvoervariabele"], ["Invoer", "invoervariabelen"],
-        ["Parameters", "parameters"], ["Voorwaarden", "voorwaarden"],
-        ["Formulering", "formulering"], ["Twijfel/aanname", "twijfel"]])}
+        ["Uitvoer", "uitvoer", uitvoerText], ["Invoer", "invoer", invoerText],
+        ["Parameters", "parameters", parametersText],
+        ["Voorwaarden", "voorwaarden", voorwaardenText],
+        ["Twijfel/aanname", "twijfel"]])}
     </div>`).join("");
   return `<div class="panel"><h2>Afleidingsregels — gedeeld over het werkgebied (${(A.afleidingsregels||[]).length})</h2>${items}</div>`;
 }

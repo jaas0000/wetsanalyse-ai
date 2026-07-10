@@ -167,6 +167,21 @@ class IngestCrosscheckTest(unittest.TestCase):
         self.assertIn("Begrip 'b2'", out)
         self.assertIn("door geen enkele declaratie gedekt", out)
 
+    def test_regel_gerefereerd_ongedekt_begrip_krijgt_scherpere_waarschuwing(self):
+        # b2 wordt door een afleidingsregel als uitvoer gerefereerd maar niet gedekt →
+        # de scherpere melding: de regels-stap kan de begrip-id-koppeling dan niet leggen.
+        ingest = _ingest()
+        ingest["afleidingsregels"] = [{
+            "id": "r1", "naam": "bepalen vervaldatum", "type": "rekenregel",
+            "uitvoer": {"begrip_id": "b2"},
+            "invoer": [{"begrip_id": "b1"}],
+        }]
+        model = _gs_model([_ot("belastingaanslag", ["b1"])])
+        code, out = _run_ingest(model, "gegevensspraak", ingest)
+        self.assertEqual(code, 1)  # waarschuwing, geen blokkade
+        self.assertIn("Begrip 'b2'", out)
+        self.assertIn("door een afleidingsregel gerefereerd", out)
+
     def test_happy_path_exit0(self):
         # Beide begrippen gedekt, herkomst geldig, geen waarschuwingen.
         model = _gs_model([

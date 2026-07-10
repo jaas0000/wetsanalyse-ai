@@ -13,7 +13,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from .contracts import BronInput, JobFout, JobState, RondeProvenance
+from .contracts import BegripInvoer, BronInput, JobFout, JobState, RondeProvenance
 
 
 def _utcnow() -> datetime:
@@ -32,6 +32,8 @@ class Project(BaseModel):
 
     bronnen: list[BronInput] = Field(default_factory=list)
     analysefocus: str = ""
+    # Aangeleverde bestaande begrippenlijst (suggestieve invoer voor activiteit 3).
+    begrippenlijst: list[BegripInvoer] = Field(default_factory=list)
     review: bool = True
     model_profile: str = ""
     client_id: str = ""
@@ -75,10 +77,12 @@ class Project(BaseModel):
         return Job(
             id=self.slug,
             naam=self.naam,
+            omschrijving=self.omschrijving,
             bronnen=self.bronnen,
             review=self.review,
             model_profile=self.model_profile,
             analysefocus=self.analysefocus,
+            begrippenlijst=self.begrippenlijst,
             client_id=self.client_id,
             regelspraak_review=self.regelspraak_review,
             scope=self.scope,

@@ -2,7 +2,8 @@
 
 Stdlib-only (unittest + subprocess). Controleert dat de relevante delen uit een
 rapport.json worden geëxtraheerd met behoud van de herkomst-id's, dat bronnen worden
-getrimd (geen niet-Brondefinitie-markeringen), en dat dangling referenties worden gemeld.
+getrimd (Brondefinities + via `markering_ids` gerefereerde markeringen blijven; de rest
+verdwijnt), en dat dangling referenties (incl. begrip-id's in regelvelden) worden gemeld.
 """
 
 import json
@@ -30,6 +31,7 @@ RAPPORT = {
             "markeringen": [
                 {"id": "m1", "klasse": "Rechtssubject", "formulering": "De verzekerde"},
                 {"id": "m2", "klasse": "Brondefinitie", "formulering": "verzekerde: ..."},
+                {"id": "m3", "klasse": "Voorwaarde", "formulering": "indien verzekerd"},
             ],
             "verwijzingen": [
                 {"id": "v1", "functie": "definitie", "doel": {"label": "art. 2"}},
@@ -39,10 +41,16 @@ RAPPORT = {
     ],
     "begrippen": [
         {"id": "b1", "naam": "verzekerde", "klasse": "Rechtssubject",
-         "bron_verwijzing": "v1", "vindplaatsen": [{"bron_id": "br1", "lid": "1"}]}
+         "bron_verwijzing": "v1", "markering_ids": ["m1"],
+         "vindplaatsen": [{"bron_id": "br1", "lid": "1"}]},
+        {"id": "b2", "naam": "recht op zorgtoeslag", "klasse": "Rechtsbetrekking",
+         "vindplaatsen": [{"bron_id": "br1", "lid": "1"}]},
     ],
     "afleidingsregels": [
-        {"id": "r1", "naam": "recht op zorgtoeslag", "type": "beslisregel",
+        {"id": "r1", "naam": "bepalen recht op zorgtoeslag", "type": "beslisregel",
+         "uitvoer": {"begrip_id": "b2"},
+         "invoer": [{"begrip_id": "b1"}],
+         "voorwaarden": [{"tekst": "indien verzekerd", "begrip_ids": ["b1"], "verbinding": ""}],
          "vindplaatsen": [{"bron_id": "br1", "lid": "1"}]}
     ],
     "validatiepunten": ["iets"],
@@ -68,20 +76,23 @@ class IngestRapportTest(unittest.TestCase):
         code, _out, data = _run(RAPPORT)
         self.assertEqual(code, 0)
         self.assertEqual(data["werkgebied"]["naam"], "Zorgtoeslag")
-        self.assertEqual([b["id"] for b in data["begrippen"]], ["b1"])
+        self.assertEqual([b["id"] for b in data["begrippen"]], ["b1", "b2"])
         self.assertEqual([r["id"] for r in data["afleidingsregels"]], ["r1"])
         self.assertEqual(data["begrippen"][0]["bron_verwijzing"], "v1")
+        self.assertEqual(data["afleidingsregels"][0]["uitvoer"]["begrip_id"], "b2")
 
-    def test_bron_getrimd_alleen_brondefinitie_markeringen(self):
+    def test_bron_getrimd_brondefinities_plus_gerefereerde_markeringen(self):
         _code, _out, data = _run(RAPPORT)
         bron = data["bronnen"][0]
-        # Identificerende velden + leden + verwijzingen blijven; markeringen verdwijnen,
-        # alleen de Brondefinitie komt mee onder 'brondefinities'.
+        # Identificerende velden + leden + verwijzingen blijven; van de markeringen blijven
+        # de Brondefinitie ('brondefinities') en de via markering_ids gerefereerde m1
+        # ('gekoppelde_markeringen'); de ongerefereerde m3 verdwijnt.
         self.assertEqual(bron["bronreferentie"], "jci1.3:c:BWBR0018451&artikel=1&lid=1")
         self.assertIn("leden", bron)
         self.assertIn("verwijzingen", bron)
         self.assertNotIn("markeringen", bron)
         self.assertEqual([m["id"] for m in bron["brondefinities"]], ["m2"])
+        self.assertEqual([m["id"] for m in bron["gekoppelde_markeringen"]], ["m1"])
 
     def test_dangling_verwijzing_wordt_gemeld(self):
         rapport = json.loads(json.dumps(RAPPORT))
@@ -89,6 +100,14 @@ class IngestRapportTest(unittest.TestCase):
         code, out, _data = _run(rapport)
         self.assertEqual(code, 0)  # melding, geen harde fout
         self.assertIn("v999", out)
+
+    def test_dangling_begrip_id_in_regelveld_wordt_gemeld(self):
+        rapport = json.loads(json.dumps(RAPPORT))
+        rapport["afleidingsregels"][0]["uitvoer"]["begrip_id"] = "b999"
+        code, out, _data = _run(rapport)
+        self.assertEqual(code, 0)  # melding, geen harde fout
+        self.assertIn("b999", out)
+        self.assertIn("uitvoer", out)
 
     def test_geen_bronnen_blokkeert(self):
         rapport = json.loads(json.dumps(RAPPORT))

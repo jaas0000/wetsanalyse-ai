@@ -125,30 +125,83 @@ class Analyse2(BaseModel):
 
 # --- Activiteit 3 -------------------------------------------------------------
 
+class BegripRelatie(BaseModel):
+    """Gestructureerd kenmerk/relatie van een begrip (methode: eigenschappen en relaties)."""
+
+    soort: str = ""            # relatie | kenmerk
+    beschrijving: str = ""
+    doel_begrip: str | None = None   # begrip-id bij soort=relatie, None bij soort=kenmerk
+
+
+class BegripHerkomst(BaseModel):
+    """Herkomst t.o.v. een aangeleverde begrippenlijst (suggestief hergebruik)."""
+
+    status: str = "nieuw"      # hergebruikt | aangepast | nieuw
+    aangeleverd_id: str = ""   # id in de aangeleverde lijst (ab1..), verplicht bij hergebruikt/aangepast
+    motivatie: str = ""        # verplicht bij aangepast: waarom is afgeweken
+
+
 class Begrip(BaseModel):
     id: str
     naam: str = ""                                         # de voorkeursterm (uniek per werkgebied)
     synoniemen: list[str] = Field(default_factory=list)   # alternatieve termen voor hetzelfde begrip
     klasse: str = ""
     definitie: str = ""
+    is_interpretatie: bool = False   # true = (deels) eigen werkdefinitie i.p.v. letterlijke brondefinitie
     grondformulering: str = ""                            # letterlijke wetformulering (homoniem-herleiding)
     voorbeeld: str = ""
-    kenmerken: str = ""
+    kenmerken: str = ""              # vrije toelichting; de structuur staat in `relaties`
+    relaties: list[BegripRelatie] = Field(default_factory=list)
     vindplaatsen: list[Vindplaats] = Field(default_factory=list)
+    markering_ids: list[str] = Field(default_factory=list)  # act-2-markeringen waarop het begrip berust
     verwijst_naar_begrippen: list[str] = Field(default_factory=list)  # begrip-id's in de omschrijving
     bron_verwijzing: str = ""   # id van de verwijzing waarop het begrip steunt (bv. brondefinitie)
+    herkomst: BegripHerkomst | None = None   # alleen relevant bij een aangeleverde begrippenlijst
     twijfel: str = ""
+
+
+class RegelUitvoer(BaseModel):
+    """Wat de regel afleidt — een begrip (methode: begrippen zijn de bouwstenen van regels)."""
+
+    begrip_id: str = ""
+    toelichting: str = ""
+
+
+class RegelInvoer(BaseModel):
+    begrip_id: str = ""
+    toelichting: str = ""
+
+
+class RegelParameter(BaseModel):
+    """Vaste waarde in een regel; `waarde` leeg = staat in een (nog niet geanalyseerde) delegatie."""
+
+    begrip_id: str = ""
+    waarde: str = ""
+    eenheid: str = ""
+    geldigheid: str = ""
+    vindplaats: Vindplaats = Field(default_factory=Vindplaats)
+    toelichting: str = ""
+
+
+class RegelVoorwaarde(BaseModel):
+    """Conditie in tekst; `verbinding` is de koppeling met de vórige voorwaarde (EN/OF, leeg=eerste)."""
+
+    tekst: str = ""
+    begrip_ids: list[str] = Field(default_factory=list)
+    verbinding: str = ""       # EN | OF | "" — negatie hoort in de tekst zelf
 
 
 class Afleidingsregel(BaseModel):
     id: str
     naam: str = ""
     type: str = ""
-    uitvoervariabele: str = ""
-    invoervariabelen: str = ""
-    parameters: str = ""
-    voorwaarden: str = ""
+    uitvoer: RegelUitvoer = Field(default_factory=RegelUitvoer)   # begrip_id is verplicht (validatie)
+    invoer: list[RegelInvoer] = Field(default_factory=list)
+    parameters: list[RegelParameter] = Field(default_factory=list)
+    voorwaarden: list[RegelVoorwaarde] = Field(default_factory=list)
+    toelichting: str = ""
     vindplaatsen: list[Vindplaats] = Field(default_factory=list)
+    markering_ids: list[str] = Field(default_factory=list)  # Afleidingsregel-markering(en) uit act 2
     twijfel: str = ""
 
 
@@ -205,11 +258,34 @@ class BronInput(BaseModel):
     lid: str | None = Field(default=None, max_length=16)
 
 
+class BegripInvoer(BaseModel):
+    """Eén begrip uit een aangeleverde (bestaande) begrippenlijst — suggestieve invoer voor act 3."""
+
+    id: str = Field(default="", max_length=32)          # bij ontbreken genummerd: ab1..abN
+    naam: str = Field(min_length=1, max_length=200)
+    synoniemen: list[str] = Field(default_factory=list, max_length=20)
+    definitie: str = Field(default="", max_length=2000)
+    klasse: str = Field(default="", max_length=64)
+    bron: str = Field(default="", max_length=200)       # herkomst van de lijst (bv. begrippenkader X)
+    toelichting: str = Field(default="", max_length=1000)
+
+    @field_validator("synoniemen")
+    @classmethod
+    def _begrens_synoniemen(cls, v: list[str]) -> list[str]:
+        for s in v:
+            if len(s) > 200:
+                raise ValueError("synoniem is te lang (max 200 tekens)")
+        return v
+
+
 class StartRequest(BaseModel):
     bronnen: list[BronInput] = Field(min_length=1, max_length=50)
     naam: str = Field(default="", max_length=200)           # werkgebied-naam
     omschrijving: str = Field(default="", max_length=2000)
     analysefocus: str | None = Field(default=None, max_length=2000)  # hoofdvraag
+    # Bestaande begrippenlijst (optioneel, suggestief): act 3 hergebruikt waar de betekenis past
+    # en registreert per begrip de herkomst (hergebruikt/aangepast/nieuw).
+    begrippenlijst: list[BegripInvoer] | None = Field(default=None, max_length=300)
     review: bool = True
     model_profile: str | None = Field(default=None, max_length=64)
 
@@ -296,10 +372,13 @@ class Job(BaseModel):
     id: str
     state: JobState = JobState.queued
     naam: str = ""
+    omschrijving: str = ""
     bronnen: list[BronInput] = Field(default_factory=list)
     review: bool = True
     model_profile: str = ""
     analysefocus: str = ""
+    # Aangeleverde bestaande begrippenlijst (suggestief; zie StartRequest.begrippenlijst).
+    begrippenlijst: list[BegripInvoer] = Field(default_factory=list)
     client_id: str = ""
     # Of de regelspraak-fase met review-checkpoints draait. None = nog niet gestart / erft job.review.
     regelspraak_review: bool | None = None

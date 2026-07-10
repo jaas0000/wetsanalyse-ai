@@ -58,8 +58,11 @@ class FakeLLM:
         lidnr, tekst = (m.group(1), m.group(2)) if m else ("1", "")
         citaat = "VERZONNEN TEKST DIE NIET IN DE WET STAAT" if self.hallucineer else tekst
         is_inventaris = "OPDRACHT (stap 1b" in user
-        is_act3 = "begrippenlijst" in user        # act-3 vers én revise (BEGRIPPEN_REF)
+        is_act3a = "OPDRACHT (activiteit 3a" in user          # stap 3a — begrippen
+        is_act3b = "OPDRACHT (activiteit 3b" in user          # stap 3b — regels
+        is_act3_revise = "HERZIENE werkgebied-brede begrippenlijst" in user
         is_revise_act2 = "per bron de HERZIENE" in user
+        heeft_begrippenlijst = "AANGELEVERDE BESTAANDE BEGRIPPENLIJST" in user
         # RegelSpraak-vervolgfase (vers én revise) — eigen opdracht-markers.
         is_rs_gegevens = "OPDRACHT (GegevensSpraak)" in user or "HERZIENE GegevensSpraak" in user
         is_rs_regels = "OPDRACHT (RegelSpraak-regels)" in user or "HERZIENE RegelSpraak-regels" in user
@@ -108,15 +111,63 @@ class FakeLLM:
                          "target": "jci1.3:c:BWBR0000001&artikel=2", "bwbId": "BWBR0000001"},
                 "volgen": True,
             }]}
-        elif is_act3:
-            # Werkgebied-brede begrippenlijst met cross-bron vindplaatsen.
+        elif is_act3a:
+            # Stap 3a — alleen de werkgebied-brede begrippen (nieuw act-3-schema).
+            begrip = {
+                "id": "b1", "naam": "belastingplichtige", "klasse": "Rechtssubject",
+                "definitie": "degene die aangifte moet doen", "is_interpretatie": True,
+                "markering_ids": ["m1"],
+                "vindplaatsen": [{"bron_id": "br1", "lid": lidnr}],
+            }
+            if heeft_begrippenlijst:
+                begrip["herkomst"] = {"status": "hergebruikt", "aangeleverd_id": "ab1"}
             data = {
-                "begrippen": [{"id": "b1", "naam": "belastingplichtige", "klasse": "Rechtssubject",
-                               "definitie": "[interpretatie] degene die aangifte moet doen",
-                               "vindplaatsen": [{"bron_id": "br1", "lid": lidnr}]}],
-                "afleidingsregels": [{"id": "r1", "naam": "aangifteplicht", "type": "beslisregel",
-                                      "voorwaarden": "belastingplichtig",
-                                      "vindplaatsen": [{"bron_id": "br1", "lid": lidnr}]}],
+                "begrippen": [begrip],
+                "validatiepunten": ["Open norm: 'aangifte' niet gedefinieerd in dit artikel."],
+            }
+        elif is_act3b:
+            # Stap 3b — regels op begrip-id's; de uitvoer ontbreekt in 3a en komt als
+            # nieuw begrip mee (test het doornummer/remap-pad in de merge).
+            data = {
+                "afleidingsregels": [{
+                    "id": "r1", "naam": "bepalen aangifteplicht", "type": "beslisregel",
+                    "uitvoer": {"begrip_id": "nb1"},
+                    "invoer": [{"begrip_id": "b1", "toelichting": "drager van de plicht"}],
+                    "voorwaarden": [{"tekst": "indien belastingplichtig",
+                                     "begrip_ids": ["b1"], "verbinding": ""}],
+                    "markering_ids": ["m1"],
+                    "vindplaatsen": [{"bron_id": "br1", "lid": lidnr}],
+                }],
+                "nieuwe_begrippen": [{
+                    "id": "nb1", "naam": "aangifteplicht", "klasse": "Rechtsbetrekking",
+                    "definitie": "de plicht om aangifte te doen", "is_interpretatie": True,
+                    "verwijst_naar_begrippen": ["b1"], "markering_ids": ["m1"],
+                    "vindplaatsen": [{"bron_id": "br1", "lid": lidnr}],
+                }],
+                "validatiepunten": [],
+            }
+        elif is_act3_revise:
+            # Revise act-3: begrippen + regels in één herziene levering (nieuw schema).
+            data = {
+                "begrippen": [
+                    {"id": "b1", "naam": "belastingplichtige", "klasse": "Rechtssubject",
+                     "definitie": "degene die aangifte moet doen", "is_interpretatie": True,
+                     "markering_ids": ["m1"],
+                     "vindplaatsen": [{"bron_id": "br1", "lid": lidnr}]},
+                    {"id": "b2", "naam": "aangifteplicht", "klasse": "Rechtsbetrekking",
+                     "definitie": "de plicht om aangifte te doen", "is_interpretatie": True,
+                     "verwijst_naar_begrippen": ["b1"], "markering_ids": ["m1"],
+                     "vindplaatsen": [{"bron_id": "br1", "lid": lidnr}]},
+                ],
+                "afleidingsregels": [{
+                    "id": "r1", "naam": "bepalen aangifteplicht", "type": "beslisregel",
+                    "uitvoer": {"begrip_id": "b2"},
+                    "invoer": [{"begrip_id": "b1", "toelichting": "drager van de plicht"}],
+                    "voorwaarden": [{"tekst": "indien belastingplichtig",
+                                     "begrip_ids": ["b1"], "verbinding": ""}],
+                    "markering_ids": ["m1"],
+                    "vindplaatsen": [{"bron_id": "br1", "lid": lidnr}],
+                }],
                 "validatiepunten": ["Open norm: 'aangifte' niet gedefinieerd in dit artikel."],
             }
         elif is_revise_act2:

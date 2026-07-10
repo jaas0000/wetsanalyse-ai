@@ -10,7 +10,10 @@ import { Field, Input, Select, Textarea } from "@/components/ui/Field";
 import { Melding } from "@/components/ui/Melding";
 import { createProject, getArtikelInfo, isApiError, listModelProfiles, listWetten } from "@/lib/api";
 import { bestaatArtikel } from "@/lib/artikelFilter";
-import { buildStartRequest, legeBron, projectSchema, type BronFormValue } from "@/lib/projectForm";
+import {
+  buildStartRequest, legeBron, parseBegrippenlijst, projectSchema,
+  type BronFormValue, type ParseResultaat,
+} from "@/lib/projectForm";
 import { pathSegment } from "@/lib/url";
 import { useWetStructuren, type StructuurEntry } from "@/lib/useWetStructuur";
 import type { ArtikelInfo, ProfileChoice, WetChoice } from "@/lib/types";
@@ -26,6 +29,9 @@ export function ProjectForm() {
   const [wetten, setWetten] = useState<WetChoice[] | null>(null);
   // Het werkgebied: één of meer bronnen (wet + artikel + lid).
   const [bronnen, setBronnen] = useState<BronFormValue[]>([legeBron()]);
+  // Bestaande begrippenlijst (optioneel): geplakt of geüpload, client-side geparseerd.
+  const [begrippenTekst, setBegrippenTekst] = useState("");
+  const begrippenParse: ParseResultaat = parseBegrippenlijst(begrippenTekst);
   const heeftCatalogus = wetten !== null && wetten.length > 0;
   // Wetsstructuur per BWB-id (gedeeld over rijen op dezelfde wet) voor de artikel-combobox;
   // een catalogus-keuze is meteen compleet, vrije-tekst-invoer wordt gedebounced.
@@ -66,11 +72,16 @@ export function ProjectForm() {
     setFout(null);
     setVeldFout({});
     const fd = new FormData(e.currentTarget);
+    if (begrippenParse.fouten.length > 0) {
+      setVeldFout({ begrippenlijst: "Los eerst de parse-fouten in de begrippenlijst op." });
+      return;
+    }
     const raw = {
       bronnen,
       naam: String(fd.get("naam") ?? ""),
       omschrijving: String(fd.get("omschrijving") ?? ""),
       analysefocus: String(fd.get("analysefocus") ?? ""),
+      begrippenlijst: begrippenParse.begrippen.length ? begrippenParse.begrippen : undefined,
       review,
       model_profile: profiel,
     };
@@ -197,6 +208,57 @@ export function ProjectForm() {
             placeholder="Waar moet de analyse antwoord op geven?"
           />
         </Field>
+
+        <details className="rounded-lg border border-line bg-paper/60 p-3">
+          <summary className="cursor-pointer text-sm font-medium text-ink">
+            Bestaande begrippenlijst (optioneel)
+            {begrippenParse.begrippen.length > 0 && (
+              <span className="ml-2 font-mono text-xs text-faint">
+                {begrippenParse.begrippen.length} begrip
+                {begrippenParse.begrippen.length === 1 ? "" : "pen"} herkend
+              </span>
+            )}
+          </summary>
+          <div className="mt-3 space-y-2">
+            <p className="text-xs text-muted">
+              Plak of upload een bestaande begrippenlijst als suggestieve invoer voor activiteit 3:
+              JSON (<code>{"{begrippen: [...]}"}</code>), CSV met kopregel (kolom <code>naam</code>{" "}
+              verplicht), of één begrip per regel (<code>naam; definitie</code>). De analyse
+              hergebruikt waar de betekenis past en registreert per begrip de herkomst.
+            </p>
+            <Textarea
+              value={begrippenTekst}
+              onChange={(e) => setBegrippenTekst(e.target.value)}
+              rows={5}
+              placeholder={"belastingplichtige; degene die aangifte moet doen\nbijdrage-inkomen"}
+            />
+            <input
+              type="file"
+              accept=".json,.csv,.txt"
+              className="block w-full text-sm text-muted file:mr-3 file:rounded-md file:border file:border-line file:bg-paper file:px-3 file:py-1.5 file:text-sm file:text-ink"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (!f) return;
+                const reader = new FileReader();
+                reader.onload = () => setBegrippenTekst(String(reader.result ?? ""));
+                reader.readAsText(f);
+              }}
+            />
+            {begrippenParse.fouten.length > 0 && (
+              <Melding type="fout">
+                <ul className="list-inside list-disc space-y-0.5">
+                  {begrippenParse.fouten.slice(0, 5).map((f, i) => (
+                    <li key={i}>{f}</li>
+                  ))}
+                  {begrippenParse.fouten.length > 5 && (
+                    <li>… en {begrippenParse.fouten.length - 5} meer</li>
+                  )}
+                </ul>
+              </Melding>
+            )}
+            {veldFout.begrippenlijst && <Melding type="fout">{veldFout.begrippenlijst}</Melding>}
+          </div>
+        </details>
 
         <label className="flex items-start gap-3 rounded-lg border border-line bg-paper/60 p-3">
           <input

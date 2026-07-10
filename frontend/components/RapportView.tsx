@@ -5,6 +5,9 @@ import { Melding } from "@/components/ui/Melding";
 import { JasBadge, Tag } from "@/components/ui/Badge";
 import { LedenLijst } from "@/components/LedenLijst";
 import { bronHref, wettenOverheidHref } from "@/lib/url";
+import {
+  begripNaamMap, herkomstLabel, regelVelden, relatiesText, verwijstNaarText,
+} from "@/lib/begrippen";
 import { bronLabel, bronLabelMap, vindplaatsText } from "@/lib/bronnen";
 import type { Bron, Markering, Rapport, Verwijzing } from "@/lib/types";
 
@@ -153,6 +156,7 @@ export function RapportView({ rapport }: { rapport: Rapport }) {
   const wg = rapport.werkgebied ?? ({} as Rapport["werkgebied"]);
   const bronnen = rapport.bronnen ?? [];
   const labels = bronLabelMap(bronnen);
+  const namen = begripNaamMap(rapport.begrippen);
   const hoofdvraag = wg.hoofdvraag || wg.analysefocus;
 
   return (
@@ -192,13 +196,27 @@ export function RapportView({ rapport }: { rapport: Rapport }) {
               <Card key={b.id} className="p-4">
                 <div className="flex items-start justify-between gap-2">
                   <p className="min-w-0 break-words font-display text-base font-medium text-ink">{b.naam}</p>
-                  {b.klasse && <JasBadge klasse={b.klasse} />}
+                  <div className="flex shrink-0 flex-wrap justify-end gap-1">
+                    {b.herkomst?.status && <Tag>{herkomstLabel(b.herkomst)}</Tag>}
+                    {b.klasse && <JasBadge klasse={b.klasse} />}
+                  </div>
                 </div>
                 <div className="mt-2 space-y-1">
                   {b.synoniemen?.length > 0 && <Veld label="Synoniemen" waarde={b.synoniemen.join(", ")} />}
-                  <Veld label="Definitie" waarde={b.definitie} />
+                  <Veld
+                    label="Definitie"
+                    waarde={b.definitie ? b.definitie + (b.is_interpretatie ? " [interpretatie]" : "") : ""}
+                  />
+                  <Veld label="Grondformulering" waarde={b.grondformulering} />
                   <Veld label="Voorbeeld" waarde={b.voorbeeld} />
                   <Veld label="Kenmerken" waarde={b.kenmerken} />
+                  <Veld label="Relaties" waarde={relatiesText(b.relaties, namen)} />
+                  <Veld label="Verwijst naar" waarde={verwijstNaarText(b.verwijst_naar_begrippen, namen)} />
+                  <Veld label="Bron-verwijzing" waarde={b.bron_verwijzing} />
+                  <Veld
+                    label="Herkomst"
+                    waarde={b.herkomst?.motivatie ? `${herkomstLabel(b.herkomst)} — ${b.herkomst.motivatie}` : ""}
+                  />
                   <Veld label="Vindplaats" waarde={vindplaatsText(b.vindplaatsen, labels)} />
                 </div>
                 <Twijfel tekst={b.twijfel} />
@@ -218,14 +236,11 @@ export function RapportView({ rapport }: { rapport: Rapport }) {
                   <p className="min-w-0 break-words font-display text-base font-medium text-ink">{r.naam}</p>
                   {r.type && <Tag>{r.type}</Tag>}
                 </div>
-                <div className="mt-2 grid grid-cols-1 gap-1 sm:grid-cols-2">
-                  <Veld label="Uitvoer" waarde={r.uitvoervariabele} />
-                  <Veld label="Invoer" waarde={r.invoervariabelen} />
-                  <Veld label="Parameters" waarde={r.parameters} />
+                <div className="mt-2 space-y-1">
+                  {regelVelden(r, namen).map((v) => (
+                    <Veld key={v.label} label={v.label} waarde={v.waarde} />
+                  ))}
                   <Veld label="Vindplaats" waarde={vindplaatsText(r.vindplaatsen, labels)} />
-                </div>
-                <div className="mt-1 space-y-1">
-                  <Veld label="Voorwaarden" waarde={r.voorwaarden} />
                 </div>
                 <Twijfel tekst={r.twijfel} />
               </Card>

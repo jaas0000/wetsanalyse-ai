@@ -97,6 +97,25 @@ def verzamel_herkomst_refs(obj) -> tuple[set, set, set]:
     return begrip_ids, regel_ids, bron_ids
 
 
+def regel_gerefereerde_begrip_ids(ingest: dict) -> set:
+    """Alle begrip-id's waar een ingest-afleidingsregel op steunt (uitvoer/invoer/parameters/
+    voorwaarden) — die begrippen MOETEN in GegevensSpraak gedekt zijn, anders kan de regels-stap
+    de id-koppeling niet leggen."""
+    ids: set = set()
+    for r in (ingest.get("afleidingsregels") or []):
+        uitvoer = r.get("uitvoer") or {}
+        if isinstance(uitvoer, dict) and uitvoer.get("begrip_id"):
+            ids.add(uitvoer["begrip_id"])
+        for veld in ("invoer", "parameters"):
+            for item in (r.get(veld) or []):
+                if isinstance(item, dict) and item.get("begrip_id"):
+                    ids.add(item["begrip_id"])
+        for vw in (r.get("voorwaarden") or []):
+            if isinstance(vw, dict):
+                ids.update(x for x in (vw.get("begrip_ids") or []) if x)
+    return ids
+
+
 def check_ingest(data: dict, stap: str, ingest: dict) -> tuple[list[str], list[str]]:
     """Toets de herkomst-keten van het model tegen de wetsanalyse-ingest.
 
@@ -133,14 +152,24 @@ def check_ingest(data: dict, stap: str, ingest: dict) -> tuple[list[str], list[s
             f"Herkomst-vindplaats verwijst naar bron-id '{brid}' dat niet in de wetsanalyse (ingest) bestaat."
         )
 
-    # Dekking (waarschuwing): per stap de bijbehorende ingest-as.
+    # Dekking (waarschuwing): per stap de bijbehorende ingest-as. Een begrip waar een
+    # afleidingsregel op steunt krijgt een scherpere melding — zonder declaratie kan de
+    # regels-stap de begrip-id-koppeling (uitvoer/invoer/parameters/voorwaarden) niet leggen.
     if stap == "gegevensspraak":
+        regel_refs = regel_gerefereerde_begrip_ids(ingest)
         for bid in sorted(ingest_begrip_ids - ref_begrip_ids):
             naam = f" ({begrip_namen[bid]})" if begrip_namen.get(bid) else ""
-            waarschuwingen.append(
-                f"Begrip '{bid}'{naam} uit de wetsanalyse wordt door geen enkele declaratie gedekt "
-                "— gedekt elders, of bewust buiten scope (validatiepunt)?"
-            )
+            if bid in regel_refs:
+                waarschuwingen.append(
+                    f"Begrip '{bid}'{naam} wordt door een afleidingsregel gerefereerd maar door "
+                    "geen enkele GegevensSpraak-declaratie gedekt — de regels-stap kan de "
+                    "begrip-id-koppeling dan niet leggen."
+                )
+            else:
+                waarschuwingen.append(
+                    f"Begrip '{bid}'{naam} uit de wetsanalyse wordt door geen enkele declaratie gedekt "
+                    "— gedekt elders, of bewust buiten scope (validatiepunt)?"
+                )
     else:
         for rid in sorted(ingest_regel_ids - ref_regel_ids):
             naam = f" ({regel_namen[rid]})" if regel_namen.get(rid) else ""

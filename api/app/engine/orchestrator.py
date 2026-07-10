@@ -104,6 +104,7 @@ class WetsanalyseEngine:
                 review=req.review,
                 model_profile=req.model_profile or self.s.default_model_profile,
                 analysefocus=req.analysefocus or "",
+                begrippenlijst=self._normaliseer_begrippenlijst(req),
                 client_id=client_id,
             )
             try:
@@ -125,10 +126,12 @@ class WetsanalyseEngine:
                 id=job_id,
                 state=JobState.queued,
                 naam=_naam(req),
+                omschrijving=req.omschrijving,
                 bronnen=list(req.bronnen),
                 review=req.review,
                 model_profile=req.model_profile or self.s.default_model_profile,
                 analysefocus=req.analysefocus or "",
+                begrippenlijst=self._normaliseer_begrippenlijst(req),
                 client_id=client_id,
             )
             try:
@@ -137,6 +140,15 @@ class WetsanalyseEngine:
             except IdConflict:
                 continue
         raise IdConflict("Kon geen uniek analyse-id reserveren; probeer opnieuw.")
+
+    @staticmethod
+    def _normaliseer_begrippenlijst(req: StartRequest) -> list:
+        """Aangeleverde begrippen krijgen bij ontbreken een genummerd id (ab1..abN), zodat de
+        herkomst-registratie (`herkomst.aangeleverd_id`) altijd een aanwijsbaar doel heeft."""
+        return [
+            b.model_copy(update={"id": b.id or f"ab{i}"})
+            for i, b in enumerate(req.begrippenlijst or [], 1)
+        ]
 
     @staticmethod
     def _valideer_bronnen(req: StartRequest) -> None:
@@ -334,13 +346,18 @@ class WetsanalyseEngine:
         await self._save(job)
         llm = await self._llm_for(job)
         vorige = await self.store.lees_analyse(job.id, activiteit, ronde) or {}
-        # Context voor de merge: act-2 herziet op de brongetrouwe bronnen van ronde 1; act-3 op
-        # de vorige act-3 (werkgebied + bron-index).
-        context = (await self._context_act2(job)) if activiteit == "2" else vorige
+        # Context voor prompt + merge: act-2 herziet op de brongetrouwe bronnen van ronde 1;
+        # act-3 op de goedgekeurde act-2 (leden-tekst + bron-index, zelfde context als vers).
+        context = (await self._context_act2(job)) if activiteit == "2" else (await self._act2_akkoord(job))
         fb = feedback.model_dump()
 
         async def maak():
-            return await steps.herzie(llm, activiteit, context, ronde + 1, vorige, fb)
+            return await steps.herzie(
+                llm, activiteit, context, ronde + 1, vorige, fb,
+                omschrijving=job.omschrijving,
+                analysefocus=job.analysefocus or None,
+                begrippenlijst=self._begrippenlijst(job),
+            )
 
         await self._afronden_ronde(job, activiteit, ronde + 1, maak)
 
@@ -359,7 +376,12 @@ class WetsanalyseEngine:
         act2 = await self._act2_akkoord(job)
 
         async def maak():
-            return await steps.genereer_act3(llm, 1, act2)
+            return await steps.genereer_act3(
+                llm, 1, act2,
+                omschrijving=job.omschrijving,
+                analysefocus=job.analysefocus or None,
+                begrippenlijst=self._begrippenlijst(job),
+            )
 
         await self._afronden_ronde(job, "3", 1, maak)
 
@@ -391,7 +413,14 @@ class WetsanalyseEngine:
     # --- generatie van één ronde (incl. auto-correctie) -------------------
 
     def _werkgebied(self, job: Job) -> dict:
-        return {"naam": job.naam, "hoofdvraag": job.analysefocus or "", "omschrijving": "", "scoping": ""}
+        return {"naam": job.naam, "hoofdvraag": job.analysefocus or "",
+                "omschrijving": job.omschrijving or "", "scoping": ""}
+
+    def _begrippenlijst(self, job: Job) -> list[dict] | None:
+        """De aangeleverde begrippenlijst als plain dicts (prompt- en validatiecontext)."""
+        if not job.begrippenlijst:
+            return None
+        return [b.model_dump() for b in job.begrippenlijst]
 
     async def _context_act2(self, job: Job) -> dict:
         """De act-2-aggregaat van ronde 1 (brongetrouwe bronnen) — merge-basis voor act-2-revise."""
@@ -471,7 +500,17 @@ class WetsanalyseEngine:
         await self._set_fase(job, "brongetrouwheid-check")
         schendingen = brongetrouwheid_check(analyse, activiteit)
         await self._set_fase(job, "schema-check")
-        fouten, waarschuwingen = schema_check(analyse, activiteit)
+        if activiteit == "3":
+            # Act-3-context: de goedgekeurde act-2 activeert de dekkings-/markering-id-checks,
+            # de aangeleverde begrippenlijst de herkomst-checks.
+            bl = self._begrippenlijst(job)
+            fouten, waarschuwingen = schema_check(
+                analyse, activiteit,
+                act2=await self._act2_akkoord(job),
+                begrippenlijst={"begrippen": bl} if bl else None,
+            )
+        else:
+            fouten, waarschuwingen = schema_check(analyse, activiteit)
 
         await self._set_fase(job, "analyse-wegschrijven")
         await self.store.schrijf_analyse(job.id, activiteit, ronde, analyse)
@@ -572,15 +611,26 @@ class WetsanalyseEngine:
 
     def _rs_gegevens_context(self, rapport: dict) -> dict:
         """Trim het rapport tot wat de GegevensSpraak-stap voedt: werkgebied + begrippen +
-        afleidingsregels + de brondefinitie-markeringen per bron (geen volledige leden-tekst)."""
+        afleidingsregels + per bron de brondefinitie-markeringen én de markeringen waar een
+        begrip/regel via `markering_ids` op steunt (geen volledige leden-tekst). Zelfde trim
+        als de skill-ingest (`ingest_rapport.py`)."""
+        gerefereerd: set[str] = set()
+        for groep in ("begrippen", "afleidingsregels"):
+            for item in (rapport.get(groep) or []):
+                gerefereerd.update(m for m in (item.get("markering_ids") or []) if m)
         bronnen = []
         for b in rapport.get("bronnen") or []:
+            markeringen = b.get("markeringen") or []
             bronnen.append({
                 "bron_id": b.get("bron_id"), "label": b.get("label"),
                 "bwbId": b.get("bwbId"), "artikel": b.get("artikel"), "lid": b.get("lid"),
                 "versiedatum": b.get("versiedatum"), "bronreferentie": b.get("bronreferentie"),
                 "brondefinities": [
-                    m for m in (b.get("markeringen") or []) if m.get("klasse") == "Brondefinitie"
+                    m for m in markeringen if m.get("klasse") == "Brondefinitie"
+                ],
+                "gekoppelde_markeringen": [
+                    m for m in markeringen
+                    if m.get("klasse") != "Brondefinitie" and m.get("id") in gerefereerd
                 ],
             })
         return {
