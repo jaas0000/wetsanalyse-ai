@@ -127,7 +127,28 @@ begrippenlijst + afleidingsregels die met **begrip-id's** naar die begrippen ver
 verder `id`/`synoniemen`/`definitie`/`klasse`/`bron`/`toelichting`) is **suggestieve** invoer voor
 activiteit 3: de analyse hergebruikt een aangeleverd begrip waar de betekenis past en registreert
 per begrip de `herkomst` (`hergebruikt`/`aangepast`/`nieuw`, met motivatie bij afwijken). De
-wettekst blijft leidend.
+wettekst blijft leidend. Volledig voorbeeld van één item (alle velden):
+
+```json
+{
+  "begrippenlijst": [
+    {
+      "id": "ab1",
+      "naam": "belastingplichtige",
+      "synoniemen": ["plichtige", "aangifteplichtige"],
+      "definitie": "degene die op grond van de wet gehouden is aangifte te doen",
+      "klasse": "Rechtssubject",
+      "bron": "Begrippenkader Heffing, versie 2025",
+      "toelichting": "voorkeursterm binnen het domein Heffing"
+    },
+    { "naam": "bijdrage-inkomen" }
+  ]
+}
+```
+
+`id` mag weg — ontbrekende id's worden doorgenummerd als `ab1..abN`; de act-3-uitkomst verwijst
+er met `herkomst.aangeleverd_id` naar terug. `klasse` is desgewenst een van de dertien
+JAS-klassen. Caps: naam ≤ 200 tekens, definitie ≤ 2000, max 20 synoniemen.
 
 **Cross-referenties.** Activiteit 2 is twee-fase: eerst een lichte *verwijzing-inventaris* (per
 verwijzing een functie + `volgen`-vlag), dan een begrensde deterministische fetch-lus die de

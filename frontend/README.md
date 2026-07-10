@@ -34,7 +34,24 @@ bevestigingsregel met opschrift en tekstsnippet). De dropdowns zijn een gemak: i
 leeg of faalt de structuur-lookup, dan val je terug op vrije invoer. Optioneel plak of upload je
 een **bestaande begrippenlijst** (JSON, CSV met kopregel, of `naam; definitie`-regels) als
 suggestieve invoer voor activiteit 3 — de analyse registreert dan per begrip de herkomst
-(hergebruikt/aangepast/nieuw). Het beheer loopt via aparte `/api/admin/*`-routes met een
+(hergebruikt/aangepast/nieuw). De JSON-vorm (alleen `naam` verplicht; een kale array mag ook):
+
+```json
+{
+  "begrippen": [
+    {
+      "naam": "belastingplichtige",
+      "synoniemen": ["plichtige"],
+      "definitie": "degene die op grond van de wet gehouden is aangifte te doen",
+      "klasse": "Rechtssubject",
+      "bron": "Begrippenkader Heffing, versie 2025"
+    },
+    { "naam": "bijdrage-inkomen" }
+  ]
+}
+```
+
+Het beheer loopt via aparte `/api/admin/*`-routes met een
 **apart admin-token** (zie hieronder).
 
 ## Architectuur — BFF met server-side token
