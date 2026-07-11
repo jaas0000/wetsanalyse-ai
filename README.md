@@ -20,7 +20,7 @@ en aannames — zichtbaar maken in plaats van schijnzekerheid te produceren.
 | **frontend** | `frontend/` | Webapp (Next.js) bovenop de API: analyse aanmaken, live voortgang, de review-lus, het rapport, de **RegelSpraak-fase** (knop "Naar RegelSpraak" + model-weergave), een live **`/dashboard`** (alle analyses tot op functieniveau), en een **`/beheer`-scherm** om LLM-modelprofielen, gebruikers en token-verbruik te beheren. Zit achter een **login** (userid + wachtwoord, rollen, optionele 2FA). Vormgegeven volgens de **Rijkshuisstijl** (Belastingdienst-stijlvak). |
 | **analyses** | `analyses/` | Output: per analyse een eindrapport plus `werk/`-tussenbestanden (en desgewenst een `regelspraak/`-submap met het RegelSpraak-`model.json`). |
 | **deploy** | `deploy/openshift/` | Kustomize-manifests om de hele stack (API · frontend · MCP · PostgreSQL) op OpenShift uit te rollen (overlays `local`/`simpel`/`beproeving`/`managed-prod`); zie `deploy/openshift/INSTALL.md`. |
-| **docs** | `docs/` | Methodische onderbouwing (handleiding, leidraad, JAS-kader) + `docs/architectuur/` (interactieve architectuurplaat en het kennisgraaf/GraphRAG-ontwerpdoc). |
+| **docs** | `docs/` | Methodische onderbouwing (handleiding, leidraad, JAS-kader). |
 
 Er zijn dus **twee manieren** om een analyse te draaien: interactief via de wetsanalyse-skill in
 Claude Code (skill + MCP + `analyses/`), of als dienst via de **API + webapp** (`api/` + `frontend/`).

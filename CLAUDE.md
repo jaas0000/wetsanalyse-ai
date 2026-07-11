@@ -212,9 +212,4 @@ naar RegelSpraak/GegevensSpraak) in `.claude/skills/regelspraak/`.
 `docs/` bevat de methodische onderbouwing (niet code): `handleiding.pages.md`,
 `leidraad.pages.md`, en `docs/wetsanalyse-rijk/` (hoofdstukken over JAS en het kader). Raadpleeg
 deze bij inhoudelijke vragen over de methode; de skill-`references/` zijn de operationele
-samenvatting daarvan. `docs/architectuur/wetsanalyse-architectuur.html` is een interactieve
-architectuurplaat (API · MCP · frontend tot functieniveau), in dezelfde styling als de frontend;
-`docs/architectuur/kennisgraaf-graphrag-ontwerp.md` is het ontwerpdoc voor de kennisgraaf als
-GraphRAG-retrieval-substraat (status: ontwerp, geen code — het vroegere `tools/kennisgraaf/`-
-prototype, een 3D-verwijzingsgraaf van de Invorderingswet 1990 + Leidraad Invordering 2008,
-is verwijderd).
+samenvatting daarvan.
