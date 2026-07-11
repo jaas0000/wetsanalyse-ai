@@ -90,8 +90,9 @@ zijn **projectrelatieve paden**, zodat de map portabel is tussen machines/OS'en:
 - `.claude/settings.json` → **gedeeld en gecommit**: bevat een `PreToolUse`-hook die
   `scripts/write_guard.py` aanroept bij elke Write/Edit-tool. De guard beschermt beide sporen:
   hij blokkeert schrijven naar `analyses/**/werk/**/feedback.json` (uitsluitend de review-server
-  schrijft dat) en het overschrijven van een bestaande `analyse.json`/`model.json` in `werk/`
-  (voltooide rondes — wetsanalyse én regelspraak — zijn immutabel).
+  schrijft dat) en het overschrijven van een `analyse.json`/`model.json` in `werk/` zodra de
+  ronde **voltooid** is — d.w.z. zodra `feedback.json` in de ronde-map bestaat (gereviewde
+  rondes — wetsanalyse én regelspraak — zijn immutabel; correcties vóór de review mogen wél).
 - `.claude/settings.local.json` → `enabledMcpjsonServers: ["wettenbank"]` plus een **machine-lokale**
   allowlist. Dit bestand is **gitignored** (`.gitignore`), dus het reist niet mee en is per definitie
   niet gedeeld: een andere machine/analist bouwt z'n eigen lijst gewoon opnieuw op via de

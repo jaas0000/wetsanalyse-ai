@@ -158,9 +158,18 @@ async def test_scope_in_lijst(client):
 
 
 async def test_verwijderen_states(client):
-    """Verwijderen mag vanuit een eindstaat én een review-pauze, niet vanuit een lopende state."""
-    # queued (lopend) → 409
-    assert (await client.delete("/v1/projects/bwbr1-art1")).status_code == 409
+    """Verwijderen mag vanuit een eindstaat, een review-pauze én queued (escape-hatch voor
+    een verweesde job), maar niet vanuit een lopende (runt-)state."""
+    from app.deps import get_store
+
+    # runt (lopend) → 409
+    await get_store().save_job(
+        Job(id="runt-art1", state=JobState.act2_runt, client_id="anonymous")
+    )
+    assert (await client.delete("/v1/projects/runt-art1")).status_code == 409
+    # queued → 204 (normaal claimt run_initial direct; blijft de job hangen, dan is dit de uitweg)
+    assert (await client.delete("/v1/projects/bwbr1-art1")).status_code == 204
+    assert (await client.get("/v1/projects/bwbr1-art1")).status_code == 404
     # review-pauze → 204 (de analist gooit de analyse tijdens de review weg)
     assert (await client.delete("/v1/projects/review-art1")).status_code == 204
     assert (await client.get("/v1/projects/review-art1")).status_code == 404
@@ -256,3 +265,27 @@ async def test_dashboard_poll_scoping_diff_en_removed(store):
     frames3, seen3 = await _dashboard_poll(store, "c1", seen2)
     assert any("event: removed" in f and "a2" in f for f in frames3)
     assert "a2" not in seen3
+
+
+async def test_dashboard_poll_geen_vals_removed_buiten_top100(store):
+    """Zakt een project uit de poll-limiet (top-100 op `updated`), dan volgt géén removed-event —
+    alleen een écht verwijderd project verdwijnt live uit de UI."""
+    from app.routers.projects import _dashboard_poll
+
+    await store.save_job(Job(id="oud", state=JobState.klaar, client_id="c1"))
+    _, seen = await _dashboard_poll(store, "c1", {})
+    assert "oud" in seen
+
+    # 100 nieuwere projecten duwen 'oud' uit de top-100.
+    for i in range(100):
+        await store.save_job(Job(id=f"p{i}", state=JobState.klaar, client_id="c1"))
+
+    frames2, seen2 = await _dashboard_poll(store, "c1", seen)
+    assert not any("event: removed" in f for f in frames2)
+    assert "oud" in seen2  # blijft gevolgd, ook al valt hij buiten de poll-limiet
+
+    # Echt verwijderen → wél removed.
+    await store.delete_project("oud")
+    frames3, seen3 = await _dashboard_poll(store, "c1", seen2)
+    assert any("event: removed" in f and "oud" in f for f in frames3)
+    assert "oud" not in seen3

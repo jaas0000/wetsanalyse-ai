@@ -124,6 +124,16 @@ náást de markeringen (uitgaande pointers, geen tweede registratie van JAS-klas
 `opgehaald | gevolgd | gesignaleerd | buiten-scope-diepte`; `soort` ∈
 `intref | extref | natuurlijk` (`natuurlijk` = natuurlijke-taalverwijzing die de MCP niet
 tagt, bv. "het eerste lid"). `doel.label` is verplicht; `target`/`bwbId` alleen indien bekend.
+
+**Dienst-spoor-uitbreidingen van het contract.** De API/webapp voegt aan hetzelfde schema een
+paar velden toe die het skill-spoor niet hoeft te schrijven maar wel kan tegenkomen (bv. bij
+het inlezen van een API-rapport):
+- `verwijzing.volgen` (bool) — het scope-besluit uit de inventaris-stap: haalt de begrensde
+  fetch-lus deze verwijzing op? (In het skill-spoor drukt `status` dat besluit uit.)
+- `markering.twijfel` (string) — expliciete twijfel/aanname bij een markering, naast
+  `toelichting` (het act-3-schema kent `twijfel` al op begrippen/afleidingsregels).
+- `lid.bronreferentie` (string) — jci-uri op lid-niveau in `leden[]`, naast de
+  bron-brede `bronreferentie`.
 Volg je een definitie/delegatie en wordt die zelf relevant genoeg om te markeren, dan
 **promoveer** je haar tot een eigen bron in het werkgebied (het werkgebied mág groeien).
 
@@ -317,12 +327,20 @@ Ga niet zelf door tot de analist bevestigt.
 
 ```json
 {
-  "status": "akkoord",            // of "wijzigingen"
+  "status": "akkoord",            // of "wijzigingen", of "akkoord-afronden" (alleen act. 2)
   "activiteit": "2",
   "items": { "m2": "Plichthebbende benoemen.", "v1": "Volg deze delegatie wél verder." },
   "algemeen": "Markering voor 'partner' ontbreekt in bron br2."
 }
 ```
+
+Naast `akkoord`/`wijzigingen` kent het dienst-spoor (API/webapp) de status
+**`akkoord-afronden`**: akkoord op activiteit 2 én daar bewust afronden zónder activiteit 3.
+Die status is alleen geldig op activiteit 2 en zonder `items`/`algemeen`; de analyse krijgt
+dan **`scope: "act2"`** (een rapport zonder begrippen/afleidingsregels) en activiteit 3 kan
+later alsnog on-demand draaien. In het reviewlog van het rapport draagt elke ronde daartoe
+ook haar `status` mee. In het skill-spoor rond je desgewenst op dezelfde manier af door na
+het act-2-akkoord in overleg met de analist te stoppen; de viewer schrijft die status niet.
 
 In activiteit 2 kan een `items`-sleutel ook een **verwijzing-id** (`v1`, …) zijn: zo stuurt
 de analist het scope-besluit bij ("volg deze delegatie wél verder", "deze hoort buiten

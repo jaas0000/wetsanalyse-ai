@@ -313,7 +313,12 @@ python "<skill>/scripts/build_rapport_json.py" \
 
 Het script kiest per activiteit automatisch de hoogste ronde en combineert act-2 en act-3
 tot één `rapport.json`. De drie vrije tekstvelden (reviewlog act. 2, reviewlog act. 3,
-aandachtspunten) zijn nog leeg; het script meldt hoeveel er ontbreken.
+aandachtspunten) zijn nog leeg; het script meldt hoeveel er ontbreken. Het script bewaakt
+bovendien de referentiële integriteit: bij **dangling referenties** (markering-/begrip-/bron-id's
+die nergens bestaan) eindigt het met **exit 2** — herstel dan eerst de betreffende
+activiteit-ronde (het rapport is wél geschreven, ter inspectie). Heeft de hoogste ronde van een
+activiteit geen schoon `akkoord` in `feedback.json`, dan waarschuwt het script (niet-blokkerend):
+controleer of de review-lus echt is afgerond.
 
 **Stap 4b — Genereer de vrije tekstvelden**
 

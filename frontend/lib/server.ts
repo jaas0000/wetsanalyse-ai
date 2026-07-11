@@ -58,6 +58,28 @@ export async function verifyCredentials(
   return (await res.json()) as VerifyResult;
 }
 
+/** Actuele accountstatus voor de periodieke sessie-herverificatie (jwt-callback in auth.ts). */
+export type AccountStatus =
+  | { status: "actief"; role: "beheerder" | "analist"; email: string }
+  | { status: "ingetrokken" } // 401: account inactief of verwijderd → sessie invalideren
+  | { status: "onbekend" }; // API tijdelijk onbereikbaar → sessie laten staan (maxAge begrenst)
+
+/** Raadpleeg `/v1/auth/me` (identiteit via de vertrouwde X-User-Id, zoals de account-routes). */
+export async function getAccountStatus(userid: string): Promise<AccountStatus> {
+  try {
+    const res = await fetch(`${apiBaseUrl()}/v1/auth/me`, {
+      headers: { ...authHeader(), "X-User-Id": userid },
+      cache: "no-store",
+    });
+    if (res.status === 401) return { status: "ingetrokken" };
+    if (!res.ok) return { status: "onbekend" };
+    const me = (await res.json()) as { role: "beheerder" | "analist"; email: string };
+    return { status: "actief", role: me.role, email: me.email };
+  } catch {
+    return { status: "onbekend" };
+  }
+}
+
 /** Is er nog geen enkel account? Dan staat de eenmalige registratie open. */
 export async function getSetupStatus(): Promise<{ needs_setup: boolean }> {
   try {

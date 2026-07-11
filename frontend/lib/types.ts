@@ -127,10 +127,13 @@ export interface Job {
   id: string;
   state: JobState;
   naam: string;
+  omschrijving: string;
   bronnen: BronInput[];
   review: boolean;
   model_profile: string;
   analysefocus: string;
+  // Aangeleverde bestaande begrippenlijst (suggestief; zie StartRequest.begrippenlijst).
+  begrippenlijst: BegripInvoer[];
   client_id: string;
   regelspraak_review?: boolean | null;
   scope: Scope;
@@ -316,6 +319,9 @@ export interface ReviewRonde {
   ronde: number;
   items: Record<string, string>;
   algemeen: string;
+  // Feedback-status van de ronde ("akkoord" | "wijzigingen" | "akkoord-afronden");
+  // ontbreekt bij een ronde zonder feedback.
+  status?: string;
 }
 
 export interface ReviewActiviteit {

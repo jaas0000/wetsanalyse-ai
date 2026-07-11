@@ -276,6 +276,21 @@ class PostgresStore:
             )
         return [r[0] for r in rows.all()]
 
+    async def lijst_verweesde_queued(self, ouder_dan_s: int) -> list[str]:
+        """Ids van verweesde `queued`-jobs: nooit geclaimd (geen owner) en ouder dan de drempel.
+        Crasht het proces tussen de create-commit en de run_initial-claim, dan blijft de job
+        anders eeuwig `queued` (buiten reaper, retry en quota-vrijgave) — input voor de reaper."""
+        grens = db.utcnow() - timedelta(seconds=ouder_dan_s)
+        async with db.get_engine().connect() as conn:
+            rows = await conn.execute(
+                select(db.projects.c.slug).where(
+                    db.projects.c.state == JobState.queued.value,
+                    db.projects.c.owner.is_(None),
+                    db.projects.c.updated < grens,
+                )
+            )
+        return [r[0] for r in rows.all()]
+
     async def markeer_lease_loze_running(self) -> int:
         """Migratie-/herstelvangnet: geef runt-jobs zónder lease (pre-upgrade of na een crash waar
         het lease-veld nooit gezet werd) een verlopen lease, zodat de reaper ze oppakt. Jobs met een

@@ -232,3 +232,49 @@ def test_parse_zet_foutklasse_op_wettenbank_error():
     with pytest.raises(WettenbankError) as ei:
         WettenbankClient._parse("wettenbank_artikel", Result("kale foutmelding, geen JSON"))
     assert ei.value.klasse is None
+
+
+# --- usage-telling over de repareer-retry heen -------------------------------
+
+async def test_repair_retry_telt_usage_van_beide_calls(monkeypatch):
+    """Faalt de eerste generatie op JSON en herstelt de repareer-retry het, dan telt de
+    LLMResult de tokens van BEIDE calls — de eerste (mislukte) generatie is óók verbruik."""
+    import litellm
+
+    from app.llm.base import LlmConfig
+    from app.llm.litellm_client import LiteLLMClient
+
+    class _Usage:
+        def __init__(self, i, o):
+            self.prompt_tokens = i
+            self.completion_tokens = o
+
+    class _Msg:
+        def __init__(self, c):
+            self.content = c
+
+    class _Choice:
+        def __init__(self, c):
+            self.message = _Msg(c)
+
+    class _Resp:
+        def __init__(self, c, i, o):
+            self.choices = [_Choice(c)]
+            self.usage = _Usage(i, o)
+            self.model = "fake/model"
+
+    responsen = iter([
+        _Resp("dit is geen json", 10, 5),          # eerste poging: onparseerbaar
+        _Resp('{"ok": true}', 20, 7),              # repareer-retry: geldig
+    ])
+
+    async def fake_acompletion(**kwargs):
+        return next(responsen)
+
+    monkeypatch.setattr(litellm, "acompletion", fake_acompletion)
+    client = LiteLLMClient(LlmConfig(model="fake/model", max_prompt_tokens=1_000_000))
+    res = await client.complete("sys", "user")
+
+    assert res.data == {"ok": True}
+    assert res.tokens_in == 30   # 10 + 20
+    assert res.tokens_out == 12  # 5 + 7

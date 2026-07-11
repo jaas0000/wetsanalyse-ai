@@ -28,7 +28,7 @@ Alle analyse-endpoints zijn client-gescopet (alleen je eigen analyses) en versio
 | `GET` | `/v1/projects?limit=&offset=` | Lijst van je analyses (gepagineerd) |
 | `GET` | `/v1/projects/{id}` | Status en voortgang van een job (incl. fijnmazige `current_fase`) |
 | `GET` | `/v1/projects/events` | Aggregate SSE-stream over **al** je analyses (diff-emit + `removed`) — voedt het dashboard |
-| `DELETE` | `/v1/projects/{id}` | Verwijder (terminal of `wacht-op-review-*`; lopend → 409) |
+| `DELETE` | `/v1/projects/{id}` | Verwijder (terminal, `wacht-op-review-*` of `queued`; runt → 409) |
 | `POST` | `/v1/projects/{id}/feedback` | Geef reviewfeedback (alleen in `wacht-op-review-*`; status `akkoord`, `wijzigingen` of `akkoord-afronden` — dat laatste rondt af zonder act. 3) |
 | `POST` | `/v1/projects/{id}/act3` | Voer activiteit 3 alsnog uit op een act2-only-afgeronde analyse (`scope: "act2"`; alleen vanuit `klaar`) |
 | `POST` | `/v1/projects/{id}/retry` | Herstart een job in `fout`-state |

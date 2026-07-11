@@ -2,8 +2,9 @@
 
 Driehoek van garanties:
   - HARD brongetrouwheid faalt → job naar `fout` (ook in review:false). Nooit stil `klaar`.
-  - ZACHTE schema-fouten blokkeren niet; ze gaan als waarschuwing mee naar het checkpoint
-    (review:true) of worden gelogd (review:false).
+  - Schema-FOUTEN (ongeldige JAS-klasse, dangling begrip_id, …) blokkeren eveneens: eerst
+    auto-correctie, blijven ze staan → `fout` (zelfde handhaving als het skill-spoor).
+    Schema-WAARSCHUWINGEN blokkeren niet; die gaan als context mee naar het checkpoint.
   - Auto-correctie is GEEN ronde: her-genereren binnen één ronde, vóór het wegschrijven.
 De jobstore is PostgreSQL (gedeeld). State-transities worden geserialiseerd met een atomaire
 **state-CAS** (`store.claim`, één UPDATE … RETURNING): alleen de transitie NAAR een runt-state hoeft atomair,
@@ -297,11 +298,12 @@ class WetsanalyseEngine:
         n = await self.store.markeer_lease_loze_running()
         if n:
             logger.info("Reconcile: %d lease-loze runt-job(s) gemarkeerd voor de reaper.", n)
+        await self._reap_verweesde_queued()
 
     async def reap_once(self) -> None:
         """Eén reaper-ronde: claim elke runt-job met een verlopen lease naar `fout`. De claim is
         atomair én vereist een verlopen lease, dus een job van een levende worker (verse lease)
-        wordt nooit gekaapt."""
+        wordt nooit gekaapt. Ruimt daarnaast verweesde `queued`-jobs op (zie hieronder)."""
         for job_id in await self.store.lijst_verlopen_running():
             claimed = await self.store.claim(
                 job_id, RUNNING_STATES, JobState.fout, self.owner, self.s.lease_s,
@@ -312,6 +314,25 @@ class WetsanalyseEngine:
             logger.warning("Reaper: job %s had een verlopen lease → fout (onderbroken).", job_id)
             await self._fail(claimed, claimed.current_activiteit or "intern", FoutKlasse.intern,
                              "Onderbroken: lease verlopen (worker weg of gecrasht).")
+        await self._reap_verweesde_queued()
+
+    async def _reap_verweesde_queued(self) -> None:
+        """Vangnet voor de `queued`-dead-end: crasht het proces tussen de commit van
+        `POST /v1/projects` en de claim in `run_initial`, dan blijft de job anders eeuwig
+        `queued` (geen retry/delete mogelijk; telt mee in het quotum). Drempel = de lease:
+        de claim volgt normaal binnen milliseconden op de create, dus een `queued` zonder
+        owner die ouder is dan de lease is aantoonbaar wees. De atomaire claim verliest
+        netjes van een gelijktijdige run_initial-claim (state is dan al niet meer queued)."""
+        for job_id in await self.store.lijst_verweesde_queued(self.s.lease_s):
+            claimed = await self.store.claim(
+                job_id, {JobState.queued}, JobState.fout, self.owner, self.s.lease_s
+            )
+            if claimed is None:
+                continue  # intussen alsnog opgepakt (of al door een andere reaper gemarkeerd)
+            logger.warning("Reaper: job %s bleef verweesd in queued → fout.", job_id)
+            await self._fail(claimed, "start", FoutKlasse.intern,
+                             "Onderbroken vóór de start (worker weg of gecrasht); "
+                             "probeer opnieuw via retry of verwijder de analyse.")
 
     # --- fasen (coroutines, uitgevoerd binnen _guard) ---------------------
 
@@ -482,35 +503,44 @@ class WetsanalyseEngine:
                 )
                 return
 
+        # Act-3-context (eenmalig vóór de lus): de goedgekeurde act-2 activeert de dekkings-/
+        # markering-id-checks, de aangeleverde begrippenlijst de herkomst-checks.
+        act2 = (await self._act2_akkoord(job)) if activiteit == "3" else None
+        bl = self._begrippenlijst(job)
+
+        def _schema(a: dict) -> tuple[list[str], list[str]]:
+            if activiteit == "3":
+                return schema_check(a, activiteit, act2=act2,
+                                    begrippenlijst={"begrippen": bl} if bl else None)
+            return schema_check(a, activiteit)
+
         await self._set_fase(job, "llm-generatie")
+        # Tokens van verworpen auto-correctie-pogingen tellen mee (budget/usage-aggregatie).
+        weggegooid_in = weggegooid_out = 0
         with gebruik_context(project_slug=job.id, activiteit=activiteit, ronde=ronde,
                              poging=1, fase="generatie"):
             analyse, prov = await self._met_retry(maak)
             pogingen = 0
-            # Auto-correctie regenereert UITSLUITEND op harde brongetrouwheid-schendingen.
-            while pogingen < self.s.max_autocorrectie and brongetrouwheid_check(analyse, activiteit):
+            # Auto-correctie regenereert op harde brongetrouwheid-schendingen én op blokkerende
+            # schema-fouten (ongeldige JAS-klasse, dangling begrip_id, …) — dezelfde handhaving
+            # als het skill-spoor (validate_analyse exit 2). Waarschuwingen blokkeren niet.
+            while pogingen < self.s.max_autocorrectie and (
+                brongetrouwheid_check(analyse, activiteit) or _schema(analyse)[0]
+            ):
                 pogingen += 1
                 werk_context_bij(poging=pogingen + 1, fase="auto-correctie")
                 await self._set_fase(job, "auto-correctie")
+                weggegooid_in += prov.get("tokens_in", 0)
+                weggegooid_out += prov.get("tokens_out", 0)
                 analyse, prov = await self._met_retry(maak)
-        # Tel eenmalig de inventaris-tokens (fase 2a) bij de ronde — budget/usage-aggregatie.
-        prov["tokens_in"] += extra_tokens[0]
-        prov["tokens_out"] += extra_tokens[1]
+        # Tel eenmalig de inventaris-tokens (fase 2a) plus de verworpen pogingen bij de ronde.
+        prov["tokens_in"] += extra_tokens[0] + weggegooid_in
+        prov["tokens_out"] += extra_tokens[1] + weggegooid_out
 
         await self._set_fase(job, "brongetrouwheid-check")
         schendingen = brongetrouwheid_check(analyse, activiteit)
         await self._set_fase(job, "schema-check")
-        if activiteit == "3":
-            # Act-3-context: de goedgekeurde act-2 activeert de dekkings-/markering-id-checks,
-            # de aangeleverde begrippenlijst de herkomst-checks.
-            bl = self._begrippenlijst(job)
-            fouten, waarschuwingen = schema_check(
-                analyse, activiteit,
-                act2=await self._act2_akkoord(job),
-                begrippenlijst={"begrippen": bl} if bl else None,
-            )
-        else:
-            fouten, waarschuwingen = schema_check(analyse, activiteit)
+        fouten, waarschuwingen = _schema(analyse)
 
         await self._set_fase(job, "analyse-wegschrijven")
         await self.store.schrijf_analyse(job.id, activiteit, ronde, analyse)
@@ -524,6 +554,14 @@ class WetsanalyseEngine:
             await self._fail(
                 job, f"act{activiteit}", FoutKlasse.validatie,
                 "Brongetrouwheid faalt na auto-correctie: " + "; ".join(schendingen),
+            )
+            return
+        if fouten:
+            # Schema-fouten blokkeren, ook in review:false — gelijke handhaving met het
+            # skill-spoor, waar validate_analyse.py met exit 2 de review-server tegenhoudt.
+            await self._fail(
+                job, f"act{activiteit}", FoutKlasse.validatie,
+                "Schema-fouten na auto-correctie: " + "; ".join(fouten),
             )
             return
         if job.review:
@@ -611,9 +649,9 @@ class WetsanalyseEngine:
 
     def _rs_gegevens_context(self, rapport: dict) -> dict:
         """Trim het rapport tot wat de GegevensSpraak-stap voedt: werkgebied + begrippen +
-        afleidingsregels + per bron de brondefinitie-markeringen én de markeringen waar een
-        begrip/regel via `markering_ids` op steunt (geen volledige leden-tekst). Zelfde trim
-        als de skill-ingest (`ingest_rapport.py`)."""
+        afleidingsregels + per bron de identificatie (incl. `pad`), de letterlijke `leden`,
+        de `verwijzingen`, de brondefinitie-markeringen én de markeringen waar een begrip/regel
+        via `markering_ids` op steunt. Zelfde trim als de skill-ingest (`ingest_rapport.py`)."""
         gerefereerd: set[str] = set()
         for groep in ("begrippen", "afleidingsregels"):
             for item in (rapport.get(groep) or []):
@@ -621,10 +659,16 @@ class WetsanalyseEngine:
         bronnen = []
         for b in rapport.get("bronnen") or []:
             markeringen = b.get("markeringen") or []
-            bronnen.append({
+            bron = {
                 "bron_id": b.get("bron_id"), "label": b.get("label"),
                 "bwbId": b.get("bwbId"), "artikel": b.get("artikel"), "lid": b.get("lid"),
                 "versiedatum": b.get("versiedatum"), "bronreferentie": b.get("bronreferentie"),
+                "pad": b.get("pad"),
+                # Pariteit met de skill-ingest: de letterlijke leden-tekst en de verwijzingen
+                # gaan mee, zodat het dienst-spoor met dezelfde brongetrouwe context
+                # formaliseert (de prompt-token-guard bewaakt de omvang).
+                "leden": b.get("leden") or [],
+                "verwijzingen": b.get("verwijzingen") or [],
                 "brondefinities": [
                     m for m in markeringen if m.get("klasse") == "Brondefinitie"
                 ],
@@ -632,7 +676,8 @@ class WetsanalyseEngine:
                     m for m in markeringen
                     if m.get("klasse") != "Brondefinitie" and m.get("id") in gerefereerd
                 ],
-            })
+            }
+            bronnen.append(bron)
         return {
             "werkgebied": rapport.get("werkgebied") or {},
             "bronnen": bronnen,
@@ -850,7 +895,12 @@ class WetsanalyseEngine:
     async def _fail(self, job: Job, stap: str, klasse: FoutKlasse, bericht: str) -> None:
         job.state = JobState.fout
         job.error = JobFout(stap=stap, ronde=job.current_ronde or None, klasse=klasse, bericht=bericht)
-        await self.store.save_job(job)
+        # Fenced (net als _save): schrijf alleen zolang deze worker de job nog bezit. Bij een
+        # verloren lease bezit een andere worker (bv. de reaper) de job — diens state niet clobberen.
+        if not await self.store.save_job(job, owner=self.owner):
+            logger.warning("Job %s: fout-state niet geschreven — lease/owner intussen kwijt "
+                           "(een andere worker bezit de job).", job.id)
+            return
         await self._set_fase(job, None)  # fout: geen lopende functiefase meer tonen
 
     async def _save(self, job: Job) -> None:
@@ -870,16 +920,34 @@ class WetsanalyseEngine:
         except Exception:  # noqa: BLE001 — observerend; nooit de analyse laten struikelen
             logger.debug("Fase-tik %r voor %s overgeslagen.", fase, job.id, exc_info=True)
 
+    # Zoveel opeenvolgende gefaalde heartbeat-ticks (bv. een transiënte DB-hapering) tolereren we
+    # voordat de heartbeat opgeeft. Eén hikje mag niet betekenen dat de reaper een levende job kaapt.
+    _HEARTBEAT_MAX_MISSERS = 3
+
     async def _heartbeat(self, job_id: str) -> None:
         """Houd de lease vers terwijl de fase loopt, zodat de reaper een levende job niet kaapt.
         Tikt op lease_s/2. Raakt de owner de job kwijt, dan stopt de heartbeat; de eerstvolgende
-        fenced `_save` breekt de fase dan netjes af."""
+        fenced `_save` breekt de fase dan netjes af. Een transiënte fout (bv. een DB-hapering)
+        doodt de heartbeat niet direct — pas na N opeenvolgende missers geeft hij op."""
         interval = max(self.s.lease_s / 2, 1)
+        missers = 0
         try:
             while True:
                 await asyncio.sleep(interval)
-                if not await self.store.verleng_lease(job_id, self.owner, self.s.lease_s):
-                    return
+                try:
+                    if not await self.store.verleng_lease(job_id, self.owner, self.s.lease_s):
+                        return  # owner/lease definitief kwijt — geen fout, gewoon stoppen
+                    missers = 0
+                except asyncio.CancelledError:
+                    raise
+                except Exception:  # noqa: BLE001 — transiënt: tolereren tot de misser-cap
+                    missers += 1
+                    logger.debug("Heartbeat-tick voor %s mislukt (%d/%d).",
+                                 job_id, missers, self._HEARTBEAT_MAX_MISSERS, exc_info=True)
+                    if missers >= self._HEARTBEAT_MAX_MISSERS:
+                        logger.warning("Heartbeat voor %s gestopt na %d opeenvolgende missers.",
+                                       job_id, missers)
+                        return
         except asyncio.CancelledError:
             return
 
@@ -896,14 +964,23 @@ class WetsanalyseEngine:
             logger.warning("Job %s faalt op %s (MCP): %s", job.id, stap, e)
             await self._fail(job, stap, FoutKlasse.mcp, str(e))
         except LLMError as e:
+            # LLMError-meldingen zijn door onze eigen adapter geformuleerd (JSON-reparatie,
+            # PromptTooLarge) en veilig om aan de client te tonen.
             logger.warning("Job %s faalt op %s (LLM): %s", job.id, stap, e)
             await self._fail(job, stap, FoutKlasse.llm, str(e))
         except Exception as e:  # noqa: BLE001
+            # Een rauwe provider-/interne fout kan endpoint-URL's, headers of (delen van) een
+            # key bevatten — die hoort in het server-log, niet in job.error richting de client
+            # (zelfde sanitisatie als de admin-verbindingstest).
             logger.exception("Job %s faalt op %s (intern)", job.id, stap)
-            await self._fail(job, stap, FoutKlasse.intern, f"{type(e).__name__}: {e}")
+            await self._fail(job, stap, FoutKlasse.intern,
+                             "Interne fout bij het uitvoeren van deze stap — zie het server-log "
+                             "voor details. Probeer opnieuw via retry.")
         finally:
             hb.cancel()
             try:
                 await hb
             except asyncio.CancelledError:
                 pass
+            except Exception:  # noqa: BLE001 — een gefaalde heartbeat mag de fase-afronding niet breken
+                logger.debug("Heartbeat van job %s eindigde met een fout.", job.id, exc_info=True)

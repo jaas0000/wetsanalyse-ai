@@ -21,13 +21,34 @@ from .config import get_settings
 
 _hits: dict[str, deque[float]] = defaultdict(deque)
 
+# Harde cap op het aantal bijgehouden sleutels. De login-route voedt de teller met
+# aanvaller-gekozen userids; zonder cap groeit _hits onbegrensd (memory-DoS). Bij het
+# bereiken van de cap worden eerst alle verlopen sleutels geveegd; blijft hij vol, dan
+# weigeren we nieuwe sleutels (fail-closed: een aanvaller kan de limiter niet omzeilen
+# door 'm vol te pompen — bestaande, legitieme sleutels blijven gewoon werken).
+_MAX_KEYS = 10_000
+
 
 class QuotaExceeded(Exception):
     """Een client overschrijdt een beleidsgrens (gelijktijdige jobs / token-budget)."""
 
 
+def _sweep(now: float, window_s: float) -> None:
+    """Verwijder sleutels waarvan alle hits buiten het venster liggen."""
+    for key in [k for k, dq in _hits.items() if not dq or dq[0] <= now - window_s]:
+        dq = _hits[key]
+        while dq and dq[0] <= now - window_s:
+            dq.popleft()
+        if not dq:
+            del _hits[key]
+
+
 def _allow(key: str, max_requests: int, window_s: float) -> bool:
     now = time.monotonic()
+    if key not in _hits and len(_hits) >= _MAX_KEYS:
+        _sweep(now, window_s)
+        if len(_hits) >= _MAX_KEYS:
+            return False
     dq = _hits[key]
     while dq and dq[0] <= now - window_s:
         dq.popleft()

@@ -360,6 +360,64 @@ async def test_reconcile_markeert_lease_loze_runtjob(engine, store):
     assert (await store.load_job("pre-upgrade")).state == JobState.fout
 
 
+async def _set_updated(slug: str, tijdstip) -> None:
+    """Test-helper: antidateer `updated` (de wees-drempel van de queued-reaper kijkt daarnaar)."""
+    async with db.get_engine().begin() as conn:
+        await conn.execute(
+            update(db.projects).where(db.projects.c.slug == slug).values(updated=tijdstip)
+        )
+
+
+async def test_reaper_ruimt_verweesde_queued_op(engine, store):
+    """Dead-end dichten: crasht het proces tussen de create-commit en de run_initial-claim, dan
+    brengt de reaper de verweesde `queued`-job na de leeftijdsdrempel naar `fout` — waarna
+    retry (en delete) weer werken. Een verse `queued` blijft ongemoeid (de claim kan nog komen)."""
+    job = await engine.create_job(_start_req(review=True), "test")  # queued, geen owner
+
+    await engine.reap_once()
+    assert (await store.load_job(job.id)).state == JobState.queued  # vers: geen wees
+
+    await _set_updated(
+        job.id, datetime.now(timezone.utc) - timedelta(seconds=engine.s.lease_s + 5)
+    )
+    await engine.reap_once()
+    wees = await store.load_job(job.id)
+    assert wees.state == JobState.fout
+    assert wees.error.klasse.value == "intern"
+
+    # Het bestaande retry-pad herstelt de wees: geen rondes → verse act2-run → review-pauze.
+    await engine.retry(job.id)
+    assert (await store.load_job(job.id)).state == JobState.wacht_review_act2
+
+
+async def test_reconcile_ruimt_verweesde_queued_op(engine, store):
+    """Ook het opstart-vangnet neemt de verweesde queued-jobs mee (crash + herstart-scenario)."""
+    job = await engine.create_job(_start_req(review=True), "test")
+    await _set_updated(
+        job.id, datetime.now(timezone.utc) - timedelta(seconds=engine.s.lease_s + 5)
+    )
+    await engine.reconcile_startup()
+    assert (await store.load_job(job.id)).state == JobState.fout
+
+
+async def test_fail_clobbert_vreemde_owner_niet(engine, store):
+    """_fail schrijft fenced: is de job intussen van een andere worker (lease-race), dan blijft
+    diens state staan in plaats van door een verlate fout-write geclobberd te worden."""
+    from app.contracts import FoutKlasse
+
+    job = await engine.create_job(_start_req(review=True), "test")
+    await engine.run_initial(job.id)  # → wacht_review_act2, owner = engine.owner
+    # Een andere worker kaapt de job (reaper/retry-scenario).
+    await store.claim(job.id, {JobState.wacht_review_act2}, JobState.act2_runt, "andere-worker", 120)
+
+    snapshot = await store.load_job(job.id)
+    await engine._fail(snapshot, "act2", FoutKlasse.intern, "verlate fout van de oude worker")
+
+    heropgepakt = await store.load_job(job.id)
+    assert heropgepakt.state == JobState.act2_runt  # niet geclobberd
+    assert heropgepakt.error is None
+
+
 async def test_fenced_save_faalt_na_verloren_eigenaarschap(engine, store):
     """Een worker die zijn job aan een ander is verloren, kan met een fenced save niet clobberen."""
     job = await engine.create_job(_start_req(review=True), "test")
@@ -409,24 +467,85 @@ async def test_token_budget_stopt_job(settings, store):
     assert job.error.klasse.value == "quota"
 
 
-async def test_autocorrectie_negeert_zachte_schemafouten(settings, store, monkeypatch):
-    """Zachte schemafouten mogen geen (dure) hergeneratie triggeren — alleen brongetrouwheid wel."""
+async def test_schema_fouten_blokkeren_na_autocorrectie(settings, store, monkeypatch):
+    """Schema-FOUTEN (ongeldige JAS-klasse, dangling begrip_id, …) triggeren auto-correctie en
+    blokkeren daarna de job — in review:false én review:true. Gelijke handhaving met het
+    skill-spoor, waar validate_analyse.py met exit 2 de review-server tegenhoudt."""
     import app.engine.orchestrator as orch
 
     settings.max_autocorrectie = 2
     monkeypatch.setattr(orch, "brongetrouwheid_check", lambda d, a: [])
     monkeypatch.setattr(orch, "schema_check",
-                        lambda d, a, **kw: (["zachte schemafout"], []))
+                        lambda d, a, **kw: (["ongeldige JAS-klasse: 'Verzonnen'"], []))
+
+    for review in (False, True):
+        llm = FakeLLM()
+        eng = WetsanalyseEngine(settings, store, llm, FakeWettenbank())
+        job = await eng.create_job(_start_req(review=review), "test")
+        await eng.run_initial(job.id)
+
+        # Inventaris (fase 2a) + act2 + 2 auto-correctie-pogingen; daarna blokkeert de fout —
+        # de job bereikt review noch klaar.
+        assert llm.calls == 4
+        job = await store.load_job(job.id)
+        assert job.state == JobState.fout
+        assert job.error.klasse.value == "validatie"
+        assert "Schema-fouten" in job.error.bericht
+
+
+async def test_schema_waarschuwingen_blokkeren_niet(settings, store, monkeypatch):
+    """Schema-WAARSCHUWINGEN triggeren geen (dure) hergeneratie en blokkeren de job niet;
+    ze reizen mee als context (job.waarschuwingen)."""
+    import app.engine.orchestrator as orch
+
+    settings.max_autocorrectie = 2
+    monkeypatch.setattr(orch, "brongetrouwheid_check", lambda d, a: [])
+    monkeypatch.setattr(orch, "schema_check",
+                        lambda d, a, **kw: ([], ["zachte waarschuwing"]))
 
     llm = FakeLLM()
     eng = WetsanalyseEngine(settings, store, llm, FakeWettenbank())
     job = await eng.create_job(_start_req(review=False), "test")
     await eng.run_initial(job.id)
 
-    # Verwijzing-inventaris (fase 2a) + act2 + act3a + act3b; geen extra hergeneratie
-    # ondanks de zachte fout.
+    # Verwijzing-inventaris (fase 2a) + act2 + act3a + act3b; geen extra hergeneratie.
     assert llm.calls == 4
-    assert (await store.load_job(job.id)).state == JobState.klaar
+    job = await store.load_job(job.id)
+    assert job.state == JobState.klaar
+    assert "zachte waarschuwing" in job.waarschuwingen
+
+
+async def test_autocorrectie_telt_tokens_van_verworpen_pogingen(settings, store, monkeypatch):
+    """Tokens van verworpen auto-correctie-pogingen tellen mee in de ronde-provenance
+    (budget/usage): een hergeneratie is óók verbruik."""
+    from dataclasses import replace
+
+    from app.llm.base import LLMResult
+    import app.engine.orchestrator as orch
+
+    class TokensLLM(FakeLLM):
+        async def complete(self, system, user, schema=None) -> LLMResult:
+            res = await super().complete(system, user, schema)
+            return replace(res, tokens_in=7, tokens_out=3)
+
+    # Precies één hergeneratie in act-2: de eerste loop-check faalt, daarna schoon.
+    checks = {"n": 0}
+
+    def bg(d, a):
+        checks["n"] += 1
+        return ["schending"] if checks["n"] == 1 else []
+
+    monkeypatch.setattr(orch, "brongetrouwheid_check", bg)
+    settings.max_autocorrectie = 2
+    eng = WetsanalyseEngine(settings, store, TokensLLM(), FakeWettenbank())
+    job = await eng.create_job(_start_req(review=False), "test")
+    await eng.run_initial(job.id)
+
+    job = await store.load_job(job.id)
+    assert job.state == JobState.klaar
+    prov2 = next(p for p in job.provenance if p.activiteit == "2")
+    # Inventaris (7/3) + verworpen poging (7/3) + definitieve generatie (7/3).
+    assert (prov2.tokens_in, prov2.tokens_out) == (21, 9)
 
 
 async def test_transiente_mcp_fout_wordt_geretryed(settings, store):

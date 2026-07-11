@@ -6,7 +6,7 @@ Eén URL-conventie voor sub-resources (`/ronde/{act}/{n}`). Vervangt de eerdere 
 POST   /v1/projects                     — maak project aan en start analyse (202 + Location)
 GET    /v1/projects?limit=&offset=      — lijst eigen projecten (beknopt, gepagineerd)
 GET    /v1/projects/{id}                — volledig project-object
-DELETE /v1/projects/{id}                — verwijder (terminal of review-state; lopend → 409)
+DELETE /v1/projects/{id}                — verwijder (terminal, review-state of queued; runt → 409)
 POST   /v1/projects/{id}/feedback       — review-feedback
 POST   /v1/projects/{id}/retry          — herstart vanuit fout
 GET    /v1/projects/{id}/rapport        — rapport JSON
@@ -129,7 +129,13 @@ async def _dashboard_poll(
         if seen.get(p.slug) != payload:
             frames.append(f"data: {json.dumps(payload)}\n\n")
     for verdwenen in seen.keys() - huidige:
-        frames.append(f"event: removed\ndata: {json.dumps({'id': verdwenen})}\n\n")
+        # `removed` alleen bij écht verwijderd: een project dat enkel buiten de poll-limiet
+        # (top-100 op `updated`) valt bestaat nog en mag niet live uit de UI verdwijnen.
+        p = await store.load_project(verdwenen)
+        if p is None or p.client_id != client_id:
+            frames.append(f"event: removed\ndata: {json.dumps({'id': verdwenen})}\n\n")
+        else:
+            nieuw[verdwenen] = seen[verdwenen]  # blijven volgen; geen vals removed-event
     return frames, nieuw
 
 
@@ -173,11 +179,12 @@ async def project_detail(project_id: str, client_id: str = Depends(require_clien
 async def verwijder_project(project_id: str, client_id: str = Depends(require_client)):
     store = get_store()
     p = await _project_or_404(store, project_id, client_id)
-    # Verwijderen mag vanuit een eindstaat (klaar/fout) én vanuit een review-pauze
-    # (de analist kan een lopende analyse tijdens de review weggooien). In een
-    # lopende/queued state draait er nog een achtergrondtaak die het document muteert
-    # → niet verwijderen (anders 409).
-    if p.state not in TERMINAL_STATES | REVIEW_STATES:
+    # Verwijderen mag vanuit een eindstaat (klaar/fout), vanuit een review-pauze
+    # (de analist kan een lopende analyse tijdens de review weggooien) én vanuit `queued`
+    # (escape-hatch voor een verweesde job — normaal claimt run_initial binnen milliseconden,
+    # dus een zichtbaar `queued` project is vrijwel zeker wees). In een lopende (runt-)state
+    # draait er nog een achtergrondtaak die het document muteert → niet verwijderen (409).
+    if p.state not in TERMINAL_STATES | REVIEW_STATES | {JobState.queued}:
         raise HTTPException(
             status_code=409,
             detail=f"Kan alleen verwijderen vanuit een review- of eindstaat; staat nu op: {p.state}",

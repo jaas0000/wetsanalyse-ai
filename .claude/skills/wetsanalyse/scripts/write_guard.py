@@ -3,7 +3,9 @@
 
 Geldt voor beide sporen onder analyses/ (wetsanalyse → analyse.json; regelspraak → model.json):
   1. analyses/**/werk/**/feedback.json          — alleen de review-server schrijft dit; nooit de skill.
-  2. analyses/**/werk/**/(analyse|model).json   — immutabel zodra het ronde-bestand bestaat.
+  2. analyses/**/werk/**/(analyse|model).json   — immutabel zodra de ronde VOLTOOID is, d.w.z.
+     zodra feedback.json in dezelfde ronde-map bestaat. Correcties vóór de review (bv. na een
+     validate-fout, verplicht volgens SKILL.md) blijven toegestaan; overschrijven ná feedback niet.
 
 Ontvangt via stdin: {"tool_name": "...", "tool_input": {"file_path": "..."}}
 Exit 0: toegestaan; exit 2: geblokkeerd (stderr-bericht zichtbaar voor de skill/analist).
@@ -49,14 +51,16 @@ def main() -> None:
         sys.exit(2)
 
     if _ANALYSE.search(file_path):
-        # Een bestaand ronde-resultaat (analyse.json/model.json) in werk/ is immutabel — ongeacht
-        # grootte. Ook een leeg/partieel bestand (0 bytes) mag niet stilzwijgend worden
-        # overschreven: de eerste write per ronde bestaat nog niet en is dus toegestaan, een
-        # tweede write wordt geweigerd.
-        if Path(file_path).is_file():
+        # Een ronde-resultaat (analyse.json/model.json) in werk/ wordt immutabel zodra de ronde
+        # VOLTOOID is — dat is het moment waarop feedback.json in de ronde-map verschijnt (alleen
+        # de review-server schrijft die). Vóór dat moment mag de skill het bestand corrigeren
+        # (SKILL.md verplicht herstel van validatiefouten binnen dezelfde ronde); daarna is
+        # overschrijven het herschrijven van een gereviewde ronde en dus geblokkeerd.
+        doel = Path(file_path)
+        if doel.is_file() and (doel.parent / "feedback.json").is_file():
             print(
                 f"GEBLOKKEERD: {file_path}\n"
-                "Een bestaand ronde-resultaat in werk/ is immutabel. "
+                "Deze ronde is al gereviewd (feedback.json bestaat) en daarmee immutabel. "
                 "Schrijf naar een nieuwe ronde (ronde-N+1) in plaats van de bestaande te overschrijven.",
                 file=sys.stderr,
             )

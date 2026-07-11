@@ -107,15 +107,21 @@ class LiteLLMClient:
                 resp = await litellm.acompletion(model=self._model_ref(), messages=messages, **self._kwargs())
                 tekst = resp.choices[0].message.content or ""
                 usage = getattr(resp, "usage", None)
+                tokens_in = getattr(usage, "prompt_tokens", 0) or 0
+                tokens_out = getattr(usage, "completion_tokens", 0) or 0
 
                 try:
                     data = parse_json_strict(tekst)
                 except json.JSONDecodeError:
-                    # Eén gerichte repareer-retry.
+                    # Eén gerichte repareer-retry. De tokens ervan tellen mee: de eerste
+                    # (mislukte) generatie is óók verbruikt (budget/usage-aggregatie).
                     messages.append({"role": "assistant", "content": tekst})
                     messages.append({"role": "user", "content": _REPAREER})
                     resp = await litellm.acompletion(model=self._model_ref(), messages=messages, **self._kwargs())
                     tekst = resp.choices[0].message.content or ""
+                    usage = getattr(resp, "usage", None)
+                    tokens_in += getattr(usage, "prompt_tokens", 0) or 0
+                    tokens_out += getattr(usage, "completion_tokens", 0) or 0
                     try:
                         data = parse_json_strict(tekst)
                     except json.JSONDecodeError as e:
@@ -133,8 +139,8 @@ class LiteLLMClient:
             model=getattr(resp, "model", self.c.model) or self.c.model,
             provider=self.c.provider,
             output_strategie=self.c.output_strategy,
-            tokens_in=getattr(usage, "prompt_tokens", 0) or 0,
-            tokens_out=getattr(usage, "completion_tokens", 0) or 0,
+            tokens_in=tokens_in,
+            tokens_out=tokens_out,
             ruwe_tekst=tekst,
         )
 

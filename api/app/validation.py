@@ -1,8 +1,10 @@
 """Validatie — hergebruikt de skill-checks en voegt de harde brongetrouwheid-invariant toe.
 
 Twee soorten:
-  - ZACHT (schema/volledigheid): de bestaande check_activiteit_2/3 uit validate_analyse.py.
-    Blokkeert in review:true vóór het checkpoint; logt-maar-blokkeert-niet in review:false.
+  - SCHEMA (check_activiteit_2/3 uit validate_analyse.py): FOUTEN blokkeren — de orchestrator
+    probeert eerst auto-correctie en zet de job anders naar `fout`, ook in review:false
+    (gelijke handhaving met het skill-spoor, waar exit 2 de review-server tegenhoudt).
+    WAARSCHUWINGEN blokkeren niet; die gaan als context mee naar het checkpoint.
   - HARD (brongetrouwheid): geldt ALTIJD, ook in review:false. Faalt dit na auto-correctie,
     dan gaat de job naar `fout` — nooit stil naar `klaar`.
 """
@@ -47,10 +49,11 @@ GELDIGE_REGELSOORTEN: set[str] = _validate_rs.GELDIGE_REGELSOORTEN
 
 
 # Concerns die in de API door de harde, genormaliseerde brongetrouwheid_check worden gedekt.
-# De zachte skill-checks rapporteren ze óók (rauwe substring-match, zonder normalisatie), wat tot
-# dubbele en soms vals-positieve waarschuwingen leidt. We filteren ze hier zodat per concern nog
-# precies één — de harde — melding overblijft. De skill-scripts zelf blijven ongemoeid: in het
-# skill-spoor (zonder harde check) zijn deze waarschuwingen de enige citaat/vindplaats-controle.
+# De skill-checks rapporteren ze óók (rauwe substring-match, zonder normalisatie — de
+# citaat-mismatch daar is sinds de hardening een blokkerende FOUT), wat tot dubbele en soms
+# vals-positieve meldingen leidt. We filteren ze hier — uit fouten én waarschuwingen — zodat per
+# concern precies één (de harde, genormaliseerde) melding overblijft. De skill-scripts zelf
+# blijven ongemoeid: in het skill-spoor is die check de enige citaat/vindplaats-controle.
 _OVERLAPT_MET_HARD = (
     "lijkt geen letterlijk citaat",        # citaat (act 2)
     "Veld 'vindplaats' ontbreekt",         # vindplaats (act 2: markering, lid-relatief)
@@ -80,6 +83,7 @@ def schema_check(
         fouten, waarschuwingen = _validate.check_activiteit_3(
             data, act2=act2, begrippenlijst=begrippenlijst
         )
+    fouten = [f for f in fouten if not any(m in f for m in _OVERLAPT_MET_HARD)]
     waarschuwingen = [
         w for w in waarschuwingen if not any(m in w for m in _OVERLAPT_MET_HARD)
     ]

@@ -126,10 +126,42 @@ class ValidateAnalyseTest(unittest.TestCase):
         _mark(data)["formulering"] = "een [bankrekening]"
         self.assertEqual(_run(data, "2"), 0)
 
-    def test_echt_niet_letterlijk_citaat_waarschuwt(self):
+    def test_echt_niet_letterlijk_citaat_blokkeert(self):
+        # Citaat-mismatch is een blokkerende fout (brongetrouwheid), geen waarschuwing meer.
         data = copy.deepcopy(GELDIG_ACT2)
         _mark(data)["formulering"] = "de belastingbetaler verzint iets"
-        self.assertEqual(_run(data, "2"), 1)
+        self.assertEqual(_run(data, "2"), 2)
+
+    def test_citaat_geheel_tussen_haken_blokkeert(self):
+        # Een formulering die volledig uit invoegingen bestaat ('[…]') citeert niets.
+        data = copy.deepcopy(GELDIG_ACT2)
+        _mark(data)["formulering"] = "[een parafrase zonder één letterlijk fragment]"
+        self.assertEqual(_run(data, "2"), 2)
+
+    def test_citaat_alleen_ellips_blokkeert(self):
+        data = copy.deepcopy(GELDIG_ACT2)
+        _mark(data)["formulering"] = "..."
+        self.assertEqual(_run(data, "2"), 2)
+
+    def test_citaat_uit_ander_lid_dan_vindplaats_blokkeert(self):
+        # De toets loopt tegen het lid dat de vindplaats claimt, niet tegen de concatenatie:
+        # een citaat uit lid 2 met vindplaats "lid 1" is een verkeerde herleiding.
+        data = copy.deepcopy(GELDIG_ACT2)
+        data["bronnen"][0]["leden"].append(
+            {"lid": "2", "tekst": "De inspecteur stelt de aanslag vast."}
+        )
+        _mark(data)["formulering"] = "De inspecteur stelt de aanslag vast"
+        _mark(data)["vindplaats"] = "lid 1"
+        self.assertEqual(_run(data, "2"), 2)
+
+    def test_citaat_uit_geclaimd_lid_exit_0(self):
+        data = copy.deepcopy(GELDIG_ACT2)
+        data["bronnen"][0]["leden"].append(
+            {"lid": "2", "tekst": "De inspecteur stelt de aanslag vast."}
+        )
+        _mark(data)["formulering"] = "De inspecteur stelt de aanslag vast"
+        _mark(data)["vindplaats"] = "lid 2"
+        self.assertEqual(_run(data, "2"), 0)
 
     def test_geldige_act3_exit_0(self):
         self.assertEqual(_run(GELDIG_ACT3, "3"), 0)
@@ -275,13 +307,66 @@ class ValidateAct3Test(unittest.TestCase):
         data["begrippen"][2]["herkomst"] = {"status": "nieuw"}
         self.assertEqual(_run(data, "3", begrippenlijst=lijst), 1)
 
-    def test_herkomst_dangling_aangeleverd_id_waarschuwt(self):
+    def test_herkomst_dangling_aangeleverd_id_blokkeert(self):
+        # Herkomst-structuurfouten blokkeren: een dangling aangeleverd_id maakt het
+        # hergebruik oncontroleerbaar.
         lijst = {"begrippen": [{"id": "ab1", "naam": "belastingplichtige"}]}
         data = copy.deepcopy(GELDIG_ACT3)
         data["begrippen"][0]["herkomst"] = {"status": "hergebruikt", "aangeleverd_id": "ab9"}
         data["begrippen"][1]["herkomst"] = {"status": "nieuw"}
         data["begrippen"][2]["herkomst"] = {"status": "nieuw"}
+        self.assertEqual(_run(data, "3", begrippenlijst=lijst), 2)
+
+    def test_herkomst_onbekende_status_blokkeert(self):
+        lijst = {"begrippen": [{"id": "ab1", "naam": "belastingplichtige"}]}
+        data = copy.deepcopy(GELDIG_ACT3)
+        data["begrippen"][0]["herkomst"] = {"status": "overgetypt"}
+        data["begrippen"][1]["herkomst"] = {"status": "nieuw"}
+        data["begrippen"][2]["herkomst"] = {"status": "nieuw"}
+        self.assertEqual(_run(data, "3", begrippenlijst=lijst), 2)
+
+    def test_herkomst_zonder_aangeleverd_id_blokkeert(self):
+        lijst = {"begrippen": [{"id": "ab1", "naam": "belastingplichtige"}]}
+        data = copy.deepcopy(GELDIG_ACT3)
+        data["begrippen"][0]["herkomst"] = {"status": "hergebruikt"}
+        data["begrippen"][1]["herkomst"] = {"status": "nieuw"}
+        data["begrippen"][2]["herkomst"] = {"status": "nieuw"}
+        self.assertEqual(_run(data, "3", begrippenlijst=lijst), 2)
+
+    def test_herkomst_aangepast_zonder_motivatie_waarschuwt(self):
+        # Ontbrekende motivatie blijft een (inhoudelijke) waarschuwing, geen structuurfout.
+        lijst = {"begrippen": [{"id": "ab1", "naam": "belastingplichtige"}]}
+        data = copy.deepcopy(GELDIG_ACT3)
+        data["begrippen"][0]["herkomst"] = {"status": "aangepast", "aangeleverd_id": "ab1"}
+        data["begrippen"][1]["herkomst"] = {"status": "nieuw"}
+        data["begrippen"][2]["herkomst"] = {"status": "nieuw"}
         self.assertEqual(_run(data, "3", begrippenlijst=lijst), 1)
+
+    def test_ongeldige_klasse_op_begrip_blokkeert(self):
+        # Spiegel van act-2: een verzonnen JAS-klasse blokkeert ook op een begrip.
+        data = copy.deepcopy(GELDIG_ACT3)
+        data["begrippen"][0]["klasse"] = "Verzonnen klasse"
+        self.assertEqual(_run(data, "3"), 2)
+
+    def test_invoer_item_zonder_begrip_id_blokkeert(self):
+        data = copy.deepcopy(GELDIG_ACT3)
+        data["afleidingsregels"][0]["invoer"] = [{"toelichting": "zonder begrip_id"}]
+        self.assertEqual(_run(data, "3"), 2)
+
+    def test_parameter_item_zonder_begrip_id_blokkeert(self):
+        data = copy.deepcopy(GELDIG_ACT3)
+        data["afleidingsregels"][0]["parameters"] = [{"waarde": "5%", "toelichting": "x"}]
+        self.assertEqual(_run(data, "3"), 2)
+
+    def test_synoniem_botst_met_andere_begripsnaam_blokkeert(self):
+        data = copy.deepcopy(GELDIG_ACT3)
+        data["begrippen"][1]["synoniemen"] = ["Belastingplichtige"]  # = naam van b1
+        self.assertEqual(_run(data, "3"), 2)
+
+    def test_synoniem_gelijk_aan_eigen_naam_waarschuwt(self):
+        data = copy.deepcopy(GELDIG_ACT3)
+        data["begrippen"][0]["synoniemen"] = ["belastingplichtige"]
+        self.assertEqual(_run(data, "3"), 1)
 
 
 if __name__ == "__main__":

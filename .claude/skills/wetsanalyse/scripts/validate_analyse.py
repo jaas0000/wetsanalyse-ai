@@ -87,12 +87,30 @@ DELEGATIE_KLASSE = "Delegatiebevoegdheid en delegatie-invulling"
 _ELLIPS = re.compile(r"\s*(?:\.\.\.|…)\s*")
 _HAKEN = re.compile(r"\[[^\]]*\]")
 
+# Lid-nummer uit een lid-relatieve vindplaats ("lid 2", "lid 3, onderdeel a", …).
+_VINDPLAATS_LID = re.compile(r"\blid\s+(\S+?)[\s,.;]*(?:$|,)", re.IGNORECASE)
+
+
+def _geclaimde_lid_tekst(vindplaats: str, leden: list[dict]) -> str | None:
+    """De tekst van het lid dat `vindplaats` claimt, of None als er geen specifiek lid te
+    herleiden is (geen lid-nummer, of het genoemde lid bestaat niet in de bron)."""
+    m = _VINDPLAATS_LID.search(vindplaats or "")
+    if not m:
+        return None
+    nummer = m.group(1).strip().rstrip(".,;")
+    for lid in leden:
+        if str(lid.get("lid") or "").strip() == nummer:
+            return lid.get("tekst") or ""
+    return None
+
 
 def fragmenten_letterlijk(formulering: str, brontekst: str) -> bool:
     """True als elk (op beletselteken gesplitst) fragment letterlijk in de brontekst staat.
 
     Vierkante-haak-invoegingen worden eerst weggestript, zodat 'een [bankrekening]' op
-    'een' wordt getoetst. Lege fragmenten (bv. door een eind-beletselteken) tellen niet mee.
+    'een' wordt getoetst. Lege fragmenten (bv. door een eind-beletselteken) tellen niet mee,
+    maar minstens ÉÉN niet-leeg letterlijk fragment is verplicht: een formulering die geheel
+    uit invoegingen/beletseltekens bestaat ('[...]', '…') citeert niets en is dus geen citaat.
 
     Beide kanten worden eerst naar unicode-NFC genormaliseerd: zonder dat zouden een composé
     'é' (U+00E9) en een decomposé 'e'+combining-accent (U+0065 U+0301) — visueel identiek —
@@ -101,8 +119,10 @@ def fragmenten_letterlijk(formulering: str, brontekst: str) -> bool:
     formulering = unicodedata.normalize("NFC", formulering)
     brontekst = unicodedata.normalize("NFC", brontekst)
     schoon = _HAKEN.sub("", formulering)
-    fragmenten = [f.strip() for f in _ELLIPS.split(schoon)]
-    return all((not f) or (f in brontekst) for f in fragmenten)
+    fragmenten = [f.strip() for f in _ELLIPS.split(schoon) if f.strip()]
+    if not fragmenten:
+        return False
+    return all(f in brontekst for f in fragmenten)
 
 
 def check_verwijzing_item(v: dict, geziene_ids: set[str], label: str) -> tuple[list[str], list[str]]:
@@ -212,11 +232,19 @@ def check_activiteit_2(data: dict) -> tuple[list[str], list[str]]:
                 heeft_delegatie_markering = True
 
             formulering = (m.get("formulering") or "").strip()
-            if formulering and leden_tekst and not fragmenten_letterlijk(formulering, leden_tekst):
-                kort = formulering[:60] + ("..." if len(formulering) > 60 else "")
-                waarschuwingen.append(
-                    f"[{mid}] Formulering lijkt geen letterlijk citaat uit de wettekst: '{kort}'"
-                )
+            if formulering and leden_tekst:
+                # Toets tegen het lid dat de vindplaats claimt; alleen zonder herleidbaar lid
+                # valt de toets terug op de samengevoegde leden-tekst. Een citaat-mismatch is
+                # blokkerend (fout): brongetrouwheid is niet onderhandelbaar.
+                doel_tekst = _geclaimde_lid_tekst(m.get("vindplaats") or "", bron.get("leden") or [])
+                if doel_tekst is None:
+                    doel_tekst = leden_tekst
+                if not fragmenten_letterlijk(formulering, doel_tekst):
+                    kort = formulering[:60] + ("..." if len(formulering) > 60 else "")
+                    fouten.append(
+                        f"[{mid}] Formulering lijkt geen letterlijk citaat uit de wettekst "
+                        f"van de geclaimde vindplaats: '{kort}'"
+                    )
 
             if not (m.get("vindplaats") or "").strip():
                 waarschuwingen.append(f"[{mid}] Veld 'vindplaats' ontbreekt of is leeg.")
@@ -378,12 +406,37 @@ def check_activiteit_3(
                     "ontkenning — laat dat weg (naamgevings-vuistregel)."
                 )
 
+        # Synoniemen delen de naamruimte met de voorkeurstermen: een synoniem dat samenvalt
+        # met de naam (of een synoniem) van een ánder begrip is een botsing — dan zijn het
+        # geen synoniemen maar een niet-ontdubbeld begrip of een niet-gesplitst homoniem.
+        for syn in (b.get("synoniemen") or []):
+            syn_norm = _norm_naam(str(syn))
+            if not syn_norm:
+                continue
+            if naam and syn_norm == _norm_naam(naam):
+                waarschuwingen.append(
+                    f"[{bid or '?'}] Synoniem '{syn}' is gelijk aan de eigen begripsnaam — "
+                    "laat het weg."
+                )
+                continue
+            if syn_norm in naam_index and naam_index[syn_norm] != (bid or "?"):
+                fouten.append(
+                    f"[{bid or '?'}] Synoniem '{syn}' botst met begrip "
+                    f"'{naam_index[syn_norm]}' (naam of synoniem). Voeg samen (synoniemen) "
+                    "of splits met een onderscheidende naam (homoniemen)."
+                )
+            else:
+                naam_index[syn_norm] = bid or "?"
+
         klasse = b.get("klasse", "")
         if not klasse:
             waarschuwingen.append(f"[{bid or '?'}] Veld 'klasse' ontbreekt of is leeg.")
         elif klasse not in GELDIGE_JAS_KLASSEN:
-            waarschuwingen.append(
-                f"[{bid or '?'}] Klasse op begrip is geen geldige JAS-klasse: '{klasse}'."
+            # Fout (blokkerend), net als bij een act-2-markering: er zijn dertien JAS-klassen,
+            # een verzonnen klasse op een begrip is net zo min toegestaan als op een markering.
+            fouten.append(
+                f"[{bid or '?'}] Klasse op begrip is geen geldige JAS-klasse: '{klasse}'. "
+                "Gebruik een van de 13 toegestane klassen."
             )
 
         definitie = (b.get("definitie") or "").strip()
@@ -442,20 +495,23 @@ def check_activiteit_3(
                     "aangeleverd — registreer hergebruikt/aangepast/nieuw."
                 )
         if herkomst:
+            # Structuurfouten in de herkomst blokkeren: een onnavolgbare herkomst-registratie
+            # maakt het hergebruik oncontroleerbaar. Alleen de ontbrekende motivatie blijft
+            # een waarschuwing (inhoudelijk aandachtspunt, geen structuurfout).
             status = herkomst.get("status", "")
             if status not in GELDIGE_HERKOMST_STATUS:
-                waarschuwingen.append(
+                fouten.append(
                     f"[{bid or '?'}] Onbekende herkomst-status '{status}' "
                     "(verwacht: hergebruikt, aangepast, nieuw)."
                 )
             elif status in ("hergebruikt", "aangepast"):
                 aid = (herkomst.get("aangeleverd_id") or "").strip()
                 if not aid:
-                    waarschuwingen.append(
+                    fouten.append(
                         f"[{bid or '?'}] herkomst '{status}' zonder 'aangeleverd_id'."
                     )
                 elif aangeleverde_ids and aid not in aangeleverde_ids:
-                    waarschuwingen.append(
+                    fouten.append(
                         f"[{bid or '?'}] herkomst.aangeleverd_id '{aid}' staat niet in de "
                         "aangeleverde begrippenlijst."
                     )
@@ -529,13 +585,28 @@ def check_activiteit_3(
                 r, rid, "Afleidingsregel", "uitvoer.begrip_id", begrip_ids, [uitvoer_id],
             ))
 
+        # Elk invoer-/parameter-item verwijst per begrip_id naar zijn bouwsteen; een item
+        # zónder begrip_id is een niet-geannoteerde bouwsteen en blokkeert (net als een
+        # dangling verwijzing) — de regel is dan niet tegen de begrippen te valideren.
         invoer = _object_items(r, "invoer", rid, "Afleidingsregel", fouten)
+        for i, item in enumerate(invoer, 1):
+            if not (item.get("begrip_id") or "").strip():
+                fouten.append(
+                    f"[{rid or '?'}] Afleidingsregel: invoer-item {i} heeft geen 'begrip_id' — "
+                    "maak eerst een begrip voor deze bouwsteen en verwijs daarnaar."
+                )
         fouten.extend(_check_begrip_refs(
             r, rid, "Afleidingsregel", "invoer.begrip_id", begrip_ids,
             [(i.get("begrip_id") or "").strip() for i in invoer],
         ))
 
         parameters = _object_items(r, "parameters", rid, "Afleidingsregel", fouten)
+        for i, item in enumerate(parameters, 1):
+            if not (item.get("begrip_id") or "").strip():
+                fouten.append(
+                    f"[{rid or '?'}] Afleidingsregel: parameter-item {i} heeft geen 'begrip_id' — "
+                    "maak eerst een begrip voor deze bouwsteen en verwijs daarnaar."
+                )
         fouten.extend(_check_begrip_refs(
             r, rid, "Afleidingsregel", "parameters.begrip_id", begrip_ids,
             [(p.get("begrip_id") or "").strip() for p in parameters],

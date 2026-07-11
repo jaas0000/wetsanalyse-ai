@@ -19,15 +19,59 @@ function isPublic(path: string): boolean {
   );
 }
 
+// Muterende methodes waarop de Origin-check geldt (CSRF defense-in-depth naast SameSite=Lax).
+const MUTEREND = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+
 export const authConfig = {
   // De app draait achter Nginx Proxy Manager; vertrouw de forward-headers voor de callback-host.
   trustHost: true,
   pages: { signIn: "/login" },
-  session: { strategy: "jwt" },
+  // Korte, rollende sessie: de bovengrens waarbinnen een gedeactiveerde/gedegradeerde gebruiker
+  // hoe dan ook zijn toegang verliest (de jwt-callback in auth.ts herverifieert daarbinnen
+  // periodiek tegen de API).
+  session: { strategy: "jwt", maxAge: 60 * 60 },
+  // Cookie-flags expliciet (defense-in-depth; dit zijn de Auth.js-defaults, maar vastgelegd
+  // zodat een library-upgrade ze niet stil kan versoepelen).
+  cookies: {
+    sessionToken: {
+      name:
+        process.env.NODE_ENV === "production"
+          ? "__Secure-authjs.session-token"
+          : "authjs.session-token",
+      options: {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        secure: process.env.NODE_ENV === "production",
+      },
+    },
+  },
   callbacks: {
     // Draait voor elk door de middleware-matcher geraakt request: bepaalt toegang + rol-gate.
-    authorized({ auth, request: { nextUrl } }) {
+    authorized({ auth, request }) {
+      const { nextUrl } = request;
       const path = nextUrl.pathname;
+      // CSRF defense-in-depth naast SameSite=Lax: een muterende BFF-call moet van de eigen
+      // origin komen. Alleen afgedwongen als de browser een Origin-header meestuurt (fetch/POST
+      // doet dat altijd; header-loze server-side calls vallen terug op SameSite). Auth.js' eigen
+      // /api/auth/* heeft al een CSRF-token en valt buiten de middleware-matcher.
+      if (path.startsWith("/api/") && MUTEREND.has(request.method)) {
+        const origin = request.headers.get("origin");
+        if (origin) {
+          let originHost: string | null = null;
+          try {
+            originHost = new URL(origin).host;
+          } catch {
+            originHost = null;
+          }
+          const eigenHosts = new Set(
+            [nextUrl.host, request.headers.get("x-forwarded-host")].filter(Boolean),
+          );
+          if (!originHost || !eigenHosts.has(originHost)) {
+            return Response.json({ detail: "Origin niet toegestaan." }, { status: 403 });
+          }
+        }
+      }
       if (isPublic(path)) return true;
       const user = auth?.user;
       if (!user) return false; // → redirect naar de signIn-pagina (/login)

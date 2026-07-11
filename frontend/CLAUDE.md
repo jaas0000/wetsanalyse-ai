@@ -141,6 +141,17 @@ De **harde scheidingslijn**: alles met een token is server-only.
   ingelogde identiteit als vertrouwde `X-User-Id`-header (uit de sessie, nooit uit browser-input).
   Let op: Auth.js' eigen routes leven onder `/api/auth/*` — daar geen eigen BFF-route bijzetten
   (de eenmalige-registratie-proxy staat daarom op `/api/setup`).
+- **Sessie-revocatie + CSRF defense-in-depth.** De sessie is kort en rollend
+  (`session.maxAge` = 1 uur in `auth.config.ts`); de node-`jwt`-callback in `auth.ts`
+  herverifieert elke ~5 min de accountstatus bij de API (`lib/server.ts → getAccountStatus` →
+  `/v1/auth/me`): een gedeactiveerd account invalideert de sessie, een rolwijziging werkt direct
+  door in het token. De edge-middleware draait de lichte `jwt`-variant zonder herverificatie
+  (`lib/server.ts` is node-only) — elke `auth()`-aanroep in Server Components/route handlers
+  loopt wél langs de herverifiërende versie, en `maxAge` is de harde bovengrens. Daarnaast
+  handhaaft de `authorized`-callback een **Origin-check** op muterende BFF-calls
+  (`POST/PUT/PATCH/DELETE` op `/api/*`, incl. de publieke `/api/login-verify`): een meegestuurde
+  vreemde Origin → 403; zonder Origin-header valt het terug op `SameSite=Lax`. De cookie-flags
+  (`httpOnly`/`sameSite=lax`/`secure`) staan expliciet in `authConfig` vastgelegd.
 - **Geen vrije model-string of dwingende wet-lijst in de UI.** Het modelprofiel kies je uit de live
   `/api/profiles`-dropdown; de wet-dropdown (`/api/wetten`) is een gemak — is de catalogus leeg, dan
   val je terug op vrije BWB-id-invoer. Hetzelfde geldt voor de artikel-autocomplete en lid-keuze

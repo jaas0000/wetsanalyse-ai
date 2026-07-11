@@ -101,10 +101,13 @@ triviale geval; het rapport heeft de vorm `{werkgebied, bronnen[], begrippen, af
   `brongetrouwheid-check`). Dit is **geen** state-machine-veld: het staat los van de state-CAS en heeft
   geen control-flow-effect; bij review/terminal/fout gaat het op `None`.
 - `wettenbank.py` — MCP-client; lege/fout-respons → `WettenbankError` (nooit doorgaan met lege context).
-- `validation.py` — **zacht** (skill-`check_activiteit_2/3`, schema) vs **hard** (brongetrouwheid: citaat
-  letterlijk in leden-tekst na normalisatie, `vindplaats`/`bronreferentie` verplicht). Voor act 3
-  krijgt `schema_check` context mee: de goedgekeurde act-2 activeert de dekkings- en
-  markering-id-checks, de aangeleverde begrippenlijst de herkomst-checks.
+- `validation.py` — **schema** (skill-`check_activiteit_2/3`: FOUTEN blokkeren — auto-correctie,
+  anders `fout`, ook in `review:false`; WAARSCHUWINGEN reizen mee als context) vs **hard**
+  (brongetrouwheid: citaat letterlijk in leden-tekst na normalisatie, `vindplaats`/`bronreferentie`
+  verplicht). Voor act 3 krijgt `schema_check` context mee: de goedgekeurde act-2 activeert de
+  dekkings- en markering-id-checks, de aangeleverde begrippenlijst de herkomst-checks. Meldingen
+  die de harde check al dekt (citaat/vindplaats) worden uit de skill-fouten/-waarschuwingen
+  gefilterd, zodat per concern één — de genormaliseerde — melding overblijft.
 - `ratelimit.py` — in-process per-client rate limit (dependency) + `QuotaExceeded` (beleidsgrenzen).
 - `llm/` — `LLMClient`-protocol + LiteLLM-implementatie (provider = config; output-strategie + parse).
   `throttle.py` — proces-globale **concurrency-rem** (semafoor) op gelijktijdige LLM-calls
@@ -164,6 +167,9 @@ triviale geval; het rapport heeft de vorm `{werkgebied, bronnen[], begrippen, af
 ## Garanties (niet aan tornen)
 
 - HARD brongetrouwheid faalt → job naar `fout`, **ook in `review:false`**. Nooit stil `klaar`.
+- Schema-FOUTEN (ongeldige JAS-klasse, dangling `begrip_id`, …) blokkeren eveneens: eerst
+  auto-correctie, blijven ze staan → `fout` (gelijke handhaving met het skill-spoor, waar
+  `validate_analyse.py` met exit 2 blokkeert). Waarschuwingen blokkeren niet.
 - Auto-correctie is **geen ronde**: her-genereren binnen één ronde vóór het wegschrijven.
 - Feedback alleen via de API en alleen in een `wacht-op-review-*`-state (anders 409);
   `akkoord-afronden` alleen op activiteit 2 en zonder opmerkingen (contract-validatie).
@@ -261,7 +267,11 @@ Docker-image + Portainer-stack achter NPM, net als de MCP (`docker-compose.yml`)
 `UPDATE … RETURNING`), dus `--workers >1` en `deploy.replicas >1` zijn veilig. Een geclaimde job draagt
 een `owner` + `lease_until`; de owner houdt de lease vers (heartbeat) en schrijft fenced (alleen zolang
 hij de job bezit), en een periodieke **reaper** ruimt jobs met een verlopen lease op (crashende worker →
-job naar `fout`, herstelbaar via `retry`). Knoppen: `WETSANALYSE_LEASE_S` (default 120) en
+job naar `fout`, herstelbaar via `retry`). Dezelfde reaper (én `reconcile_startup`) vangt ook
+**verweesde `queued`-jobs** af: crasht het proces tussen de create-commit en de `run_initial`-claim,
+dan gaat een `queued` zonder owner die ouder is dan de lease naar `fout` (retry/delete werken dan
+weer; een `queued` project is bovendien direct door de gebruiker te verwijderen). Knoppen:
+`WETSANALYSE_LEASE_S` (default 120) en
 `WETSANALYSE_REAPER_INTERVAL_S` (default 60; 0 = uit). Kies de lease ruim langer dan de langste
 realistische staptijd. De containers draaien **non-root** en **PostgreSQL draait met authenticatie**. Alle secrets (LLM-key, tokens, DB-credentials, connection string) staan
 als bestanden op de host (`*_FILE`-patroon) — nooit als plain env var in de container of Portainer-UI.
@@ -338,7 +348,10 @@ Knoppen via env (0 = uit): `WETSANALYSE_RATE_LIMIT_MAX`/`_WINDOW` (per-client re
 muterende endpoints → 429), `WETSANALYSE_ADMIN_TEST_RATE_MAX`/`_WINDOW` (aparte, krappe limiet op
 `POST /v1/admin/profiles/{name}/test` → 429; die doet een betaalde LLM-call achter alleen het
 admin-token. De testfout is bovendien gesaniteerd: een vaste melding in de respons, de ruwe
-provider-fout alleen in het server-log), `WETSANALYSE_MAX_ACTIVE_JOBS` (max gelijktijdig lopende analyses per
+provider-fout alleen in het server-log — dezelfde sanitisatie geldt voor `job.error.bericht`:
+een rauwe provider-/interne fout landt als vaste melding, de details alleen in het server-log.
+De in-process rate-limiter is begrensd (sweep + harde cap op het aantal sleutels, fail-closed)
+zodat aanvaller-gekozen sleutels via de publieke login-route het geheugen niet vol pompen), `WETSANALYSE_MAX_ACTIVE_JOBS` (max gelijktijdig lopende analyses per
 client → 429), `WETSANALYSE_LLM_TOKEN_BUDGET` (token-plafond per analyse → job naar `fout`,
 `FoutKlasse.quota`), `WETSANALYSE_LLM_MAX_CONCURRENCY` (globaal plafond op gelijktijdige LLM-calls,
 default 4 — de echte rem tegen provider-rate-limits), `WETSANALYSE_LLM_TIMEOUT_S` (harde wandklok-

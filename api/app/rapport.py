@@ -81,14 +81,12 @@ async def bouw_rapport_async(
     rondes3 = await store.lees_alle_rondes(job_id, "3")
 
     def reviewlog_rondes(rondes: dict) -> list[dict]:
-        return [
-            {
-                "ronde": int(k),
-                "items": (rd.feedback or {}).get("items", {}),
-                "algemeen": (rd.feedback or {}).get("algemeen", ""),
-            }
+        # Zelfde ronde-vorm als de skill (bouw_reviewlog_rondes), incl. `status` — zo is een
+        # `akkoord-afronden`-keuze (act2-only) ook in het API-rapport zichtbaar.
+        return bouw_reviewlog_rondes([
+            (int(k), rd.feedback)
             for k, rd in sorted(rondes.items(), key=lambda x: int(x[0]))
-        ]
+        ])
 
     werkgebied = dict(a2.get("werkgebied") or {})
     werkgebied.setdefault("analysefocus", a2.get("analysefocus", ""))

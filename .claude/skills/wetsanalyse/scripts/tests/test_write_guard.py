@@ -45,15 +45,25 @@ class WriteGuardTest(unittest.TestCase):
         # feedback.json mag alleen de review-server schrijven → altijd exit 2.
         self.assertEqual(_run(str(self.werk / "feedback.json")), 2)
 
-    def test_bestaande_analyse_geblokkeerd(self):
+    def test_bestaande_analyse_voor_review_toegestaan(self):
+        # Vóór de review (geen feedback.json) mag de skill het ronde-bestand corrigeren —
+        # SKILL.md verplicht herstel van validatiefouten binnen dezelfde ronde.
         pad = self.werk / "analyse.json"
         pad.write_text('{"markeringen": []}', encoding="utf-8")
+        self.assertEqual(_run(str(pad)), 0)
+
+    def test_gereviewde_analyse_geblokkeerd(self):
+        # Zodra feedback.json bestaat is de ronde voltooid → het resultaat is immutabel.
+        pad = self.werk / "analyse.json"
+        pad.write_text('{"markeringen": []}', encoding="utf-8")
+        (self.werk / "feedback.json").write_text('{"status": "akkoord"}', encoding="utf-8")
         self.assertEqual(_run(str(pad)), 2)
 
-    def test_lege_analyse_ook_geblokkeerd(self):
-        # Regressie: een 0-byte analyse.json mag niet meer stilzwijgend overschreven worden.
+    def test_lege_gereviewde_analyse_ook_geblokkeerd(self):
+        # Regressie: ook een 0-byte analyse.json in een gereviewde ronde blijft beschermd.
         pad = self.werk / "analyse.json"
         pad.write_text("", encoding="utf-8")
+        (self.werk / "feedback.json").write_text('{"status": "akkoord"}', encoding="utf-8")
         self.assertEqual(pad.stat().st_size, 0)
         self.assertEqual(_run(str(pad)), 2)
 

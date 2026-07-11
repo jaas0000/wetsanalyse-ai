@@ -76,6 +76,20 @@ def verzamel_rondes(activiteit_dir: Path) -> list[tuple[int, dict | None]]:
     return out
 
 
+def schoon_akkoord(rondes: list[tuple[int, dict | None]]) -> bool:
+    """True als de hóógste ronde een akkoord zonder opmerkingen draagt. Een rapport hoort op
+    een afgeronde review-lus te steunen; anders is het een tussenstand."""
+    if not rondes:
+        return False
+    _, fb = max(rondes, key=lambda t: t[0])
+    if not fb:
+        return False
+    status = fb.get("status", "")
+    heeft_opmerkingen = any((v or "").strip() for v in (fb.get("items") or {}).values()) or \
+        (fb.get("algemeen") or "").strip()
+    return status in ("akkoord", "akkoord-afronden") and not heeft_opmerkingen
+
+
 def bouw_reviewlog_rondes(rondes: list[tuple[int, dict | None]]) -> list[dict]:
     """Zet de ruw-feedback-data om naar een leesbare lijst voor de JSON."""
     result = []
@@ -238,10 +252,21 @@ def main() -> None:
                 for ref in (vw.get("begrip_ids") or []):
                     check_begrip_ref("afleidingsregel", iid, "voorwaarden", ref)
 
+    # Een rapport hoort op een schoon afgeronde review-lus te steunen: waarschuw als de
+    # hoogste ronde geen akkoord-zonder-opmerkingen draagt (niet-blokkerend; de analist kan
+    # bewust een tussenstand exporteren, maar hoort dat te weten).
+    for act, rondes in (("2", rondes2), ("3", rondes3)):
+        if not schoon_akkoord(rondes):
+            print(f"Let op: de hoogste ronde van activiteit {act} heeft geen schoon "
+                  "'akkoord' in feedback.json — is de review-lus wel afgerond?")
+
     if problemen:
-        print("Let op: dangling referenties (controleer act-2/act-3):")
+        print("FOUT: dangling referenties (controleer act-2/act-3):", file=sys.stderr)
         for p in problemen:
-            print(f"  - {p}")
+            print(f"  - {p}", file=sys.stderr)
+        # Blokkerend (exit 2): een rapport met onherleidbare referenties mag niet stil als
+        # eindresultaat door. Het bestand is wél geschreven, zodat de analist kan inspecteren.
+        sys.exit(2)
 
 
 if __name__ == "__main__":
