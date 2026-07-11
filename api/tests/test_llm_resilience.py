@@ -238,8 +238,13 @@ def test_parse_zet_foutklasse_op_wettenbank_error():
 
 async def test_repair_retry_telt_usage_van_beide_calls(monkeypatch):
     """Faalt de eerste generatie op JSON en herstelt de repareer-retry het, dan telt de
-    LLMResult de tokens van BEIDE calls — de eerste (mislukte) generatie is óók verbruik."""
-    import litellm
+    LLMResult de tokens van BEIDE calls — de eerste (mislukte) generatie is óók verbruik.
+
+    litellm zit in de optionele `llm`-extra en ontbreekt in de CI-testomgeving; de client
+    importeert het pas ín complete(), dus een stub-module in sys.modules volstaat en de test
+    draait overal (de token-fallback vangt het ontbrekende token_counter-attribuut op)."""
+    import sys
+    import types
 
     from app.llm.base import LlmConfig
     from app.llm.litellm_client import LiteLLMClient
@@ -271,7 +276,9 @@ async def test_repair_retry_telt_usage_van_beide_calls(monkeypatch):
     async def fake_acompletion(**kwargs):
         return next(responsen)
 
-    monkeypatch.setattr(litellm, "acompletion", fake_acompletion)
+    stub = types.ModuleType("litellm")
+    stub.acompletion = fake_acompletion
+    monkeypatch.setitem(sys.modules, "litellm", stub)
     client = LiteLLMClient(LlmConfig(model="fake/model", max_prompt_tokens=1_000_000))
     res = await client.complete("sys", "user")
 
