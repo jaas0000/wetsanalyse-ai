@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { JobState } from "./types";
 import {
   STATE_LABEL,
+  isDeletable,
   isReview,
   isRunning,
   isTerminal,
@@ -62,6 +63,18 @@ describe("state-classificatie", () => {
     for (const s of ALLE_STATES) {
       const n = [isReview(s), isRunning(s), isTerminal(s)].filter(Boolean).length;
       expect(n, s).toBe(1);
+    }
+  });
+
+  it("spiegelt de upstream delete-regel (terminaal/review/queued wel, lopend niet)", () => {
+    expect(isDeletable("queued")).toBe(true);
+    expect(isDeletable("klaar")).toBe(true);
+    expect(isDeletable("fout")).toBe(true);
+    expect(isDeletable("rs-klaar")).toBe(true);
+    expect(isDeletable("wacht-op-review-act3")).toBe(true);
+    for (const s of ["act2-runt", "act3-runt", "bouwt", "rs-gegevens-runt",
+                     "rs-regels-runt", "rs-bouwt"] as JobState[]) {
+      expect(isDeletable(s), s).toBe(false);
     }
   });
 

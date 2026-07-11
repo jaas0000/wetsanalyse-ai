@@ -56,6 +56,12 @@ export function isTerminal(state: JobState): boolean {
   return TERMINAL_STATES.includes(state);
 }
 
+/** Spiegelt de upstream delete-regel (DELETE /v1/projects/{id}): verwijderen mag vanuit een
+ *  eindstaat, een review-pauze of `queued` (verweesde job); lopende states geven 409. */
+export function isDeletable(state: JobState): boolean {
+  return isTerminal(state) || isReview(state) || state === "queued";
+}
+
 /** Macro-statusgroepen voor tellers en filters (gelijk aan de dashboard-indeling). */
 export type StatusBucket = "lopend" | "review" | "klaar" | "fout";
 

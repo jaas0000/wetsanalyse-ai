@@ -6,10 +6,13 @@ import { useRouter } from "next/navigation";
 import { StateBadge } from "@/components/ui/Badge";
 import { Button, LinkButton } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { Melding } from "@/components/ui/Melding";
 import { ProjectControls } from "@/components/ProjectControls";
 import { Pagination } from "@/components/Pagination";
 import { useProjectenStream } from "@/lib/useProjectenStream";
 import { bronnenSamenvatting } from "@/lib/bronnen";
+import { deleteProject, isApiError } from "@/lib/api";
+import { isDeletable } from "@/lib/states";
 import { pathSegment } from "@/lib/url";
 import {
   DEFAULT_FILTERS,
@@ -74,6 +77,96 @@ export function ProjectenLijstClient({ initieel }: { initieel: JobSummary[] }) {
     if (page !== huidige) setPage(huidige);
   }, [page, huidige]);
 
+  // Multi-select + bulk verwijderen. De selectie leeft op id en overleeft pagina-/filterwissels;
+  // rijen die intussen verdwenen zijn (SSE `removed`, ander tabblad) vallen er bij afleiding uit.
+  const [geselecteerd, setGeselecteerd] = useState<Set<string>>(new Set());
+  const [bezig, setBezig] = useState<{ k: number; n: number } | null>(null);
+  const [resultaat, setResultaat] = useState<{
+    type: "bevestiging" | "waarschuwing" | "fout";
+    tekst: string;
+    fouten?: { naam: string; detail: string }[];
+  } | null>(null);
+
+  const selectie = new Set([...geselecteerd].filter((id) => items.has(id)));
+  const paginaSelecteerbaar = lijst.filter((p) => isDeletable(p.state));
+  const alleOpPagina =
+    paginaSelecteerbaar.length > 0 && paginaSelecteerbaar.every((p) => selectie.has(p.id));
+  const enkeleOpPagina = paginaSelecteerbaar.some((p) => selectie.has(p.id));
+
+  function toggle(id: string) {
+    setResultaat(null);
+    setGeselecteerd((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function togglePagina() {
+    setResultaat(null);
+    setGeselecteerd((prev) => {
+      const next = new Set(prev);
+      if (alleOpPagina) for (const p of paginaSelecteerbaar) next.delete(p.id);
+      else for (const p of paginaSelecteerbaar) next.add(p.id);
+      return next;
+    });
+  }
+
+  function wisSelectie() {
+    setResultaat(null);
+    setGeselecteerd(new Set());
+  }
+
+  async function verwijderSelectie() {
+    const ids = [...selectie];
+    const n = ids.length;
+    if (n === 0) return;
+    if (!confirm(`${n} analyse${n === 1 ? "" : "s"} verwijderen? Dit kan niet ongedaan worden gemaakt.`)) {
+      return;
+    }
+    setResultaat(null);
+    const geslaagd = new Set<string>();
+    const fouten: { naam: string; detail: string }[] = [];
+    try {
+      for (let i = 0; i < ids.length; i++) {
+        const id = ids[i];
+        setBezig({ k: i + 1, n });
+        try {
+          await deleteProject(id);
+          geslaagd.add(id);
+        } catch (e) {
+          // 404 = al verwijderd (ander tabblad): het doel is bereikt.
+          if (isApiError(e) && e.status === 404) {
+            geslaagd.add(id);
+          } else {
+            const naam = items.get(id)?.naam || id;
+            fouten.push({ naam, detail: isApiError(e) ? e.detail : (e as Error).message });
+          }
+        }
+      }
+    } finally {
+      setBezig(null);
+    }
+    // Mislukte items blijven geselecteerd, zodat opnieuw proberen één klik is.
+    setGeselecteerd((prev) => new Set([...prev].filter((id) => !geslaagd.has(id))));
+    if (fouten.length === 0) {
+      setResultaat({
+        type: "bevestiging",
+        tekst: `${geslaagd.size} analyse${geslaagd.size === 1 ? "" : "s"} verwijderd.`,
+      });
+    } else {
+      setResultaat({
+        type: geslaagd.size > 0 ? "waarschuwing" : "fout",
+        tekst:
+          geslaagd.size > 0
+            ? `${geslaagd.size} verwijderd, ${fouten.length} mislukt:`
+            : `Verwijderen mislukt voor ${fouten.length} analyse${fouten.length === 1 ? "" : "s"}:`,
+        fouten,
+      });
+    }
+  }
+
   if (all.length === 0) {
     return (
       <Card className="flex flex-col items-center gap-3 px-6 py-16 text-center">
@@ -93,6 +186,40 @@ export function ProjectenLijstClient({ initieel }: { initieel: JobSummary[] }) {
     <div className="space-y-4">
       <ProjectControls filters={filters} onChange={setFilters} wetten={wetten} />
 
+      {(selectie.size > 0 || bezig) && (
+        <div className="flex flex-wrap items-center gap-3 rounded-md border border-line bg-surface px-4 py-2">
+          <span className="text-sm text-muted">
+            {selectie.size} geselecteerd
+          </span>
+          <Button
+            variant="danger"
+            size="sm"
+            onClick={verwijderSelectie}
+            disabled={bezig !== null || selectie.size === 0}
+          >
+            {bezig ? `Verwijderen… (${bezig.k}/${bezig.n})` : "Verwijderen"}
+          </Button>
+          <Button variant="ghost" size="sm" onClick={wisSelectie} disabled={bezig !== null}>
+            Selectie wissen
+          </Button>
+        </div>
+      )}
+
+      {resultaat && (
+        <Melding type={resultaat.type}>
+          {resultaat.tekst}
+          {resultaat.fouten && resultaat.fouten.length > 0 && (
+            <ul className="mt-1 list-inside list-disc space-y-0.5 text-sm">
+              {resultaat.fouten.map((f, i) => (
+                <li key={i}>
+                  <span className="font-medium">{f.naam}</span>: {f.detail}
+                </li>
+              ))}
+            </ul>
+          )}
+        </Melding>
+      )}
+
       {gefilterd.length === 0 ? (
         <Card className="flex flex-col items-center gap-3 px-6 py-12 text-center">
           <p className="text-sm text-muted">Geen analyses gevonden met deze filters.</p>
@@ -104,9 +231,24 @@ export function ProjectenLijstClient({ initieel }: { initieel: JobSummary[] }) {
         <>
           <Card className="overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[34rem] text-sm">
+              <table className="w-full min-w-[37rem] text-sm">
                 <thead>
                   <tr className="border-b border-line text-left text-xs uppercase tracking-wide text-faint">
+                    <th className="w-10 px-4 py-3">
+                      {paginaSelecteerbaar.length > 0 && (
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 accent-accent"
+                          aria-label="Selecteer alle analyses op deze pagina"
+                          checked={alleOpPagina}
+                          disabled={bezig !== null}
+                          ref={(el) => {
+                            if (el) el.indeterminate = enkeleOpPagina && !alleOpPagina;
+                          }}
+                          onChange={togglePagina}
+                        />
+                      )}
+                    </th>
                     <th className="px-4 py-3 font-medium">Naam</th>
                     <th className="px-4 py-3 font-medium">Bron</th>
                     <th className="px-4 py-3 font-medium">Status</th>
@@ -119,6 +261,21 @@ export function ProjectenLijstClient({ initieel }: { initieel: JobSummary[] }) {
                       key={p.id}
                       className="group border-b border-line/60 last:border-0 transition-colors hover:bg-surface"
                     >
+                      <td className="w-10 px-4 py-3">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 accent-accent"
+                          aria-label={`Selecteer ${p.naam || p.id}`}
+                          checked={selectie.has(p.id)}
+                          disabled={bezig !== null || !isDeletable(p.state)}
+                          title={
+                            isDeletable(p.state)
+                              ? undefined
+                              : "Kan niet verwijderd worden tijdens een lopende analyse"
+                          }
+                          onChange={() => toggle(p.id)}
+                        />
+                      </td>
                       <td className="px-4 py-3">
                         <Link href={`/projecten/${pathSegment(p.id)}`} className="block">
                           <span className="font-medium text-ink group-hover:text-link">
