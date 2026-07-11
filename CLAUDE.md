@@ -58,13 +58,7 @@ inhoudelijke `references/`/`scripts/`. De samenwerkende delen:
    JAS-klassekleuren uit `docs/wa-table.png`. Op een afgeronde analyse kan de gebruiker met
    **"Naar RegelSpraak"** de formaliseringsfase starten en het RegelSpraak-model bekijken/downloaden.
    Heeft een eigen `CLAUDE.md` + `README.md` — lees die bij werk *in* de frontend.
-7. **`tools/kennisgraaf/`** — standalone 3D-verwijzingsgraaf van de JCI-links in de
-   Invorderingswet 1990 + Leidraad Invordering 2008 (aparte knopen voor sub-artikelen en leden,
-   zoekpaneel op artikel + lid). Statische viewer: open het gecommitte standalone HTML-bestand of
-   `npm run serve` (poort 4567); data hergenereren via `npm run extract` (via de MCP) →
-   `graph.json` → `npm run bundle`. Het bijbehorende GraphRAG-ontwerp staat in
-   `docs/architectuur/kennisgraaf-graphrag-ontwerp.md` (ontwerp, geen code).
-8. **`deploy/openshift/`** — Kustomize-manifests om de hele stack (API · frontend · MCP ·
+7. **`deploy/openshift/`** — Kustomize-manifests om de hele stack (API · frontend · MCP ·
    PostgreSQL) op een OpenShift-namespace uit te rollen: `base/` + overlays
    `local`/`simpel`/`beproeving`/`managed-prod`, `components/postgres-cnpg` (CloudNativePG) en
    `gen-secrets.py`. Lees `deploy/openshift/INSTALL.md` bij werk aan de uitrol; de
@@ -221,4 +215,6 @@ deze bij inhoudelijke vragen over de methode; de skill-`references/` zijn de ope
 samenvatting daarvan. `docs/architectuur/wetsanalyse-architectuur.html` is een interactieve
 architectuurplaat (API · MCP · frontend tot functieniveau), in dezelfde styling als de frontend;
 `docs/architectuur/kennisgraaf-graphrag-ontwerp.md` is het ontwerpdoc voor de kennisgraaf als
-GraphRAG-retrieval-substraat (status: ontwerp, nog geen code buiten `tools/kennisgraaf/`).
+GraphRAG-retrieval-substraat (status: ontwerp, geen code — het vroegere `tools/kennisgraaf/`-
+prototype, een 3D-verwijzingsgraaf van de Invorderingswet 1990 + Leidraad Invordering 2008,
+is verwijderd).

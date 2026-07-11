@@ -1,9 +1,10 @@
 # Kennisgraaf als GraphRAG-substraat voor de wetsanalyse — ontwerp
 
-> **Status:** ontwerp ter besluitvorming (geen code). Doel: vastleggen hoe de losse
-> `tools/kennisgraaf` en de wetsanalyse-annotaties tot één traceerbare kennisgraaf kunnen
-> samenkomen, hoe die in de API/Postgres landt en hoe retrieval erover loopt — zónder de
-> brongetrouwheid of de human-in-the-loop op te geven.
+> **Status:** ontwerp ter besluitvorming (geen code). Doel: vastleggen hoe de referentielaag
+> (voorheen het prototype `tools/kennisgraaf`, inmiddels uit de repo verwijderd — de
+> extractie-aanpak ervan blijft de referentie in dit ontwerp) en de wetsanalyse-annotaties tot
+> één traceerbare kennisgraaf kunnen samenkomen, hoe die in de API/Postgres landt en hoe
+> retrieval erover loopt — zónder de brongetrouwheid of de human-in-the-loop op te geven.
 >
 > Leeswijzer: §1–§2 motiveren en inventariseren, §3–§4 leggen het schema en de
 > bron-van-waarheid vast, §5–§8 zijn de architectuurkeuzes, §9–§10 zijn risico's en
@@ -88,7 +89,7 @@ Cruciaal: dit is geen nieuwbouw. Het datamodel ís al een graaf — we maken hem
 | `Begrip.bron_verwijzing` (id van de definitie-verwijzing) | `api/app/contracts.py` | kant `definieert` (begrip→artikel/definitie) |
 | `Begrip.vindplaatsen` / `Afleidingsregel.vindplaatsen` (`[{bron_id, lid}]`) | `api/app/contracts.py` | kant `vindplaats` (begrip/regel→artikel+lid) |
 | `Markering` (JAS-klasse op een lid) | `api/app/contracts.py` | annotatie op de artikel-knoop |
-| referentielaag (intref/extref/koppeling/structuur) | `tools/kennisgraaf/extract.ts` | knopen `artikel/sectie/wet/extern` + kanten |
+| referentielaag (intref/extref/koppeling/structuur) | het verwijderde prototype `tools/kennisgraaf/extract.ts` (aanpak: MCP-extractie → `graph.json`) | knopen `artikel/sectie/wet/extern` + kanten |
 | scoping-beleid (diepte-cap 1 + relevantie-gate, bounded delegaties) | `.claude/skills/wetsanalyse/references/verwijzingen-volgen.md` | graaf-gestuurde werkgebied-scoping |
 | begrippen als objectmodel (`gegevensspraak`: objecttypen/feittypen) | `RegelspraakModel` in `api/app/contracts.py` | begrip-knoop → objecttype-knoop |
 
