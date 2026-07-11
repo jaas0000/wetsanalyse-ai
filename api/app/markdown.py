@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import re
 
+from .validation import jas_sorteersleutel
+
 
 def _lid_suffix(label: str, lid) -> str:
     """Lid-suffix voor een vindplaats. Normaliseert de lid-waarde (strip een eventuele
@@ -70,10 +72,12 @@ def rapport_naar_markdown(r: dict) -> str:
         for lid in b.get("leden", []):
             L.append(f"- **Lid {lid.get('lid', '')}:** {lid.get('tekst', '')}")
         L += ["", "**Markeringen en classificatie**"]
+        markeringen = sorted(b.get("markeringen", []),
+                             key=lambda m: jas_sorteersleutel(m.get("klasse", "")))
         L += _tabel(
             ["Id", "Formulering", "JAS-klasse", "Vindplaats", "Toelichting"],
             [[m.get("id", ""), m.get("formulering", ""), m.get("klasse", ""),
-              m.get("vindplaats", ""), m.get("toelichting", "")] for m in b.get("markeringen", [])],
+              m.get("vindplaats", ""), m.get("toelichting", "")] for m in markeringen],
         )
         verwijzingen = b.get("verwijzingen", [])
         if verwijzingen:
@@ -93,11 +97,13 @@ def rapport_naar_markdown(r: dict) -> str:
 
     L.append("## 3. Begrippen en afleidingsregels (gedeeld over het werkgebied)")
     L.append("### Begrippen")
+    begrippen = sorted(r.get("begrippen", []),
+                       key=lambda b: jas_sorteersleutel(b.get("klasse", "")))
     L += _tabel(
         ["Id", "Naam", "Synoniemen", "Klasse", "Definitie", "Vindplaats"],
         [[b.get("id", ""), b.get("naam", ""), ", ".join(b.get("synoniemen") or []),
           b.get("klasse", ""), b.get("definitie", ""), _vindplaats(b.get("vindplaatsen"), bron_label)]
-         for b in r.get("begrippen", [])],
+         for b in begrippen],
     )
     L += ["", "### Afleidingsregels"]
     L += _tabel(

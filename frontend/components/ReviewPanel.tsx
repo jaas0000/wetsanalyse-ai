@@ -12,6 +12,7 @@ import {
   begripNaamMap, herkomstLabel, regelVelden, relatiesText, verwijstNaarText,
 } from "@/lib/begrippen";
 import { bronLabelMap, vindplaatsText } from "@/lib/bronnen";
+import { jasVolgorde } from "@/lib/jas";
 import type {
   Activiteit, Analyse2, Analyse3, Bron, Feedback, GegevensSpraak, Job, Lid, RsRegel,
 } from "@/lib/types";
@@ -101,7 +102,10 @@ function items2of3(act: "2" | "3", data: Analyse2 | Analyse3): ReviewItem[] {
     const out: ReviewItem[] = [];
     for (const bron of a.bronnen ?? []) {
       const bronNaam = labels[bron.bron_id] || bron.label;
-      for (const m of bron.markeringen ?? []) {
+      const markeringen = [...(bron.markeringen ?? [])].sort(
+        (x, y) => jasVolgorde(x.klasse) - jasVolgorde(y.klasse),
+      );
+      for (const m of markeringen) {
         out.push({
           id: m.id,
           titel: m.formulering || m.id,
@@ -134,7 +138,9 @@ function items2of3(act: "2" | "3", data: Analyse2 | Analyse3): ReviewItem[] {
   const a = data as Analyse3;
   const labels = bronLabelMap(a.bronnen);
   const namen = begripNaamMap(a.begrippen);
-  const begrippen: ReviewItem[] = (a.begrippen ?? []).map((b) => ({
+  const begrippen: ReviewItem[] = [...(a.begrippen ?? [])]
+    .sort((x, y) => jasVolgorde(x.klasse) - jasVolgorde(y.klasse))
+    .map((b) => ({
     id: b.id,
     titel: b.naam || b.id,
     klasse: b.klasse,

@@ -9,6 +9,7 @@ import {
   begripNaamMap, herkomstLabel, regelVelden, relatiesText, verwijstNaarText,
 } from "@/lib/begrippen";
 import { bronLabel, bronLabelMap, vindplaatsText } from "@/lib/bronnen";
+import { jasVolgorde } from "@/lib/jas";
 import type { Bron, Markering, Rapport, Verwijzing } from "@/lib/types";
 
 const VERWIJZING_FUNCTIE_LABEL: Record<string, string> = {
@@ -192,7 +193,7 @@ export function RapportView({ rapport }: { rapport: Rapport }) {
       {rapport.begrippen?.length > 0 && (
         <Section title="Begrippen" count={rapport.begrippen.length} subtitle="activiteit 3 · gedeeld" level={3}>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-            {rapport.begrippen.map((b) => (
+            {[...rapport.begrippen].sort((a, b) => jasVolgorde(a.klasse) - jasVolgorde(b.klasse)).map((b) => (
               <Card key={b.id} className="p-4">
                 <div className="flex items-start justify-between gap-2">
                   <p className="min-w-0 break-words font-display text-base font-medium text-ink">{b.naam}</p>
@@ -286,7 +287,7 @@ function groepeer(markeringen: Markering[]): [string, Markering[]][] {
     if (!map.has(k)) map.set(k, []);
     map.get(k)!.push(m);
   }
-  return [...map.entries()];
+  return [...map.entries()].sort((a, b) => jasVolgorde(a[0]) - jasVolgorde(b[0]));
 }
 
 function groepeerVerwijzingen(verwijzingen: Verwijzing[]): [string, Verwijzing[]][] {

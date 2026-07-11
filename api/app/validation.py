@@ -39,6 +39,8 @@ def _load_skill_module(naam: str):
 
 _validate = _load_skill_module("validate_analyse")
 GELDIGE_JAS_KLASSEN: set[str] = _validate.GELDIGE_JAS_KLASSEN  # canonieke bron (drift-fix)
+JAS_KLASSEN_VOLGORDE: tuple[str, ...] = _validate.JAS_KLASSEN_VOLGORDE  # weergave-volgorde (wa-table.png)
+jas_sorteersleutel = _validate.jas_sorteersleutel
 GELDIGE_REGELTYPEN: set[str] = _validate.GELDIGE_REGELTYPEN
 BEGRIP_PLICHTIGE_KLASSEN: set[str] = _validate.BEGRIP_PLICHTIGE_KLASSEN
 

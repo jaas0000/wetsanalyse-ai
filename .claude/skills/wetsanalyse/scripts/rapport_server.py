@@ -27,6 +27,9 @@ from functools import partial
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from validate_analyse import jas_sorteersleutel  # noqa: E402 — sibling-script, zelfde map
+
 TEMPLATE = Path(__file__).resolve().parent.parent / "assets" / "rapport.html"
 
 
@@ -199,7 +202,8 @@ def rapport_naar_md(d: dict) -> str:
             "| # | Formulering (letterlijk) | JAS-klasse | Vindplaats | Toelichting |",
             "| --- | --- | --- | --- | --- |",
         ]
-        for m in b.get("markeringen", []):
+        for m in sorted(b.get("markeringen", []),
+                        key=lambda m: jas_sorteersleutel(m.get("klasse", ""))):
             regels.append(
                 f"| {cel(m.get('id'))} | \"{cel(m.get('formulering'))}\" | "
                 f"{cel(m.get('klasse'))} | {cel(m.get('vindplaats'))} | {cel(m.get('toelichting'))} |"
@@ -238,7 +242,8 @@ def rapport_naar_md(d: dict) -> str:
         "Kenmerken / relaties | Verwijst naar | Herkomst | Vindplaats | Twijfel/aanname |",
         "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
-    for b in d.get("begrippen", []):
+    for b in sorted(d.get("begrippen", []),
+                    key=lambda b: jas_sorteersleutel(b.get("klasse", ""))):
         kenmerken = "; ".join(x for x in [b.get("kenmerken") or "",
                                           relaties_text(b.get("relaties"), namen)] if x)
         verwijst = ", ".join(begrip_ref(x, namen)

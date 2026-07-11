@@ -29,7 +29,9 @@ import sys
 import unicodedata
 from pathlib import Path
 
-GELDIGE_JAS_KLASSEN = {
+# De canonieke weergave-volgorde van de dertien JAS-klassen (docs/wa-table.png).
+# Alle resultaatweergaves (viewers, Markdown-exports, frontend) sorteren hierop.
+JAS_KLASSEN_VOLGORDE: tuple[str, ...] = (
     "Rechtssubject",
     "Rechtsobject",
     "Rechtsbetrekking",
@@ -43,7 +45,19 @@ GELDIGE_JAS_KLASSEN = {
     "Plaatsaanduiding",
     "Delegatiebevoegdheid en delegatie-invulling",
     "Brondefinitie",
-}
+)
+
+GELDIGE_JAS_KLASSEN = set(JAS_KLASSEN_VOLGORDE)
+
+
+def jas_sorteersleutel(klasse: str) -> int:
+    """Sorteersleutel voor presentatie: klasse-index in de wa-table-volgorde;
+    onbekende klassen achteraan. Gebruik met een stabiele sort zodat de onderlinge
+    (document)volgorde binnen een klasse behouden blijft."""
+    try:
+        return JAS_KLASSEN_VOLGORDE.index(klasse)
+    except ValueError:
+        return len(JAS_KLASSEN_VOLGORDE)
 
 GELDIGE_REGELTYPEN = {"beslisregel", "rekenregel", "specialisatieregel"}
 

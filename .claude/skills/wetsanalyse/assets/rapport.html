@@ -219,6 +219,22 @@ function bronTitel(bron) {
   return bron.label || (bron.wet ? bron.wet + " art. " + bron.artikel + (bron.lid ? " lid " + bron.lid : "") : bron.bron_id);
 }
 
+// Canonieke JAS-klassevolgorde (docs/wa-table.png) — presentatie-sortering, geen datamutatie.
+const JAS_VOLGORDE = [
+  "Rechtssubject", "Rechtsobject", "Rechtsbetrekking", "Rechtsfeit", "Voorwaarde",
+  "Afleidingsregel", "Variabele en variabelewaarde", "Parameter en parameterwaarde",
+  "Operator", "Tijdsaanduiding", "Plaatsaanduiding",
+  "Delegatiebevoegdheid en delegatie-invulling", "Brondefinitie",
+];
+function jasVolgorde(klasse) {
+  const i = JAS_VOLGORDE.indexOf(String(klasse || "").trim());
+  return i === -1 ? JAS_VOLGORDE.length : i;
+}
+// Stabiele kopie-sortering op klasse (onbekende klassen achteraan).
+function sorteerOpKlasse(items) {
+  return (items || []).slice().sort((a, b) => jasVolgorde(a.klasse) - jasVolgorde(b.klasse));
+}
+
 // --- act-3-helpers: begrippen zijn de bouwstenen van regels (id → naam-weergave) ---
 const BEGRIP_NAAM = {};
 (D.begrippen || []).forEach(b => { if (b && b.id) BEGRIP_NAAM[b.id] = b.naam || b.id; });
@@ -359,7 +375,7 @@ function renderBron(bron, n) {
   const ledenHtml = leden.map(l =>
     `<div class="lid"><b>${l.lid ? "Lid " + esc(l.lid) : ""}</b> ${esc(l.tekst)}</div>`
   ).join("");
-  const markeringen = bron.markeringen || [];
+  const markeringen = sorteerOpKlasse(bron.markeringen);
   const mItems = markeringen.map(m => `
     <div class="item">
       <div class="top">
@@ -393,7 +409,7 @@ function renderBronnen() {
 // --- §3 Begrippen + Afleidingsregels -----------------------------------------
 
 function renderSectie3() {
-  const begrippen = D.begrippen || [];
+  const begrippen = sorteerOpKlasse(D.begrippen);
   const regels = D.afleidingsregels || [];
   const vp = Array.isArray(D.validatiepunten)
     ? D.validatiepunten
