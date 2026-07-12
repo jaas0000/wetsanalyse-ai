@@ -1,5 +1,27 @@
 import { describe, expect, it } from "vitest";
-import { bronHref, pathSegment, wettenOverheidHref } from "./url";
+import { bronHref, normaliseerJci, pathSegment, wettenOverheidHref } from "./url";
+
+describe("normaliseerJci", () => {
+  it("voegt &z= toe (gelijk aan &g=) als alleen &g= aanwezig is", () => {
+    expect(normaliseerJci("jci1.3:c:BWBR0002320&artikel=25&g=2026-04-11")).toBe(
+      "jci1.3:c:BWBR0002320&artikel=25&z=2026-04-11&g=2026-04-11",
+    );
+    expect(normaliseerJci("jci1.3:c:BWBR0002320&artikel=25&lid=1&g=2026-04-11")).toBe(
+      "jci1.3:c:BWBR0002320&artikel=25&lid=1&z=2026-04-11&g=2026-04-11",
+    );
+  });
+
+  it("laat een jci met al een &z= ongemoeid", () => {
+    const jci = "jci1.3:c:BWBR0002320&artikel=52a&z=2026-04-11&g=2026-04-11";
+    expect(normaliseerJci(jci)).toBe(jci);
+  });
+
+  it("laat een jci zonder datum ongemoeid (kale kruisverwijzing)", () => {
+    expect(normaliseerJci("jci1.3:c:BWBR0005537&artikel=7:2")).toBe(
+      "jci1.3:c:BWBR0005537&artikel=7:2",
+    );
+  });
+});
 
 describe("pathSegment", () => {
   it("encodeert een kale slug met gereserveerde tekens precies één keer", () => {
@@ -42,6 +64,12 @@ describe("bronHref", () => {
   it("weigert een http(s)-URL naar een vreemde host (phishing/host-pinning) → undefined", () => {
     expect(bronHref("https://phish.example/BWBR0004770")).toBeUndefined();
     expect(bronHref("http://wetten.overheid.nl.evil.example/x")).toBeUndefined();
+  });
+
+  it("vult &z= aan bij een jci met alleen &g= (deeplink landt zo op de bepaling)", () => {
+    expect(bronHref("jci1.3:c:BWBR0002320&artikel=25&lid=1&g=2026-04-11")).toBe(
+      "https://wetten.overheid.nl/jci1.3:c:BWBR0002320&artikel=25&lid=1&z=2026-04-11&g=2026-04-11",
+    );
   });
 
   it("weigert een javascript:-URL (XSS) → undefined", () => {

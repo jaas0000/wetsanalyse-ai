@@ -91,11 +91,11 @@ describe("brongetrouwheid — gerepareerde verliesgevallen", () => {
 describe("brongetrouwheid — traceerbare bronreferenties", () => {
   it("geeft lid-nodes een artikel-, lid- én versiespecifieke jci-uri", () => {
     const lid2 = resultaat.mcpLite.find((n) => n.sectie.endsWith("Artikel 9 > Lid 2"));
-    expect(lid2?.bronreferentie).toBe("jci1.3:c:BWBR0099999&artikel=9&lid=2&g=2024-01-01");
+    expect(lid2?.bronreferentie).toBe("jci1.3:c:BWBR0099999&artikel=9&lid=2&z=2024-01-01&g=2024-01-01");
   });
 
   it("geeft een artikel zonder leden een artikel- en versiespecifieke jci-uri", () => {
     const art1 = resultaat.mcpLite.find((n) => n.sectie.endsWith("Artikel 1"));
-    expect(art1?.bronreferentie).toBe("jci1.3:c:BWBR0099999&artikel=1&g=2024-01-01");
+    expect(art1?.bronreferentie).toBe("jci1.3:c:BWBR0099999&artikel=1&z=2024-01-01&g=2024-01-01");
   });
 });

@@ -64,3 +64,19 @@ def decrypt(token: str) -> str:
         raise SecretsCryptoError(
             "Kan opgeslagen API-key niet ontsleutelen (verkeerde of geroteerde master key?)."
         ) from e
+
+
+def decrypt_ttl(token: str, ttl: int) -> str | None:
+    """Ontsleutel een Fernet-token dat maximaal `ttl` seconden oud mag zijn (Fernet stempelt zelf
+    een timestamp). Geeft None bij een ongeldig, gemanipuleerd of verlopen token — bedoeld voor
+    kortlevende auth-tokens (login-ticket, trusted-device) i.p.v. een exception. Zonder master key
+    ook None (fail-closed: geen token te vertrouwen)."""
+    f = _fernet()
+    if f is None:
+        return None
+    from cryptography.fernet import InvalidToken
+
+    try:
+        return f.decrypt(token.encode("ascii"), ttl=ttl).decode("utf-8")
+    except (InvalidToken, ValueError, TypeError):
+        return None

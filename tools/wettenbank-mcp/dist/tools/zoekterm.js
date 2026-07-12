@@ -21,7 +21,9 @@ export async function handleZoekterm(args, signaal) {
     const resultaat = zoekTermInArtikelDom(doc, parseZoekterm(zoekterm), maxResultaten);
     // Versiespecifieke jci per gevonden artikel — zo is elke treffer direct herleidbaar
     // zonder een extra wettenbank_artikel-aanroep.
-    const jciVoor = (artikelnr) => `jci1.3:c:${bwbId}&artikel=${artikelnr}` + (versiedatum ? `&g=${versiedatum}` : "");
+    // &z= (zichtdatum) én &g= (geldigheidsdatum) samen — alleen &g= landt bovenaan de wet.
+    const jciVoor = (artikelnr) => `jci1.3:c:${bwbId}&artikel=${artikelnr}` +
+        (versiedatum ? `&z=${versiedatum}&g=${versiedatum}` : "");
     // Voeg optioneel artikeltekst toe
     const artikelen = await Promise.all(resultaat.artikelen.map(async (art) => {
         const basis = { ...art, bronreferentie: jciVoor(art.artikel) };

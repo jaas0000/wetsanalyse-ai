@@ -191,7 +191,8 @@ function createMcpLiteNode(node, context) {
         bronreferentie += `&lid=${node.lidnr}`;
     }
     if (context.versiedatum) {
-        bronreferentie += `&g=${context.versiedatum}`;
+        // Zowel &z= als &g= — alleen &g= laat een wetten.overheid.nl-deeplink bovenaan de wet landen.
+        bronreferentie += `&z=${context.versiedatum}&g=${context.versiedatum}`;
     }
     // Uitgaande verwijzingen (intref/extref) als zelfstandig gegeven naast de tekst.
     const verwijzingen = [];

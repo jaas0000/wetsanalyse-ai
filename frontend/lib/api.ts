@@ -256,18 +256,36 @@ export async function deleteUser(userid: string): Promise<void> {
 
 // --- Login (pre-check vóór de Auth.js-sessie) -------------------------------
 
-/** Pre-check: kloppen de gegevens (op userid), en is 2FA vereist? Zet zelf geen sessie. */
+/** Stap A — pre-check: kloppen userid+wachtwoord, en is 2FA vereist? Een vertrouwd apparaat (cookie)
+ *  levert direct code "ok". Zet zelf geen sessie. */
 export async function loginVerify(
   userid: string,
   password: string,
-  totp?: string,
 ): Promise<LoginVerifyResult> {
   const res = await fetch("/api/login-verify", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ userid, password, totp: totp ?? null }),
+    body: JSON.stringify({ userid, password }),
   });
-  if (!res.ok) {
+  if (!res.ok && res.status !== 200) {
+    return { ok: false, code: res.status === 429 ? "rate" : "invalid", userid: "", email: "", role: "" };
+  }
+  return (await res.json()) as LoginVerifyResult;
+}
+
+/** Stap B — verifieer de 2FA-code op het aparte /login/2fa-scherm via het login-ticket (httpOnly
+ *  cookie). `remember` zet de trusted-device-cookie (30 dagen). Zet zelf geen sessie. */
+export async function login2fa(
+  userid: string,
+  totp: string,
+  remember: boolean,
+): Promise<LoginVerifyResult> {
+  const res = await fetch("/api/login-2fa", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ userid, totp, remember }),
+  });
+  if (!res.ok && res.status !== 200) {
     return { ok: false, code: res.status === 429 ? "rate" : "invalid", userid: "", email: "", role: "" };
   }
   return (await res.json()) as LoginVerifyResult;

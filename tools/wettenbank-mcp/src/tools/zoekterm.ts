@@ -34,8 +34,10 @@ export async function handleZoekterm(args: unknown, signaal?: AbortSignal): Prom
 
   // Versiespecifieke jci per gevonden artikel — zo is elke treffer direct herleidbaar
   // zonder een extra wettenbank_artikel-aanroep.
+  // &z= (zichtdatum) én &g= (geldigheidsdatum) samen — alleen &g= landt bovenaan de wet.
   const jciVoor = (artikelnr: string) =>
-    `jci1.3:c:${bwbId}&artikel=${artikelnr}` + (versiedatum ? `&g=${versiedatum}` : "");
+    `jci1.3:c:${bwbId}&artikel=${artikelnr}` +
+    (versiedatum ? `&z=${versiedatum}&g=${versiedatum}` : "");
 
   // Voeg optioneel artikeltekst toe
   const artikelen = await Promise.all(

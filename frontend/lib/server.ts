@@ -40,22 +40,55 @@ export interface VerifyResult {
   userid: string;
   email: string;
   role: "beheerder" | "analist" | "";
+  // Server→server-only (via httpOnly cookies gezet door de BFF; nooit naar de browser-JS).
+  ticket?: string | null; // bij totp_required: bewijs voor het aparte 2FA-scherm
+  trusted_token?: string | null; // bij ok + remember: 30-daags "dit apparaat onthouden"-token
 }
 
-/** Valideer inloggegevens (op userid) bij de API. Gebruikt door de Auth.js Credentials-provider. */
+/** Alternatieve bewijzen naast het wachtwoord, uit de httpOnly cookies (server-side gelezen). */
+export interface VerifyOpts {
+  ticket?: string | null;
+  trusted_token?: string | null;
+  remember?: boolean;
+}
+
+/** Lage-niveau POST naar `/v1/auth/verify` — geeft de VOLLEDIGE respons (incl. ticket/trusted_token)
+ *  zodat de BFF-login-routes de cookies kunnen zetten. Server→server; nooit vanuit een client. */
+export async function postAuthVerify(
+  payload: Record<string, unknown>,
+): Promise<{ status: number; body: VerifyResult }> {
+  const res = await fetch(`${apiBaseUrl()}/v1/auth/verify`, {
+    method: "POST",
+    headers: { ...authHeader(), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+    cache: "no-store",
+  });
+  if (res.status === 429) {
+    return { status: 429, body: { ok: false, code: "rate", userid: "", email: "", role: "" } };
+  }
+  const body = (await res
+    .json()
+    .catch(() => ({ ok: false, code: "invalid", userid: "", email: "", role: "" }))) as VerifyResult;
+  return { status: res.status, body };
+}
+
+/** Valideer inloggegevens (op userid) bij de API. Gebruikt door de Auth.js Credentials-provider;
+ *  `opts` draagt de httpOnly-cookie-bewijzen (login-ticket / trusted-device) die authorize meestuurt. */
 export async function verifyCredentials(
   userid: string,
   password: string,
   totp?: string,
+  opts: VerifyOpts = {},
 ): Promise<VerifyResult> {
-  const res = await fetch(`${apiBaseUrl()}/v1/auth/verify`, {
-    method: "POST",
-    headers: { ...authHeader(), "Content-Type": "application/json" },
-    body: JSON.stringify({ userid, password, totp: totp ?? null }),
-    cache: "no-store",
+  const { body } = await postAuthVerify({
+    userid,
+    password,
+    totp: totp ?? null,
+    ticket: opts.ticket ?? null,
+    trusted_token: opts.trusted_token ?? null,
+    remember: opts.remember ?? false,
   });
-  if (!res.ok) return { ok: false, code: res.status === 429 ? "rate" : "invalid", userid: "", email: "", role: "" };
-  return (await res.json()) as VerifyResult;
+  return body;
 }
 
 /** Actuele accountstatus voor de periodieke sessie-herverificatie (jwt-callback in auth.ts). */

@@ -97,10 +97,12 @@ export async function handleArtikel(args: unknown, signaal?: AbortSignal): Promi
 
   // Lid- en versiespecifieke jci-bronreferentie per lid (traceerbaarheid: een
   // lid-2-analyse op peildatum X moet naar precies die tekst verwijzen).
+  // wetten.overheid.nl heeft zowel de zichtdatum (&z=) als de geldigheidsdatum (&g=) nodig om op de
+  // bepaling te landen; alleen &g= laat de deeplink bovenaan de wet uitkomen. Zet ze beide (gelijk).
   const jciVoor = (lidNr: string) =>
     `jci1.3:c:${bwbId}&artikel=${artikel}` +
     (lidNr ? `&lid=${lidNr}` : "") +
-    (versiedatum ? `&g=${versiedatum}` : "");
+    (versiedatum ? `&z=${versiedatum}&g=${versiedatum}` : "");
 
   const ledenData = results.map((r) => {
     const lidVanResultaat = r.sectie.match(/Lid (.*)$/)?.[1] || "";

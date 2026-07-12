@@ -71,9 +71,9 @@ describe("handleArtikel", () => {
     // Aanhef (lid "") + lid 1 + lid 2, in documentvolgorde.
     expect(res.leden.map((l) => l.lid)).toEqual(["", "1", "2"]);
     expect(res.leden[2].bronreferentie).toBe(
-      "jci1.3:c:BWBR0099999&artikel=9&lid=2&g=2024-01-01"
+      "jci1.3:c:BWBR0099999&artikel=9&lid=2&z=2024-01-01&g=2024-01-01"
     );
-    expect(res.bronreferentie).toBe("jci1.3:c:BWBR0099999&artikel=9&g=2024-01-01");
+    expect(res.bronreferentie).toBe("jci1.3:c:BWBR0099999&artikel=9&z=2024-01-01&g=2024-01-01");
   });
 
   it("matcht artikelnummers case-insensitief en getrimd ('9A' vindt '9a')", async () => {
@@ -282,7 +282,7 @@ describe("handleZoekterm", () => {
     expect(res.artikelen.length).toBeGreaterThan(0);
     for (const art of res.artikelen) {
       expect(art.bronreferentie).toBe(
-        `jci1.3:c:BWBR0099999&artikel=${art.artikel}&g=2024-01-01`
+        `jci1.3:c:BWBR0099999&artikel=${art.artikel}&z=2024-01-01&g=2024-01-01`
       );
     }
   });

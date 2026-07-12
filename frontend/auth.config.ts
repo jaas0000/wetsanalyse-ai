@@ -12,9 +12,11 @@ export type Role = "beheerder" | "analist";
 function isPublic(path: string): boolean {
   return (
     path === "/login" ||
+    path === "/login/2fa" ||
     path === "/setup" ||
     path === "/api/setup" ||
     path === "/api/login-verify" ||
+    path === "/api/login-2fa" ||
     path === "/api/health"
   );
 }

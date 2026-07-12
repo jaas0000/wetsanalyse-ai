@@ -7,6 +7,7 @@ import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { authConfig, type Role } from "./auth.config";
 import { getAccountStatus, verifyCredentials } from "@/lib/server";
+import { getLoginTicketCookie, getTrustedDeviceCookie } from "@/lib/authCookies";
 
 // Hoe lang een JWT op de laatste verificatie mag teren voordat we de accountstatus opnieuw
 // bij de API checken. Samen met session.maxAge (auth.config.ts) begrenst dit hoe lang een
@@ -52,8 +53,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const userid = String(credentials?.userid ?? "");
         const password = String(credentials?.password ?? "");
         const totp = credentials?.totp ? String(credentials.totp) : undefined;
-        if (!userid || !password) return null;
-        const res = await verifyCredentials(userid, password, totp);
+        if (!userid) return null;
+        // Bewijzen uit de httpOnly cookies (server-side): het login-ticket vervangt het wachtwoord op
+        // het aparte 2FA-scherm; de trusted-device-cookie slaat bij een 2FA-account de TOTP over.
+        const ticket = (await getLoginTicketCookie()) ?? null;
+        const trusted_token = (await getTrustedDeviceCookie()) ?? null;
+        // Wachtwoord óf een geldig login-ticket is vereist.
+        if (!password && !ticket) return null;
+        const res = await verifyCredentials(userid, password, totp, { ticket, trusted_token });
         if (!res.ok) {
           // Bij rate-limiting (code "rate") of foutieve gegevens retourneert null zodat Auth.js
           // de sessie weigert. De loginVerify-precheck in LoginClient toont de specifieke

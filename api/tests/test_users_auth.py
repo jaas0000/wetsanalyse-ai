@@ -173,6 +173,75 @@ async def test_verify_credentials_dummy_bcrypt_bij_onbekende_user(monkeypatch, d
     assert users.verify_password("x", users._DUMMY_HASH) is True
 
 
+# --- stateless auth-tokens: login-ticket + trusted device ----------------------
+
+async def test_login_ticket_roundtrip(monkeypatch, db):
+    _fresh_settings(monkeypatch)
+    from app import users
+
+    t = users.maak_login_ticket("baas")
+    assert t is not None
+    assert users.lees_login_ticket(t) == "baas"
+    assert users.lees_login_ticket("rommel") is None
+    assert users.lees_login_ticket(None) is None
+
+
+async def test_trusted_device_bind_invalidatie_bij_wachtwoordwijziging(monkeypatch, db):
+    _fresh_settings(monkeypatch)
+    from app import users
+
+    await users.bootstrap_admin("baas", "a@example.com", "wachtwoord1")
+    uri = await users.begin_2fa("baas")
+    await users.activate_2fa("baas", _totp_now(uri))
+
+    token = users.maak_trusted_device(await users.get_user("baas"))
+    assert token is not None
+    assert await users.valideer_trusted_device(token) == "baas"
+
+    # Wachtwoord wijzigen verandert de bind → token automatisch ongeldig (geen revocatielijst).
+    await users.change_own_password("baas", "wachtwoord1", "wachtwoord2")
+    assert await users.valideer_trusted_device(token) is None
+
+
+async def test_trusted_device_ongeldig_zonder_2fa(monkeypatch, db):
+    _fresh_settings(monkeypatch)
+    from app import users
+
+    await users.bootstrap_admin("baas", "a@example.com", "wachtwoord1")
+    # Token gemaakt vóór 2FA aanstaat: valideren moet falen (2FA niet aan).
+    token = users.maak_trusted_device(await users.get_user("baas"))
+    assert await users.valideer_trusted_device(token) is None
+
+
+async def test_verify_credentials_via_ticket_en_trusted(monkeypatch, db):
+    _fresh_settings(monkeypatch)
+    from app import users
+
+    await users.bootstrap_admin("baas", "a@example.com", "wachtwoord1")
+    uri = await users.begin_2fa("baas")
+    await users.activate_2fa("baas", _totp_now(uri))
+
+    # Wachtwoord ok maar 2FA nodig.
+    user, code = await users.verify_credentials("baas", "wachtwoord1")
+    assert user is None and code == "totp_required"
+
+    # Ticket telt als wachtwoord-bewijs; met geldige TOTP → ok (het 2FA-scherm zonder wachtwoord).
+    ticket = users.maak_login_ticket("baas")
+    user, code = await users.verify_credentials("baas", "", _totp_now(uri), ticket=ticket)
+    assert code == "ok" and user is not None
+
+    # Een ticket voor een ándere userid telt niet als bewijs.
+    user, code = await users.verify_credentials("baas", "", _totp_now(uri),
+                                                ticket=users.maak_login_ticket("iemand-anders"))
+    # (wachtwoord leeg + ticket voor andere user → geen bewijs → invalid)
+    assert user is None and code == "invalid"
+
+    # Trusted device slaat de TOTP-stap over.
+    token = users.maak_trusted_device(await users.get_user("baas"))
+    user, code = await users.verify_credentials("baas", "wachtwoord1", trusted_token=token)
+    assert code == "ok" and user is not None
+
+
 # --- wachtwoord wijzigen -------------------------------------------------------
 
 async def test_change_own_password(monkeypatch, db):

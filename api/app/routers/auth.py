@@ -42,18 +42,28 @@ class SetupIn(BaseModel):
 
 class VerifyIn(BaseModel):
     userid: str = Field(max_length=64)
-    password: str = Field(max_length=512)
+    # Wachtwoord is optioneel: het 2FA-scherm bewijst de identiteit via `ticket` i.p.v. het wachtwoord.
+    password: str = Field(default="", max_length=512)
     totp: str | None = Field(default=None, max_length=16)
+    # Login-ticket (wachtwoord-bewijs voor de 2FA-stap) en trusted-device-token (2FA overslaan);
+    # beide server→server via httpOnly cookies, nooit direct uit browser-input. Ruime cap: Fernet-tokens.
+    ticket: str | None = Field(default=None, max_length=1024)
+    trusted_token: str | None = Field(default=None, max_length=1024)
+    # Vraagt (bij een geslaagde 2FA) om een trusted-device-token voor "30 dagen onthouden".
+    remember: bool = False
 
 
 class VerifyResult(BaseModel):
     """Intern contract voor de BFF (Auth.js). 200 met `ok=false` i.p.v. 401 zodat de
-    authorize()-flow zonder exception-afhandeling de reden kan lezen."""
+    authorize()-flow zonder exception-afhandeling de reden kan lezen. `ticket`/`trusted_token`
+    gaan server→server naar de BFF, die ze als httpOnly cookies zet (nooit naar de browser-JS)."""
     ok: bool
     code: str = ""  # "" | "invalid" | "totp_required"
     userid: str = ""
     email: str = ""
     role: str = ""
+    ticket: str | None = None          # bij totp_required: bewijs voor het aparte 2FA-scherm
+    trusted_token: str | None = None   # bij ok + remember: 30-daags "dit apparaat onthouden"-token
 
 
 class MeOut(BaseModel):
@@ -114,13 +124,28 @@ async def verify(body: VerifyIn):
             detail="Te veel inlogpogingen; probeer later opnieuw.",
         )
     try:
-        user, code = await users.verify_credentials(body.userid, body.password, body.totp)
+        user, code = await users.verify_credentials(
+            body.userid, body.password, body.totp,
+            ticket=body.ticket, trusted_token=body.trusted_token,
+        )
     except SecretsCryptoError:
         # 2FA staat aan maar het secret kan niet ontsleuteld worden (master key weg/geroteerd).
         return VerifyResult(ok=False, code="invalid")
     if user is None:
-        return VerifyResult(ok=False, code=code)
-    return VerifyResult(ok=True, code="ok", userid=user.userid, email=user.email, role=user.role)
+        # Wachtwoord klopte maar 2FA is nog nodig → geef een login-ticket mee zodat het aparte
+        # 2FA-scherm de identiteit heeft zonder het wachtwoord opnieuw te hoeven vasthouden.
+        ticket = users.maak_login_ticket(body.userid) if code == "totp_required" else None
+        return VerifyResult(ok=False, code=code, ticket=ticket)
+    # Bij een geslaagde 2FA-login met "onthouden" aangevinkt: een 30-daags trusted-device-token.
+    trusted = (
+        users.maak_trusted_device(user)
+        if body.remember and user.totp_enabled
+        else None
+    )
+    return VerifyResult(
+        ok=True, code="ok", userid=user.userid, email=user.email, role=user.role,
+        trusted_token=trusted,
+    )
 
 
 # --- self-service account + 2FA ------------------------------------------------

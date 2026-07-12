@@ -26,33 +26,28 @@ export function LoginClient() {
   const params = useSearchParams();
   const [userid, setUserid] = useState("");
   const [password, setPassword] = useState("");
-  const [totp, setTotp] = useState("");
-  // Het 2FA-veld verschijnt pas zodra de API meldt dat tweestapsverificatie vereist is.
-  const [tonen2fa, setTonen2fa] = useState(false);
   const [fout, setFout] = useState<string | null>(null);
-  const [info, setInfo] = useState<string | null>(null);
   const [bezig, setBezig] = useState(false);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setFout(null);
-    setInfo(null);
     setBezig(true);
     try {
       // Pre-check: kloppen de gegevens, en is 2FA nodig? (zet zelf nog geen sessie)
-      const check = await loginVerify(userid, password, tonen2fa ? totp : undefined);
+      const check = await loginVerify(userid, password);
 
-      if (check.code === "totp_required") {
-        if (!tonen2fa) {
-          setTonen2fa(true);
-          setInfo("Tweestapsverificatie staat aan. Voer de 6-cijferige code uit je authenticator-app in.");
-        } else {
-          setFout("Onjuiste of verlopen 2FA-code.");
-        }
-        return;
-      }
       if (check.code === "rate") {
         setFout("Te veel inlogpogingen. Wacht even en probeer het opnieuw.");
+        return;
+      }
+      if (check.code === "totp_required") {
+        // 2FA nodig én dit apparaat is niet (meer) vertrouwd → naar het aparte 2FA-scherm. Draag de
+        // niet-gevoelige userid + callbackUrl mee; het login-ticket (httpOnly cookie) draagt het
+        // wachtwoord-bewijs, zodat het wachtwoord het geheugen niet verlaat.
+        sessionStorage.setItem("wa_login_userid", userid);
+        const cb = params.get("callbackUrl");
+        router.push(cb ? `/login/2fa?callbackUrl=${encodeURIComponent(cb)}` : "/login/2fa");
         return;
       }
       if (!check.ok) {
@@ -60,13 +55,8 @@ export function LoginClient() {
         return;
       }
 
-      // Gegevens kloppen → sessie opzetten via Auth.js.
-      const res = await signIn("credentials", {
-        redirect: false,
-        userid,
-        password,
-        totp: tonen2fa ? totp : "",
-      });
+      // Gegevens kloppen (geen 2FA, of een vertrouwd apparaat) → sessie opzetten via Auth.js.
+      const res = await signIn("credentials", { redirect: false, userid, password });
       if (res?.error) {
         setFout("Inloggen mislukt. Probeer het opnieuw.");
         return;
@@ -81,7 +71,6 @@ export function LoginClient() {
   return (
     <form onSubmit={onSubmit} className="space-y-4">
       {fout && <Melding type="fout">{fout}</Melding>}
-      {info && <Melding type="uitleg">{info}</Melding>}
       <Field label="Gebruikersnaam" required>
         <Input
           type="text"
@@ -101,19 +90,6 @@ export function LoginClient() {
           onChange={(e) => setPassword(e.target.value)}
         />
       </Field>
-
-      {tonen2fa && (
-        <Field label="2FA-code" hint="6 cijfers uit je authenticator-app">
-          <Input
-            inputMode="numeric"
-            autoComplete="one-time-code"
-            autoFocus
-            required
-            value={totp}
-            onChange={(e) => setTotp(e.target.value)}
-          />
-        </Field>
-      )}
 
       <Button type="submit" disabled={bezig} className="w-full">
         {bezig ? "Bezig met inloggen…" : "Inloggen"}

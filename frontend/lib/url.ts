@@ -17,6 +17,19 @@ export function pathSegment(value: string): string {
   return encodeURIComponent(decoded);
 }
 
+// wetten.overheid.nl heeft voor een jci-deeplink zowel de zichtdatum (`&z=`) als de
+// geldigheidsdatum (`&g=`) nodig; een jci met alléén `&g=` landt bovenaan de wet i.p.v. op de
+// bepaling. De MCP levert nu alleen `&g=<datum>`, dus vul `&z=<zelfde datum>` aan als die ontbreekt
+// (conform het format dat wetten.overheid.nl in zijn eigen bron-XML gebruikt: `…&z=D&g=D`). Een jci
+// zónder datum (kale kruisverwijzing) laten we ongemoeid — die resolvet naar de actuele versie.
+export function normaliseerJci(jci: string): string {
+  const g = jci.match(/[?&]g=(\d{4}-\d{2}-\d{2})/);
+  if (g && !/[?&]z=/.test(jci)) {
+    return jci.replace(/([?&])g=/, `$1z=${g[1]}&g=`);
+  }
+  return jci;
+}
+
 // Veilige href voor een bronreferentie. Het veld komt (indirect) uit de analyse-pipeline/LLM
 // en mag dus niet blind in een href: een waarde als `javascript:…` zou klikbare
 // scriptuitvoering opleveren (React escaped tekst, maar niet de href-scheme).
@@ -35,7 +48,7 @@ export function bronHref(ref?: string | null): string | undefined {
       return undefined;
     }
   }
-  if (/^jci/i.test(trimmed)) return `https://wetten.overheid.nl/${encodeURI(trimmed)}`;
+  if (/^jci/i.test(trimmed)) return `https://wetten.overheid.nl/${encodeURI(normaliseerJci(trimmed))}`;
   return undefined;
 }
 
@@ -43,7 +56,7 @@ export function bronHref(ref?: string | null): string | undefined {
 // en daarna gevalideerd, zodat een vreemd schema of een andere host nooit kan ontsnappen.
 export function wettenOverheidHref(target?: string | null): string | undefined {
   if (!target) return undefined;
-  const url = `https://wetten.overheid.nl/${encodeURI(target.trim())}`;
+  const url = `https://wetten.overheid.nl/${encodeURI(normaliseerJci(target.trim()))}`;
   try {
     return new URL(url).hostname === "wetten.overheid.nl" ? url : undefined;
   } catch {

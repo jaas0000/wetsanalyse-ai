@@ -18,6 +18,8 @@ nooit terug.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import re
 import secrets
 
@@ -26,8 +28,12 @@ import pyotp
 from sqlalchemy import delete, func, insert, select, text, update
 
 from . import db
-from .secrets_crypto import decrypt, encrypt
+from .secrets_crypto import crypto_beschikbaar, decrypt, decrypt_ttl, encrypt
 from .user import ROLLEN, User, _utcnow
+
+# TTL's voor de stateless auth-tokens (Fernet stempelt zelf de timestamp).
+_LOGIN_TICKET_TTL_S = 5 * 60            # login-ticket: 5 min tussen wachtwoord- en 2FA-stap
+_TRUSTED_DEVICE_TTL_S = 30 * 24 * 3600  # trusted device: 30 dagen 2FA overslaan
 
 # Issuer-naam in de authenticator-app (bij het scannen van de QR zichtbaar als "Wetsanalyse").
 _TOTP_ISSUER = "Wetsanalyse"
@@ -143,24 +149,99 @@ def _verify_totp(user: User, code: str) -> bool:
     return pyotp.TOTP(secret).verify(code.strip(), valid_window=1)
 
 
+# --- stateless auth-tokens (login-ticket + trusted device) ---------------------
+#
+# Beide zijn Fernet-tokens (hergebruiken de LLM-master-key; 2FA vereist die toch al). Er is GEEN
+# serverstate: het login-ticket draagt de al-geverifieerde userid naar het aparte 2FA-scherm zodat
+# het wachtwoord daar niet nodig is; het trusted-device-token slaat de 2FA-prompt 30 dagen over en
+# is gebonden aan sha256(password_hash + totp_secret_enc) — wijzigt het wachtwoord of gaat 2FA uit,
+# dan verandert die binding en is het token vanzelf ongeldig (geen revocatielijst nodig).
+
+def maak_login_ticket(userid: str) -> str | None:
+    """Kortlevend bewijs 'wachtwoord geverifieerd voor userid X'. None als er geen master key is."""
+    if not crypto_beschikbaar():
+        return None
+    return encrypt(json.dumps({"t": "ticket", "userid": userid}))
+
+
+def lees_login_ticket(token: str | None) -> str | None:
+    """Userid uit een geldig, niet-verlopen login-ticket; anders None."""
+    if not token:
+        return None
+    plain = decrypt_ttl(token, _LOGIN_TICKET_TTL_S)
+    if not plain:
+        return None
+    try:
+        data = json.loads(plain)
+    except ValueError:
+        return None
+    return data.get("userid") if data.get("t") == "ticket" else None
+
+
+def _device_bind(user: User) -> str:
+    """Bindwaarde die verandert bij wachtwoordwijziging of 2FA-uit → maakt een trusted-token dan
+    automatisch ongeldig."""
+    basis = f"{user.password_hash or ''}|{user.totp_secret_enc or ''}"
+    return hashlib.sha256(basis.encode("utf-8")).hexdigest()
+
+
+def maak_trusted_device(user: User) -> str | None:
+    """30-daags token dat op dit apparaat de 2FA-prompt overslaat. None zonder master key."""
+    if not crypto_beschikbaar():
+        return None
+    return encrypt(json.dumps({"t": "trusted", "userid": user.userid, "bind": _device_bind(user)}))
+
+
+async def valideer_trusted_device(token: str | None) -> str | None:
+    """Userid als het trusted-device-token geldig, niet-verlopen en nog gebonden is (user actief,
+    2FA aan, bind-match); anders None."""
+    if not token:
+        return None
+    plain = decrypt_ttl(token, _TRUSTED_DEVICE_TTL_S)
+    if not plain:
+        return None
+    try:
+        data = json.loads(plain)
+    except ValueError:
+        return None
+    if data.get("t") != "trusted" or not data.get("userid"):
+        return None
+    user = await get_user(data["userid"])
+    if user is None or not user.active or not user.totp_enabled:
+        return None
+    if data.get("bind") != _device_bind(user):
+        return None
+    return user.userid
+
+
 async def verify_credentials(
-    userid: str, password: str, totp: str | None = None
+    userid: str, password: str, totp: str | None = None,
+    *, ticket: str | None = None, trusted_token: str | None = None,
 ) -> tuple[User | None, str]:
     """Valideer inloggegevens (uitsluitend op userid). Geeft (user, "ok") of (None, reden).
 
     Reden-codes: "invalid" (onbekend/inactief/verkeerd wachtwoord — bewust niet onderscheiden om
     niets te lekken) en "totp_required" (wachtwoord klopt, maar 2FA staat aan en de code ontbreekt
     of is onjuist).
+
+    Twee alternatieve bewijzen naast het wachtwoord:
+    - `ticket`: een geldig login-ticket voor deze userid telt als wachtwoord-bewijs (voor het aparte
+      2FA-scherm, dat het wachtwoord niet vasthoudt);
+    - `trusted_token`: een geldig trusted-device-token slaat bij een 2FA-account de TOTP-stap over.
     """
     user = await get_user(userid)
+    # Wachtwoord-bewijs via een geldig login-ticket voor DEZE userid, anders via het wachtwoord.
+    ticket_ok = ticket is not None and lees_login_ticket(ticket) == userid
     if user is None or not user.active:
-        # Betaal dezelfde bcrypt-kost als bij een bestaande, actieve gebruiker, zodat het
-        # responsverschil geen timing-oracle voor "gebruiker bestaat + actief" wordt.
-        verify_password(password, _DUMMY_HASH)
+        if not ticket_ok:
+            # Constant-tijd: betaal de bcrypt-kost ook bij een onbekende/inactieve user.
+            verify_password(password, _DUMMY_HASH)
         return None, "invalid"
-    if not verify_password(password, user.password_hash):
+    if not ticket_ok and not verify_password(password, user.password_hash):
         return None, "invalid"
     if user.totp_enabled:
+        if await valideer_trusted_device(trusted_token) == userid:
+            return user, "ok"  # vertrouwd apparaat → 2FA overgeslagen
         if not totp or not _verify_totp(user, totp):
             return None, "totp_required"
     return user, "ok"
