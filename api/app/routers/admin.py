@@ -306,15 +306,9 @@ async def maak_user(body: UserCreateIn):
 @router.patch("/users/{userid}", response_model=UserOut)
 async def wijzig_user(userid: str, body: UserPatchIn):
     try:
-        user = None
-        if body.role is not None:
-            user = await users.set_role(userid, body.role)
-        if body.active is not None:
-            user = await users.set_active(userid, body.active)
-        if user is None:  # niets meegegeven → huidige staat teruggeven
-            user = await users.get_user(userid)
-            if user is None:
-                raise users.UserError(f"Onbekende gebruiker: {userid}")
+        # Rol + active in één atomaire patch (invariant op de eind-toestand — voorkomt de TOCTOU
+        # waarbij twee losse checks de laatste actieve beheerder alsnog laten verdwijnen).
+        user = await users.patch_user(userid, role=body.role, active=body.active)
     except users.UserError as e:
         raise HTTPException(status_code=409, detail=str(e))
     return _user_to_out(user)

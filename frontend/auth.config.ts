@@ -64,6 +64,10 @@ export const authConfig = {
           } catch {
             originHost = null;
           }
+          // LET OP: `x-forwarded-host` wordt hier vertrouwd. Dat is veilig achter de Nginx Proxy
+          // Manager (die de header autoritair zet), maar hard afhankelijk van die proxy: stel de app
+          // nooit direct (zonder proxy) bloot, anders kan een client de Origin-check omzeilen door
+          // zelf een `x-forwarded-host` gelijk aan zijn Origin mee te sturen.
           const eigenHosts = new Set(
             [nextUrl.host, request.headers.get("x-forwarded-host")].filter(Boolean),
           );

@@ -17,13 +17,25 @@ interface ProxyInit {
 }
 
 export async function proxy(path: string, init: ProxyInit = {}): Promise<Response> {
+  // Defense-in-depth: de middleware gate't /api/admin al op rol, maar een admin-proxy dwingt de
+  // beheerder-rol hier server-side nóg eens af — één matcher-/callback-regressie opent dan niet
+  // meteen alle admin-endpoints. Onafhankelijk van, en náást, de middleware.
+  if (init.admin) {
+    // Dynamische import: houdt de module vrij van de node-only auth-stack (en de unit-test licht);
+    // alleen een echte admin-proxy laadt 'm.
+    const { auth } = await import("@/auth");
+    const session = await auth();
+    if ((session?.user as { role?: string } | undefined)?.role !== "beheerder") {
+      return Response.json({ detail: "Alleen voor beheerders." }, { status: 403 });
+    }
+  }
   const upstreamUrl = `${apiBaseUrl()}${path}`;
-  const auth = init.admin ? adminAuthHeader() : authHeader();
+  const authHeaders = init.admin ? adminAuthHeader() : authHeader();
   let upstream: Response;
   try {
     upstream = await fetch(upstreamUrl, {
       method: init.method ?? "GET",
-      headers: { ...auth, ...(init.headers ?? {}) },
+      headers: { ...authHeaders, ...(init.headers ?? {}) },
       body: init.body,
       cache: "no-store",
     });

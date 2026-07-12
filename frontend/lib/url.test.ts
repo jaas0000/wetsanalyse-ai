@@ -33,10 +33,15 @@ describe("bronHref", () => {
     );
   });
 
-  it("laat een complete http(s)-URL ongemoeid", () => {
+  it("laat een complete wetten.overheid.nl-URL ongemoeid", () => {
     expect(bronHref("https://wetten.overheid.nl/BWBR0004770")).toBe(
       "https://wetten.overheid.nl/BWBR0004770",
     );
+  });
+
+  it("weigert een http(s)-URL naar een vreemde host (phishing/host-pinning) → undefined", () => {
+    expect(bronHref("https://phish.example/BWBR0004770")).toBeUndefined();
+    expect(bronHref("http://wetten.overheid.nl.evil.example/x")).toBeUndefined();
   });
 
   it("weigert een javascript:-URL (XSS) → undefined", () => {

@@ -119,7 +119,7 @@ async def _dashboard_poll(
     en geef (a) de te-emitten SSE-frames en (b) de bijgewerkte `seen` terug. Alleen gewijzigde
     projecten krijgen een `data:`-frame; verdwenen (verwijderde) projecten een `event: removed`.
     Apart van de stream-lus gehouden zodat dit zonder oneindige SSE getest kan worden."""
-    projects = await store.list_projects(client_id, limit=100)
+    projects = await store.list_projects(client_id, limit=100, light=True)
     huidige = {p.slug for p in projects}
     frames: list[str] = []
     nieuw: dict[str, dict] = {}

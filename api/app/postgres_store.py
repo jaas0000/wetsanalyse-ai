@@ -12,6 +12,7 @@ rondes/rapport/naam/omschrijving.
 
 from __future__ import annotations
 
+import logging
 from datetime import timedelta
 
 from sqlalchemy import delete, func, insert, select, text, update
@@ -27,6 +28,8 @@ from .contracts import (
 )
 from .jobstore import IdConflict
 from .project import Project, RondeData
+
+logger = logging.getLogger(__name__)
 
 # Velden die save_job mag overschrijven. Bewust ZONDER owner/lease_until: die worden uitsluitend
 # door claim()/verleng_lease() beheerd, zodat een stale Job-snapshot de lease nooit kan overschrijven.
@@ -51,6 +54,19 @@ def _serialize(value):
 def _state_values(job: Job) -> dict:
     """De state-machine-velden van een Job als kolom→waarde-blok (geserialiseerd)."""
     return {field: _serialize(getattr(job, field, None)) for field in _STATE_FIELDS}
+
+
+def _create_values(obj) -> dict:
+    """Kolom→waarde-blok voor het aanmaken van een projects-rij. Één gedeelde bron voor zowel
+    `insert_job` (Job) als `create_project` (Project), zodat de twee aanmaakpaden niet stil uiteen
+    kunnen lopen (ze schrijven gegarandeerd dezelfde kolommen). Werkt op elk object met de
+    create-time-velden + de _STATE_FIELDS (Job én Project dragen die)."""
+    return {
+        "naam": getattr(obj, "naam", None),
+        "omschrijving": obj.omschrijving,
+        "begrippenlijst": [b.model_dump() for b in obj.begrippenlijst],
+        **_state_values(obj),
+    }
 
 
 def _row_to_project(row) -> Project:
@@ -79,7 +95,9 @@ def _row_to_project(row) -> Project:
         lease_until=db.aware(m["lease_until"]),
         created=db.aware(m["created"]),
         updated=db.aware(m["updated"]),
-        rapport=m["rapport"],
+        # .get zodat een lichte projectie (list_projects(light=True), zonder de zware JSONB-kolommen)
+        # niet KeyErrort — het dashboard heeft rapport/regelspraak niet nodig.
+        rapport=m.get("rapport"),
         regelspraak=m.get("regelspraak"),
         regelspraak_review=m.get("regelspraak_review"),
     )
@@ -111,22 +129,33 @@ class PostgresStore:
         die owner de job nog bezit (verloren lease → False, geen clobber). Return True = geschreven.
 
         Schrijft nooit rondes/rapport/naam/omschrijving, zodat een verouderde snapshot die
-        artefacten niet kan wissen."""
+        artefacten niet kan wissen.
+
+        Insert-if-missing geldt ALLEEN voor de niet-fenced (owner=None) write. Een fenced write
+        (owner gezet, zoals `_save`/`_fail` tijdens een lopende run) doet nooit een insert: is de rij
+        tussentijds verwijderd (delete-race op een `queued`-job die net geclaimd werd), dan levert de
+        write False i.p.v. het project te 'laten herrijzen'."""
         now = db.utcnow()
         values = _state_values(job)
         async with db.get_engine().begin() as conn:
-            bestaat = (await conn.execute(
-                select(db.projects.c.slug).where(db.projects.c.slug == job.id)
-            )).first() is not None
-            if not bestaat:
-                await conn.execute(insert(db.projects).values(
-                    slug=job.id, created=now, updated=now, **values
-                ))
-                return True
-            stmt = update(db.projects).where(db.projects.c.slug == job.id)
-            if owner is not None:
-                stmt = stmt.where(db.projects.c.owner == owner)
-            res = await conn.execute(stmt.values(updated=now, **values))
+            if owner is None:
+                bestaat = (await conn.execute(
+                    select(db.projects.c.slug).where(db.projects.c.slug == job.id)
+                )).first() is not None
+                if not bestaat:
+                    await conn.execute(insert(db.projects).values(
+                        slug=job.id, created=now, updated=now, **values
+                    ))
+                    return True
+                res = await conn.execute(
+                    update(db.projects).where(db.projects.c.slug == job.id).values(updated=now, **values)
+                )
+                return res.rowcount == 1
+            res = await conn.execute(
+                update(db.projects)
+                .where(db.projects.c.slug == job.id, db.projects.c.owner == owner)
+                .values(updated=now, **values)
+            )
             return res.rowcount == 1
 
     async def set_current_fase(self, job_id: str, fase: str | None, owner: str) -> bool:
@@ -178,11 +207,7 @@ class PostgresStore:
             async with db.get_engine().begin() as conn:
                 await self._handhaaf_active_quota(conn, job.client_id, max_active)
                 await conn.execute(insert(db.projects).values(
-                    slug=job.id, created=now, updated=now,
-                    # Create-time invoer buiten _STATE_FIELDS (save_job schrijft die nooit terug).
-                    omschrijving=job.omschrijving,
-                    begrippenlijst=[b.model_dump() for b in job.begrippenlijst],
-                    **_state_values(job),
+                    slug=job.id, created=now, updated=now, **_create_values(job),
                 ))
         except IntegrityError:
             raise IdConflict(f"slug bestaat al: {job.id}")
@@ -195,22 +220,7 @@ class PostgresStore:
             async with db.get_engine().begin() as conn:
                 await self._handhaaf_active_quota(conn, project.client_id, max_active)
                 await conn.execute(insert(db.projects).values(
-                    slug=project.slug,
-                    naam=project.naam,
-                    omschrijving=project.omschrijving,
-                    bronnen=[b.model_dump() for b in project.bronnen],
-                    analysefocus=project.analysefocus,
-                    begrippenlijst=[b.model_dump() for b in project.begrippenlijst],
-                    review=project.review,
-                    model_profile=project.model_profile,
-                    client_id=project.client_id,
-                    state=project.state.value,
-                    scope=project.scope,
-                    current_ronde=project.current_ronde,
-                    waarschuwingen=[],
-                    provenance=[],
-                    created=now,
-                    updated=now,
+                    slug=project.slug, created=now, updated=now, **_create_values(project),
                 ))
         except IntegrityError:
             raise IdConflict(f"slug bestaat al: {project.slug}")
@@ -427,8 +437,10 @@ class PostgresStore:
                 update(db.projects).where(db.projects.c.slug == job_id)
                 .values(rapport=rapport, updated=db.utcnow())
             )
-        # Stil zwijgen als het project niet bestaat (geen exception).
-        _ = res
+        # Geen exception (best-effort), maar niet stil: is het project intussen verdwenen
+        # (bv. door een delete-race tijdens de run), dan is de rapport-write verloren — log dat.
+        if res.rowcount == 0:
+            logger.warning("Rapport-write voor %s raakte geen rij — project verdwenen tijdens de run?", job_id)
 
     async def lees_rapport(self, job_id: str) -> dict | None:
         async with db.get_engine().connect() as conn:
@@ -442,10 +454,12 @@ class PostgresStore:
 
     async def schrijf_regelspraak(self, job_id: str, model: dict) -> None:
         async with db.get_engine().begin() as conn:
-            await conn.execute(
+            res = await conn.execute(
                 update(db.projects).where(db.projects.c.slug == job_id)
                 .values(regelspraak=model, updated=db.utcnow())
             )
+        if res.rowcount == 0:
+            logger.warning("Regelspraak-write voor %s raakte geen rij — project verdwenen tijdens de run?", job_id)
 
     async def lees_regelspraak(self, job_id: str) -> dict | None:
         async with db.get_engine().connect() as conn:
@@ -465,9 +479,17 @@ class PostgresStore:
         return _row_to_project(row) if row is not None else None
 
     async def list_projects(
-        self, client_id: str | None = None, *, limit: int | None = None, offset: int = 0
+        self, client_id: str | None = None, *, limit: int | None = None, offset: int = 0,
+        light: bool = False,
     ) -> list[Project]:
-        stmt = select(db.projects)
+        # light=True laat de zware JSONB-kolommen (rapport/regelspraak) uit de SELECT — die
+        # deserialiseren is duur en het dashboard/de projectenlijst gebruiken ze niet. Het
+        # aggregate-SSE pollt dit elke ~5s per open dashboard, dus dat telt op.
+        if light:
+            kolommen = [c for c in db.projects.c if c.name not in ("rapport", "regelspraak")]
+            stmt = select(*kolommen)
+        else:
+            stmt = select(db.projects)
         if client_id is not None:
             stmt = stmt.where(db.projects.c.client_id == client_id)
         stmt = stmt.order_by(db.projects.c.updated.desc()).offset(offset)

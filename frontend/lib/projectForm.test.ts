@@ -119,4 +119,11 @@ describe("parseBegrippenlijst", () => {
   it("geeft leeg resultaat op lege invoer", () => {
     expect(parseBegrippenlijst("   \n ")).toEqual({ begrippen: [], fouten: [] });
   });
+
+  it("dropt geen begrip als de eerste regel toevallig een kolomnaam is (geen valse CSV-header)", () => {
+    // Één term per regel; regel 1 = "naam" mag NIET als kopregel worden opgevat (≥2 kolommen vereist).
+    const r = parseBegrippenlijst("naam\npremie\ninkomen");
+    expect(r.fouten).toEqual([]);
+    expect(r.begrippen).toEqual([{ naam: "naam" }, { naam: "premie" }, { naam: "inkomen" }]);
+  });
 });

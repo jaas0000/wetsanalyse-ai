@@ -22,12 +22,19 @@ export function pathSegment(value: string): string {
 // scriptuitvoering opleveren (React escaped tekst, maar niet de href-scheme).
 //   - jci-uri (`jci1.3:c:BWBR…`)  → deeplink op wetten.overheid.nl (repareert meteen het
 //     anders niet-navigeerbare jci-linkje);
-//   - al complete http(s)-URL     → ongewijzigd toestaan;
+//   - al complete http(s)-URL     → alleen toegestaan als de host wetten.overheid.nl is (host-pinning,
+//     net als wettenOverheidHref) — een vreemde host wordt platte tekst, geen phishing-link;
 //   - alles anders (javascript:, data:, leeg) → undefined ⇒ render als platte tekst, geen <a>.
 export function bronHref(ref?: string | null): string | undefined {
   if (!ref) return undefined;
   const trimmed = ref.trim();
-  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  if (/^https?:\/\//i.test(trimmed)) {
+    try {
+      return new URL(trimmed).hostname === "wetten.overheid.nl" ? trimmed : undefined;
+    } catch {
+      return undefined;
+    }
+  }
   if (/^jci/i.test(trimmed)) return `https://wetten.overheid.nl/${encodeURI(trimmed)}`;
   return undefined;
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { DashboardUpdate, JobSummary } from "./types";
 
 /** Beginstand uit de SSR-lijst; de aggregate-SSE verrijkt/overschrijft dit binnen enkele seconden. */
@@ -34,6 +34,22 @@ export function useProjectenStream(initieel: JobSummary[]) {
   );
   const [verbonden, setVerbonden] = useState(false);
 
+  // Ids die de gebruiker zojuist lokaal (optimistisch) verwijderde. Zolang de server-read (`initieel`)
+  // ze nog teruggeeft, mag de SSR-re-add hieronder ze NIET opnieuw invoegen — anders "herrijst" een
+  // net-verwijderde rij bij een focus-/visibility-refresh terwijl de server nog niet is bijgetrokken.
+  const verwijderdRef = useRef<Set<string>>(new Set());
+
+  /** Verwijder rijen direct uit de lijst (optimistisch, naast de SSE-`removed`-bevestiging), zodat een
+   *  geslaagde bulk-delete meteen zichtbaar is — ook als de aggregate-SSE net down is. */
+  const verwijderLokaal = useCallback((ids: string[]) => {
+    for (const id of ids) verwijderdRef.current.add(id);
+    setItems((prev) => {
+      const m = new Map(prev);
+      for (const id of ids) m.delete(id);
+      return m;
+    });
+  }, []);
+
   // Voeg rijen toe wanneer een verse SSR-snapshot binnenkomt (na een `router.refresh()` of een
   // focus-refresh): een net aangemaakte analyse verschijnt zo meteen, ook als de SSE-poll nog niet
   // is binnengekomen. De `useState`-initializer draait maar één keer, dus zónder dit zou een refresh
@@ -42,8 +58,15 @@ export function useProjectenStream(initieel: JobSummary[]) {
   // overschrijven.
   useEffect(() => {
     if (initieel.length === 0) return;
+    const aanwezig = new Set(initieel.map((s) => s.id));
+    // Server heeft de verwijdering ingehaald (id niet meer in de snapshot) → guard opheffen.
+    for (const id of verwijderdRef.current) {
+      if (!aanwezig.has(id)) verwijderdRef.current.delete(id);
+    }
     setItems((prev) => {
-      const ontbrekend = initieel.filter((s) => !prev.has(s.id));
+      const ontbrekend = initieel.filter(
+        (s) => !prev.has(s.id) && !verwijderdRef.current.has(s.id),
+      );
       if (ontbrekend.length === 0) return prev;
       const m = new Map(prev);
       for (const s of ontbrekend) m.set(s.id, summaryNaarUpdate(s));
@@ -78,5 +101,5 @@ export function useProjectenStream(initieel: JobSummary[]) {
     return () => es.close();
   }, []);
 
-  return { items, verbonden };
+  return { items, verbonden, verwijderLokaal };
 }

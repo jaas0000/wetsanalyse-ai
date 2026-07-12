@@ -138,6 +138,41 @@ async def test_laatste_beheerder_beschermd(monkeypatch, db):
     assert (await users.get_user("admin")).role == "analist"
 
 
+async def test_patch_user_gecombineerd_atomair(monkeypatch, db):
+    """patch_user toetst de laatste-beheerder-invariant op de EIND-toestand: rol+active tegelijk
+    wijzigen mag de enige beheerder niet degraderen, maar een no-op-combinatie (beheerder blijft
+    actief beheerder) wél."""
+    _fresh_settings(monkeypatch)
+    from app import users
+
+    await users.bootstrap_admin("admin", "admin@example.com", "wachtwoord1")
+    # Rol+active in één patch die de enige beheerder zou wegnemen → geweigerd (geen half-effect).
+    with pytest.raises(users.UserError):
+        await users.patch_user("admin", role="analist", active=False)
+    na = await users.get_user("admin")
+    assert na.role == "beheerder" and na.active is True  # niets veranderd
+
+    # Een niet-degraderende patch (blijft actief beheerder) mag.
+    u = await users.patch_user("admin", role="beheerder", active=True)
+    assert u.role == "beheerder" and u.active is True
+
+    # Met een tweede beheerder mag de gecombineerde degradatie wél.
+    await users.create_user("admin2", "admin2@example.com", role="beheerder")
+    u = await users.patch_user("admin", role="analist", active=False)
+    assert u.role == "analist" and u.active is False
+
+
+async def test_verify_credentials_dummy_bcrypt_bij_onbekende_user(monkeypatch, db):
+    """Bij een onbekende/inactieve gebruiker draait tóch een bcrypt-verificatie (dummy-hash), zodat
+    er geen timing-oracle 'bestaat + actief' ontstaat. We toetsen het waarneembare contract: de
+    reden blijft de generieke 'invalid', en de dummy-hash is een geldige bcrypt-hash."""
+    _fresh_settings(monkeypatch)
+    from app import users
+
+    assert (await users.verify_credentials("bestaat-niet", "x"))[1] == "invalid"
+    assert users.verify_password("x", users._DUMMY_HASH) is True
+
+
 # --- wachtwoord wijzigen -------------------------------------------------------
 
 async def test_change_own_password(monkeypatch, db):

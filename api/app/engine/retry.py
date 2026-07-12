@@ -26,6 +26,10 @@ _TRANSIENTE_LLM_NAMEN = {
 }
 
 
+# HTTP-statuscodes die een tijdelijke conditie aanduiden: 429 (rate-limit) en 5xx (server).
+_TRANSIENTE_STATUS = {429, 500, 502, 503, 504}
+
+
 def is_transient(e: BaseException) -> bool:
     from ..wettenbank import WettenbankError
 
@@ -33,7 +37,17 @@ def is_transient(e: BaseException) -> bool:
         # Client-/permanente MCP-fouten (bv. niet-bestaand artikel of onbekende wet) worden
         # niet beter van herhalen; alleen zonder of met transiënte klasse retryen.
         return getattr(e, "klasse", None) not in {"client", "permanent"}
-    return type(e).__name__ in _TRANSIENTE_LLM_NAMEN
+    if type(e).__name__ in _TRANSIENTE_LLM_NAMEN:
+        return True
+    # Robuuster dan alleen de klassenaam (broos bij LiteLLM-versiewissels of doorgelekte
+    # httpx-fouten): kijk ook naar een HTTP-status op de fout of de meegeleverde response.
+    for status in (
+        getattr(e, "status_code", None),
+        getattr(getattr(e, "response", None), "status_code", None),
+    ):
+        if isinstance(status, int) and status in _TRANSIENTE_STATUS:
+            return True
+    return False
 
 
 def retry_after_seconds(e: BaseException) -> float | None:

@@ -23,7 +23,7 @@ import secrets
 
 import bcrypt
 import pyotp
-from sqlalchemy import delete, func, insert, select, update
+from sqlalchemy import delete, func, insert, select, text, update
 
 from . import db
 from .secrets_crypto import decrypt, encrypt
@@ -77,6 +77,12 @@ def verify_password(plain: str, hashed: str) -> bool:
         return bcrypt.checkpw(plain.encode("utf-8")[:72], hashed.encode("ascii"))
     except ValueError:
         return False
+
+
+# Vaste dummy-hash om bij een onbekende/inactieve gebruiker toch de bcrypt-kost te betalen
+# (constant-tijd responspad), zodat login-timing geen "bestaat + actief"-oracle wordt. Eén keer
+# bij import berekend.
+_DUMMY_HASH = hash_password("x")
 
 
 def genereer_wachtwoord() -> str:
@@ -147,7 +153,12 @@ async def verify_credentials(
     of is onjuist).
     """
     user = await get_user(userid)
-    if user is None or not user.active or not verify_password(password, user.password_hash):
+    if user is None or not user.active:
+        # Betaal dezelfde bcrypt-kost als bij een bestaande, actieve gebruiker, zodat het
+        # responsverschil geen timing-oracle voor "gebruiker bestaat + actief" wordt.
+        verify_password(password, _DUMMY_HASH)
+        return None, "invalid"
+    if not verify_password(password, user.password_hash):
         return None, "invalid"
     if user.totp_enabled:
         if not totp or not _verify_totp(user, totp):
@@ -244,6 +255,45 @@ async def set_active(userid: str, active: bool) -> User:
             raise UserError("Kan de laatste actieve beheerder niet deactiveren.")
     await _update(user.userid, active=active)
     user.active = active
+    return user
+
+
+async def patch_user(userid: str, *, role: str | None = None, active: bool | None = None) -> User:
+    """Combineer een rol- en/of active-wijziging in ÉÉN transactie, met de 'laatste actieve
+    beheerder'-invariant getoetst op de EIND-toestand. Zo kan een gelijktijdige rol+active-patch
+    (of twee parallelle patches) de laatste beheerder niet via twee losse checks laten verdwijnen
+    (TOCTOU). Op Postgres serialiseert een advisory xact-lock de check+write; op SQLite (tests) zijn
+    writes al geserialiseerd."""
+    if role is not None and role not in ROLLEN:
+        raise UserError(f"Onbekende rol: {role!r}")
+    user = await _require_user(userid)
+    waarden: dict = {}
+    if role is not None:
+        waarden["role"] = role
+    if active is not None:
+        waarden["active"] = active
+    if not waarden:
+        return user
+    nieuw_role = role if role is not None else user.role
+    nieuw_active = active if active is not None else user.active
+    was_actieve_beheerder = user.role == "beheerder" and user.active
+    wordt_actieve_beheerder = nieuw_role == "beheerder" and nieuw_active
+    waarden["updated"] = _utcnow()
+    async with db.get_engine().begin() as conn:
+        if was_actieve_beheerder and not wordt_actieve_beheerder:
+            if db.get_engine().url.get_backend_name() == "postgresql":
+                await conn.execute(
+                    text("SELECT pg_advisory_xact_lock(hashtext(:k))"), {"k": "actieve-beheerders"}
+                )
+            aantal = (await conn.execute(
+                select(func.count()).select_from(db.users).where(
+                    db.users.c.role == "beheerder", db.users.c.active.is_(True)
+                )
+            )).scalar() or 0
+            if aantal <= 1:
+                raise UserError("Kan de laatste actieve beheerder niet degraderen of deactiveren.")
+        await conn.execute(update(db.users).where(db.users.c.userid == userid).values(**waarden))
+    user.role, user.active = nieuw_role, nieuw_active
     return user
 
 

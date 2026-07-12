@@ -175,6 +175,25 @@ def test_prompt_too_large_niet_transient():
     assert is_transient(PromptTooLargeError("te groot")) is False
 
 
+def test_is_transient_op_http_status():
+    """Naast de klassenaam-set herkent is_transient ook een HTTP-status op de fout of de response
+    (robuust bij LiteLLM-versiewissels / doorgelekte httpx-fouten)."""
+
+    class VreemdeFout(Exception):
+        def __init__(self, status):
+            self.status_code = status
+
+    class MetResponse(Exception):
+        def __init__(self, status):
+            self.response = type("R", (), {"status_code": status})()
+
+    assert is_transient(VreemdeFout(429)) is True
+    assert is_transient(VreemdeFout(503)) is True
+    assert is_transient(MetResponse(502)) is True
+    assert is_transient(VreemdeFout(400)) is False   # client-fout: niet retryen
+    assert is_transient(Exception("gewone fout zonder status")) is False
+
+
 # --- #4 MCP-foutklasse: client-fouten (niet-bestaand artikel) niet retryen ---
 
 def test_wettenbank_client_fout_niet_transient():

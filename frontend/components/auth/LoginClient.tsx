@@ -16,7 +16,8 @@ function veiligPad(cb: string | null): string {
     const u = new URL(cb, window.location.origin);
     return u.origin === window.location.origin ? u.pathname + u.search : "/";
   } catch {
-    return cb.startsWith("/") ? cb : "/";
+    // Alleen een echt intern pad; sluit protocol-relatieve paden (`//evil.com`) expliciet uit.
+    return cb.startsWith("/") && !cb.startsWith("//") ? cb : "/";
   }
 }
 

@@ -42,7 +42,7 @@ function formatDatum(iso: string): string {
  *  filteren, sorteren en pagineren gebeuren client-side op de live lijst. */
 export function ProjectenLijstClient({ initieel }: { initieel: JobSummary[] }) {
   const router = useRouter();
-  const { items } = useProjectenStream(initieel);
+  const { items, verwijderLokaal } = useProjectenStream(initieel);
   const all = [...items.values()];
 
   // Re-sync de SSR-lijst bij terugkeer naar het tabblad/venster: een analyse die elders is aangemaakt
@@ -148,6 +148,9 @@ export function ProjectenLijstClient({ initieel }: { initieel: JobSummary[] }) {
     } finally {
       setBezig(null);
     }
+    // Verwijder de geslaagde rijen direct lokaal (optimistisch): meteen weg uit de lijst, ook als de
+    // aggregate-SSE net down is (de `removed`-events zouden dan uitblijven).
+    verwijderLokaal([...geslaagd]);
     // Mislukte items blijven geselecteerd, zodat opnieuw proberen één klik is.
     setGeselecteerd((prev) => new Set([...prev].filter((id) => !geslaagd.has(id))));
     if (fouten.length === 0) {

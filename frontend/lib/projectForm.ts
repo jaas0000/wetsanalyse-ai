@@ -151,10 +151,12 @@ export function parseBegrippenlijst(tekst: string): ParseResultaat {
 
   const regels = schoon.split(/\r?\n/).map((r) => r.trim()).filter(Boolean);
 
-  // 2. CSV met kopregel: eerste regel bevat een 'naam'-kolom.
+  // 2. CSV met kopregel: eerste regel is een écht meerkoloms-kopje (≥2 kolommen) met een 'naam'-kolom.
+  // De ≥2-eis voorkomt dat een platte één-begrip-per-regel-lijst waarvan de eerste regel toevallig
+  // exact "naam" (of een andere kolomnaam) is, als header wordt opgevat en het eerste begrip stil dropt.
   const scheider = regels[0].includes(";") && !regels[0].includes(",") ? ";" : ",";
   const kop = splitsCsvRegel(regels[0], scheider).map((k) => k.toLowerCase());
-  if (kop.includes("naam") && kop.every((k) => !k || CSV_KOLOMMEN.has(k))) {
+  if (kop.length >= 2 && kop.includes("naam") && kop.every((k) => !k || CSV_KOLOMMEN.has(k))) {
     const begrippen: BegripInvoer[] = [];
     for (let i = 1; i < regels.length; i++) {
       const velden = splitsCsvRegel(regels[i], scheider);

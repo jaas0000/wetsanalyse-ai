@@ -49,6 +49,7 @@ export function ProjectClient({ initieel }: { initieel: Job }) {
   const [regelspraakFout, setRegelspraakFout] = useState<string | null>(null);
   const [regelspraakBezig, setRegelspraakBezig] = useState(false);
   const [startFout, setStartFout] = useState<string | null>(null);
+  const [actieFout, setActieFout] = useState<string | null>(null);
   const [actie, setActie] = useState<string | null>(null);
   const [tab, setTab] = useState<"analyse" | "regelspraak">("analyse");
   // Wordt opgehoogd bij het starten van de regelspraak-fase, zodat de SSE-stream heropent vanuit
@@ -185,24 +186,26 @@ export function ProjectClient({ initieel }: { initieel: Job }) {
   }
 
   async function onRetry() {
+    setActieFout(null);
     setActie("retry");
     try {
       await retryProject(initieel.id);
       await refreshJob();
     } catch (e) {
-      alert(isApiError(e) ? e.detail : (e as Error).message);
+      setActieFout(isApiError(e) ? e.detail : (e as Error).message);
     }
     setActie(null);
   }
 
   async function onDelete() {
     if (!confirm("Dit project verwijderen? Dit kan niet ongedaan worden gemaakt.")) return;
+    setActieFout(null);
     setActie("delete");
     try {
       await deleteProject(initieel.id);
       router.push("/");
     } catch (e) {
-      alert(isApiError(e) ? e.detail : (e as Error).message);
+      setActieFout(isApiError(e) ? e.detail : (e as Error).message);
       setActie(null);
     }
   }
@@ -311,6 +314,12 @@ export function ProjectClient({ initieel }: { initieel: Job }) {
           )}
         </ButtonRow>
       </div>
+
+      {actieFout && (
+        <Melding type="fout" titel="Actie mislukt">
+          <p className="mt-1 text-sm">{actieFout}</p>
+        </Melding>
+      )}
 
       {/* Waarschuwingen — in review-states toont de ReviewPanel ze (algemeen + per item), dus
           hier alleen buiten review om dubbele weergave te voorkomen. */}

@@ -183,6 +183,37 @@ async def test_claim_overschrijft_geen_owner_via_save_job(store):
     assert na.lease_until == voor.lease_until
 
 
+async def test_save_job_owner_fenced_inserteert_niet_na_delete(store):
+    """Delete-race: een owner-fenced save_job op een tussentijds verwijderd project mag de rij NIET
+    opnieuw aanmaken (geen 'resurrection'); hij levert False."""
+    await store.save_job(Job(id="race", state=JobState.queued))
+    await store.claim("race", {JobState.queued}, JobState.act2_runt, "worker-a", 120)
+    # Simuleer de delete tijdens de run.
+    assert await store.delete_project("race") is True
+    job = Job(id="race", state=JobState.fout)
+    # Fenced (owner gezet, zoals _save/_fail): geen re-insert, netjes False.
+    assert await store.save_job(job, owner="worker-a") is False
+    assert await store.load_project("race") is None
+    # Niet-fenced (owner=None) blijft insert-if-missing houden (seed-pad in tests).
+    assert await store.save_job(Job(id="niet-fenced", state=JobState.queued)) is True
+
+
+async def test_list_projects_light_laat_zware_kolommen_weg(store):
+    """light=True levert de projecten zonder de zware JSONB-kolommen (rapport/regelspraak) — die
+    heeft het dashboard niet nodig; de rest van de velden blijft intact."""
+    await store.save_job(Job(id="licht", state=JobState.klaar, client_id="c1",
+                             bronnen=[BronInput(bwbId="BWBR1", artikel="1")]))
+    await store.schrijf_rapport("licht", {"werkgebied": "Test", "groot": "x" * 100})
+    licht = await store.list_projects("c1", light=True)
+    assert len(licht) == 1
+    assert licht[0].slug == "licht"
+    assert licht[0].rapport is None          # zware kolom weggelaten
+    assert licht[0].bronnen[0].bwbId == "BWBR1"  # lichte velden intact
+    # Zonder light komt het rapport wél mee.
+    vol = await store.list_projects("c1")
+    assert vol[0].rapport == {"werkgebied": "Test", "groot": "x" * 100}
+
+
 async def test_set_current_fase_fenced_zonder_updated_bump(store):
     """De observerende fase-tik is owner-fenced en raakt `updated` (de homepage-sortering) niet."""
     await store.save_job(Job(id="f1", state=JobState.queued))

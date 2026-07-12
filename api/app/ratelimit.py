@@ -75,13 +75,25 @@ def rate_limited_client(client_id: str = Depends(require_client)) -> str:
     return client_id
 
 
+# De globale login-rem staat een veelvoud van de per-userid-limiet toe: legitiem verkeer over veel
+# gebruikers moet ruim passen, maar een password-spray over honderden userids (die de per-userid-rem
+# omzeilt) raakt alsnog dit plafond. In-process (per replica), dus defense-in-depth — echte
+# bescherming hoort op de proxy/WAF.
+_LOGIN_GLOBAL_FACTOR = 20
+
+
 def login_allowed(userid: str) -> bool:
-    """Per-userid brute-force-rem op de login-verificatie. Hergebruikt de muterende-rate-knoppen
+    """Brute-force-rem op de login-verificatie: per-userid ÉN een ruimere globale teller (tegen
+    spraying over veel userids). Hergebruikt de muterende-rate-knoppen
     (`WETSANALYSE_RATE_LIMIT_MAX`/`_WINDOW`); 0 = uit. In-process (per replica)."""
     s = get_settings()
     if s.rate_limit_max <= 0:
         return True
-    return _allow(f"login:{userid.strip().lower()}", s.rate_limit_max, s.rate_limit_window_s)
+    per_userid = _allow(f"login:{userid.strip().lower()}", s.rate_limit_max, s.rate_limit_window_s)
+    globaal = _allow(
+        "login:__global__", s.rate_limit_max * _LOGIN_GLOBAL_FACTOR, s.rate_limit_window_s
+    )
+    return per_userid and globaal
 
 
 def rate_limited_admin_test(admin_id: str = Depends(require_admin)) -> str:
