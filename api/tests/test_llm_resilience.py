@@ -304,3 +304,53 @@ async def test_repair_retry_telt_usage_van_beide_calls(monkeypatch):
     assert res.data == {"ok": True}
     assert res.tokens_in == 30   # 10 + 20
     assert res.tokens_out == 12  # 5 + 7
+
+
+# --- #4 prompt caching: cachebaar system-blok + cache-token-telemetrie ---
+
+def test_system_message_cachebaar_blok_aan_en_uit():
+    from app.llm.base import LlmConfig
+    from app.llm.litellm_client import LiteLLMClient
+
+    aan = LiteLLMClient(LlmConfig(model="m", prompt_caching=True))._system_message("REF")
+    assert aan["content"] == [{"type": "text", "text": "REF", "cache_control": {"type": "ephemeral"}}]
+
+    uit = LiteLLMClient(LlmConfig(model="m", prompt_caching=False))._system_message("REF")
+    assert uit == {"role": "system", "content": "REF"}
+
+
+def test_cache_tokens_leest_usage_defensief():
+    from app.llm.litellm_client import LiteLLMClient
+
+    class Usage:  # provider-stijl usage-object
+        cache_read_input_tokens = 1200
+        cache_creation_input_tokens = 800
+
+    assert LiteLLMClient._cache_tokens(Usage()) == (1200, 800)
+    assert LiteLLMClient._cache_tokens(None) == (0, 0)
+
+    class Nested:  # alternatieve vorm: genest onder prompt_tokens_details
+        cache_read_input_tokens = 0
+        cache_creation_input_tokens = 0
+        class prompt_tokens_details:  # noqa: N801
+            cached_tokens = 512
+
+    assert LiteLLMClient._cache_tokens(Nested()) == (512, 0)
+
+
+def test_references_in_system_niet_in_user():
+    """Caching-invariant: de (grote, stabiele) references staan in het cachebare system-blok,
+    de volatile per-call data in de user-prompt."""
+    from app.engine.prompts import act2_prompt, act3_begrippen_prompt
+
+    basis = {"wet": "Wet X", "bwbId": "BWBR1", "artikel": "1",
+             "leden": [{"lid": "1", "tekst": "de minister stelt vast"}]}
+    system, user, _schema, _h = act2_prompt(basis, None)
+    assert "JAS-klassen" in system and "verwijzingen volgen" in system
+    assert "REFERENTIE" not in user
+
+    ctx = {"werkgebied": {"naam": "WG"}, "bronnen": [{"bron_id": "br1", "label": "L",
+            "markeringen": [], "verwijzingen": []}]}
+    system3, user3, _s3, _h3 = act3_begrippen_prompt(ctx)
+    assert "begrippen en afleidingsregels" in system3
+    assert "REFERENTIE" not in user3

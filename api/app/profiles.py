@@ -93,6 +93,7 @@ def _config_uit_env(s: Settings) -> LlmConfig:
         temperature=s.llm_temperature,
         timeout=s.llm_timeout_s,
         max_prompt_tokens=s.llm_max_prompt_tokens,
+        prompt_caching=s.llm_prompt_caching,
     )
 
 
@@ -114,6 +115,7 @@ async def resolve_config(name: str | None, settings: Settings | None = None) -> 
         temperature=profile.temperature,
         timeout=s.llm_timeout_s,
         max_prompt_tokens=s.llm_max_prompt_tokens,
+        prompt_caching=s.llm_prompt_caching,
     )
 
 

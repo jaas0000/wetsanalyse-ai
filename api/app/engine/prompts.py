@@ -33,7 +33,7 @@ REFERENTIE_HASH = _hash(JAS_REF, BEGRIPPEN_REF, VERWIJZINGEN_REF)
 _KLASSEN = ", ".join(sorted(GELDIGE_JAS_KLASSEN))
 _REGELTYPEN = ", ".join(sorted(GELDIGE_REGELTYPEN))
 
-_SYSTEM = (
+_SYSTEM_BASE = (
     "Je bent een juridisch analist die de methode Wetsanalyse (JAS) toepast op Nederlandse "
     "wetgeving. Brongetrouwheid is niet-onderhandelbaar:\n"
     "- Werk UITSLUITEND met de letterlijke, aangeleverde wettekst. Verzin nooit tekst, leden "
@@ -42,6 +42,24 @@ _SYSTEM = (
     "- Markeer twijfel en interpretatiekeuzes expliciet i.p.v. schijnzekerheid te produceren.\n"
     "Geef UITSLUITEND geldig JSON terug, zonder uitleg of markdown-fences."
 )
+
+# De references als gelabelde secties. Ze verhuizen van de user-prompt naar het system-bericht:
+# daar vormen ze per fase een byte-stabiele prefix die — met prompt caching aan — over bronnen en
+# rondes heen uit de cache wordt geserveerd i.p.v. elke call opnieuw vol betaald. De volatile
+# per-call data (wettekst/markeringen/opdracht) blijft in de user-prompt staan.
+_REF_JAS = "REFERENTIE — JAS-klassen (gebruik dit bij het classificeren):\n" + JAS_REF
+_REF_VERWIJZINGEN = "REFERENTIE — verwijzingen volgen:\n" + VERWIJZINGEN_REF
+_REF_BEGRIPPEN = "REFERENTIE — begrippen en afleidingsregels opstellen:\n" + BEGRIPPEN_REF
+
+
+def _system(*ref_secties: str) -> str:
+    """Bouw het system-bericht: de vaste brongetrouwheids-instructie + de fase-references.
+    Byte-stabiel binnen een fase → cachebaar (zie LiteLLMClient._system_message)."""
+    return "\n\n".join((_SYSTEM_BASE, *ref_secties))
+
+
+# Backwards-compat alias (sommige imports/oudere call-sites verwachten `_SYSTEM`).
+_SYSTEM = _SYSTEM_BASE
 
 _ACT2_SCHEMA = {
     "markeringen": [
@@ -256,10 +274,9 @@ def _mcp_verwijzingen_blok(basis: dict) -> str:
 
 def act2_inventaris_prompt(basis: dict) -> tuple[str, str, dict, str]:
     """Fase 2a — alleen de verwijzing-inventaris met de fetch-afweging (`volgen`)."""
+    system = _system(_REF_VERWIJZINGEN)
     user = (
-        "REFERENTIE — verwijzingen volgen:\n"
-        + VERWIJZINGEN_REF
-        + "\n\n=== WETTEKST ===\n"
+        "=== WETTEKST ===\n"
         + _leden_blok(basis)
         + _mcp_verwijzingen_blok(basis)
         + "\n\nOPDRACHT (stap 1b — verwijzing-inventaris): inventariseer ALLE uitgaande "
@@ -272,7 +289,7 @@ def act2_inventaris_prompt(basis: dict) -> tuple[str, str, dict, str]:
         "false voor louter informatieve of intra-artikel-verwijzingen. Gebruik stabiele id's "
         "(v1, v2, …). Geef UITSLUITEND het verwijzingen-veld terug."
     )
-    return _SYSTEM, user, _INVENTARIS_SCHEMA, _hash(_SYSTEM, user)
+    return system, user, _INVENTARIS_SCHEMA, _hash(system, user)
 
 
 def _verwijzing_context(inventaris: dict | None, opgehaald: dict | None) -> str:
@@ -338,12 +355,9 @@ def act2_prompt(
     opgehaald: dict | None = None,
 ) -> tuple[str, str, dict, str]:
     focus = _focus_blok(analysefocus)
+    system = _system(_REF_JAS, _REF_VERWIJZINGEN)
     user = (
-        "REFERENTIE — JAS-klassen (gebruik dit bij het classificeren):\n"
-        + JAS_REF
-        + "\n\nREFERENTIE — verwijzingen volgen:\n"
-        + VERWIJZINGEN_REF
-        + "\n\n=== WETTEKST OM TE ANALYSEREN ===\n"
+        "=== WETTEKST OM TE ANALYSEREN ===\n"
         + _leden_blok(basis)
         + _verwijzing_context(inventaris, opgehaald)
         + focus
@@ -356,7 +370,7 @@ def act2_prompt(
         "opgehaalde tekst) en zet 'status' op 'opgehaald' als de tekst is meegeleverd, anders "
         "'gesignaleerd' (of 'gevolgd' voor intra-artikel)."
     )
-    return _SYSTEM, user, _ACT2_SCHEMA, _hash(_SYSTEM, user)
+    return system, user, _ACT2_SCHEMA, _hash(system, user)
 
 
 _BEGRIP_PLICHTIG = ", ".join(sorted(BEGRIP_PLICHTIGE_KLASSEN))
@@ -370,11 +384,11 @@ def act3_begrippen_prompt(
 ) -> tuple[str, str, dict, str]:
     """Stap 3a — alleen de werkgebied-brede begrippen. `context` is de act-2-aggregaat
     ({werkgebied, bronnen[...]}); de leden-tekst gaat mee zodat definities dicht op de bron
-    blijven (de token-guard WETSANALYSE_LLM_MAX_PROMPT_TOKENS bewaakt het context window)."""
+    blijven (de token-guard WETSANALYSE_LLM_MAX_PROMPT_TOKENS bewaakt het context window).
+    De referenties staan in het cachebare system-bericht (zie `_system`)."""
+    system = _system(_REF_BEGRIPPEN)
     user = (
-        "REFERENTIE — begrippen en afleidingsregels opstellen:\n"
-        + BEGRIPPEN_REF
-        + "\n\n" + _bron_index_blok(context)
+        _bron_index_blok(context)
         + "\n\n=== WETTEKST VAN ALLE BRONNEN ===\n"
         + _bronnen_blok(context)
         + "\n\n=== GECLASSIFICEERDE MARKERINGEN (activiteit 2, alle bronnen — basis voor de begrippen) ===\n"
@@ -406,7 +420,7 @@ def act3_begrippen_prompt(
         "variabele) — stap 3b verwijst daarnaar. Gebruik stabiele, werkgebied-brede id's "
         "(b1, b2, …). Noteer aandachtspunten als validatiepunten."
     )
-    return _SYSTEM, user, _ACT3_BEGRIPPEN_SCHEMA, _hash(_SYSTEM, user)
+    return system, user, _ACT3_BEGRIPPEN_SCHEMA, _hash(system, user)
 
 
 def _compacte_begrippen(begrippen: list[dict]) -> list[dict]:
@@ -428,11 +442,11 @@ def _regel_markeringen(context: dict) -> list[dict]:
 
 
 def act3_regels_prompt(context: dict, begrippen: list[dict]) -> tuple[str, str, dict, str]:
-    """Stap 3b — de afleidingsregels, gebouwd met de 3a-begrippen als bouwstenen."""
+    """Stap 3b — de afleidingsregels, gebouwd met de 3a-begrippen als bouwstenen.
+    De referenties staan in het cachebare system-bericht (zie `_system`)."""
+    system = _system(_REF_BEGRIPPEN)
     user = (
-        "REFERENTIE — begrippen en afleidingsregels opstellen:\n"
-        + BEGRIPPEN_REF
-        + "\n\n" + _bron_index_blok(context)
+        _bron_index_blok(context)
         + "\n\n=== WETTEKST VAN ALLE BRONNEN ===\n"
         + _bronnen_blok(context)
         + "\n\n=== VASTGESTELDE BEGRIPPEN (stap 3a — de bouwstenen; verwijs met deze begrip-id's) ===\n"
@@ -456,7 +470,7 @@ def act3_regels_prompt(context: dict, begrippen: list[dict]) -> tuple[str, str, 
         "volgt in de RegelSpraak-stap. Gebruik stabiele id's (r1, r2, …). Noteer aandachtspunten "
         "als validatiepunten."
     )
-    return _SYSTEM, user, _ACT3_REGELS_SCHEMA, _hash(_SYSTEM, user)
+    return system, user, _ACT3_REGELS_SCHEMA, _hash(system, user)
 
 
 def _zonder_leden(analyse: dict) -> dict:
@@ -477,9 +491,9 @@ def revise_prompt(
 ) -> tuple[str, str, dict, str]:
     if activiteit == "2":
         schema = _ACT2_REVISE_SCHEMA
-        wettekst = "\n\n=== WETTEKST VAN ALLE BRONNEN ===\n" + _bronnen_blok(context)
+        wettekst = "=== WETTEKST VAN ALLE BRONNEN ===\n" + _bronnen_blok(context)
         vorige = _zonder_leden(vorige)   # leden staan al in `wettekst` → niet dubbel dumpen
-        ref = JAS_REF + "\n\n" + VERWIJZINGEN_REF
+        system = _system(_REF_JAS, _REF_VERWIJZINGEN)
         extra = (
             "\n\nOPDRACHT: lever per bron de HERZIENE markeringen/verwijzingen/samenhang terug "
             "(gebruik dezelfde bron_id's). Verwerk elke per-item-correctie (per id) en de algemene "
@@ -497,7 +511,7 @@ def revise_prompt(
             + _focus_blok(analysefocus)
             + _begrippenlijst_blok(begrippenlijst)
         )
-        ref = BEGRIPPEN_REF
+        system = _system(_REF_BEGRIPPEN)
         extra = (
             "\n\nOPDRACHT: lever de HERZIENE werkgebied-brede begrippenlijst + afleidingsregels. "
             "Verwerk elke per-item-correctie (per id) en de algemene feedback. HOUD ID'S STABIEL. "
@@ -507,11 +521,11 @@ def revise_prompt(
             "'vindplaatsen' met de juiste bron_id's."
         )
     user = (
-        "REFERENTIE:\n" + ref + wettekst
+        wettekst
         + "\n\n=== JE VORIGE VERSIE ===\n"
         + json.dumps(vorige, ensure_ascii=False, indent=2)
         + "\n\n=== FEEDBACK VAN DE ANALIST (verwerk ELK punt) ===\n"
         + json.dumps(feedback, ensure_ascii=False, indent=2)
         + extra
     )
-    return _SYSTEM, user, schema, _hash(_SYSTEM, user)
+    return system, user, schema, _hash(system, user)

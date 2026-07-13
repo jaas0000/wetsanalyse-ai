@@ -48,6 +48,22 @@ _SYSTEM = (
     "Geef UITSLUITEND geldig JSON terug, zonder uitleg of markdown-fences."
 )
 
+# De references als gelabelde secties. Ze verhuizen van de user-prompt naar het system-bericht:
+# daar vormen ze per stap een byte-stabiele prefix die — met prompt caching aan — over rondes heen
+# uit de cache wordt geserveerd i.p.v. elke call (incl. elke revisie) opnieuw vol betaald.
+_REF_GEGEVENS = "REFERENTIE — GegevensSpraak-syntax:\n" + GEGEVENSSPRAAK_REF
+_REF_REGELS = "REFERENTIE — RegelSpraak-regels en resultaatacties:\n" + REGELS_REF
+_REF_EXPRESSIES = "REFERENTIE — expressies en operatoren:\n" + EXPRESSIES_REF
+_REF_VERTAAL_GEGEVENS = "REFERENTIE — vertaalpatronen (JAS-klasse → GegevensSpraak):\n" + VERTAALPATRONEN_REF
+_REF_VERTAAL_REGELS = "REFERENTIE — vertaalpatronen (afleidingsregel → resultaatactie):\n" + VERTAALPATRONEN_REF
+
+
+def _system(*ref_secties: str) -> str:
+    """Bouw het system-bericht: de vaste brongetrouwheids-instructie + de stap-references.
+    Byte-stabiel binnen een stap → cachebaar (zie LiteLLMClient._system_message)."""
+    return "\n\n".join((_SYSTEM, *ref_secties))
+
+
 # --- schema's ----------------------------------------------------------------
 
 _GEGEVENS_SCHEMA = {
@@ -147,10 +163,9 @@ def _brondefinities_blok(context: dict) -> str:
 
 def gegevens_prompt(context: dict) -> tuple[str, str, dict, str]:
     """Stap 2 — bouw het objectmodel uit de begrippen (en afleidingsregels voor parameters)."""
+    system = _system(_REF_GEGEVENS, _REF_VERTAAL_GEGEVENS)
     user = (
-        "REFERENTIE — GegevensSpraak-syntax:\n" + GEGEVENSSPRAAK_REF
-        + "\n\nREFERENTIE — vertaalpatronen (JAS-klasse → GegevensSpraak):\n" + VERTAALPATRONEN_REF
-        + "\n\n=== WERKGEBIED ===\n"
+        "=== WERKGEBIED ===\n"
         + json.dumps(context.get("werkgebied") or {}, ensure_ascii=False, indent=2)
         + "\n\n=== BEGRIPPEN (wetsanalyse activiteit 3a — voeden de objecttypen/attributen/kenmerken) ===\n"
         + _begrippen_blok(context)
@@ -173,16 +188,14 @@ def gegevens_prompt(context: dict) -> tuple[str, str, dict, str]:
         "letterlijke GegevensSpraak in 'regelspraak_tekst'. Verzin geen gegevens die niet uit de "
         "bron volgen; markeer twijfel."
     )
-    return _SYSTEM, user, _GEGEVENS_SCHEMA, _hash(_SYSTEM, user)
+    return system, user, _GEGEVENS_SCHEMA, _hash(system, user)
 
 
 def regels_prompt(context: dict) -> tuple[str, str, dict, str]:
     """Stap 3 — schrijf de RegelSpraak-regels uit de afleidingsregels, bovenop het objectmodel."""
+    system = _system(_REF_REGELS, _REF_EXPRESSIES, _REF_VERTAAL_REGELS)
     user = (
-        "REFERENTIE — RegelSpraak-regels en resultaatacties:\n" + REGELS_REF
-        + "\n\nREFERENTIE — expressies en operatoren:\n" + EXPRESSIES_REF
-        + "\n\nREFERENTIE — vertaalpatronen (afleidingsregel → resultaatactie):\n" + VERTAALPATRONEN_REF
-        + "\n\n=== GEGEVENSSPRAAK (het objectmodel — verwijs ALLEEN naar hierin gedeclareerde "
+        "=== GEGEVENSSPRAAK (het objectmodel — verwijs ALLEEN naar hierin gedeclareerde "
         "objecttypen/attributen/kenmerken/parameters/rollen) ===\n"
         + json.dumps(context.get("gegevensspraak") or {}, ensure_ascii=False, indent=2)
         + "\n\n=== AFLEIDINGSREGELS (wetsanalyse activiteit 3b — voeden de regels) ===\n"
@@ -201,14 +214,14 @@ def regels_prompt(context: dict) -> tuple[str, str, dict, str]:
         "'regelspraak_tekst', en een 'herkomst' (regel_id + vindplaatsen). Markeer "
         "interpretatiekeuzes in 'twijfel' en noteer aandachtspunten als validatiepunten."
     )
-    return _SYSTEM, user, _REGELS_SCHEMA, _hash(_SYSTEM, user)
+    return system, user, _REGELS_SCHEMA, _hash(system, user)
 
 
 def revise_prompt(stap: str, vorige: dict, feedback: dict) -> tuple[str, str, dict, str]:
     """Herzie GegevensSpraak (stap='rs-gegevens') of de regels (stap='rs-regels') op feedback."""
     if stap == "rs-gegevens":
         schema = _GEGEVENS_SCHEMA
-        ref = GEGEVENSSPRAAK_REF + "\n\n" + VERTAALPATRONEN_REF
+        system = _system(_REF_GEGEVENS, _REF_VERTAAL_GEGEVENS)
         vorig_blok = json.dumps(vorige.get("gegevensspraak") or {}, ensure_ascii=False, indent=2)
         extra = (
             "\n\nOPDRACHT: lever de HERZIENE GegevensSpraak (objecttypen/attributen/kenmerken/"
@@ -217,7 +230,7 @@ def revise_prompt(stap: str, vorige: dict, feedback: dict) -> tuple[str, str, di
         )
     else:
         schema = _REGELS_SCHEMA
-        ref = REGELS_REF + "\n\n" + EXPRESSIES_REF
+        system = _system(_REF_REGELS, _REF_EXPRESSIES)
         vorig_blok = json.dumps(
             {"regels": vorige.get("regels") or [], "validatiepunten": vorige.get("validatiepunten") or []},
             ensure_ascii=False, indent=2,
@@ -228,10 +241,9 @@ def revise_prompt(stap: str, vorige: dict, feedback: dict) -> tuple[str, str, di
             "gegevens; gebruik uitsluitend echte RegelSpraak-taalpatronen."
         )
     user = (
-        "REFERENTIE:\n" + ref
-        + "\n\n=== JE VORIGE VERSIE ===\n" + vorig_blok
+        "=== JE VORIGE VERSIE ===\n" + vorig_blok
         + "\n\n=== FEEDBACK VAN DE ANALIST (verwerk ELK punt) ===\n"
         + json.dumps(feedback, ensure_ascii=False, indent=2)
         + extra
     )
-    return _SYSTEM, user, schema, _hash(_SYSTEM, user)
+    return system, user, schema, _hash(system, user)

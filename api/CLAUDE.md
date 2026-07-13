@@ -364,7 +364,13 @@ volledige leden-tekst mee zodat definities dicht op de bron blijven — deze tok
 bewaking van dat contextrisico),
 `WETSANALYSE_MAX_VERWIJZING_FETCHES` (cap op het aantal
 verwezen artikelen dat per analyse wordt opgehaald in de cross-referentie-fetch-lus, default 6;
-0 = niet volgen). Een 429 wordt bovendien geretryed met respect
+0 = niet volgen), `WETSANALYSE_LLM_PROMPT_CACHING` (prompt caching aan/uit, **default 1/aan**;
+de prompt-builders zetten de vaste references in het **system**-bericht en de LLM-laag markeert
+dat blok als cachebaar (`cache_control: ephemeral`) — de references vormen per fase/stap een
+byte-stabiele prefix, dus opeenvolgende bronnen én revisierondes lezen ze uit de cache i.p.v. ze
+elke call vol te betalen. Verlaagt kosten/latency, niet het window zelf. Zet op 0 als de provider
+`cache_control` niet ondersteunt → terug naar het oude gedrag, geen regressie. De cache-besparing
+is zichtbaar via `cache_read_in`/`cache_write_in` in de `provenance` en in `/v1/admin/usage`). Een 429 wordt bovendien geretryed met respect
 voor de `Retry-After`-header (`WETSANALYSE_TRANSIENT_MAX_RETRIES`/`_BACKOFF`/`_MAX_BACKOFF`). Let op
 bij >1 replica: de **rate limit** én de **LLM-concurrency-rem** zijn in-process (per replica → de
 effectieve grens schaalt mee met het aantal replica's); **max-active-jobs** en het token-budget zijn
