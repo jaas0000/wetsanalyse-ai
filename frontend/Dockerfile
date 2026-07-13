@@ -5,13 +5,13 @@
 # server-side. De server bereikt de API intern via API_BASE_URL (proxy-netwerk).
 
 # ── Dependencies ──────────────────────────────────────────────────────────────
-FROM node:26-slim@sha256:95a34da32a840bd9b3b09a5b773591c16923e350174b1c50e1200c75bf15eaa9 AS deps
+FROM node:26-slim@sha256:ffc78385a788964bb3cbab5e434ff79a10bdc25b8ae6db03fe5fe6cb14053c09 AS deps
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci
 
 # ── Build ─────────────────────────────────────────────────────────────────────
-FROM node:26-slim@sha256:95a34da32a840bd9b3b09a5b773591c16923e350174b1c50e1200c75bf15eaa9 AS builder
+FROM node:26-slim@sha256:ffc78385a788964bb3cbab5e434ff79a10bdc25b8ae6db03fe5fe6cb14053c09 AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
@@ -20,7 +20,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
 # ── Runtime ───────────────────────────────────────────────────────────────────
-FROM node:26-slim@sha256:95a34da32a840bd9b3b09a5b773591c16923e350174b1c50e1200c75bf15eaa9 AS runtime
+FROM node:26-slim@sha256:ffc78385a788964bb3cbab5e434ff79a10bdc25b8ae6db03fe5fe6cb14053c09 AS runtime
 
 ARG GIT_SHA=""
 ARG BUILD_TIME=""
