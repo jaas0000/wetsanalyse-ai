@@ -1,0 +1,88 @@
+# Wetsanalyse — docker-compose.yml
+#
+# Twee containers:
+#   backend   — PostgreSQL 16 + FastAPI in één image (gebouwd vanuit de projectroot)
+#   frontend  — Next.js BFF (publiek image van GHCR)
+#
+# Vereisten:
+#   1. Kopieer .env.example naar .env en vul LLM_API_KEY, LLM_API_BASE en AUTH_URL in.
+#   2. Genereer de overige secrets:  python3 gen-secrets.py
+#   3. Start de stack:               podman-compose up -d
+#                              of:   docker compose up -d
+#
+# De frontend is bereikbaar op http://localhost:3000 (of het domein in AUTH_URL).
+# Eerste keer: ga naar <url>/setup om de eerste beheerdersaccount aan te maken.
+
+services:
+
+  backend:
+    build:
+      context: ../..         # projectroot — Dockerfile heeft api/ en .claude/skills/ nodig
+      dockerfile: deploy/compose/Dockerfile.backend
+    container_name: wetsanalyse-backend
+    restart: unless-stopped
+    environment:
+      # LLM-configuratie (uit .env)
+      LLM_PROVIDER:          azure_ai
+      LLM_MODEL:             ${LLM_MODEL:-claude-sonnet-4-6}
+      LLM_API_BASE:          ${LLM_API_BASE}
+      LLM_API_KEY_FILE:      /run/secrets/llm_api_key
+      # Wettenbank MCP — remote, geen extra container nodig
+      WETTENBANK_MCP_URL:    https://wettenbank-mcp.ipalm.nl/mcp
+      WETTENBANK_TOKEN_FILE: /run/secrets/wettenbank_token
+      # Auth
+      WETSANALYSE_AUTH_REQUIRED:   "1"
+      WETSANALYSE_API_TOKENS_FILE: /run/secrets/api_tokens
+      WETSANALYSE_ADMIN_TOKENS_FILE: /run/secrets/admin_tokens
+      LLM_CONFIG_SECRET_FILE: /run/secrets/llm_config_secret
+      # DATABASE_URL wordt door backend-entrypoint.sh gegenereerd op basis van postgres_password
+    volumes:
+      - ./secrets:/run/secrets:ro
+      - wetsanalyse_pgdata:/var/lib/postgresql/data
+    networks:
+      - intern
+    expose:
+      - "3000"
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:3000/health').status==200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  frontend:
+    image: ghcr.io/palmw01/wetsanalyse-frontend:latest
+    container_name: wetsanalyse-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"      # pas aan als poort 3000 al in gebruik is
+    environment:
+      NODE_ENV:              production
+      API_BASE_URL:          http://backend:3000
+      API_TOKEN_FILE:        /run/secrets/frontend_api_token
+      ADMIN_API_TOKEN_FILE:  /run/secrets/frontend_admin_token
+      AUTH_SECRET_FILE:      /run/secrets/frontend_auth_secret
+      AUTH_URL:              ${AUTH_URL}           # verplicht — zie .env.example
+      AUTH_TRUST_HOST:       "true"
+    volumes:
+      - ./secrets:/run/secrets:ro
+    networks:
+      - intern
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e",
+             "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+volumes:
+  wetsanalyse_pgdata:    # PostgreSQL data — blijft bewaard bij herstart
+
+networks:
+  intern:
+    driver: bridge

@@ -38,6 +38,13 @@ docs/regelspraak/
 .env
 .env.local
 api/secrets/
+
+# Gegenereerd ACA-parameterbestand (bevat geheimen — nooit committen)
+deploy/aca/params.json
+
+# Compose-secrets en ingevulde .env (nooit committen)
+deploy/compose/secrets/
+deploy/compose/.env
 api/docker-compose.override.yml
 api/_data/
 api/spike_act2.json

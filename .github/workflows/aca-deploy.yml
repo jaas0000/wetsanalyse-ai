@@ -1,0 +1,138 @@
+# Rolt de Wetsanalyse-stack bij naar Azure Container Apps.
+#
+# Wordt geactiveerd nadat api-docker-publish of frontend-docker-publish slaagt op master,
+# of handmatig via workflow_dispatch (per app of beide tegelijk).
+#
+# Authenticatie: OIDC (Workload Identity Federation) — geen client-secret nodig.
+# Eenmalige Azure AD-setup: zie deploy/aca/INSTALL.md → "GitHub Actions instellen".
+#
+# Vereiste GitHub-secrets:  AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID.
+# Vereiste repo-variabelen: ACA_RESOURCE_GROUP.
+# Optionele repo-variabele: ACA_APP_NAME (default: wetsanalyse).
+#
+# Wanneer ACA_RESOURCE_GROUP leeg is, slaat de workflow zichzelf over — zodat de repo
+# ook werkt op omgevingen die alleen Portainer gebruiken.
+
+name: aca-deploy
+
+on:
+  workflow_run:
+    workflows: ["api-docker-publish", "frontend-docker-publish"]
+    types: [completed]
+    branches: [master]
+  workflow_dispatch:
+    inputs:
+      app:
+        description: 'App om bij te werken'
+        required: true
+        default: 'both'
+        type: choice
+        options: [api, frontend, both]
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  deploy:
+    # Sla over als ACA niet geconfigureerd is, of als de upstream workflow mislukt is.
+    if: >
+      vars.ACA_RESOURCE_GROUP != '' &&
+      (github.event_name == 'workflow_dispatch' ||
+       github.event.workflow_run.conclusion == 'success')
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write   # OIDC naar Azure AD
+      contents: read
+
+    steps:
+      - name: Bepaal app en image-tag
+        id: ctx
+        env:
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            APP="${{ github.event.inputs.app }}"
+            SHA="${GITHUB_SHA::7}"
+          else
+            NAME="${{ github.event.workflow_run.name }}"
+            FULL_SHA="${{ github.event.workflow_run.head_sha }}"
+            SHA="${FULL_SHA::7}"
+            case "$NAME" in
+              "api-docker-publish")      APP="api"      ;;
+              "frontend-docker-publish") APP="frontend" ;;
+              *)                         APP="both"     ;;
+            esac
+          fi
+          APP_NAME="${{ vars.ACA_APP_NAME }}"
+          APP_NAME="${APP_NAME:-wetsanalyse}"
+          echo "app=$APP"           >> "$GITHUB_OUTPUT"
+          echo "sha=$SHA"           >> "$GITHUB_OUTPUT"
+          echo "app_name=$APP_NAME" >> "$GITHUB_OUTPUT"
+          echo "api_image=ghcr.io/${OWNER}/wetsanalyse-api:sha-${SHA}"           >> "$GITHUB_OUTPUT"
+          echo "frontend_image=ghcr.io/${OWNER}/wetsanalyse-frontend:sha-${SHA}" >> "$GITHUB_OUTPUT"
+          echo "→ app=$APP  sha=$SHA  app_name=$APP_NAME"
+
+      - name: Azure-login (OIDC)
+        # Pin naar een specifieke commit voor supply chain-veiligheid (BIO2 / ISO 27002:2022 §8.30).
+        # Huidige versie: azure/login v2.3.0
+        uses: azure/login@a457da9ea7e39c3bef4f0c85f60f7c70ea0fc0a6 # v2.3.0
+        with:
+          client-id:       ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id:       ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      # ── API bijwerken ───────────────────────────────────────────────────────
+      - name: Update API Container App
+        if: steps.ctx.outputs.app == 'api' || steps.ctx.outputs.app == 'both'
+        run: |
+          az containerapp update \
+            --name "${{ steps.ctx.outputs.app_name }}-api" \
+            --resource-group "${{ vars.ACA_RESOURCE_GROUP }}" \
+            --image "${{ steps.ctx.outputs.api_image }}"
+
+      - name: Wacht op API-revisie (intern — geen HTTP-check mogelijk)
+        if: steps.ctx.outputs.app == 'api' || steps.ctx.outputs.app == 'both'
+        run: |
+          APP="${{ steps.ctx.outputs.app_name }}-api"
+          RG="${{ vars.ACA_RESOURCE_GROUP }}"
+          echo "Wacht op aktieve revisie voor ${APP}…"
+          for i in $(seq 1 20); do
+            STATUS=$(az containerapp show \
+              --name "$APP" --resource-group "$RG" \
+              --query "properties.runningStatus" -o tsv 2>/dev/null || echo "Unknown")
+            echo "  poging $i: runningStatus=$STATUS"
+            [ "$STATUS" = "Running" ] && exit 0
+            sleep 15
+          done
+          echo "::error::API niet actief na 5 minuten — controleer de revisielogs."
+          exit 1
+
+      # ── Frontend bijwerken ──────────────────────────────────────────────────
+      - name: Update Frontend Container App
+        if: steps.ctx.outputs.app == 'frontend' || steps.ctx.outputs.app == 'both'
+        run: |
+          az containerapp update \
+            --name "${{ steps.ctx.outputs.app_name }}-frontend" \
+            --resource-group "${{ vars.ACA_RESOURCE_GROUP }}" \
+            --image "${{ steps.ctx.outputs.frontend_image }}"
+
+      - name: Health check frontend (extern bereikbaar)
+        if: steps.ctx.outputs.app == 'frontend' || steps.ctx.outputs.app == 'both'
+        run: |
+          APP="${{ steps.ctx.outputs.app_name }}-frontend"
+          RG="${{ vars.ACA_RESOURCE_GROUP }}"
+          FQDN=$(az containerapp show \
+            --name "$APP" --resource-group "$RG" \
+            --query "properties.configuration.ingress.fqdn" -o tsv)
+          URL="https://${FQDN}/api/health"
+          echo "Health check: $URL"
+          for i in $(seq 1 20); do
+            if curl -fsS --max-time 10 "$URL" -o /dev/null; then
+              echo "Service gezond (poging $i)."
+              exit 0
+            fi
+            echo "  poging $i: nog niet gezond — wacht 15s"
+            sleep 15
+          done
+          echo "::error::Frontend niet gezond na 5 minuten — controleer de containerlogs."
+          exit 1
