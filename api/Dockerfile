@@ -26,6 +26,12 @@ RUN uv sync --extra llm --frozen
 # blijven geldig. Geen uv meer; systeem-pip naar een gepatchte versie (BIO2 / ISO 27002).
 FROM python:3.12-slim@sha256:d764629ce0ddd8c71fd371e9901efb324a95789d2315a47db7e4d27e78f1b0e9 AS runtime
 
+# OS-pakketten patchen (BIO2 / ISO 27002:2022 §8.8), spiegelt de MCP-/frontend-image.
+# De base-image loopt soms achter op Debian-security-updates (o.a. liblzma5, CVE-2026-34743).
+RUN apt-get update \
+    && apt-get upgrade -y --no-install-recommends \
+    && rm -rf /var/lib/apt/lists/*
+
 RUN pip install --no-cache-dir --upgrade 'pip>=26.1'
 
 WORKDIR /app/api
