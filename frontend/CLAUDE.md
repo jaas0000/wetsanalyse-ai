@@ -126,7 +126,8 @@ De **harde scheidingslijn**: alles met een token is server-only.
 - **Admin-pad apart.** `/api/admin/*` → `proxy(..., { admin: true })` → `/v1/admin/*`. Het admin-token
   zit server-side in de BFF. Meng de twee tokens niet.
 - **Login = Auth.js (NextAuth v5), API is identiteitsbron.** De hele app zit achter een login met
-  **userid** + wachtwoord (`auth.ts` + `auth.config.ts`; `middleware.ts` bewaakt élke route en
+  **userid** + wachtwoord (`auth.ts` + `auth.config.ts`; `proxy.ts` — de Next 16-opvolger van
+  de `middleware`-conventie — bewaakt élke route en
   stuurt niet-ingelogden naar `/login`). Inloggen gaat uitsluitend met de userid; e-mail wordt bij
   het aanmaken verplicht/uniek geregistreerd maar is geen inlog-identiteit. De sessie is een
   httpOnly JWT-cookie (`AUTH_SECRET`) die de `userid` + rol draagt; de Credentials-provider
