@@ -1,7 +1,7 @@
 # Wetsanalyse — docker-compose.yml
 #
 # Twee containers:
-#   backend   — PostgreSQL 16 + FastAPI in één image (gebouwd vanuit de projectroot)
+#   backend   — PostgreSQL 17 + FastAPI in één image (gebouwd vanuit de projectroot)
 #   frontend  — Next.js BFF (publiek image van GHCR)
 #
 # Vereisten:
@@ -26,18 +26,23 @@ services:
       LLM_PROVIDER:          azure_ai
       LLM_MODEL:             ${LLM_MODEL:-claude-sonnet-4-6}
       LLM_API_BASE:          ${LLM_API_BASE}
-      LLM_API_KEY_FILE:      /run/secrets/llm_api_key
-      # Wettenbank MCP — remote, geen extra container nodig
-      WETTENBANK_MCP_URL:    https://wettenbank-mcp.ipalm.nl/mcp
-      WETTENBANK_TOKEN_FILE: /run/secrets/wettenbank_token
-      # Auth
-      WETSANALYSE_AUTH_REQUIRED:   "1"
-      WETSANALYSE_API_TOKENS_FILE: /run/secrets/api_tokens
-      WETSANALYSE_ADMIN_TOKENS_FILE: /run/secrets/admin_tokens
-      LLM_CONFIG_SECRET_FILE: /run/secrets/llm_config_secret
-      # DATABASE_URL wordt door backend-entrypoint.sh gegenereerd op basis van postgres_password
+      # Paden naar gemounte secret-bestanden
+      LLM_API_KEY_FILE:                /run/secrets/llm_api_key
+      WETTENBANK_MCP_URL:              https://wettenbank-mcp.ipalm.nl/mcp
+      WETTENBANK_TOKEN_FILE:           /run/secrets/wettenbank_token
+      WETSANALYSE_AUTH_REQUIRED:       "1"
+      WETSANALYSE_API_TOKENS_FILE:     /run/secrets/api_tokens
+      WETSANALYSE_ADMIN_TOKENS_FILE:   /run/secrets/admin_tokens
+      LLM_CONFIG_SECRET_FILE:          /run/secrets/llm_config_secret
+      # DATABASE_URL wordt door backend-entrypoint.sh gegenereerd op basis van /run/secrets/postgres_password
+    secrets:
+      - postgres_password
+      - llm_api_key
+      - wettenbank_token
+      - api_tokens
+      - admin_tokens
+      - llm_config_secret
     volumes:
-      - ./secrets:/run/secrets:ro
       - wetsanalyse_pgdata:/var/lib/postgresql/data
     networks:
       - intern
@@ -59,13 +64,16 @@ services:
     environment:
       NODE_ENV:              production
       API_BASE_URL:          http://backend:3000
+      AUTH_URL:              ${AUTH_URL}           # verplicht — zie .env.example
+      AUTH_TRUST_HOST:       "true"
+      # Paden naar gemounte secret-bestanden
       API_TOKEN_FILE:        /run/secrets/frontend_api_token
       ADMIN_API_TOKEN_FILE:  /run/secrets/frontend_admin_token
       AUTH_SECRET_FILE:      /run/secrets/frontend_auth_secret
-      AUTH_URL:              ${AUTH_URL}           # verplicht — zie .env.example
-      AUTH_TRUST_HOST:       "true"
-    volumes:
-      - ./secrets:/run/secrets:ro
+    secrets:
+      - frontend_api_token
+      - frontend_admin_token
+      - frontend_auth_secret
     networks:
       - intern
     depends_on:
@@ -84,3 +92,25 @@ volumes:
 networks:
   intern:
     driver: bridge
+
+# Elk secret wordt gemount als /run/secrets/<naam> (read-only bestand).
+# Aanmaken: python3 gen-secrets.py  (genereert secrets/ vanuit .env)
+secrets:
+  postgres_password:
+    file: ./secrets/postgres_password
+  llm_api_key:
+    file: ./secrets/llm_api_key
+  wettenbank_token:
+    file: ./secrets/wettenbank_token
+  api_tokens:
+    file: ./secrets/api_tokens
+  admin_tokens:
+    file: ./secrets/admin_tokens
+  llm_config_secret:
+    file: ./secrets/llm_config_secret
+  frontend_api_token:
+    file: ./secrets/frontend_api_token
+  frontend_admin_token:
+    file: ./secrets/frontend_admin_token
+  frontend_auth_secret:
+    file: ./secrets/frontend_auth_secret

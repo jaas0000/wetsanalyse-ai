@@ -157,6 +157,20 @@ resource apiApp 'Microsoft.App/containerApps@2024-03-01' = {
       ]
     }
     template: {
+      volumes: [
+        {
+          name: 'api-secrets'
+          storageType: 'Secret'
+          secrets: [
+            { secretRef: 'llm-api-key',       path: 'llm_api_key' }
+            { secretRef: 'wettenbank-token',   path: 'wettenbank_token' }
+            { secretRef: 'llm-config-secret',  path: 'llm_config_secret' }
+            { secretRef: 'api-tokens',         path: 'api_tokens' }
+            { secretRef: 'admin-tokens',       path: 'admin_tokens' }
+            { secretRef: 'database-url',       path: 'database_url' }
+          ]
+        }
+      ]
       containers: [
         {
           name: 'api'
@@ -165,21 +179,25 @@ resource apiApp 'Microsoft.App/containerApps@2024-03-01' = {
             cpu: json('0.5')
             memory: '1Gi'
           }
+          volumeMounts: [
+            {
+              volumeName: 'api-secrets'
+              mountPath: '/run/secrets'
+            }
+          ]
           env: [
-            // Niet-geheime config — gespiegeld aan deploy/openshift/base/configmap.yaml.
             { name: 'LLM_PROVIDER',              value: llmProvider }
             { name: 'LLM_MODEL',                 value: llmModel }
             { name: 'LLM_API_BASE',              value: llmApiBase }
             { name: 'WETSANALYSE_AUTH_REQUIRED', value: '1' }
             { name: 'HOME',                      value: '/tmp' }
-            // Secrets via secretRef: de waarde wordt ingelezen als gewone env-var (geen *_FILE nodig,
-            // zie _read_secret() in api/app/config.py — ondersteunt zowel NAME als NAME_FILE).
-            { name: 'LLM_API_KEY',               secretRef: 'llm-api-key' }
-            { name: 'WETTENBANK_TOKEN',          secretRef: 'wettenbank-token' }
-            { name: 'LLM_CONFIG_SECRET',         secretRef: 'llm-config-secret' }
-            { name: 'WETSANALYSE_API_TOKENS',    secretRef: 'api-tokens' }
-            { name: 'WETSANALYSE_ADMIN_TOKENS',  secretRef: 'admin-tokens' }
-            { name: 'DATABASE_URL',              secretRef: 'database-url' }
+            // Secrets worden als bestand gemount op /run/secrets/ — *_FILE wijst naar het pad.
+            { name: 'LLM_API_KEY_FILE',              value: '/run/secrets/llm_api_key' }
+            { name: 'WETTENBANK_TOKEN_FILE',         value: '/run/secrets/wettenbank_token' }
+            { name: 'LLM_CONFIG_SECRET_FILE',        value: '/run/secrets/llm_config_secret' }
+            { name: 'WETSANALYSE_API_TOKENS_FILE',   value: '/run/secrets/api_tokens' }
+            { name: 'WETSANALYSE_ADMIN_TOKENS_FILE', value: '/run/secrets/admin_tokens' }
+            { name: 'DATABASE_URL_FILE',             value: '/run/secrets/database_url' }
           ]
           probes: [
             {
@@ -236,6 +254,17 @@ resource frontendApp 'Microsoft.App/containerApps@2024-03-01' = {
       ]
     }
     template: {
+      volumes: [
+        {
+          name: 'frontend-secrets'
+          storageType: 'Secret'
+          secrets: [
+            { secretRef: 'api-token',       path: 'frontend_api_token' }
+            { secretRef: 'admin-api-token', path: 'frontend_admin_token' }
+            { secretRef: 'auth-secret',     path: 'frontend_auth_secret' }
+          ]
+        }
+      ]
       containers: [
         {
           name: 'frontend'
@@ -244,18 +273,22 @@ resource frontendApp 'Microsoft.App/containerApps@2024-03-01' = {
             cpu: json('0.5')
             memory: '1Gi'
           }
+          volumeMounts: [
+            {
+              volumeName: 'frontend-secrets'
+              mountPath: '/run/secrets'
+            }
+          ]
           env: [
-            { name: 'NODE_ENV',         value: 'production' }
-            // BFF → API intern (token blijft server-side, zie frontend/CLAUDE.md).
-            { name: 'API_BASE_URL',     value: apiInternalUrl }
-            // Auth.js: canonical URL + proxy-vertrouwen (ACA injecteert X-Forwarded-*).
-            { name: 'AUTH_URL',         value: frontendPublicUrl }
-            { name: 'AUTH_TRUST_HOST',  value: 'true' }
-            { name: 'HOME',             value: '/tmp' }
-            // docker-entrypoint.sh exporteert AUTH_SECRET als process.env zodra het gezet is.
-            { name: 'API_TOKEN',        secretRef: 'api-token' }
-            { name: 'ADMIN_API_TOKEN',  secretRef: 'admin-api-token' }
-            { name: 'AUTH_SECRET',      secretRef: 'auth-secret' }
+            { name: 'NODE_ENV',              value: 'production' }
+            { name: 'API_BASE_URL',          value: apiInternalUrl }
+            { name: 'AUTH_URL',              value: frontendPublicUrl }
+            { name: 'AUTH_TRUST_HOST',       value: 'true' }
+            { name: 'HOME',                  value: '/tmp' }
+            // Secrets worden als bestand gemount op /run/secrets/ — *_FILE wijst naar het pad.
+            { name: 'API_TOKEN_FILE',        value: '/run/secrets/frontend_api_token' }
+            { name: 'ADMIN_API_TOKEN_FILE',  value: '/run/secrets/frontend_admin_token' }
+            { name: 'AUTH_SECRET_FILE',      value: '/run/secrets/frontend_auth_secret' }
           ]
           probes: [
             {
