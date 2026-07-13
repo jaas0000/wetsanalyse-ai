@@ -134,6 +134,14 @@ per bron de tekst lid voor lid. Identificeer samenhangende formuleringen (2a) en
 JAS-klasse toe (2b). Werk fijnmazig: een lid bevat vrijwel altijd meerdere markeringen. Geef
 elke markering het `bron_id` van haar bron en een werkgebied-breed uniek id.
 
+**Werkset-discipline bij veel bronnen.** Elke `wettenbank_artikel`-respons is fors (~5–50 KB);
+houd de hoofdcontext klein. Bij een werkgebied met meerdere bronnen: overweeg activiteit 2
+**per bron via een sub-agent** te draaien — de sub-agent markeert de volledige wettekst van
+één bron en meldt alléén de markeringen + verwijzingen terug (niet de leden-tekst), zodat de
+brontekst van afgeronde bronnen niet in de hoofdcontext blijft hangen terwijl je de volgende
+bron doet. Laad de `references/` één keer; herhaal ze niet per bron. Zie
+`references/harness-diagnose.md` → Context (context-druk bij veel bronnen).
+
 Gebruik per klasse de **herkenningsvraag** als grammaticale ontleedvraag op de tekst. Dit
 is de compacte checklist; voor de volledige omschrijving, herkenningsvragen en
 uitdrukkingswijzen zie `references/jas-klassen-referentie.md` (raadpleeg bij twijfel of bij

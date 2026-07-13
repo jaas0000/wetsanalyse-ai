@@ -59,6 +59,20 @@ Waar dit in deze skill aan vastzit:
 - **Context-opbouw over rondes.** `analyse.json` en de feedback stapelen per ronde. Bij
   ronde 4-6 dreigt overload: het belangrijke signaal verdrinkt. Een analyse die juist
   *slechter* wordt naarmate de rondes vorderen, wijst hierop.
+- **Context-druk bij veel bronnen (werkset-discipline).** Een werkgebied met veel bronnen
+  laat de hoofdcontext vollopen: elke `wettenbank_artikel`-respons is ~5–50 KB. Houd de
+  werkset klein:
+  - Laad de `references/` **één keer** aan het begin; herhaal ze niet per bron.
+  - **Activiteit 2 per bron via een sub-agent.** Laat een sub-agent de volledige
+    wettekst van bron X markeren/classificeren en alléén het gemarkeerde resultaat
+    (markeringen + verwijzingen, niet de leden-tekst) terugmelden. Zo blijft de brontekst
+    van afgeronde bronnen uit de hoofdcontext terwijl je bron Y doet.
+  - Lees een afgeronde `werk/.../analyse.json` niet onnodig in z'n geheel opnieuw in;
+    werk gericht met de id's. Activiteit 3 werkt werkgebied-breed op de **markeringen**,
+    niet op de volledige leden-tekst — citeer daar uit de markering, niet uit een
+    her-opgehaald artikel.
+  Symptoom dat hierop wijst: kwaliteitsverlies of trager/duurder worden naarmate er
+  bronnen bijkomen, of het model dat brontekst van een eerdere bron door elkaar haalt.
 
 ## 2. Tools — wat kon het model doen?
 
