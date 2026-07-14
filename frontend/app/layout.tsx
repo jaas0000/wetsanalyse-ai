@@ -2,8 +2,10 @@ import type { Metadata, Viewport } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { auth } from "@/auth";
+import { ChatAssistent } from "@/components/ChatAssistent";
 import { Providers } from "@/components/Providers";
 import { SiteNav } from "@/components/SiteNav";
+import { getChatEnabled } from "@/lib/server";
 import { sans, mono } from "./fonts";
 import "./globals.css";
 
@@ -33,6 +35,8 @@ export const viewport: Viewport = {
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
+  // Bel alleen tonen voor ingelogde gebruikers én als een beheerder de chat heeft aangezet.
+  const chatEnabled = session ? await getChatEnabled() : false;
   return (
     <html lang="nl" className={`${sans.variable} ${mono.variable}`}>
       <body className="min-h-screen">
@@ -84,6 +88,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           (Ausems, Bulles &amp; Lokin) · Juridisch Analyseschema · brongetrouw herleidbaar naar
           artikel, lid en bronreferentie.
         </footer>
+        {/* Kennisgraaf-assistent (zwevende chatbel) — ingelogd én door beheer aangezet. */}
+        {chatEnabled && <ChatAssistent />}
         </Providers>
       </body>
     </html>

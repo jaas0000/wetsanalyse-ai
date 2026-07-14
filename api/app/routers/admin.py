@@ -335,10 +335,18 @@ async def verwijder_user(userid: str):
 
 class SettingsOut(BaseModel):
     capture_llm_calls: bool = False
+    # Kennisgraaf-chatbot (webapp). Het secret verlaat de server nooit — alleen of het gezet is.
+    chat_enabled: bool = False
+    chat_webhook_url: str = ""
+    chat_secret_set: bool = False
 
 
 class SettingsIn(BaseModel):
-    capture_llm_calls: bool
+    # Alle velden optioneel: partiële update (None = ongewijzigd). chat_secret is write-only.
+    capture_llm_calls: bool | None = None
+    chat_enabled: bool | None = None
+    chat_webhook_url: str | None = None
+    chat_secret: str | None = None
 
 
 class LlmCallOut(BaseModel):
@@ -360,15 +368,32 @@ class LlmCallOut(BaseModel):
     tijdstip: str = ""
 
 
+async def _settings_out(store: JobStore) -> SettingsOut:
+    enabled, url, secret = await app_settings.chat_config(store)
+    return SettingsOut(
+        capture_llm_calls=await app_settings.capture_enabled(store),
+        chat_enabled=enabled,
+        chat_webhook_url=url,
+        chat_secret_set=bool(secret),
+    )
+
+
 @router.get("/settings", response_model=SettingsOut)
 async def haal_settings(store: JobStore = Depends(get_store)):
-    return SettingsOut(capture_llm_calls=await app_settings.capture_enabled(store))
+    return await _settings_out(store)
 
 
 @router.put("/settings", response_model=SettingsOut)
 async def zet_settings(body: SettingsIn, store: JobStore = Depends(get_store)):
-    await app_settings.set_capture(store, body.capture_llm_calls)
-    return SettingsOut(capture_llm_calls=await app_settings.capture_enabled(store))
+    if body.capture_llm_calls is not None:
+        await app_settings.set_capture(store, body.capture_llm_calls)
+    await app_settings.set_chat(
+        store,
+        enabled=body.chat_enabled,
+        webhook_url=body.chat_webhook_url,
+        secret=body.chat_secret,
+    )
+    return await _settings_out(store)
 
 
 @router.get("/projects/{slug}/llm-calls", response_model=list[LlmCallOut])

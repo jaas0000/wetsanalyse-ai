@@ -32,6 +32,17 @@ export function getRapportServer(id: string): Promise<Rapport> {
   return serverGet<Rapport>(`/v1/projects/${pathSegment(id)}/rapport`);
 }
 
+/** Of de kennisgraaf-chatbot aanstaat (bepaalt of de zwevende chatbel wordt getoond).
+ *  Best-effort: een API-storing mag het renderen van de layout niet breken → dan geen bel. */
+export async function getChatEnabled(): Promise<boolean> {
+  try {
+    const { enabled } = await serverGet<{ enabled: boolean }>(`/v1/chat/config`);
+    return Boolean(enabled);
+  } catch {
+    return false;
+  }
+}
+
 // --- Auth (server→server; aangeroepen door auth.ts en de login/setup-pagina's) ---------------
 
 export interface VerifyResult {

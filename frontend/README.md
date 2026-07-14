@@ -136,6 +136,9 @@ AUTH_SECRET=<openssl rand -base64 32>   # ondertekent de login-sessiecookie (Aut
 | `AUTH_SECRET`          | —                             | Ondertekent de Auth.js-sessiecookie/JWT. Verplicht voor login. |
 | `AUTH_URL`             | —                             | Publieke origin (bv. `https://wetsanalyse.ipalm.nl`). **Verplicht achter een reverse proxy** — anders redirecten login/logout naar het interne `0.0.0.0:3000`. |
 
+De **kennisgraaf-chatbot** (zwevende chatbel) heeft geen env-var: webhook-URL, secret en de
+aan/uit-schakelaar staan in de API-settings en worden via het `/beheer`-scherm beheerd.
+
 ## Docker / deployment
 
 Multi-stage `Dockerfile` (standalone, non-root) + `docker-compose.yml` voor de Portainer-stack

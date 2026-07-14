@@ -633,6 +633,18 @@ export interface LoginVerifyResult {
 
 export interface AppSettings {
   capture_llm_calls: boolean;
+  // Kennisgraaf-chatbot. Het secret verlaat de server nooit — alleen of het gezet is.
+  chat_enabled: boolean;
+  chat_webhook_url: string;
+  chat_secret_set: boolean;
+}
+
+/** Partiële update van de runtime-instellingen (alleen meegestuurde velden wijzigen). */
+export interface SettingsUpdate {
+  capture_llm_calls?: boolean;
+  chat_enabled?: boolean;
+  chat_webhook_url?: string;
+  chat_secret?: string; // write-only; leeg = ongewijzigd
 }
 
 export interface LlmCall {

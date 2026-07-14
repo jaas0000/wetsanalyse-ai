@@ -21,6 +21,7 @@ import { WetEditor } from "./WetEditor";
 import { UsagePanel } from "./UsagePanel";
 import { UsersPanel } from "./UsersPanel";
 import { LlmCapturePanel } from "./LlmCapturePanel";
+import { ChatInstellingenPanel } from "./ChatInstellingenPanel";
 
 type EditState =
   | { open: false }
@@ -230,6 +231,8 @@ export function BeheerClient() {
       <UsagePanel />
 
       <LlmCapturePanel />
+
+      <ChatInstellingenPanel />
     </div>
   );
 }

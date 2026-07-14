@@ -22,6 +22,7 @@ import type {
   RegelspraakModel,
   RegelspraakStart,
   Role,
+  SettingsUpdate,
   StartRequest,
   TempPassword,
   TestResult,
@@ -52,6 +53,18 @@ export async function parseError(res: Response): Promise<ApiError> {
 async function json<T>(res: Response): Promise<T> {
   if (!res.ok) throw await parseError(res);
   return (await res.json()) as T;
+}
+
+/** Stuur een vraag naar de kennisgraaf-assistent (BFF → n8n-agent). De sessionId houdt de
+ *  gesprekscontext vast; geef bij een vervolgvraag dezelfde mee. */
+export async function sendChat(chatInput: string, sessionId: string): Promise<string> {
+  const res = await fetch("/api/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ chatInput, sessionId }),
+  });
+  const { answer } = await json<{ answer: string }>(res);
+  return answer;
 }
 
 export async function createProject(body: StartRequest): Promise<CreateAccepted> {
@@ -337,13 +350,18 @@ export async function getSettings(): Promise<AppSettings> {
   return json<AppSettings>(res);
 }
 
-export async function setCaptureLlmCalls(aan: boolean): Promise<AppSettings> {
+/** Partiële update van de runtime-instellingen (capture-toggle en/of chat-config). */
+export async function updateSettings(patch: SettingsUpdate): Promise<AppSettings> {
   const res = await fetch("/api/admin/settings", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ capture_llm_calls: aan }),
+    body: JSON.stringify(patch),
   });
   return json<AppSettings>(res);
+}
+
+export function setCaptureLlmCalls(aan: boolean): Promise<AppSettings> {
+  return updateSettings({ capture_llm_calls: aan });
 }
 
 export async function getLlmCalls(projectId: string): Promise<LlmCall[]> {

@@ -13,7 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from . import __version__, db
 from .config import get_settings
 from .deps import drain_tasks, get_engine
-from .routers import admin, auth, catalog, projects
+from .routers import admin, auth, catalog, chat, projects
 
 logger = logging.getLogger(__name__)
 
@@ -87,6 +87,7 @@ app.add_middleware(
 # /analyses-router is geconsolideerd; clients migreren naar /v1/projects.
 app.include_router(projects.router, prefix="/v1")
 app.include_router(catalog.router, prefix="/v1")
+app.include_router(chat.router, prefix="/v1")
 app.include_router(admin.router, prefix="/v1")
 app.include_router(auth.router, prefix="/v1")
 
