@@ -59,13 +59,17 @@ async def chat_config(
 async def _vraag_agent(url: str, secret: str, session_id: str, vraag: str) -> str:
     """Roep de n8n-webhook aan en geef het (defensief geparste) antwoord terug."""
     headers = {"Content-Type": "application/json"}
-    if secret:
-        headers["X-Chat-Secret"] = secret
     payload = {
         "action": "sendMessage",
         "sessionId": session_id or "web",
         "chatInput": vraag[:_MAX_INPUT],
     }
+    # Het gedeelde geheim gaat in de BODY mee (de n8n Chat-Trigger geeft request-headers níét door
+    # aan downstream-nodes, wél extra body-velden); een gate-node in de workflow checkt het. Ook als
+    # header meesturen kan geen kwaad voor eventueel toekomstig gebruik.
+    if secret:
+        payload["secret"] = secret
+        headers["X-Chat-Secret"] = secret
     async with httpx.AsyncClient(timeout=httpx.Timeout(_TIMEOUT_S)) as client:
         resp = await client.post(url, json=payload, headers=headers)
     if resp.status_code >= 400:
