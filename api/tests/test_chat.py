@@ -47,6 +47,14 @@ async def client(monkeypatch):
 _ADMIN = {"Authorization": "Bearer admin-token"}
 
 
+def _sse_answer(resp) -> str:
+    """Haal het antwoord uit de SSE-respons van /v1/chat (data:-frame)."""
+    for line in resp.text.splitlines():
+        if line.startswith("data:"):
+            return json.loads(line[len("data:"):].strip()).get("answer", "")
+    return ""
+
+
 class _FakeResp:
     def __init__(self, data, status=200):
         self._data = data
@@ -119,7 +127,8 @@ async def test_chat_aan_proxyt_naar_webhook(client, monkeypatch):
 
     r = await client.post("/v1/chat", json={"chatInput": "Wie is verantwoordelijk?", "sessionId": "sess-1"})
     assert r.status_code == 200
-    assert "Financiën" in r.json()["answer"]
+    assert "text/event-stream" in r.headers.get("content-type", "")
+    assert "Financiën" in _sse_answer(r)
     # De router stuurde de n8n-chat-body + het secret als header door.
     assert _FakeClient.last["json"] == {
         "action": "sendMessage",
@@ -139,3 +148,29 @@ async def test_chat_lege_vraag_400(client, monkeypatch):
         json={"chat_enabled": True, "chat_webhook_url": "https://n8n/x/chat"},
     )
     assert (await client.post("/v1/chat", json={"chatInput": "   "})).status_code == 400
+
+
+async def test_chat_rate_limit_per_gebruiker(client, monkeypatch):
+    from app import ratelimit
+    from app.config import get_settings
+    from app.routers import chat as chat_router
+
+    monkeypatch.setattr(chat_router.httpx, "AsyncClient", _FakeClient)
+    monkeypatch.setenv("WETSANALYSE_CHAT_RATE_MAX", "2")
+    monkeypatch.setenv("WETSANALYSE_CHAT_RATE_WINDOW", "60")
+    get_settings.cache_clear()
+    ratelimit.reset()
+    await client.put(
+        "/v1/admin/settings",
+        headers=_ADMIN,
+        json={"chat_enabled": True, "chat_webhook_url": "https://n8n/x/chat"},
+    )
+    alice = {"X-User-Id": "alice"}
+    assert (await client.post("/v1/chat", json={"chatInput": "1"}, headers=alice)).status_code == 200
+    assert (await client.post("/v1/chat", json={"chatInput": "2"}, headers=alice)).status_code == 200
+    # Derde binnen het venster → 429; het is een eigen bucket per gebruiker.
+    assert (await client.post("/v1/chat", json={"chatInput": "3"}, headers=alice)).status_code == 429
+    # Andere gebruiker heeft z'n eigen budget.
+    assert (
+        await client.post("/v1/chat", json={"chatInput": "1"}, headers={"X-User-Id": "bob"})
+    ).status_code == 200

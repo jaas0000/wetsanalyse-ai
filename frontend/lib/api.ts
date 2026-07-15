@@ -55,16 +55,55 @@ async function json<T>(res: Response): Promise<T> {
   return (await res.json()) as T;
 }
 
-/** Stuur een vraag naar de kennisgraaf-assistent (BFF → n8n-agent). De sessionId houdt de
- *  gesprekscontext vast; geef bij een vervolgvraag dezelfde mee. */
+/** Stuur een vraag naar de kennisgraaf-assistent (BFF → API → n8n-agent). Het antwoord komt als
+ *  SSE-stream binnen (heartbeats tijdens het wachten, dan één data:-event) zodat een lang antwoord
+ *  niet tegen de proxytimeout loopt. De sessionId houdt de gesprekscontext vast. */
 export async function sendChat(chatInput: string, sessionId: string): Promise<string> {
   const res = await fetch("/api/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ chatInput, sessionId }),
   });
-  const { answer } = await json<{ answer: string }>(res);
-  return answer;
+  if (!res.ok) throw await parseError(res); // 403/400/429 komen als JSON-fout terug
+  if (!res.body) throw { status: 0, detail: "Geen antwoordstroom." } as ApiError;
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let scheiding: number;
+      while ((scheiding = buffer.indexOf("\n\n")) !== -1) {
+        const frame = buffer.slice(0, scheiding);
+        buffer = buffer.slice(scheiding + 2);
+        let event = "message";
+        let data = "";
+        for (const regel of frame.split("\n")) {
+          if (regel.startsWith(":")) continue; // heartbeat-commentaar
+          if (regel.startsWith("event:")) event = regel.slice(6).trim();
+          else if (regel.startsWith("data:")) data += regel.slice(5).trim();
+        }
+        if (event === "error") {
+          throw { status: 502, detail: veiligJson(data)?.detail ?? "Er ging iets mis." } as ApiError;
+        }
+        if (data) return veiligJson(data)?.answer ?? "";
+      }
+    }
+  } finally {
+    reader.cancel().catch(() => {});
+  }
+  return "";
+}
+
+function veiligJson(s: string): { answer?: string; detail?: string } | null {
+  try {
+    return JSON.parse(s);
+  } catch {
+    return null;
+  }
 }
 
 export async function createProject(body: StartRequest): Promise<CreateAccepted> {

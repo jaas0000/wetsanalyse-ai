@@ -14,7 +14,7 @@ from __future__ import annotations
 import time
 from collections import defaultdict, deque
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, Header, HTTPException, status
 
 from .auth import require_admin, require_client
 from .config import get_settings
@@ -71,6 +71,24 @@ def rate_limited_client(client_id: str = Depends(require_client)) -> str:
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="Te veel verzoeken; probeer later opnieuw.",
             headers={"Retry-After": str(int(s.rate_limit_window_s))},
+        )
+    return client_id
+
+
+def rate_limited_chat(
+    client_id: str = Depends(require_client),
+    x_user_id: str | None = Header(default=None),
+) -> str:
+    """Als require_client, maar met een aparte chat-rate-limit **per gebruiker**. De BFF stuurt de
+    ingelogde `X-User-Id` mee (vertrouwd, uit de sessie); ontbreekt die, dan valt de sleutel terug op
+    het client-token. Eigen bucket (`chat:<sleutel>`), los van de analyse-endpoints."""
+    s = get_settings()
+    sleutel = (x_user_id or "").strip() or client_id
+    if s.chat_rate_max > 0 and not _allow(f"chat:{sleutel}", s.chat_rate_max, s.chat_rate_window_s):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Te veel chat-verzoeken; probeer zo opnieuw.",
+            headers={"Retry-After": str(int(s.chat_rate_window_s))},
         )
     return client_id
 

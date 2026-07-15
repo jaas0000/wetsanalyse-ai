@@ -158,6 +158,10 @@ class Settings:
         # LLM-call en zit alleen achter het admin-token — een gelekt token mag geen kosten stapelen.
         self.admin_test_rate_max = int(os.environ.get("WETSANALYSE_ADMIN_TEST_RATE_MAX", "10"))
         self.admin_test_rate_window_s = float(os.environ.get("WETSANALYSE_ADMIN_TEST_RATE_WINDOW", "60"))
+        # Aparte rate-limit voor de kennisgraaf-chatbot (per gebruiker), los van de analyse-bucket:
+        # één spammer raakt zo niet de analyses of andere gebruikers.
+        self.chat_rate_max = int(os.environ.get("WETSANALYSE_CHAT_RATE_MAX", "20"))
+        self.chat_rate_window_s = float(os.environ.get("WETSANALYSE_CHAT_RATE_WINDOW", "60"))
         # Max gelijktijdig lopende (niet-terminale) analyses per client.
         self.max_active_jobs = int(os.environ.get("WETSANALYSE_MAX_ACTIVE_JOBS", "5"))
         # Token-budget per analyse; bij overschrijding stopt de job (FoutKlasse.quota).
