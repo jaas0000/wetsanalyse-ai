@@ -75,9 +75,6 @@ resource pgServer 'Microsoft.DBforPostgreSQL/flexibleServers@2023-06-01-preview'
     highAvailability: {
       mode: 'Disabled'
     }
-    authConfig: {
-      passwordAuth: 'Enabled'
-    }
   }
 }
 
@@ -162,7 +159,9 @@ resource mcpApp 'Microsoft.App/containerApps@2024-03-01' = {
 // 4. API Container App (internal)
 // ─────────────────────────────────────────────────────────────────────────────
 var dbUrl = 'postgresql+asyncpg://wetsanalyse:${dbAdminPassword}@${pgServer.properties.fullyQualifiedDomainName}:5432/wetsanalyse?ssl=require'
-var mcpInternalUrl = 'https://${appName}-mcp.${cae.properties.defaultDomain}/mcp'
+// Interne app-FQDN dragen het verplichte `.internal.`-segment (`<app>.internal.<defaultDomain>`);
+// die niet met de hand opbouwen maar uit de resource lezen, anders resolvet de host niet.
+var mcpInternalUrl = 'https://${mcpApp.properties.configuration.ingress.fqdn}/mcp'
 
 resource apiApp 'Microsoft.App/containerApps@2024-03-01' = {
   name: '${appName}-api'
@@ -256,7 +255,10 @@ resource apiApp 'Microsoft.App/containerApps@2024-03-01' = {
 // ─────────────────────────────────────────────────────────────────────────────
 // 5. Frontend Container App (external HTTPS)
 // ─────────────────────────────────────────────────────────────────────────────
-var apiInternalUrl    = 'https://${appName}-api.${cae.properties.defaultDomain}'
+// Interne API-FQDN uit de resource (bevat `.internal.`); de externe frontend-URL mág met de hand
+// (extern = `<app>.<defaultDomain>`) — een `.ingress.fqdn`-referentie zou hier een cycle geven
+// omdat frontendPublicUrl binnen frontendApp zelf als AUTH_URL wordt gebruikt.
+var apiInternalUrl    = 'https://${apiApp.properties.configuration.ingress.fqdn}'
 var frontendPublicUrl = 'https://${appName}-frontend.${cae.properties.defaultDomain}'
 
 resource frontendApp 'Microsoft.App/containerApps@2024-03-01' = {
