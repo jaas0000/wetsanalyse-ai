@@ -58,11 +58,6 @@ inhoudelijke `references/`/`scripts/`. De samenwerkende delen:
    JAS-klassekleuren uit `docs/wa-table.png`. Op een afgeronde analyse kan de gebruiker met
    **"Naar RegelSpraak"** de formaliseringsfase starten en het RegelSpraak-model bekijken/downloaden.
    Heeft een eigen `CLAUDE.md` + `README.md` — lees die bij werk *in* de frontend.
-7. **`deploy/openshift/`** — Kustomize-manifests om de hele stack (API · frontend · MCP ·
-   PostgreSQL) op een OpenShift-namespace uit te rollen: `base/` + overlays
-   `local`/`simpel`/`beproeving`/`managed-prod`, `components/postgres-cnpg` (CloudNativePG) en
-   `gen-secrets.py`. Lees `deploy/openshift/INSTALL.md` bij werk aan de uitrol; de
-   Portainer/NPM-route blijft daarnaast bestaan (zie de CLAUDE.md's van api/frontend/MCP).
 
 De skill is geen vervanger van de analist: de kern is interpretatiekeuzes **expliciet** maken,
 inclusief twijfel en aannames. Brongetrouwheid is niet onderhandelbaar — werk alleen met

@@ -44,9 +44,9 @@ RUN apt-get update \
 # blijven anders CVE-alerts opleveren in de Trivy-scan zonder ooit te draaien.
 RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
 
-# Non-root + OpenShift-proof: lid van groep 0 i.p.v. een eigen gid. OpenShift restricted-v2 draait
-# met een WILLEKEURIGE UID + gid 0, dus de bestanden zijn groep-root-eigendom met groep=gebruiker-
-# rechten en de toegewezen UID kan lezen/uitvoeren. USER 10002 blijft de default (compose).
+# Non-root + read-only-fs-proof: lid van groep 0 i.p.v. een eigen gid. De bestanden zijn
+# groep-root-eigendom met groep=gebruiker-rechten, zodat de container ook onder een willekeurige UID
+# (lid van groep 0) de code kan lezen/uitvoeren. USER 10002.
 RUN useradd --no-create-home --uid 10002 --gid 0 nodeapp
 
 # Standalone-server + statische assets. .next/static en public worden niet door de

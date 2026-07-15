@@ -19,7 +19,6 @@ en aannames — zichtbaar maken in plaats van schijnzekerheid te produceren.
 | **wetsanalyse-api** | `api/` | Headless REST-backend (FastAPI) die dezelfde werkstroom als de skill aanbiedt als async API, met PostgreSQL als jobstore. Stuurt de LLM aan via beheerbare modelprofielen. Biedt ook de RegelSpraak-formaliseringsfase als on-demand vervolg (`POST /v1/projects/{id}/regelspraak`). |
 | **frontend** | `frontend/` | Webapp (Next.js) bovenop de API: analyse aanmaken, live voortgang, de review-lus, het rapport, de **RegelSpraak-fase** (knop "Naar RegelSpraak" + model-weergave), een live **`/dashboard`** (alle analyses tot op functieniveau), en een **`/beheer`-scherm** om LLM-modelprofielen, gebruikers en token-verbruik te beheren. Zit achter een **login** (userid + wachtwoord, rollen, optionele 2FA). Vormgegeven volgens de **Rijkshuisstijl** (Belastingdienst-stijlvak). |
 | **analyses** | `analyses/` | Output: per analyse een eindrapport plus `werk/`-tussenbestanden (en desgewenst een `regelspraak/`-submap met het RegelSpraak-`model.json`). |
-| **deploy** | `deploy/openshift/` | Kustomize-manifests om de hele stack (API · frontend · MCP · PostgreSQL) op OpenShift uit te rollen (overlays `local`/`simpel`/`beproeving`/`managed-prod`); zie `deploy/openshift/INSTALL.md`. |
 | **docs** | `docs/` | Methodische onderbouwing (handleiding, leidraad, JAS-kader). |
 
 Er zijn dus **twee manieren** om een analyse te draaien: interactief via de wetsanalyse-skill in
@@ -136,10 +135,7 @@ de profielen live ophaalt. Het admin-scherm zit achter een **apart admin-token**
 seeden alleen het eerste default-profiel.
 
 Beide draaien als Docker/Portainer-stacks achter Nginx Proxy Manager (CI bouwt de images en doet de
-stack-redeploy); de detail-instructies staan in de respectievelijke `CLAUDE.md`-bestanden. Daarnaast
-is er een **OpenShift-pad**: `deploy/openshift/` bevat Kustomize-manifests voor de hele stack op een
-namespace van een gedeeld cluster (overlays `local`/`simpel`/`beproeving`/`managed-prod`, database
-via kale Postgres of de CloudNativePG-operator) — zie [`deploy/openshift/INSTALL.md`](deploy/openshift/INSTALL.md).
+stack-redeploy); de detail-instructies staan in de respectievelijke `CLAUDE.md`-bestanden.
 
 ## Databron & licentie
 

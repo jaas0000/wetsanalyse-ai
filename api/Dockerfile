@@ -55,12 +55,10 @@ ENV PATH="/app/api/.venv/bin:$PATH" \
 
 EXPOSE 3000
 
-# Non-root + OpenShift-proof: de service schrijft niet naar de filesystem (jobstore = PostgreSQL).
-# OpenShift restricted-v2 draait de container met een WILLEKEURIGE UID + gid 0 (niet per se 10001),
-# dus maken we /app groep-root-eigendom met groep=gebruiker-rechten — de toegewezen UID (lid van
-# groep 0) kan dan lezen/uitvoeren. HOME=/tmp zodat eventuele home-caches naar een schrijfbare
-# (emptyDir/tmpfs) plek gaan i.p.v. een niet-schrijfbare root-fs. USER 10001 blijft de default
-# (compose); OpenShift overschrijft 'm met de namespace-UID.
+# Non-root + read-only-fs-proof: de service schrijft niet naar de filesystem (jobstore = PostgreSQL).
+# We maken /app groep-root-eigendom met groep=gebruiker-rechten, zodat de container ook onder een
+# willekeurige UID (lid van groep 0) de code kan lezen/uitvoeren. HOME=/tmp zodat eventuele
+# home-caches naar een schrijfbare (tmpfs) plek gaan i.p.v. een niet-schrijfbare root-fs. USER 10001.
 RUN useradd --no-create-home --uid 10001 --gid 0 appuser \
     && chgrp -R 0 /app && chmod -R g=u /app
 ENV HOME=/tmp
