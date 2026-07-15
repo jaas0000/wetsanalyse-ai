@@ -33,9 +33,9 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["chat"])
 
 _MAX_INPUT = 4000
-_TIMEOUT_S = 180.0
+_CONNECT_S = 15.0  # korte connect-timeout als vangnet; de read-fase heeft géén eigen deadline
 _HEARTBEAT_S = 15.0
-_MAX_WAIT_S = 200.0
+_MAX_WAIT_S = 300.0  # de SSE-lus is de enige autoriteit over de totale wachttijd (~5 min)
 
 
 class ChatConfigOut(BaseModel):
@@ -70,7 +70,11 @@ async def _vraag_agent(url: str, secret: str, session_id: str, vraag: str) -> st
     if secret:
         payload["secret"] = secret
         headers["X-Chat-Secret"] = secret
-    async with httpx.AsyncClient(timeout=httpx.Timeout(_TIMEOUT_S)) as client:
+    # read=None: httpx wacht net zo lang als n8n nodig heeft; de SSE-lus (_MAX_WAIT_S) kapt een
+    # écht te trage run af via taak.cancel(). Zo snijdt httpx niet vóórtijdig door een geslaagd,
+    # maar traag antwoord heen. De connect-timeout blijft kort tegen een onbereikbare host.
+    timeout = httpx.Timeout(None, connect=_CONNECT_S)
+    async with httpx.AsyncClient(timeout=timeout) as client:
         resp = await client.post(url, json=payload, headers=headers)
     if resp.status_code >= 400:
         raise RuntimeError(f"webhook status {resp.status_code}")

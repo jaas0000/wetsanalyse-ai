@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 
 import pytest
@@ -87,6 +88,30 @@ class _FakeClient:
         return _FakeResp({"output": "De Invorderingswet 1990 valt onder Financiën."})
 
 
+def _sse_error(resp) -> str:
+    """Haal het detail uit een SSE `event: error`-frame van /v1/chat."""
+    for line in resp.text.splitlines():
+        if line.startswith("data:"):
+            return json.loads(line[len("data:"):].strip()).get("detail", "")
+    return ""
+
+
+def _traag_client(vertraging: float):
+    """Bouw een httpx.AsyncClient-vervanger waarvan de POST `vertraging` seconden sluimert.
+
+    Simuleert een trage n8n-run zonder netwerk: de POST wordt (net als de echte call) door de
+    SSE-lus afgekapt zodra die de wachtcap bereikt — precies het scenario dat we willen dekken.
+    """
+
+    class _TraagClient(_FakeClient):
+        async def post(self, url, json=None, headers=None):
+            await asyncio.sleep(vertraging)
+            _FakeClient.last = {"url": url, "json": json, "headers": headers}
+            return _FakeResp({"output": "Traag antwoord."})
+
+    return _TraagClient
+
+
 async def test_settings_roundtrip_secret_gemaskeerd(client):
     # Standaard staat de chat uit en is er geen secret.
     r = (await client.get("/v1/admin/settings", headers=_ADMIN)).json()
@@ -149,6 +174,47 @@ async def test_chat_lege_vraag_400(client, monkeypatch):
         json={"chat_enabled": True, "chat_webhook_url": "https://n8n/x/chat"},
     )
     assert (await client.post("/v1/chat", json={"chatInput": "   "})).status_code == 400
+
+
+async def test_chat_traag_maar_succesvol_levert_antwoord(client, monkeypatch):
+    """Regressie: een run die tussen twee heartbeats maar bínnen de cap afrondt, moet gewoon zijn
+    antwoord opleveren — niet vroegtijdig door httpx worden afgekapt tot een foutmelding."""
+    from app.routers import chat as chat_router
+
+    # Kleine tijden zodat de test snel is: heartbeat 0.02s, cap 0.3s; de run doet 0.1s (> heartbeat,
+    # < cap) — precies het venster dat vroeger (httpx-timeout < cap) als fout eindigde.
+    monkeypatch.setattr(chat_router, "_HEARTBEAT_S", 0.02)
+    monkeypatch.setattr(chat_router, "_MAX_WAIT_S", 0.3)
+    monkeypatch.setattr(chat_router.httpx, "AsyncClient", _traag_client(0.1))
+    await client.put(
+        "/v1/admin/settings",
+        headers=_ADMIN,
+        json={"chat_enabled": True, "chat_webhook_url": "https://n8n/x/chat"},
+    )
+    r = await client.post("/v1/chat", json={"chatInput": "traag?"})
+    assert r.status_code == 200
+    assert "event: error" not in r.text
+    assert _sse_answer(r) == "Traag antwoord."
+    assert ": keep-alive" in r.text  # er is minstens één heartbeat gestuurd tijdens het wachten
+
+
+async def test_chat_te_traag_geeft_nette_timeout_melding(client, monkeypatch):
+    """Een run die de wachtcap overschrijdt, wordt door de SSE-lus afgekapt met de nette melding —
+    de lus (niet httpx) is de autoriteit over de deadline."""
+    from app.routers import chat as chat_router
+
+    monkeypatch.setattr(chat_router, "_HEARTBEAT_S", 0.02)
+    monkeypatch.setattr(chat_router, "_MAX_WAIT_S", 0.1)
+    monkeypatch.setattr(chat_router.httpx, "AsyncClient", _traag_client(2.0))  # ruim > cap
+    await client.put(
+        "/v1/admin/settings",
+        headers=_ADMIN,
+        json={"chat_enabled": True, "chat_webhook_url": "https://n8n/x/chat"},
+    )
+    r = await client.post("/v1/chat", json={"chatInput": "hangt?"})
+    assert r.status_code == 200
+    assert "event: error" in r.text
+    assert "niet op tijd" in _sse_error(r)
 
 
 async def test_chat_rate_limit_per_gebruiker(client, monkeypatch):
