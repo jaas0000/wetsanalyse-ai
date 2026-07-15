@@ -24,7 +24,7 @@ const SESSIE_KEY = "kg-chat-sessie";
 const HIST_PREFIX = "kg-chat-historie";
 const MAX_HIST = 50; // hoeveel berichten we bewaren bij herladen
 const WELKOM =
-  "Ik ben Lex, de kennisgraaf-assistent van de Belastingdienst. Stel mij een vraag over Nederlandse fiscale wet- en regelgeving die is opgenomen in de kennisgraaf.";
+  "Ik ben Lex, de digitale assistent van de Belastingdienst. Ik help je bij het vinden en begrijpen van fiscale wet- en regelgeving uit de kennisgraaf.";
 const VOORBEELDEN = [
   "Welke wetten gaan over de invordering van belastingen?",
   "Wat betekent het begrip 'belastingschuldige'?",
