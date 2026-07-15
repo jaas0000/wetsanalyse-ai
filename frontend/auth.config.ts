@@ -7,6 +7,12 @@ import type { NextAuthConfig } from "next-auth";
 
 export type Role = "beheerder" | "analist";
 
+// Sessieduur (JWT-strategie). De cookie-/bovengrens is de lange duur; de effectieve levensduur per
+// login wordt in auth.ts (custom jwt.encode) op LANG of KORT gezet, afhankelijk van de keuze
+// "Ingelogd blijven op dit apparaat" (token.rememberMe).
+export const SESSIE_LANG = 30 * 24 * 60 * 60; // 30 dagen (onthouden)
+export const SESSIE_KORT = 12 * 60 * 60; // 12 uur (niet onthouden)
+
 // Paden die zonder sessie bereikbaar moeten zijn (login, eenmalige registratie + hun BFF-routes,
 // en de health-check voor Docker/NPM/CI — die mag nooit achter de login vallen).
 function isPublic(path: string): boolean {
@@ -28,10 +34,11 @@ export const authConfig = {
   // De app draait achter Nginx Proxy Manager; vertrouw de forward-headers voor de callback-host.
   trustHost: true,
   pages: { signIn: "/login" },
-  // Korte, rollende sessie: de bovengrens waarbinnen een gedeactiveerde/gedegradeerde gebruiker
-  // hoe dan ook zijn toegang verliest (de jwt-callback in auth.ts herverifieert daarbinnen
-  // periodiek tegen de API).
-  session: { strategy: "jwt", maxAge: 60 * 60 },
+  // Rollende sessie. maxAge is de bovengrens/cookie-levensduur (30 d); de effectieve JWT-levensduur
+  // per login (30 d bij "ingelogd blijven", anders 12 u) zet de custom jwt.encode in auth.ts. Een
+  // gedeactiveerde/gedegradeerde gebruiker verliest z'n toegang veel sneller: de jwt-callback in
+  // auth.ts herverifieert elke ~5 min tegen de API bij elke server-side auth().
+  session: { strategy: "jwt", maxAge: SESSIE_LANG, updateAge: 24 * 60 * 60 },
   // Cookie-flags expliciet (defense-in-depth; dit zijn de Auth.js-defaults, maar vastgelegd
   // zodat een library-upgrade ze niet stil kan versoepelen).
   cookies: {
@@ -94,6 +101,7 @@ export const authConfig = {
         token.userid = (user as { userid?: string }).userid;
         token.role = (user as { role?: Role }).role;
         token.email = user.email;
+        token.rememberMe = (user as { rememberMe?: boolean }).rememberMe === true;
       }
       return token;
     },

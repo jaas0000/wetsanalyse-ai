@@ -26,13 +26,16 @@ export function TwoFactorClient() {
   // undefined = sessionStorage nog niet gelezen; null = afwezig (opnieuw beginnen); string = ok.
   const [userid, setUserid] = useState<string | null | undefined>(undefined);
   const [totp, setTotp] = useState("");
+  // De keuze "Ingelogd blijven op dit apparaat" is al op stap 1 (/login) gemaakt en meegedragen.
   const [onthouden, setOnthouden] = useState(false);
   const [fout, setFout] = useState<string | null>(null);
   const [bezig, setBezig] = useState(false);
 
-  // De (niet-gevoelige) userid komt uit stap 1 (/login). Ontbreekt die → opnieuw beginnen.
+  // De (niet-gevoelige) userid + remember-keuze komen uit stap 1 (/login). Ontbreekt de userid →
+  // opnieuw beginnen.
   useEffect(() => {
     setUserid(sessionStorage.getItem("wa_login_userid"));
+    setOnthouden(sessionStorage.getItem("wa_login_remember") === "1");
   }, []);
 
   async function onSubmit(e: React.FormEvent) {
@@ -50,13 +53,20 @@ export function TwoFactorClient() {
         setFout("Onjuiste of verlopen code. Probeer het opnieuw.");
         return;
       }
-      // Code klopt → sessie opzetten via Auth.js (het login-ticket bewijst het wachtwoord).
-      const res = await signIn("credentials", { redirect: false, userid, totp });
+      // Code klopt → sessie opzetten via Auth.js (het login-ticket bewijst het wachtwoord). De
+      // remember-keuze bepaalt de sessieduur (30 d vs 12 u).
+      const res = await signIn("credentials", {
+        redirect: false,
+        userid,
+        totp,
+        remember: onthouden ? "1" : "0",
+      });
       if (res?.error) {
         setFout("Inloggen mislukt. Begin opnieuw.");
         return;
       }
       sessionStorage.removeItem("wa_login_userid");
+      sessionStorage.removeItem("wa_login_remember");
       router.push(veiligPad(params.get("callbackUrl")));
       router.refresh();
     } finally {
@@ -94,15 +104,11 @@ export function TwoFactorClient() {
         />
       </Field>
 
-      <label className="flex items-center gap-2 text-sm text-ink">
-        <input
-          type="checkbox"
-          className="h-4 w-4 accent-lint"
-          checked={onthouden}
-          onChange={(e) => setOnthouden(e.target.checked)}
-        />
-        Dit apparaat 30 dagen onthouden
-      </label>
+      {onthouden && (
+        <p className="text-xs text-muted">
+          Dit apparaat wordt 30 dagen onthouden; de volgende keer sla je 2FA over.
+        </p>
+      )}
 
       <Button type="submit" disabled={bezig} className="w-full">
         {bezig ? "Bezig met verifiëren…" : "Verifiëren"}

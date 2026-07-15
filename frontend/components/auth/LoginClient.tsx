@@ -26,6 +26,7 @@ export function LoginClient() {
   const params = useSearchParams();
   const [userid, setUserid] = useState("");
   const [password, setPassword] = useState("");
+  const [onthouden, setOnthouden] = useState(false);
   const [fout, setFout] = useState<string | null>(null);
   const [bezig, setBezig] = useState(false);
 
@@ -43,9 +44,10 @@ export function LoginClient() {
       }
       if (check.code === "totp_required") {
         // 2FA nodig én dit apparaat is niet (meer) vertrouwd → naar het aparte 2FA-scherm. Draag de
-        // niet-gevoelige userid + callbackUrl mee; het login-ticket (httpOnly cookie) draagt het
-        // wachtwoord-bewijs, zodat het wachtwoord het geheugen niet verlaat.
+        // niet-gevoelige userid + de remember-keuze + callbackUrl mee; het login-ticket (httpOnly
+        // cookie) draagt het wachtwoord-bewijs, zodat het wachtwoord het geheugen niet verlaat.
         sessionStorage.setItem("wa_login_userid", userid);
+        sessionStorage.setItem("wa_login_remember", onthouden ? "1" : "0");
         const cb = params.get("callbackUrl");
         router.push(cb ? `/login/2fa?callbackUrl=${encodeURIComponent(cb)}` : "/login/2fa");
         return;
@@ -56,7 +58,12 @@ export function LoginClient() {
       }
 
       // Gegevens kloppen (geen 2FA, of een vertrouwd apparaat) → sessie opzetten via Auth.js.
-      const res = await signIn("credentials", { redirect: false, userid, password });
+      const res = await signIn("credentials", {
+        redirect: false,
+        userid,
+        password,
+        remember: onthouden ? "1" : "0",
+      });
       if (res?.error) {
         setFout("Inloggen mislukt. Probeer het opnieuw.");
         return;
@@ -90,6 +97,21 @@ export function LoginClient() {
           onChange={(e) => setPassword(e.target.value)}
         />
       </Field>
+
+      <label className="flex items-start gap-2 text-sm text-ink">
+        <input
+          type="checkbox"
+          className="mt-0.5 h-4 w-4 accent-lint"
+          checked={onthouden}
+          onChange={(e) => setOnthouden(e.target.checked)}
+        />
+        <span>
+          Ingelogd blijven op dit apparaat
+          <span className="block text-xs text-muted">
+            30 dagen ingelogd blijven en 2FA overslaan op dit apparaat.
+          </span>
+        </span>
+      </label>
 
       <Button type="submit" disabled={bezig} className="w-full">
         {bezig ? "Bezig met inloggen…" : "Inloggen"}

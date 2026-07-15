@@ -9,6 +9,8 @@ declare module "next-auth" {
   interface User {
     userid?: string;
     role?: Role;
+    /** "Ingelogd blijven op dit apparaat": bepaalt de sessieduur (30 d vs 12 u). */
+    rememberMe?: boolean;
   }
 }
 
@@ -16,5 +18,6 @@ declare module "next-auth/jwt" {
   interface JWT {
     userid?: string;
     role?: Role;
+    rememberMe?: boolean;
   }
 }
