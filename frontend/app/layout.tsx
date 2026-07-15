@@ -88,8 +88,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           (Ausems, Bulles &amp; Lokin) · Juridisch Analyseschema · brongetrouw herleidbaar naar
           artikel, lid en bronreferentie.
         </footer>
-        {/* Kennisgraaf-assistent (zwevende chatbel) — ingelogd én door beheer aangezet. */}
-        {chatEnabled && <ChatAssistent />}
+        {/* Kennisgraaf-assistent (zwevende chatbel) — ingelogd én door beheer aangezet.
+            De userid koppelt het gespreksgeheugen aan de gebruiker (niet aan de browser). */}
+        {chatEnabled && <ChatAssistent sessionId={session?.user?.userid} />}
         </Providers>
       </body>
     </html>
