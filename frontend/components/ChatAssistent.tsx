@@ -1,15 +1,18 @@
 "use client";
 
-// Zwevende kennisgraaf-assistent: een chatbel rechtsonder die een paneel opent. Praat via de
+// Zwevende kennisgraaf-assistent "Lex": een chatbel rechtsonder die een paneel opent. Praat via de
 // BFF-route /api/chat met de n8n-agent die de GraphDB-kennisgraaf bevraagt (dezelfde agent als
-// Telegram). De sessionId (localStorage) houdt de gesprekscontext vast, zodat de agent
-// vervolgvragen begrijpt. Rijkshuisstijl via de bestaande design-tokens.
+// Telegram). De sessionId (per ingelogde gebruiker, anders localStorage) houdt de gesprekscontext
+// vast, zodat de agent vervolgvragen begrijpt. De schrijfstijl van Lex leeft in de n8n-agent-prompt
+// (zie docs/lex-schrijfrichtlijn.md); hier strippen we alleen emoji als vangnet. Rijkshuisstijl via
+// de bestaande design-tokens.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { sendChat } from "@/lib/api";
 import { Button } from "@/components/ui/Button";
+import { Melding } from "@/components/ui/Melding";
 
 type Rol = "user" | "assistent";
 interface Bericht {
@@ -18,10 +21,37 @@ interface Bericht {
 }
 
 const SESSIE_KEY = "kg-chat-sessie";
+const HIST_PREFIX = "kg-chat-historie";
+const MAX_HIST = 50; // hoeveel berichten we bewaren bij herladen
 const WELKOM =
-  "Hoi! Ik ben de kennisgraaf-assistent. Vraag me iets over de Nederlandse wet- en regelgeving in de graaf.";
+  "Ik ben Lex, de kennisgraaf-assistent. Stel me een vraag over de Nederlandse wet- en regelgeving in de kennisgraaf.";
+const VOORBEELDEN = [
+  "Welke wetten gaan over de invordering van belastingen?",
+  "Wat betekent het begrip 'belastingschuldige'?",
+  "Welke artikelen verwijzen naar de Algemene wet bestuursrecht?",
+];
 
-function nieuweSessie(): string {
+// Verwijder emoji/emoticons als vangnet: de echte afspraak (geen emoji) leeft in de n8n-agent-prompt.
+function stripEmoji(tekst: string): string {
+  try {
+    return tekst
+      // Een eventuele voorafgaande spatie mee-consumeren, zodat "Lex 😊, ..." niet "Lex , ..." wordt.
+      .replace(/\s?[\p{Extended_Pictographic}\p{Regional_Indicator}\u{FE0F}\u{200D}]/gu, "")
+      .replace(/[ \t]{2,}/g, " ")
+      .trim();
+  } catch {
+    return tekst;
+  }
+}
+
+function histKey(sessionId?: string): string {
+  return `${HIST_PREFIX}:${sessionId ?? "anon"}`;
+}
+
+// De basissessie is stabiel per gebruiker (gedeeld gespreksgeheugen), of een localStorage-id voor
+// niet-ingelogde fallback.
+function basisSessie(sessionId?: string): string {
+  if (sessionId) return `web-${sessionId}`;
   try {
     const bestaand = localStorage.getItem(SESSIE_KEY);
     if (bestaand) return bestaand;
@@ -36,23 +66,58 @@ function nieuweSessie(): string {
   }
 }
 
+// Een verse sessie-id (met nonce) zodat het gespreksgeheugen aan de agentkant loskoppelt bij "wissen".
+function nieuwGesprek(sessionId?: string): string {
+  const nonce =
+    typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : String(Date.now());
+  return `${basisSessie(sessionId)}-${nonce}`;
+}
+
 export function ChatAssistent({ sessionId }: { sessionId?: string }) {
   const [open, setOpen] = useState(false);
   const [invoer, setInvoer] = useState("");
   const [bezig, setBezig] = useState(false);
   const [fout, setFout] = useState<string | null>(null);
+  const [laatsteVraag, setLaatsteVraag] = useState<string | null>(null);
+  const [gekopieerdIdx, setGekopieerdIdx] = useState<number | null>(null);
   const [berichten, setBerichten] = useState<Bericht[]>([{ rol: "assistent", tekst: WELKOM }]);
 
   const sessieRef = useRef<string>("");
+  const abortRef = useRef<AbortController | null>(null);
   const belRef = useRef<HTMLButtonElement>(null);
   const invoerRef = useRef<HTMLTextAreaElement>(null);
   const lijstRef = useRef<HTMLDivElement>(null);
 
-  // Sessie: koppel bij voorkeur aan de ingelogde gebruiker (server-prop), zodat het
-  // gespreksgeheugen per gebruiker is en niet per browser lekt; anders localStorage-fallback.
+  // Sessie + geschiedenis laden: bij voorkeur de bewaarde geschiedenis (per gebruiker), anders vers.
   useEffect(() => {
-    sessieRef.current = sessionId ? `web-${sessionId}` : nieuweSessie();
+    try {
+      const raw = localStorage.getItem(histKey(sessionId));
+      if (raw) {
+        const data = JSON.parse(raw);
+        if (data?.sessie && Array.isArray(data?.berichten) && data.berichten.length) {
+          sessieRef.current = data.sessie;
+          setBerichten(data.berichten);
+          return;
+        }
+      }
+    } catch {
+      /* geen/ongeldige geschiedenis */
+    }
+    sessieRef.current = basisSessie(sessionId);
   }, [sessionId]);
+
+  // Geschiedenis bewaren (gecapt) zodat een herlaad het gesprek behoudt. Transiënte state niet.
+  useEffect(() => {
+    if (!sessieRef.current) return;
+    try {
+      localStorage.setItem(
+        histKey(sessionId),
+        JSON.stringify({ sessie: sessieRef.current, berichten: berichten.slice(-MAX_HIST) }),
+      );
+    } catch {
+      /* opslag vol/geblokkeerd — niet fataal */
+    }
+  }, [berichten, sessionId]);
 
   // Focus het invoerveld bij openen.
   useEffect(() => {
@@ -68,22 +133,60 @@ export function ChatAssistent({ sessionId }: { sessionId?: string }) {
     belRef.current?.focus(); // focus terug naar de openknop
   }, []);
 
-  async function verstuur() {
+  async function stuurVraag(vraag: string, herhaal = false) {
+    const tekst = vraag.trim();
+    if (!tekst || bezig) return;
+    setFout(null);
+    setLaatsteVraag(tekst);
+    if (!herhaal) setBerichten((b) => [...b, { rol: "user", tekst }]);
+    setBezig(true);
+    const controller = new AbortController();
+    abortRef.current = controller;
+    try {
+      const antwoord = await sendChat(tekst, sessieRef.current, controller.signal);
+      setBerichten((b) => [...b, { rol: "assistent", tekst: stripEmoji(antwoord) || "(geen antwoord)" }]);
+      setLaatsteVraag(null);
+    } catch (e) {
+      if ((e as DOMException)?.name === "AbortError") {
+        // Door de gebruiker afgebroken — stil, geen foutmelding.
+      } else {
+        const detail =
+          (e as { detail?: string })?.detail ?? "Er ging iets mis bij het ophalen van het antwoord.";
+        setFout(detail);
+      }
+    } finally {
+      setBezig(false);
+      abortRef.current = null;
+    }
+  }
+
+  function verstuur() {
     const vraag = invoer.trim();
     if (!vraag || bezig) return;
     setInvoer("");
+    void stuurVraag(vraag);
+  }
+
+  function wis() {
+    if (berichten.length <= 1 && !laatsteVraag) return;
+    if (!window.confirm("Dit gesprek wissen? Lex begint dan een nieuw gesprek zonder eerdere context."))
+      return;
+    abortRef.current?.abort();
+    sessieRef.current = nieuwGesprek(sessionId);
+    setBerichten([{ rol: "assistent", tekst: WELKOM }]);
+    setInvoer("");
     setFout(null);
-    setBerichten((b) => [...b, { rol: "user", tekst: vraag }]);
-    setBezig(true);
+    setLaatsteVraag(null);
+    setBezig(false);
+  }
+
+  async function kopieer(idx: number, tekst: string) {
     try {
-      const antwoord = await sendChat(vraag, sessieRef.current);
-      setBerichten((b) => [...b, { rol: "assistent", tekst: antwoord || "(geen antwoord)" }]);
-    } catch (e) {
-      const detail =
-        (e as { detail?: string })?.detail ?? "Er ging iets mis bij het ophalen van het antwoord.";
-      setFout(detail);
-    } finally {
-      setBezig(false);
+      await navigator.clipboard.writeText(tekst);
+      setGekopieerdIdx(idx);
+      setTimeout(() => setGekopieerdIdx((v) => (v === idx ? null : v)), 1500);
+    } catch {
+      /* clipboard niet beschikbaar */
     }
   }
 
@@ -91,7 +194,7 @@ export function ChatAssistent({ sessionId }: { sessionId?: string }) {
     // Enter = versturen, Shift+Enter = nieuwe regel.
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      void verstuur();
+      verstuur();
     }
   }
 
@@ -103,7 +206,7 @@ export function ChatAssistent({ sessionId }: { sessionId?: string }) {
           ref={belRef}
           type="button"
           onClick={() => setOpen(true)}
-          aria-label="Open de kennisgraaf-assistent"
+          aria-label="Open Lex, de kennisgraaf-assistent"
           className="fixed bottom-5 right-5 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-accent text-paper shadow-lg transition-colors hover:bg-accent-soft focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-lint"
         >
           <ChatIcoon />
@@ -113,7 +216,7 @@ export function ChatAssistent({ sessionId }: { sessionId?: string }) {
       {open && (
         <div
           role="dialog"
-          aria-label="Kennisgraaf-assistent"
+          aria-label="Lex — kennisgraaf-assistent"
           aria-modal="false"
           onKeyDown={(e) => {
             if (e.key === "Escape") sluit();
@@ -123,17 +226,28 @@ export function ChatAssistent({ sessionId }: { sessionId?: string }) {
           {/* Kop */}
           <div className="flex items-center justify-between gap-2 border-b border-line bg-surface px-4 py-3">
             <div className="min-w-0">
-              <p className="truncate text-sm font-semibold text-lint">Kennisgraaf-assistent</p>
-              <p className="truncate text-xs text-faint">Vraag me iets over de wetgeving.</p>
+              <p className="truncate text-sm font-semibold text-lint">Lex</p>
+              <p className="truncate text-xs text-faint">Kennisgraaf-assistent</p>
             </div>
-            <button
-              type="button"
-              onClick={sluit}
-              aria-label="Sluit de assistent"
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-button text-muted transition-colors hover:bg-paper hover:text-lint focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-lint"
-            >
-              <SluitIcoon />
-            </button>
+            <div className="flex shrink-0 items-center gap-1">
+              <button
+                type="button"
+                onClick={wis}
+                aria-label="Wis het gesprek"
+                title="Wis het gesprek"
+                className="flex h-9 w-9 items-center justify-center rounded-button text-muted transition-colors hover:bg-paper hover:text-lint focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-lint"
+              >
+                <WisIcoon />
+              </button>
+              <button
+                type="button"
+                onClick={sluit}
+                aria-label="Sluit de assistent"
+                className="flex h-9 w-9 items-center justify-center rounded-button text-muted transition-colors hover:bg-paper hover:text-lint focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-lint"
+              >
+                <SluitIcoon />
+              </button>
+            </div>
           </div>
 
           {/* Berichten */}
@@ -147,10 +261,42 @@ export function ChatAssistent({ sessionId }: { sessionId?: string }) {
                 ) : (
                   <div className="max-w-[85%] rounded-button border border-line bg-surface px-3 py-2 text-sm text-ink">
                     <MarkdownBericht tekst={b.tekst} />
+                    {b.tekst !== WELKOM && (
+                      <div className="mt-1 flex justify-end">
+                        <button
+                          type="button"
+                          onClick={() => void kopieer(i, b.tekst)}
+                          aria-label={gekopieerdIdx === i ? "Gekopieerd" : "Kopieer antwoord"}
+                          title={gekopieerdIdx === i ? "Gekopieerd" : "Kopieer antwoord"}
+                          className={`flex h-7 w-7 items-center justify-center rounded-button transition-colors hover:bg-paper focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-lint ${
+                            gekopieerdIdx === i ? "text-succes" : "text-muted hover:text-lint"
+                          }`}
+                        >
+                          {gekopieerdIdx === i ? <VinkIcoon /> : <KopieerIcoon />}
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
             ))}
+
+            {/* Voorbeeldvragen bij een leeg gesprek. */}
+            {berichten.length === 1 && !bezig && (
+              <div className="flex flex-wrap gap-2 pt-1">
+                {VOORBEELDEN.map((v) => (
+                  <button
+                    key={v}
+                    type="button"
+                    onClick={() => void stuurVraag(v)}
+                    className="rounded-button border border-line bg-paper px-3 py-1.5 text-left text-xs text-lint transition-colors hover:bg-surface focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-lint"
+                  >
+                    {v}
+                  </button>
+                ))}
+              </div>
+            )}
+
             {bezig && (
               <div className="flex justify-start">
                 <div className="rounded-button border border-line bg-surface px-3 py-2 text-sm text-muted">
@@ -161,9 +307,18 @@ export function ChatAssistent({ sessionId }: { sessionId?: string }) {
               </div>
             )}
             {fout && (
-              <p role="alert" className="rounded-button border border-fout/40 bg-fout/10 px-3 py-2 text-sm text-fout">
-                {fout}
-              </p>
+              <Melding type="fout" compact>
+                <p>{fout}</p>
+                {laatsteVraag && (
+                  <button
+                    type="button"
+                    onClick={() => void stuurVraag(laatsteVraag, true)}
+                    className="mt-1 text-sm font-medium text-lint underline underline-offset-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-lint"
+                  >
+                    Opnieuw
+                  </button>
+                )}
+              </Melding>
             )}
           </div>
 
@@ -177,19 +332,34 @@ export function ChatAssistent({ sessionId }: { sessionId?: string }) {
                 onKeyDown={opToets}
                 rows={1}
                 placeholder="Stel een vraag…"
-                aria-label="Je vraag aan de assistent"
+                aria-label="Je vraag aan Lex"
                 className="max-h-32 min-h-[48px] flex-1 resize-none rounded-button border border-line bg-paper px-3 py-3 text-sm text-ink placeholder:text-faint focus-visible:border-lint focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-lint"
               />
-              <Button
-                type="button"
-                onClick={() => void verstuur()}
-                disabled={bezig || !invoer.trim()}
-                className="w-auto"
-                aria-label="Verstuur"
-              >
-                Stuur
-              </Button>
+              {bezig ? (
+                <Button
+                  type="button"
+                  variant="danger"
+                  onClick={() => abortRef.current?.abort()}
+                  className="w-auto"
+                  aria-label="Stop met antwoorden"
+                >
+                  Stop
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  onClick={verstuur}
+                  disabled={!invoer.trim()}
+                  className="w-auto"
+                  aria-label="Verstuur"
+                >
+                  Stuur
+                </Button>
+              )}
             </div>
+            <p className="mt-2 text-center text-xs text-faint">
+              Lex kan fouten maken — controleer altijd de bron.
+            </p>
           </div>
         </div>
       )}
@@ -267,6 +437,48 @@ function SluitIcoon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function WisIcoon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M6 7l1 12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-12"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function KopieerIcoon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <rect x="9" y="9" width="11" height="11" rx="2" stroke="currentColor" strokeWidth="2" />
+      <path
+        d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+function VinkIcoon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M5 12.5l4.5 4.5L19 7"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }

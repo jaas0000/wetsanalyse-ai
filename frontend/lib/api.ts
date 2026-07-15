@@ -58,11 +58,16 @@ async function json<T>(res: Response): Promise<T> {
 /** Stuur een vraag naar de kennisgraaf-assistent (BFF → API → n8n-agent). Het antwoord komt als
  *  SSE-stream binnen (heartbeats tijdens het wachten, dan één data:-event) zodat een lang antwoord
  *  niet tegen de proxytimeout loopt. De sessionId houdt de gesprekscontext vast. */
-export async function sendChat(chatInput: string, sessionId: string): Promise<string> {
+export async function sendChat(
+  chatInput: string,
+  sessionId: string,
+  signal?: AbortSignal,
+): Promise<string> {
   const res = await fetch("/api/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ chatInput, sessionId }),
+    signal,
   });
   if (!res.ok) throw await parseError(res); // 403/400/429 komen als JSON-fout terug
   if (!res.body) throw { status: 0, detail: "Geen antwoordstroom." } as ApiError;
