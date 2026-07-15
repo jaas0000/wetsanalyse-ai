@@ -26,9 +26,9 @@ const MAX_HIST = 50; // hoeveel berichten we bewaren bij herladen
 const WELKOM =
   "Ik ben Lex, de digitale assistent van de Belastingdienst. Ik help je bij het vinden en begrijpen van fiscale wet- en regelgeving uit de kennisgraaf.";
 const VOORBEELDEN = [
-  "Welke wetten gaan over de invordering van belastingen?",
+  "Welke fiscale wetten en regelingen zijn beschikbaar?",
   "Wat betekent het begrip 'belastingschuldige'?",
-  "Welke artikelen verwijzen naar de Algemene wet bestuursrecht?",
+  "Welke artikelen gaan over de invordering van belastingen?"
 ];
 
 // Verwijder emoji/emoticons als vangnet: de echte afspraak (geen emoji) leeft in de n8n-agent-prompt.
