@@ -129,11 +129,12 @@ async def test_chat_aan_proxyt_naar_webhook(client, monkeypatch):
     assert r.status_code == 200
     assert "text/event-stream" in r.headers.get("content-type", "")
     assert "Financiën" in _sse_answer(r)
-    # De router stuurde de n8n-chat-body + het secret als header door.
+    # De router stuurde de n8n-chat-body (incl. het secret als body-veld) + de header door.
     assert _FakeClient.last["json"] == {
         "action": "sendMessage",
         "sessionId": "sess-1",
         "chatInput": "Wie is verantwoordelijk?",
+        "secret": "s3",
     }
     assert _FakeClient.last["headers"]["X-Chat-Secret"] == "s3"
 
