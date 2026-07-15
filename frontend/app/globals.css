@@ -49,6 +49,19 @@ html {
   }
 }
 
+/* iOS/Safari zoomt bij focus in op invoervelden met een lettergrootte < 16px. Omdat de veldgroottes
+   hier rem-gebaseerd zijn en op mobiel meeschalen (80%), komen ze onder die drempel. Op touch-
+   apparaten forceren we daarom 16px op tekstvelden. `!important` is nodig omdat Tailwinds
+   text-sm/-base utility-classes (specificiteit 0,1,0) anders van een kale element-selector winnen.
+   Desktop (fijne pointer, geen focus-zoom) blijft ongemoeid. */
+@media (pointer: coarse) {
+  input:not([type="checkbox"]):not([type="radio"]),
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
+}
+
 body {
   background-color: rgb(var(--paper));
   color: rgb(var(--ink));
