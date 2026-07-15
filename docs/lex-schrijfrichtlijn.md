@@ -8,6 +8,9 @@ promptblok om in die agent te plakken.
 > De webapp bevat een licht **vangnet** dat emoji uit antwoorden strípt vóór weergave. Dat is een
 > laatste redmiddel, geen vervanging: de afspraken hieronder horen in de agent-prompt te staan.
 
+> **Toegepast:** het `SCHRIJFWIJZE`-blok hieronder staat sinds 2026-07-15 in de `systemMessage` van
+> de `AI Agent`-node van n8n-workflow `gCny9USd6ZylpyeK` (bedient zowel Lex als Telegram).
+
 ## Afspraken
 
 1. **Taal**: Nederlands.
