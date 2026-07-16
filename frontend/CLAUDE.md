@@ -113,6 +113,17 @@ De **harde scheidingslijn**: alles met een token is server-only.
   scherm overlopen. De JAS-klassekleuren in `lib/jas.ts` zijn de **exacte labelkleuren uit
   `docs/wa-table.png`**; job-state-kleuren in `lib/states.ts`.
 
+## Observability
+
+`instrumentation.ts` registreert OpenTelemetry via `@vercel/otel` (gated op
+`OTEL_EXPORTER_OTLP_ENDPOINT`; auto-tracing van route handlers + uitgaande `fetch` met
+traceparent-propagatie → end-to-end trace over de chat-keten). `lib/logger.ts` is de **server-only**
+gestructureerde JSON-logger (mirror van de MCP-logger: secret-redactie, `LOG_LEVEL`, `trace_id`/
+`span_id`), ingezet in de BFF-lagen (`app/api/_lib/proxy.ts`, `lib/server.ts`, de chat-route). Nooit
+importeren vanuit een Client Component (net als `lib/config.ts`/`lib/server.ts`), en nooit
+tokens/secrets/inhoud loggen. In de vitest-node-omgeving wordt `server-only` gestubd
+(`vitest.config.ts` → `test/stub-empty.ts`). Zie `docs/observability.md`.
+
 ## Regels (niet aan tornen)
 
 - **Token nooit naar de client.** Geen import van `lib/config.ts`/`lib/server.ts` in Client

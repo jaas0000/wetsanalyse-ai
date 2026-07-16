@@ -48,6 +48,13 @@ services:
       MCP_AUTH_TOKENS: ${MCP_AUTH_TOKENS:-}
       MCP_AUTH_TOKENS_FILE: ${MCP_AUTH_TOKENS_FILE:-}
       MCP_ALLOWED_HOSTS: ${MCP_ALLOWED_HOSTS:-}
+      # Observability. LOG_LEVEL stelt de drempel van de JSON-stderr-logs in.
+      # OTEL_EXPORTER_OTLP_ENDPOINT leeg = OpenTelemetry uit; zet 'm op de OTel-Collector
+      # (bv. http://otel-collector:4318) om traces/metrics te exporteren.
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-wettenbank-mcp}
+      OTEL_RESOURCE_ATTRIBUTES: ${OTEL_RESOURCE_ATTRIBUTES:-}
     networks:
       - proxy
     # Runtime-hardening: de Node-app heeft geen schrijfbaar root-fs, capabilities of
