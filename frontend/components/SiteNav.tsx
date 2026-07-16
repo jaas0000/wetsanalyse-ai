@@ -5,6 +5,13 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
 import { LinkButton } from "@/components/ui/Button";
+import { wisChatOpslag } from "@/lib/chatOpslag";
+
+/** Wis de lokale chatgeschiedenis en log dan uit (gedeelde-machine-hygiëne). */
+function uitloggen(): void {
+  wisChatOpslag();
+  signOut({ callbackUrl: "/login" });
+}
 
 type NavItem = { href: string; label: string; adminOnly?: boolean };
 
@@ -89,7 +96,7 @@ export function SiteNav() {
         </span>
         <button
           type="button"
-          onClick={() => signOut({ callbackUrl: "/login" })}
+          onClick={uitloggen}
           className="ml-2 rounded-button px-3 py-3.5 text-sm font-medium text-muted transition-colors hover:text-lint focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-lint"
         >
           Uitloggen
@@ -144,7 +151,7 @@ export function SiteNav() {
             type="button"
             onClick={() => {
               setOpen(false);
-              signOut({ callbackUrl: "/login" });
+              uitloggen();
             }}
             className="mt-1 w-full rounded-button px-3 py-3 text-left text-sm font-medium text-muted transition-colors hover:text-lint"
           >

@@ -23,7 +23,7 @@ from __future__ import annotations
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from .. import app_settings, profiles, usage, users, wetten
 from ..auth import require_admin
@@ -347,6 +347,14 @@ class SettingsIn(BaseModel):
     chat_enabled: bool | None = None
     chat_webhook_url: str | None = None
     chat_secret: str | None = None
+
+    @field_validator("chat_webhook_url")
+    @classmethod
+    def _valideer_webhook_url(cls, v: str | None) -> str | None:
+        # Tweede verdedigingslinie tegen SSRF: alleen http(s), geen interne/loopback-host → 422.
+        if v is None:
+            return v
+        return app_settings.veilige_webhook_url(v)
 
 
 class LlmCallOut(BaseModel):

@@ -75,6 +75,10 @@ export async function sendChat(
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
+  // De API stuurt vandaag één data:-frame, maar we lezen bewust dóór tot het stream-einde en houden
+  // het laatste antwoord vast — zo pakt een toekomstige multi-event-stream niet stil alleen het
+  // eerste frame. Een error-frame breekt wél meteen af.
+  let antwoord = "";
   try {
     for (;;) {
       const { done, value } = await reader.read();
@@ -94,13 +98,13 @@ export async function sendChat(
         if (event === "error") {
           throw { status: 502, detail: veiligJson(data)?.detail ?? "Er ging iets mis." } as ApiError;
         }
-        if (data) return veiligJson(data)?.answer ?? "";
+        if (data) antwoord = veiligJson(data)?.answer ?? antwoord;
       }
     }
   } finally {
     reader.cancel().catch(() => {});
   }
-  return "";
+  return antwoord;
 }
 
 function veiligJson(s: string): { answer?: string; detail?: string } | null {

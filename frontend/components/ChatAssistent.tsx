@@ -11,6 +11,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { sendChat } from "@/lib/api";
+import { CHAT_HIST_PREFIX, CHAT_SESSIE_KEY } from "@/lib/chatOpslag";
 import { Button } from "@/components/ui/Button";
 import { Melding } from "@/components/ui/Melding";
 
@@ -20,8 +21,8 @@ interface Bericht {
   tekst: string;
 }
 
-const SESSIE_KEY = "kg-chat-sessie";
-const HIST_PREFIX = "kg-chat-historie";
+const SESSIE_KEY = CHAT_SESSIE_KEY;
+const HIST_PREFIX = CHAT_HIST_PREFIX;
 const MAX_HIST = 50; // hoeveel berichten we bewaren bij herladen
 const WELKOM =
   "Ik ben Lex, de digitale assistent van de Belastingdienst. Ik help je bij het vinden en begrijpen van fiscale wet- en regelgeving uit de kennisgraaf.";

@@ -20,7 +20,7 @@ import logging
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from .. import app_settings
 from ..auth import require_client
@@ -43,8 +43,9 @@ class ChatConfigOut(BaseModel):
 
 
 class ChatIn(BaseModel):
-    chatInput: str
-    sessionId: str = "web"
+    # Harde lengtegrens (→ 422) vóór verwerking; `_MAX_INPUT` truncatie blijft als tweede net.
+    chatInput: str = Field(max_length=8000)
+    sessionId: str = Field("web", max_length=200)
 
 
 @router.get("/chat/config", response_model=ChatConfigOut)
@@ -70,10 +71,11 @@ async def _vraag_agent(url: str, secret: str, session_id: str, vraag: str) -> st
     if secret:
         payload["secret"] = secret
         headers["X-Chat-Secret"] = secret
-    # read=None: httpx wacht net zo lang als n8n nodig heeft; de SSE-lus (_MAX_WAIT_S) kapt een
-    # écht te trage run af via taak.cancel(). Zo snijdt httpx niet vóórtijdig door een geslaagd,
-    # maar traag antwoord heen. De connect-timeout blijft kort tegen een onbereikbare host.
-    timeout = httpx.Timeout(None, connect=_CONNECT_S)
+    # De SSE-lus (_MAX_WAIT_S) is de primaire deadline en kapt een écht te trage run af via
+    # taak.cancel(). De read-timeout staat er als redundant vangnet net boven (_MAX_WAIT_S + 30),
+    # zodat een geslaagd-maar-traag antwoord niet vóórtijdig sneuvelt maar een hangende socket na
+    # de SSE-deadline alsnog wordt losgelaten. De connect-timeout blijft kort tegen een onbereikbare host.
+    timeout = httpx.Timeout(_MAX_WAIT_S + 30, connect=_CONNECT_S)
     async with httpx.AsyncClient(timeout=timeout) as client:
         resp = await client.post(url, json=payload, headers=headers)
     if resp.status_code >= 400:

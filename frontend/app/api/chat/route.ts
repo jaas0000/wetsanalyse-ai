@@ -8,11 +8,18 @@ import { geenSessie, sessionUserId } from "../_lib/session";
 
 export const dynamic = "force-dynamic";
 
+// Harde bovengrens op de upstream-verbinding: iets ruimer dan de API-deadline (_MAX_WAIT_S = 300s in
+// api/app/routers/chat.py) zodat een geslaagd-maar-traag antwoord er nog binnen valt, maar een
+// upstream die zónder heartbeats blijft hangen alsnog wordt losgelaten (naast client-disconnect).
+const UPSTREAM_TIMEOUT_MS = 330_000;
+
 export async function POST(req: Request) {
   const userid = await sessionUserId();
   if (!userid) return geenSessie();
 
   const body = await req.text();
+  // Breek af bij client-disconnect (req.signal) óf bij de eigen upstream-timeout.
+  const signal = AbortSignal.any([req.signal, AbortSignal.timeout(UPSTREAM_TIMEOUT_MS)]);
   let upstream: Response;
   try {
     upstream = await fetch(`${apiBaseUrl()}/v1/chat`, {
@@ -24,7 +31,7 @@ export async function POST(req: Request) {
         Accept: "text/event-stream",
       },
       body,
-      signal: req.signal, // client-disconnect propageren naar de upstream
+      signal,
       cache: "no-store",
     });
   } catch (err) {

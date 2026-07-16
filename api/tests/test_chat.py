@@ -217,6 +217,69 @@ async def test_chat_te_traag_geeft_nette_timeout_melding(client, monkeypatch):
     assert "niet op tijd" in _sse_error(r)
 
 
+@pytest.mark.parametrize(
+    "url",
+    ["http://localhost:5678/webhook", "http://127.0.0.1/x", "https://10.0.0.5/chat", "ftp://n8n/x"],
+)
+async def test_settings_webhook_url_intern_of_ongeldig_geweigerd(client, url):
+    """SSRF-verdedigingslinie: een interne/loopback-host of niet-http(s)-scheme → 422 bij PUT."""
+    r = await client.put("/v1/admin/settings", headers=_ADMIN, json={"chat_webhook_url": url})
+    assert r.status_code == 422
+    # De instelling is niet gewijzigd (blijft leeg).
+    assert (await client.get("/v1/admin/settings", headers=_ADMIN)).json()["chat_webhook_url"] == ""
+
+
+async def test_secret_versleuteld_at_rest_in_db(client):
+    """Het chat-secret staat versleuteld in de DB (niet plaintext), maar `chat_config` levert
+    plaintext terug — de round-trip die de router gebruikt."""
+    from app import app_settings, secrets_crypto
+    from app.deps import get_store
+
+    await client.put(
+        "/v1/admin/settings",
+        headers=_ADMIN,
+        json={"chat_enabled": True, "chat_webhook_url": "https://n8n/x/chat", "chat_secret": "topgeheim"},
+    )
+    store = get_store()
+    ruw = await store.lees_app_setting(app_settings.CHAT_SECRET)
+    assert ruw != "topgeheim"  # niet plaintext opgeslagen
+    assert secrets_crypto.decrypt(ruw) == "topgeheim"  # wél terug te ontsleutelen
+    # En de service-laag levert het plaintext-secret (zoals de router het aan n8n stuurt).
+    app_settings._wis_cache()
+    _enabled, _url, secret = await app_settings.chat_config(store)
+    assert secret == "topgeheim"
+
+
+async def test_legacy_plaintext_secret_blijft_werken(client):
+    """Een bestaand, onversleuteld secret (van vóór de encryptie) moet blijven werken i.p.v. te
+    breken — legacy-tolerante ontsleuteling."""
+    from app import app_settings
+    from app.deps import get_store
+
+    store = get_store()
+    await store.schrijf_app_setting(app_settings.CHAT_SECRET, "ouderwets-plaintext")
+    app_settings._wis_cache()
+    _enabled, _url, secret = await app_settings.chat_config(store)
+    assert secret == "ouderwets-plaintext"
+
+
+async def test_chat_te_grote_input_422(client, monkeypatch):
+    from app.routers import chat as chat_router
+
+    monkeypatch.setattr(chat_router.httpx, "AsyncClient", _FakeClient)
+    await client.put(
+        "/v1/admin/settings",
+        headers=_ADMIN,
+        json={"chat_enabled": True, "chat_webhook_url": "https://n8n/x/chat"},
+    )
+    # Body-lengtegrens grijpt vóór verwerking in → 422 (geen truncatie, geen stream).
+    r = await client.post("/v1/chat", json={"chatInput": "a" * 8001})
+    assert r.status_code == 422
+    # Net binnen de grens mag wel.
+    r = await client.post("/v1/chat", json={"chatInput": "a" * 8000})
+    assert r.status_code == 200
+
+
 async def test_chat_rate_limit_per_gebruiker(client, monkeypatch):
     from app import ratelimit
     from app.config import get_settings
