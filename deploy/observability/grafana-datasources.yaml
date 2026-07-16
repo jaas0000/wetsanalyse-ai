@@ -1,0 +1,39 @@
+# OPTIONEEL — Grafana-datasource-provisioning voor je BESTAANDE Grafana (unpoller-grafana).
+# Twee manieren om de drie backends aan Grafana te koppelen:
+#
+#   A) Via de UI (minst intrusief): Connections -> Data sources -> Add data source, en voeg
+#      Prometheus/Loki/Tempo toe met de URL's hieronder. Niets aan de unpoller-stack wijzigen.
+#
+#   B) Via provisioning: mount dit bestand in de unpoller-grafana-container onder
+#      /etc/grafana/provisioning/datasources/wetsanalyse.yaml (read-only) en herstart Grafana.
+#      Dit vereist een kleine aanpassing aan de unpoller-stack (een extra volume-mount).
+#
+# De URL's zijn de interne hostnamen op het homeinfra_internal-netwerk (waar unpoller-grafana óók
+# op zit), dus Grafana bereikt ze rechtstreeks.
+
+apiVersion: 1
+datasources:
+  - name: Prometheus (wetsanalyse)
+    uid: wa-prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: false
+  - name: Loki (wetsanalyse)
+    uid: wa-loki
+    type: loki
+    access: proxy
+    url: http://loki:3100
+    jsonData:
+      # Klik door van een logregel naar de bijbehorende trace in Tempo (correlatie op trace_id).
+      derivedFields:
+        - name: TraceID
+          matcherType: label
+          matcherRegex: trace_id
+          datasourceUid: wa-tempo
+          url: "$${__value.raw}"
+  - name: Tempo (wetsanalyse)
+    uid: wa-tempo
+    type: tempo
+    access: proxy
+    url: http://tempo:3200

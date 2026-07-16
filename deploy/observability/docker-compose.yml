@@ -1,0 +1,90 @@
+# OPTIONELE observability-BACKENDS-stack — koppelt aan je BESTAANDE Grafana (unpoller-grafana).
+#
+# Je hebt Grafana al draaien (via de unpoller-stack) met InfluxDB voor UniFi-metrics. Deze stack
+# brengt GEEN eigen Grafana mee; het levert de ontbrekende OTLP-ingest-backends:
+#   - otel-collector : ontvangt OTLP (4317/4318) van API/frontend/MCP en routeert het door
+#   - tempo          : traces
+#   - loki           : logs
+#   - prometheus     : metrics
+# Voeg deze drie daarna als datasources toe aan je bestaande Grafana (zie README).
+#
+# Netwerk: het gedeelde externe `homeinfra_internal` (waar je app-stacks én unpoller-grafana op zitten),
+# zodat alles elkaar op hostnaam bereikt. Er worden GEEN host-poorten gepubliceerd en GEEN NPM-routes
+# aangemaakt — de backends blijven intern (zelfde vertrouwensmodel als Postgres/InfluxDB).
+#
+# Wiring: zet in elke app-stack  OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318  en herstart.
+#
+# Stack-omgeving (in Portainer): PROXY_NETWORK (default `homeinfra_internal`).
+
+services:
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.119.0
+    container_name: otel-collector
+    restart: unless-stopped
+    command: ["--config=/etc/otelcol-contrib/config.yaml"]
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml:ro
+    expose:
+      - "4317"   # OTLP gRPC in (van de apps)
+      - "4318"   # OTLP HTTP in (van de apps)
+      - "8889"   # Prometheus-metrics uit (door prometheus gescrapet)
+    networks:
+      - proxy
+    depends_on:
+      - tempo
+      - loki
+      - prometheus
+    mem_limit: 512m
+
+  tempo:
+    image: grafana/tempo:2.7.1
+    container_name: tempo
+    restart: unless-stopped
+    command: ["-config.file=/etc/tempo.yaml"]
+    # user root: named volumes worden als root aangemaakt; tempo draait non-root en zou anders niet
+    # naar /var/tempo kunnen schrijven. Internal-only container zonder host-mounts → laag risico.
+    user: "0:0"
+    volumes:
+      - ./tempo.yaml:/etc/tempo.yaml:ro
+      - tempo_data:/var/tempo
+    networks:
+      - proxy
+    mem_limit: 512m
+
+  loki:
+    image: grafana/loki:3.4.2
+    container_name: loki
+    restart: unless-stopped
+    command: ["-config.file=/etc/loki/loki-config.yaml"]
+    user: "0:0"  # idem: schrijfrechten op /loki (zie tempo)
+    volumes:
+      - ./loki-config.yaml:/etc/loki/loki-config.yaml:ro
+      - loki_data:/loki
+    networks:
+      - proxy
+    mem_limit: 512m
+
+  prometheus:
+    image: prom/prometheus:v3.13.1
+    container_name: prometheus
+    restart: unless-stopped
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=15d"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    networks:
+      - proxy
+    mem_limit: 512m
+
+volumes:
+  tempo_data:
+  loki_data:
+  prometheus_data:
+
+networks:
+  proxy:
+    external: true
+    name: ${PROXY_NETWORK:-homeinfra_internal}

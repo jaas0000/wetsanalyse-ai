@@ -1,0 +1,29 @@
+# Tempo (monolithisch, lokale opslag) — ontvangt traces via OTLP van de collector, bewaart ze
+# lokaal en serveert queries op :3200 (de Grafana Tempo-datasource-URL: http://tempo:3200).
+
+server:
+  http_listen_port: 3200
+
+distributor:
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          endpoint: 0.0.0.0:4317
+        http:
+          endpoint: 0.0.0.0:4318
+
+ingester:
+  max_block_duration: 5m
+
+compactor:
+  compaction:
+    block_retention: 48h   # traces 48u bewaren (homelab); verhoog naar smaak
+
+storage:
+  trace:
+    backend: local
+    wal:
+      path: /var/tempo/wal
+    local:
+      path: /var/tempo/blocks
