@@ -67,7 +67,12 @@ triviale geval; het rapport heeft de vorm `{werkgebied, bronnen[], begrippen, af
   bij de eerste render compleet is zonder per-job na te laden.
 - `auth.py` — per-client bearer-tokens (erft het MCP-patroon; fail-closed; constant-tijd).
   `require_admin` is een aparte, altijd-verplichte bearer voor `/v1/admin/*` (LLM-beheer +
-  gebruikersbeheer). `user.py`/`users.py` + `routers/auth.py` vormen de **login-module**: de API is
+  gebruikersbeheer). `require_admin` is **async** en accepteert twee bronnen: de statische
+  env-admin-tokens (`WETSANALYSE_ADMIN_TOKENS`) én **genereerbare DB-tokens** (`api_tokens.py`,
+  beheerd via `/beheer` → API-tokens). Die tokens staan **alleen als sha256-hash** in de
+  `api_tokens`-tabel (hoog-entropie → geen bcrypt), worden één keer bij aanmaken getoond en zijn
+  intrekbaar; ze voeden o.a. de admin-MCP (`tools/wetsanalyse-admin-mcp/`). Env-tokens blijven het
+  bootstrap-pad. `user.py`/`users.py` + `routers/auth.py` vormen de **login-module**: de API is
   de identiteitsbron van de webapp. Inloggen gaat met de **`userid`** (de primaire sleutel van de
   `users`-tabel); `email` is een verplicht, uniek registratiegegeven (geen inlog-identiteit).
   Verder: wachtwoord-hash via bcrypt, rollen `beheerder`/`analist`, optioneel TOTP-2FA versleuteld
@@ -163,6 +168,18 @@ triviale geval; het rapport heeft de vorm `{werkgebied, bronnen[], begrippen, af
   structuur-endpoints voor het analyseformulier: `GET /v1/wetten/{bwbId}/structuur`
   (afgeplatte artikellijst → artikel-autocomplete) en `GET /v1/wetten/{bwbId}/artikelen/{artikel}`
   (leden + opschrift + snippet → lid-keuze), gevoed door `wet_info.py` (TTL-cache over de MCP).
+
+## Observability
+
+`app/observability.py` configureert **gestructureerde JSON-logging** (mirror van de MCP-logger:
+`ts/niveau/categorie/bericht/…velden`, secret-redactie, `LOG_LEVEL`/`LOG_FORMAT`) plus **OpenTelemetry**
+(traces/metrics/logs), gated op `OTEL_EXPORTER_OTLP_ENDPOINT` — leeg = no-op, alleen logs. `setup()`
+draait vroeg in `main.py`; `RequestContextMiddleware` (pure ASGI, veilig voor de SSE-streams) zet een
+`X-Request-Id` en logt per request. De orchestrator wikkelt elke fase (`_guard`) in een span met
+metrics (fase-duur, fase-fouten per `FoutKlasse`, LLM-tokens); de chat-hop krijgt een `chat.n8n`-span.
+`get_tracer()`/`get_meter()` geven no-op-shims terug zonder de `otel`-extra, dus code mag
+onvoorwaardelijk spans/metrics maken. De `otel`-extra zit in de productie-image (`Dockerfile`:
+`uv sync --extra otel`). Nooit tokens/secrets/prompt-inhoud loggen. Zie `docs/observability.md`.
 
 ## Garanties (niet aan tornen)
 

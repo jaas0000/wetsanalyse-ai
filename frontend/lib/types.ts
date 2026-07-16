@@ -608,6 +608,24 @@ export interface TempPassword {
   temp_password: string;
 }
 
+// --- Genereerbare API-tokens (admin) ------------------------------------------
+
+export interface ApiTokenOut {
+  id: string;
+  label: string;
+  token_prefix: string;
+  scope: string;
+  active: boolean;
+  created_by: string;
+  created: string;
+  last_used: string | null;
+}
+
+/** Antwoord bij genereren: het volledige token wordt eenmalig getoond en nergens bewaard. */
+export interface ApiTokenCreated extends ApiTokenOut {
+  token: string;
+}
+
 /** Eigen account (self-service); spiegelt /v1/auth/me. */
 export interface MeAccount {
   userid: string;

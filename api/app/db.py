@@ -140,6 +140,24 @@ users = Table(
     Column("updated", _DT, nullable=False),
 )
 
+# Genereerbare API-tokens voor programmatische admin-toegang (bv. de admin-MCP), náást de
+# statische env-admin-tokens. Alleen de sha256-HASH van het token wordt bewaard (hoog-entropie →
+# geen bcrypt nodig); de plaintext wordt één keer bij aanmaken getoond en nergens opgeslagen. Het
+# `token_prefix` dient enkel voor herkenning in de UI. Intrekken = `active=False` (geen delete-eis).
+api_tokens = Table(
+    "api_tokens",
+    metadata,
+    Column("id", String(64), primary_key=True),
+    Column("label", String(128), nullable=False, default=""),
+    Column("token_hash", String(64), nullable=False, unique=True),
+    Column("token_prefix", String(24), nullable=False, default=""),
+    Column("scope", String(16), nullable=False, default="admin"),
+    Column("active", Boolean, nullable=False, default=True),
+    Column("created_by", String(128), nullable=False, default=""),
+    Column("created", _DT, nullable=False),
+    Column("last_used", _DT, nullable=True),
+)
+
 # Generieke runtime-config (key/value) — beheerbaar via /v1/admin/settings + /beheer. Eerste
 # sleutel: `capture_llm_calls` (bool). Bewust een aparte, kleine tabel zodat een toggle de hot
 # projects-rij niet raakt en latere instellingen er zonder migratie bij kunnen.

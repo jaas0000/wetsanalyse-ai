@@ -5,6 +5,8 @@ import type {
   Analyse2,
   Analyse3,
   ApiError,
+  ApiTokenCreated,
+  ApiTokenOut,
   AppSettings,
   ArtikelInfo,
   CreateAccepted,
@@ -312,6 +314,27 @@ export async function resetUserPassword(userid: string): Promise<TempPassword> {
 
 export async function deleteUser(userid: string): Promise<void> {
   const res = await fetch(`/api/admin/users/${encodeURIComponent(userid)}`, { method: "DELETE" });
+  if (!res.ok) throw await parseError(res);
+}
+
+// --- Admin: genereerbare API-tokens -----------------------------------------
+
+export async function listApiTokens(): Promise<ApiTokenOut[]> {
+  const res = await fetch("/api/admin/api-tokens", { cache: "no-store" });
+  return json<ApiTokenOut[]>(res);
+}
+
+export async function createApiToken(label: string): Promise<ApiTokenCreated> {
+  const res = await fetch("/api/admin/api-tokens", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ label }),
+  });
+  return json<ApiTokenCreated>(res);
+}
+
+export async function revokeApiToken(id: string): Promise<void> {
+  const res = await fetch(`/api/admin/api-tokens/${encodeURIComponent(id)}`, { method: "DELETE" });
   if (!res.ok) throw await parseError(res);
 }
 

@@ -6,6 +6,14 @@
       "headers": {
         "Authorization": "Bearer ${WETTENBANK_TOKEN}"
       }
+    },
+    "wetsanalyse-admin": {
+      "command": "node",
+      "args": ["tools/wetsanalyse-admin-mcp/dist/index.js"],
+      "env": {
+        "WETSANALYSE_ADMIN_API_URL": "https://wetsanalyse-api.ipalm.nl",
+        "WETSANALYSE_ADMIN_TOKEN": "${WETSANALYSE_ADMIN_TOKEN}"
+      }
     }
   }
 }

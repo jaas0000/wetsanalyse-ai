@@ -25,7 +25,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field, field_validator
 
-from .. import app_settings, profiles, usage, users, wetten
+from .. import api_tokens, app_settings, profiles, usage, users, wetten
 from ..auth import require_admin
 from ..deps import get_store
 from ..jobstore import JobStore
@@ -329,6 +329,63 @@ async def verwijder_user(userid: str):
         await users.delete_user(userid)
     except users.UserError as e:
         raise HTTPException(status_code=409, detail=str(e))
+
+
+# --- genereerbare API-tokens ---------------------------------------------------
+
+class ApiTokenOut(BaseModel):
+    id: str
+    label: str = ""
+    token_prefix: str = ""
+    scope: str = "admin"
+    active: bool = True
+    created_by: str = ""
+    created: str = ""
+    last_used: str | None = None
+
+
+class ApiTokenCreateIn(BaseModel):
+    label: str = Field(default="", max_length=128)
+
+
+class ApiTokenCreated(ApiTokenOut):
+    # Het volledige token wordt EENMALIG teruggegeven en is daarna niet meer op te vragen.
+    token: str
+
+
+def _token_to_out(t: dict) -> ApiTokenOut:
+    return ApiTokenOut(
+        id=t["id"], label=t["label"], token_prefix=t["token_prefix"], scope=t["scope"],
+        active=t["active"], created_by=t["created_by"],
+        created=t["created"].isoformat(),
+        last_used=t["last_used"].isoformat() if t["last_used"] is not None else None,
+    )
+
+
+@router.get("/api-tokens", response_model=list[ApiTokenOut])
+async def lijst_api_tokens():
+    """Overzicht van genereerbare API-tokens — nooit de hash of het volledige token, alleen het prefix."""
+    return [_token_to_out(t) for t in await api_tokens.list_tokens()]
+
+
+@router.post("/api-tokens", response_model=ApiTokenCreated, status_code=status.HTTP_201_CREATED)
+async def maak_api_token(body: ApiTokenCreateIn, admin_id: str = Depends(require_admin)):
+    record, plaintext = await api_tokens.create(body.label, created_by=admin_id)
+    logger.info("API-token aangemaakt", extra={
+        "categorie": "security", "token_id": record["id"], "label": record["label"], "door": admin_id,
+    })
+    return ApiTokenCreated(**_token_to_out(record).model_dump(), token=plaintext)
+
+
+@router.delete("/api-tokens/{token_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def trek_api_token_in(token_id: str, admin_id: str = Depends(require_admin)):
+    try:
+        await api_tokens.revoke(token_id)
+    except api_tokens.ApiTokenError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    logger.info("API-token ingetrokken", extra={
+        "categorie": "security", "token_id": token_id, "door": admin_id,
+    })
 
 
 # --- runtime-instellingen + LLM-call-capture -----------------------------------

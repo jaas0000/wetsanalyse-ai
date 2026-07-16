@@ -20,6 +20,7 @@ import { ProfileEditor } from "./ProfileEditor";
 import { WetEditor } from "./WetEditor";
 import { UsagePanel } from "./UsagePanel";
 import { UsersPanel } from "./UsersPanel";
+import { ApiTokensPanel } from "./ApiTokensPanel";
 import { LlmCapturePanel } from "./LlmCapturePanel";
 import { ChatInstellingenPanel } from "./ChatInstellingenPanel";
 
@@ -227,6 +228,8 @@ export function BeheerClient() {
       </Section>
 
       <UsersPanel />
+
+      <ApiTokensPanel />
 
       <UsagePanel />
 
