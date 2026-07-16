@@ -14,6 +14,19 @@
         "WETSANALYSE_ADMIN_API_URL": "https://wetsanalyse-api.ipalm.nl",
         "WETSANALYSE_ADMIN_TOKEN": "${WETSANALYSE_ADMIN_TOKEN}"
       }
+    },
+    "grafana": {
+      "command": "docker",
+      "args": [
+        "run", "--rm", "-i",
+        "-e", "GRAFANA_URL",
+        "-e", "GRAFANA_SERVICE_ACCOUNT_TOKEN",
+        "mcp/grafana", "-t", "stdio"
+      ],
+      "env": {
+        "GRAFANA_URL": "https://grafana.ipalm.nl",
+        "GRAFANA_SERVICE_ACCOUNT_TOKEN": "${GRAFANA_TOKEN}"
+      }
     }
   }
 }
