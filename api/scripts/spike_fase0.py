@@ -41,10 +41,16 @@ async def main() -> int:
     print(f"  bronreferentie: {basis['bronreferentie']}  ({len(basis['leden'])} lid/leden)")
 
     print("→ Activiteit 2 genereren via de LLM-adapter …")
-    analyse, prov = await steps.genereer_act2(llm, basis, ronde=1, analysefocus=None)
+    # Eén bron; de cross-referentie-fetch (inventaris/opgehaald) slaan we hier bewust over —
+    # die raakt de LLM-call niet en houdt de spike deterministisch.
+    analyse, prov = await steps.genereer_act2_bron(
+        llm, basis, ronde=1, analysefocus=None, inventaris=None, opgehaald=None
+    )
 
-    fouten, waarschuwingen = schema_check(analyse, "2")
-    schendingen = brongetrouwheid_check(analyse, "2")
+    # De validatie werkt werkgebied-breed; wikkel de ene bron in de werkgebied-vorm.
+    werkgebied = {"werkgebied": {"naam": "spike"}, "bronnen": [analyse]}
+    fouten, waarschuwingen = schema_check(werkgebied, "2")
+    schendingen = brongetrouwheid_check(werkgebied, "2")
 
     print(f"\n  model={prov['model']}  markeringen={len(analyse.get('markeringen', []))}")
     print(f"  schema-fouten: {len(fouten)}  waarschuwingen: {len(waarschuwingen)}")
