@@ -271,6 +271,13 @@ afgestemd op BIO2 / NEN-EN-ISO/IEC 27002:2022. Zie `SECURITY.md` voor het volled
   zelf meegestuurde XFF de limiet niet omzeilt — de reverse-proxy (NPM) moet XFF dus **zetten**.
 - **Securityheaders**: `X-Content-Type-Options: nosniff`, `Referrer-Policy`, `Cache-Control: no-store`
   op elke respons. `/health` blijft auth-vrij en wordt niet gelogd.
+- **OpenTelemetry** (`src/otel.ts`, alleen HTTP-modus): gated op `OTEL_EXPORTER_OTLP_ENDPOINT` — leeg =
+  no-op. Met endpoint start een `NodeSDK` (traces + metrics) die `/mcp`-requests
+  (`instrumentation-http`) en de SRU-/repository-fetches (`instrumentation-undici`) traced; `logger.ts`
+  injecteert dan `trace_id`/`span_id`. Custom metric: cache hit/miss (`telCacheToegang` in
+  `repository-client.ts`). `startOtel()` draait in `index.ts` vóór de HTTP-laag laadt (zodat de
+  http/fetch-modules gepatcht zijn); `stopOtel()` flusht bij shutdown. `OTEL_SERVICE_NAME` default
+  `wettenbank-mcp`. Zie de projectbrede `docs/observability.md`.
 - **CI** (`.github/workflows/docker-publish.yml`): aparte `test`-job met `npm test` + `npm audit`
   (faalt bij high/critical), Trivy image-scan (SARIF → Security-tab, faalt bij CRITICAL), en
   SBOM/provenance-attestatie bij de image. Dependabot in `.github/dependabot.yml`.

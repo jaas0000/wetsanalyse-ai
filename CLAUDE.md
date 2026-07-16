@@ -197,6 +197,16 @@ review, niet-convergerende lus — géén gewone review-feedback), dan is
 `references/harness-diagnose.md` de troubleshooting-ingang: het diagnosticeert de skill via
 vier hendels (Context, Tools, Loop, Governance) in plaats van het model te verdenken.
 
+## Observability
+
+Alle draaiende onderdelen (API, frontend, MCP, chatbot-hop) zijn **geïnstrumenteerd, niet bemeterd**:
+ze emitteren gestructureerde JSON-logs (één gedeelde vorm, bron `tools/wettenbank-mcp/src/logger.ts`)
+en kunnen OpenTelemetry (traces/metrics/logs) naar een **configureerbaar OTLP-endpoint** sturen
+(`OTEL_EXPORTER_OTLP_ENDPOINT`; leeg = alleen logs, nul overhead). Eén trace-id verbindt de keten
+frontend → API → MCP/n8n. De verzamelstack (Collector/Grafana/Loki/Tempo) zit **niet** in de repo —
+koppel je eigen. De volledige uitleg (env-vars, logschema, AVG-redactie, n8n-follow-up) staat in
+**`docs/observability.md`**.
+
 ## Skills
 
 De wetsanalyse-skill staat in `.claude/skills/wetsanalyse/`; de vervolgskill regelspraak (formaliseren

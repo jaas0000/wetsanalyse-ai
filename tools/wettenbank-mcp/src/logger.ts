@@ -15,6 +15,8 @@
  * expliciet aangezet via LOG_ZOEKTERMEN=1 (alleen voor debug).
  */
 
+import { trace } from "@opentelemetry/api";
+
 export type LogNiveau = "debug" | "info" | "warn" | "error";
 
 /** functioneel = operationeel verkeer · audit = wie deed wat · security = auth/abuse. */
@@ -50,6 +52,19 @@ function saneer(velden: LogVelden): LogVelden {
   return schoon;
 }
 
+/** `{trace_id, span_id}` van de actieve OTel-span, of leeg als er geen (geldige) span is. */
+function traceContext(): LogVelden {
+  try {
+    const span = trace.getActiveSpan();
+    if (!span) return {};
+    const ctx = span.spanContext();
+    if (!ctx || !ctx.traceId || ctx.traceId === "00000000000000000000000000000000") return {};
+    return { trace_id: ctx.traceId, span_id: ctx.spanId };
+  } catch {
+    return {};
+  }
+}
+
 /**
  * Schrijf één gestructureerde logregel naar stderr.
  * Faalt nooit hard: logging mag de request-afhandeling niet kunnen breken.
@@ -67,6 +82,7 @@ export function log(
       niveau,
       categorie,
       bericht,
+      ...traceContext(),
       ...saneer(velden),
     };
     process.stderr.write(JSON.stringify(regel) + "\n");

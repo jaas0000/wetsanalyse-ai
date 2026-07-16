@@ -17,9 +17,11 @@ ENV UV_PYTHON_PREFERENCE=only-system
 WORKDIR /app/api
 
 # Eerst alleen de dependency-manifesten → betere layer-cache. --extra llm: de engine
-# (LiteLLM + MCP-client) is in productie nodig. De lock zorgt voor reproduceerbare builds.
+# (LiteLLM + MCP-client) is in productie nodig. --extra otel: OpenTelemetry, zodat een gezette
+# OTEL_EXPORTER_OTLP_ENDPOINT werkt (gated op runtime; zonder endpoint gebeurt er niets).
+# De lock zorgt voor reproduceerbare builds.
 COPY api/pyproject.toml api/uv.lock /app/api/
-RUN uv sync --extra llm --frozen
+RUN uv sync --extra llm --extra otel --frozen
 
 # ── Runtime ───────────────────────────────────────────────────────────────────
 # Schone base, identiek aan de builder → de venv-symlinks naar /usr/local/bin/python

@@ -10,6 +10,7 @@ import { server, StdioServerTransport } from "./server.js";
 import { leesClients } from "./auth.js";
 import { oidcConfigUitEnv } from "./oidc.js";
 import { log } from "./logger.js";
+import { startOtel, stopOtel } from "./otel.js";
 import { foutDetails } from "./shared/fouten.js";
 // ── Startup ───────────────────────────────────────────────────────────────────
 // Transport-keuze: stdio (default, lokaal subproces) of http (langlevende service).
@@ -46,6 +47,9 @@ if (process.argv[1] === __filename) {
                 "of MCP_ALLOW_NO_AUTH=1 om bewust zonder auth te draaien.");
             process.exit(1);
         }
+        // Start OpenTelemetry vóór de HTTP-laag laadt, zodat de instrumentatie de http-/fetch-modules
+        // patcht voordat http-server.ts ze gebruikt. No-op zonder OTEL_EXPORTER_OTLP_ENDPOINT.
+        await startOtel();
         // Dynamische import: het stdio-pad laadt de HTTP-laag zo nooit.
         const { startHttpServer } = await import("./http-server.js");
         const httpServer = startHttpServer({
@@ -58,7 +62,9 @@ if (process.argv[1] === __filename) {
         // ruimt cleanup-timer en rate-limiter op) zodat de container schoon afsluit.
         const sluitAf = (signaal) => {
             console.error(`Ontvangen ${signaal}: HTTP-server wordt afgesloten…`);
-            httpServer.close(() => process.exit(0));
+            httpServer.close(() => {
+                void stopOtel().finally(() => process.exit(0));
+            });
             // Vangnet: forceer exit als open verbindingen het sluiten ophouden.
             setTimeout(() => process.exit(0), 10_000).unref();
         };

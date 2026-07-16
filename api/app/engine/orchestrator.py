@@ -19,8 +19,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from uuid import uuid4
 
+from .. import observability
 from ..config import Settings
 from ..contracts import (
     FoutKlasse, Job, JobFout, JobState, RondeProvenance,
@@ -40,6 +42,21 @@ from . import prompts, regelspraak_steps as rs_steps, steps
 from .retry import met_retry
 
 logger = logging.getLogger(__name__)
+
+# OpenTelemetry: tracer + metrics voor de analyse-fasen. No-op zonder de otel-extra/endpoint.
+# Op module-niveau aanmaken is veilig: OTel bindt de instrumenten lazy aan de provider die
+# observability.setup() straks zet (proxy-tracer/-meter).
+_tracer = observability.get_tracer("wetsanalyse.engine")
+_meter = observability.get_meter("wetsanalyse.engine")
+_m_fase_duur = _meter.create_histogram(
+    "wetsanalyse.fase.duur_ms", unit="ms", description="Duur van een orchestrator-fase in ms"
+)
+_m_fase_fouten = _meter.create_counter(
+    "wetsanalyse.fase.fouten", description="Aantal gefaalde orchestrator-fasen per foutklasse"
+)
+_m_tokens = _meter.create_counter(
+    "wetsanalyse.llm.tokens", description="LLM-tokenverbruik (in+out) per fase"
+)
 
 
 def _seed(req: StartRequest) -> str:
@@ -545,6 +562,7 @@ class WetsanalyseEngine:
         await self._set_fase(job, "analyse-wegschrijven")
         await self.store.schrijf_analyse(job.id, activiteit, ronde, analyse)
         job.provenance.append(RondeProvenance(**prov))
+        _m_tokens.add(prov.get("tokens_in", 0) + prov.get("tokens_out", 0), {"stap": f"act{activiteit}"})
         job.current_activiteit = activiteit
         job.current_ronde = ronde
         job.waarschuwingen = schendingen + fouten + waarschuwingen
@@ -746,6 +764,7 @@ class WetsanalyseEngine:
         await self._set_fase(job, "analyse-wegschrijven")
         await self.store.schrijf_analyse(job.id, stap, ronde, analyse)
         job.provenance.append(RondeProvenance(**prov))
+        _m_tokens.add(prov.get("tokens_in", 0) + prov.get("tokens_out", 0), {"stap": stap})
         job.current_activiteit = stap
         job.current_ronde = ronde
         job.waarschuwingen = schendingen + fouten + waarschuwingen
@@ -955,32 +974,50 @@ class WetsanalyseEngine:
         """Voer een fase uit (met lease-heartbeat) en vertaal faalklassen naar een terminale
         `fout`-state. Verliest de worker zijn lease, dan stopt de fase zonder de job te raken."""
         hb = asyncio.create_task(self._heartbeat(job.id))
-        try:
-            await coro
-        except LeaseVerloren:
-            logger.warning("Job %s: lease verloren tijdens %s — afgebroken (andere worker bezit "
-                           "de job nu).", job.id, stap)
-        except WettenbankError as e:
-            logger.warning("Job %s faalt op %s (MCP): %s", job.id, stap, e)
-            await self._fail(job, stap, FoutKlasse.mcp, str(e))
-        except LLMError as e:
-            # LLMError-meldingen zijn door onze eigen adapter geformuleerd (JSON-reparatie,
-            # PromptTooLarge) en veilig om aan de client te tonen.
-            logger.warning("Job %s faalt op %s (LLM): %s", job.id, stap, e)
-            await self._fail(job, stap, FoutKlasse.llm, str(e))
-        except Exception as e:  # noqa: BLE001
-            # Een rauwe provider-/interne fout kan endpoint-URL's, headers of (delen van) een
-            # key bevatten — die hoort in het server-log, niet in job.error richting de client
-            # (zelfde sanitisatie als de admin-verbindingstest).
-            logger.exception("Job %s faalt op %s (intern)", job.id, stap)
-            await self._fail(job, stap, FoutKlasse.intern,
-                             "Interne fout bij het uitvoeren van deze stap — zie het server-log "
-                             "voor details. Probeer opnieuw via retry.")
-        finally:
-            hb.cancel()
+        start = time.perf_counter()
+        fout_klasse: str | None = None
+        with _tracer.start_as_current_span(
+            "wetsanalyse.fase",
+            attributes={"wetsanalyse.job_id": job.id, "wetsanalyse.stap": stap},
+        ) as span:
             try:
-                await hb
-            except asyncio.CancelledError:
-                pass
-            except Exception:  # noqa: BLE001 — een gefaalde heartbeat mag de fase-afronding niet breken
-                logger.debug("Heartbeat van job %s eindigde met een fout.", job.id, exc_info=True)
+                await coro
+            except LeaseVerloren:
+                logger.warning("Job %s: lease verloren tijdens %s — afgebroken (andere worker bezit "
+                               "de job nu).", job.id, stap)
+            except WettenbankError as e:
+                fout_klasse = "mcp"
+                span.record_exception(e)
+                logger.warning("Job %s faalt op %s (MCP): %s", job.id, stap, e)
+                await self._fail(job, stap, FoutKlasse.mcp, str(e))
+            except LLMError as e:
+                # LLMError-meldingen zijn door onze eigen adapter geformuleerd (JSON-reparatie,
+                # PromptTooLarge) en veilig om aan de client te tonen.
+                fout_klasse = "llm"
+                span.record_exception(e)
+                logger.warning("Job %s faalt op %s (LLM): %s", job.id, stap, e)
+                await self._fail(job, stap, FoutKlasse.llm, str(e))
+            except Exception as e:  # noqa: BLE001
+                # Een rauwe provider-/interne fout kan endpoint-URL's, headers of (delen van) een
+                # key bevatten — die hoort in het server-log, niet in job.error richting de client
+                # (zelfde sanitisatie als de admin-verbindingstest).
+                fout_klasse = "intern"
+                span.record_exception(e)
+                logger.exception("Job %s faalt op %s (intern)", job.id, stap)
+                await self._fail(job, stap, FoutKlasse.intern,
+                                 "Interne fout bij het uitvoeren van deze stap — zie het server-log "
+                                 "voor details. Probeer opnieuw via retry.")
+            finally:
+                _m_fase_duur.record(
+                    round((time.perf_counter() - start) * 1000, 1), {"stap": stap}
+                )
+                if fout_klasse:
+                    _m_fase_fouten.add(1, {"stap": stap, "klasse": fout_klasse})
+                    span.set_attribute("wetsanalyse.fout_klasse", fout_klasse)
+                hb.cancel()
+                try:
+                    await hb
+                except asyncio.CancelledError:
+                    pass
+                except Exception:  # noqa: BLE001 — een gefaalde heartbeat mag de fase-afronding niet breken
+                    logger.debug("Heartbeat van job %s eindigde met een fout.", job.id, exc_info=True)

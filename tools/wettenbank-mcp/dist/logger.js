@@ -14,6 +14,7 @@
  * rauwe zoektermen evenmin (kunnen onthullen wat een ambtenaar onderzoekt), tenzij
  * expliciet aangezet via LOG_ZOEKTERMEN=1 (alleen voor debug).
  */
+import { trace } from "@opentelemetry/api";
 const NIVEAUS = {
     debug: 10,
     info: 20,
@@ -38,6 +39,21 @@ function saneer(velden) {
     }
     return schoon;
 }
+/** `{trace_id, span_id}` van de actieve OTel-span, of leeg als er geen (geldige) span is. */
+function traceContext() {
+    try {
+        const span = trace.getActiveSpan();
+        if (!span)
+            return {};
+        const ctx = span.spanContext();
+        if (!ctx || !ctx.traceId || ctx.traceId === "00000000000000000000000000000000")
+            return {};
+        return { trace_id: ctx.traceId, span_id: ctx.spanId };
+    }
+    catch {
+        return {};
+    }
+}
 /**
  * Schrijf één gestructureerde logregel naar stderr.
  * Faalt nooit hard: logging mag de request-afhandeling niet kunnen breken.
@@ -51,6 +67,7 @@ export function log(niveau, categorie, bericht, velden = {}) {
             niveau,
             categorie,
             bericht,
+            ...traceContext(),
             ...saneer(velden),
         };
         process.stderr.write(JSON.stringify(regel) + "\n");

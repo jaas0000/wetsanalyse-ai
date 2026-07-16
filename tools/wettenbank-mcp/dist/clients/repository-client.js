@@ -7,6 +7,7 @@ import { fetchTekstMetRetry } from "./http.js";
 import { UpstreamError } from "../shared/fouten.js";
 import { vandaag } from "../shared/utils.js";
 import { log } from "../logger.js";
+import { telCacheToegang } from "../otel.js";
 // Sleutel = toestand-URL (locatie_toestand). Verschillende peildata die naar dezelfde
 // toestand wijzen, delen zo één entry; `datumAlias` vertaalt `${bwbId}|${datum}` naar
 // die URL zodat een cache-hit géén SRU-roundtrip meer kost.
@@ -48,6 +49,7 @@ function cacheHit(url, entry, aliasKey) {
     xmlCache.delete(url);
     xmlCache.set(url, entry);
     datumAlias.set(aliasKey, url);
+    telCacheToegang(true);
     return { rawXml: entry.rawXml, doc: entry.doc, regeling: entry.regeling };
 }
 export async function haalWetstekstOp(bwbId, peildatum, signaal) {
@@ -78,6 +80,7 @@ export async function haalWetstekstOp(bwbId, peildatum, signaal) {
     if (cachedToestand && Date.now() - cachedToestand.timestamp < CACHE_TTL) {
         return cacheHit(r.repositoryUrl, cachedToestand, aliasKey);
     }
+    telCacheToegang(false);
     const resp = await fetchTekstMetRetry(r.repositoryUrl, {}, { timeoutMs: 15_000, bron: "Wetstekst-repository", signal: signaal });
     if (!resp.ok)
         throw new UpstreamError(`Wetstekst repository onbereikbaar: ${resp.status}`, {

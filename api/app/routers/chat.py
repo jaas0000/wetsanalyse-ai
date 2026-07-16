@@ -22,13 +22,14 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from .. import app_settings
+from .. import app_settings, observability
 from ..auth import require_client
 from ..deps import get_store
 from ..jobstore import JobStore
 from ..ratelimit import rate_limited_chat
 
 logger = logging.getLogger(__name__)
+_tracer = observability.get_tracer("wetsanalyse.chat")
 
 router = APIRouter(tags=["chat"])
 
@@ -76,8 +77,15 @@ async def _vraag_agent(url: str, secret: str, session_id: str, vraag: str) -> st
     # zodat een geslaagd-maar-traag antwoord niet vóórtijdig sneuvelt maar een hangende socket na
     # de SSE-deadline alsnog wordt losgelaten. De connect-timeout blijft kort tegen een onbereikbare host.
     timeout = httpx.Timeout(_MAX_WAIT_S + 30, connect=_CONNECT_S)
-    async with httpx.AsyncClient(timeout=timeout) as client:
-        resp = await client.post(url, json=payload, headers=headers)
+    # Span rond de n8n-hop (de uitgaande POST wordt via httpx-instrumentatie zelf al getraced en
+    # krijgt traceparent mee). Nooit het secret of de vraag-inhoud als attribuut — alleen metadata.
+    with _tracer.start_as_current_span(
+        "chat.n8n",
+        attributes={"chat.session_id": session_id or "web", "chat.vraag_lengte": len(vraag)},
+    ) as span:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            resp = await client.post(url, json=payload, headers=headers)
+        span.set_attribute("chat.status", resp.status_code)
     if resp.status_code >= 400:
         raise RuntimeError(f"webhook status {resp.status_code}")
     # De n8n Chat Trigger antwoordt met { output: "…" }; defensief ook text/answer/plat afvangen.
@@ -108,6 +116,9 @@ async def chat(
     if not vraag:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Lege vraag.")
 
+    _chat_log = {"categorie": "functioneel", "chat_session_id": body.sessionId, "chat_vraag_lengte": len(vraag)}
+    logger.info("Chat gestart", extra=_chat_log)
+
     async def stream():
         taak = asyncio.ensure_future(_vraag_agent(url, secret, body.sessionId, vraag))
         gewacht = 0.0
@@ -121,16 +132,18 @@ async def chat(
             gewacht += _HEARTBEAT_S
             if gewacht >= _MAX_WAIT_S:
                 taak.cancel()
+                logger.warning("Chat-timeout: assistent reageerde niet binnen %ss", _MAX_WAIT_S, extra=_chat_log)
                 yield f"event: error\ndata: {json.dumps({'detail': 'De assistent reageerde niet op tijd.'})}\n\n"
                 return
             yield ": keep-alive\n\n"  # houdt de verbinding open (geen idle-timeout)
         try:
             antwoord = taak.result()
+            logger.info("Chat klaar", extra={**_chat_log, "chat_antwoord_lengte": len(antwoord)})
             yield f"data: {json.dumps({'answer': antwoord})}\n\n"
         except asyncio.CancelledError:
             return
         except Exception as exc:  # noqa: BLE001
-            logger.warning("Chat-fout: %s", exc)
+            logger.warning("Chat-fout: %s", exc, extra=_chat_log)
             yield (
                 "event: error\ndata: "
                 + json.dumps({"detail": "De assistent is onbereikbaar of gaf een fout."})

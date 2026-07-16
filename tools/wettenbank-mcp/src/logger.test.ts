@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
+import { trace } from "@opentelemetry/api";
 import { log, veiligeToolVelden } from "./logger.js";
 
 function vangStderr(fn: () => void): string[] {
@@ -47,6 +48,31 @@ describe("logger — log", () => {
     expect(obj.token).toBeUndefined();
     expect(obj.ip).toBe("1.2.3.4");
     expect(regels[0]).not.toContain("geheim");
+  });
+
+  it("voegt geen trace-velden toe zonder actieve span", () => {
+    const obj = JSON.parse(vangStderr(() => log("info", "functioneel", "x"))[0]);
+    expect(obj.trace_id).toBeUndefined();
+    expect(obj.span_id).toBeUndefined();
+  });
+
+  it("injecteert trace_id/span_id van de actieve span", () => {
+    const spanContext = {
+      traceId: "0af7651916cd43dd8448eb211c80319c",
+      spanId: "b7ad6b7169203331",
+      traceFlags: 1,
+    };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const spy = vi
+      .spyOn(trace, "getActiveSpan")
+      .mockReturnValue({ spanContext: () => spanContext } as any);
+    try {
+      const obj = JSON.parse(vangStderr(() => log("info", "functioneel", "x"))[0]);
+      expect(obj.trace_id).toBe(spanContext.traceId);
+      expect(obj.span_id).toBe(spanContext.spanId);
+    } finally {
+      spy.mockRestore();
+    }
   });
 });
 

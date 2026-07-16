@@ -44,6 +44,13 @@ services:
       # Publieke origin voor Auth.js-redirects (achter NPM). Override via de stack-env AUTH_URL.
       AUTH_URL: "${AUTH_URL:-https://wetsanalyse.ipalm.nl}"
       NODE_ENV: production
+      # Observability (BFF). OTEL_EXPORTER_OTLP_ENDPOINT leeg = OpenTelemetry uit (alleen JSON-logs
+      # naar stdout); zet 'm op de OTel-Collector om traces/metrics te exporteren.
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      OTEL_EXPORTER_OTLP_PROTOCOL: ${OTEL_EXPORTER_OTLP_PROTOCOL:-http/protobuf}
+      OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-wetsanalyse-frontend}
+      OTEL_RESOURCE_ATTRIBUTES: ${OTEL_RESOURCE_ATTRIBUTES:-}
     volumes:
       - ${SECRETS_DIR:-/opt/secrets/wetsanalyse-api}:/run/secrets:ro
     networks:

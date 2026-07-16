@@ -16,6 +16,7 @@ import { fetchTekstMetRetry } from "./http.js";
 import { UpstreamError } from "../shared/fouten.js";
 import { vandaag } from "../shared/utils.js";
 import { log } from "../logger.js";
+import { telCacheToegang } from "../otel.js";
 import type { DomDocument, DomElement, DomNode } from "../shared/dom.js";
 
 // ── Cache ─────────────────────────────────────────────────────────────────────
@@ -83,6 +84,7 @@ function cacheHit(url: string, entry: CacheEntry, aliasKey: string): WetstekstRe
   xmlCache.delete(url);
   xmlCache.set(url, entry);
   datumAlias.set(aliasKey, url);
+  telCacheToegang(true);
   return { rawXml: entry.rawXml, doc: entry.doc, regeling: entry.regeling };
 }
 
@@ -127,6 +129,7 @@ export async function haalWetstekstOp(
     return cacheHit(r.repositoryUrl, cachedToestand, aliasKey);
   }
 
+  telCacheToegang(false);
   const resp = await fetchTekstMetRetry(
     r.repositoryUrl,
     {},

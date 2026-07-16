@@ -4,6 +4,7 @@
 
 import "server-only";
 import { apiBaseUrl, authHeader } from "./config";
+import { logger } from "./logger";
 import { pathSegment } from "./url";
 import type { Job, JobSummary, Rapport } from "./types";
 
@@ -13,6 +14,7 @@ async function serverGet<T>(path: string): Promise<T> {
     cache: "no-store",
   });
   if (!res.ok) {
+    logger.warn("Server-fetch niet-ok", { http_path: path, http_status: res.status });
     const err = new Error(`API ${res.status} op ${path}`) as Error & { status?: number };
     err.status = res.status;
     throw err;

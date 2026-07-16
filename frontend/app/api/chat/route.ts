@@ -4,6 +4,7 @@
 // De ingelogde userid gaat als vertrouwde X-User-Id mee (per-gebruiker rate-limit in de API).
 
 import { apiBaseUrl, authHeader } from "@/lib/config";
+import { logger } from "@/lib/logger";
 import { geenSessie, sessionUserId } from "../_lib/session";
 
 export const dynamic = "force-dynamic";
@@ -35,6 +36,7 @@ export async function POST(req: Request) {
       cache: "no-store",
     });
   } catch (err) {
+    logger.warn("Chat-proxy: assistent onbereikbaar", { fout: (err as Error).message });
     return new Response(
       `event: error\ndata: ${JSON.stringify({ detail: `Assistent onbereikbaar (${(err as Error).message})` })}\n\n`,
       { status: 502, headers: { "Content-Type": "text/event-stream" } },

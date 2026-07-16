@@ -51,6 +51,15 @@ services:
       # Cross-origin browser-toegang: leeg = uit (default). De BFF praat server→server en heeft
       # dit niet nodig; zet alleen als een browser-origin de API rechtstreeks moet aanroepen.
       CORS_ORIGINS: ${CORS_ORIGINS:-}
+      # Observability. LOG_FORMAT=json (default) voor SIEM/Loki; LOG_LEVEL stelt de drempel in.
+      # OTEL_EXPORTER_OTLP_ENDPOINT leeg = OpenTelemetry uit (alleen JSON-logs); zet 'm op de
+      # OTel-Collector (bv. http://otel-collector:4318) om traces/metrics/logs te exporteren.
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      LOG_FORMAT: ${LOG_FORMAT:-json}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      OTEL_EXPORTER_OTLP_PROTOCOL: ${OTEL_EXPORTER_OTLP_PROTOCOL:-http/protobuf}
+      OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-wetsanalyse-api}
+      OTEL_RESOURCE_ATTRIBUTES: ${OTEL_RESOURCE_ATTRIBUTES:-}
     volumes:
       - ${SECRETS_DIR:-/opt/secrets/wetsanalyse-api}:/run/secrets:ro
     networks:

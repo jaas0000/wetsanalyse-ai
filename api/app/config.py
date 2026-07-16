@@ -174,6 +174,15 @@ class Settings:
             os.environ.get("WETSANALYSE_ANALYSES_DIR", str(ANALYSES_DIR))
         )
 
+        # --- Observability (gestructureerde logging + OpenTelemetry) ---
+        # Niet-geheim → gewone env (geen *_FILE). `log_format=text` is prettiger lokaal; json is default.
+        # OTel is volledig no-op zolang otel_endpoint leeg is (zie app/observability.py).
+        self.log_level = os.environ.get("LOG_LEVEL", "info")
+        self.log_format = os.environ.get("LOG_FORMAT", "json")  # json | text
+        self.otel_endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT", "").strip()
+        self.otel_service_name = os.environ.get("OTEL_SERVICE_NAME", "wetsanalyse-api")
+        self.otel_metrics_enabled = os.environ.get("OTEL_METRICS_ENABLED", "1") != "0"
+
 @lru_cache
 def get_settings() -> Settings:
     return Settings()

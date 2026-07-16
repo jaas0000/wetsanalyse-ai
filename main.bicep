@@ -50,6 +50,9 @@ param frontendAdminToken string
 @secure()
 param dbAdminPassword string
 
+@description('OTel-Collector OTLP-endpoint (bijv. http://otel-collector:4318). Leeg = OpenTelemetry uit; dan alleen gestructureerde JSON-logs.')
+param otelEndpoint string = ''
+
 // ─────────────────────────────────────────────────────────────────────────────
 // 1. PostgreSQL Flexible Server
 // ─────────────────────────────────────────────────────────────────────────────
@@ -137,6 +140,8 @@ resource mcpApp 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'MCP_TRANSPORT',     value: 'http' }
             { name: 'PORT',              value: '3000' }
             { name: 'MCP_ALLOW_NO_AUTH', value: '1' }
+            { name: 'OTEL_EXPORTER_OTLP_ENDPOINT', value: otelEndpoint }
+            { name: 'OTEL_SERVICE_NAME',           value: 'wettenbank-mcp' }
           ]
           probes: [
             {
@@ -226,6 +231,8 @@ resource apiApp 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'WETSANALYSE_API_TOKENS_FILE',   value: '/run/secrets/api_tokens' }
             { name: 'WETSANALYSE_ADMIN_TOKENS_FILE', value: '/run/secrets/admin_tokens' }
             { name: 'DATABASE_URL_FILE',             value: '/run/secrets/database_url' }
+            { name: 'OTEL_EXPORTER_OTLP_ENDPOINT',   value: otelEndpoint }
+            { name: 'OTEL_SERVICE_NAME',             value: 'wetsanalyse-api' }
           ]
           probes: [
             {
@@ -318,6 +325,8 @@ resource frontendApp 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'API_TOKEN_FILE',        value: '/run/secrets/frontend_api_token' }
             { name: 'ADMIN_API_TOKEN_FILE',  value: '/run/secrets/frontend_admin_token' }
             { name: 'AUTH_SECRET_FILE',      value: '/run/secrets/frontend_auth_secret' }
+            { name: 'OTEL_EXPORTER_OTLP_ENDPOINT', value: otelEndpoint }
+            { name: 'OTEL_SERVICE_NAME',           value: 'wetsanalyse-frontend' }
           ]
           probes: [
             {

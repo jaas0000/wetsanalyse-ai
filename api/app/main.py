@@ -10,10 +10,13 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from . import __version__, db
+from . import __version__, db, observability
 from .config import get_settings
 from .deps import drain_tasks, get_engine
 from .routers import admin, auth, catalog, chat, projects
+
+# Configureer logging + OpenTelemetry vóór iets anders logt (idempotent; OTel is no-op zonder endpoint).
+observability.setup(get_settings())
 
 logger = logging.getLogger(__name__)
 
@@ -76,12 +79,16 @@ app = FastAPI(
 )
 
 settings = get_settings()
+# Request-id-correlatie + access-logging (pure ASGI, veilig voor de SSE-streams).
+app.add_middleware(observability.RequestContextMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+# Inkomende requests → spans (no-op zonder de otel-extra/endpoint).
+observability.instrument_fastapi(app)
 
 # Eén kanonieke resource onder een versie-prefix (/v1/projects). De eerdere losse
 # /analyses-router is geconsolideerd; clients migreren naar /v1/projects.

@@ -3,6 +3,7 @@
 // Retry-After / Location headers), zodat de client correcte foutafhandeling houdt.
 
 import { adminAuthHeader, apiBaseUrl, authHeader } from "@/lib/config";
+import { logger } from "@/lib/logger";
 
 const PASS_THROUGH_HEADERS = ["retry-after", "location", "content-type"];
 
@@ -31,20 +32,33 @@ export async function proxy(path: string, init: ProxyInit = {}): Promise<Respons
   }
   const upstreamUrl = `${apiBaseUrl()}${path}`;
   const authHeaders = init.admin ? adminAuthHeader() : authHeader();
+  const method = init.method ?? "GET";
+  const start = performance.now();
   let upstream: Response;
   try {
     upstream = await fetch(upstreamUrl, {
-      method: init.method ?? "GET",
+      method,
       headers: { ...authHeaders, ...(init.headers ?? {}) },
       body: init.body,
       cache: "no-store",
     });
   } catch (err) {
+    logger.error("BFF-proxy: API onbereikbaar", {
+      http_method: method,
+      http_path: path,
+      fout: (err as Error).message,
+    });
     return Response.json(
       { detail: `API onbereikbaar: ${(err as Error).message}` },
       { status: 502 },
     );
   }
+  logger.info("BFF-proxy", {
+    http_method: method,
+    http_path: path,
+    http_status: upstream.status,
+    duur_ms: Math.round(performance.now() - start),
+  });
 
   // Stream de body door en kopieer relevante headers.
   const headers = new Headers();
