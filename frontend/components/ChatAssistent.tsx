@@ -10,7 +10,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { sendChat } from "@/lib/api";
+import { getChatHealth, sendChat } from "@/lib/api";
 import { CHAT_HIST_PREFIX, CHAT_SESSIE_KEY } from "@/lib/chatOpslag";
 import { Button } from "@/components/ui/Button";
 import { Melding } from "@/components/ui/Melding";
@@ -21,16 +21,19 @@ interface Bericht {
   tekst: string;
 }
 
-// Verbindingsstatus met de assistent: reactief afgeleid uit de laatste chatpoging (geen actieve
-// health-probe). "onbekend" = nog niet getest deze sessie (bv. na herladen).
-type Verbinding = "onbekend" | "ok" | "fout";
+// Verbindingsstatus met de assistent. Afgeleid uit een actieve health-poll (is de chat-host
+// bereikbaar?) plus de uitkomst van de laatste chatpoging. Groen = gezond (de ruststand); rood =
+// host onbereikbaar; oranje = host bereikbaar maar de laatste poging haperde.
+type Verbinding = "ok" | "degraded" | "fout";
 
 function statusKleur(v: Verbinding): string {
   return v === "ok" ? "bg-succes" : v === "fout" ? "bg-fout" : "bg-waarschuwing";
 }
 function statusLabel(v: Verbinding): string {
-  return v === "ok" ? "actief" : v === "fout" ? "probleem" : "onbekend";
+  return v === "ok" ? "actief" : v === "fout" ? "probleem" : "hapering";
 }
+
+const HEALTH_POLL_MS = 60_000;
 
 const SESSIE_KEY = CHAT_SESSIE_KEY;
 const HIST_PREFIX = CHAT_HIST_PREFIX;
@@ -93,7 +96,10 @@ export function ChatAssistent({ sessionId }: { sessionId?: string }) {
   const [laatsteVraag, setLaatsteVraag] = useState<string | null>(null);
   const [gekopieerdIdx, setGekopieerdIdx] = useState<number | null>(null);
   const [berichten, setBerichten] = useState<Bericht[]>([{ rol: "assistent", tekst: WELKOM }]);
-  const [verbinding, setVerbinding] = useState<Verbinding>("onbekend");
+  // Verbindingsstatus: optimistisch gezond (groen) bij laden; de health-poll bevestigt/corrigeert.
+  const [hostGezond, setHostGezond] = useState(true);
+  const [chatFout, setChatFout] = useState(false);
+  const verbinding: Verbinding = !hostGezond ? "fout" : chatFout ? "degraded" : "ok";
 
   const sessieRef = useRef<string>("");
   const abortRef = useRef<AbortController | null>(null);
@@ -146,6 +152,28 @@ export function ChatAssistent({ sessionId }: { sessionId?: string }) {
     belRef.current?.focus(); // focus terug naar de openknop
   }, []);
 
+  // Health-poll: is de chat-host bereikbaar? Zet de baseline (groen/rood). Server-side ~20s gecachet;
+  // setState gebeurt in de promise-callback (subscribe-patroon), niet synchroon in de effect-body.
+  useEffect(() => {
+    let actief = true;
+    const toets = () => {
+      void getChatHealth().then(({ healthy }) => {
+        if (actief) setHostGezond(healthy);
+      });
+    };
+    toets();
+    const id = setInterval(toets, HEALTH_POLL_MS);
+    return () => {
+      actief = false;
+      clearInterval(id);
+    };
+  }, []);
+  // Opnieuw toetsen bij het openen van het paneel.
+  useEffect(() => {
+    if (!open) return;
+    void getChatHealth().then(({ healthy }) => setHostGezond(healthy));
+  }, [open]);
+
   async function stuurVraag(vraag: string, herhaal = false) {
     const tekst = vraag.trim();
     if (!tekst || bezig) return;
@@ -159,7 +187,9 @@ export function ChatAssistent({ sessionId }: { sessionId?: string }) {
       const antwoord = await sendChat(tekst, sessieRef.current, controller.signal);
       setBerichten((b) => [...b, { rol: "assistent", tekst: stripEmoji(antwoord) || "(geen antwoord)" }]);
       setLaatsteVraag(null);
-      setVerbinding("ok");
+      // Geslaagd → host is bereikbaar en geen hapering meer.
+      setHostGezond(true);
+      setChatFout(false);
     } catch (e) {
       if ((e as DOMException)?.name === "AbortError") {
         // Door de gebruiker afgebroken — stil, geen foutmelding; status ongewijzigd.
@@ -167,7 +197,10 @@ export function ChatAssistent({ sessionId }: { sessionId?: string }) {
         const detail =
           (e as { detail?: string })?.detail ?? "Er ging iets mis bij het ophalen van het antwoord.";
         setFout(detail);
-        setVerbinding("fout");
+        // Deze poging faalde → oranje (hapering); een health-recheck kleurt het rood als de host
+        // écht onbereikbaar is.
+        setChatFout(true);
+        void getChatHealth().then(({ healthy }) => setHostGezond(healthy));
       }
     } finally {
       setBezig(false);
@@ -225,7 +258,7 @@ export function ChatAssistent({ sessionId }: { sessionId?: string }) {
           className="fixed bottom-5 right-5 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-accent text-paper shadow-lg transition-colors hover:bg-accent-soft focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-lint"
         >
           <ChatIcoon />
-          {/* Verbindingsstatus: groen (actief) / oranje (onbekend) / rood (probleem). */}
+          {/* Verbindingsstatus: groen (actief) / oranje (hapering) / rood (probleem). */}
           <span
             aria-hidden="true"
             title={`Chatverbinding: ${statusLabel(verbinding)}`}

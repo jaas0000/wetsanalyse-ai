@@ -16,6 +16,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import time
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -43,6 +44,11 @@ class ChatConfigOut(BaseModel):
     enabled: bool = False
 
 
+class ChatHealthOut(BaseModel):
+    enabled: bool = False
+    healthy: bool = False
+
+
 class ChatIn(BaseModel):
     # Harde lengtegrens (→ 422) vóór verwerking; `_MAX_INPUT` truncatie blijft als tweede net.
     chatInput: str = Field(max_length=8000)
@@ -56,6 +62,45 @@ async def chat_config(
 ):
     """Alleen de toggle (of de chatbot aanstaat) — geen webhook/secret."""
     return ChatConfigOut(enabled=await app_settings.chat_enabled(store))
+
+
+# Lichte, kortstondig gecachete bereikbaarheidsprobe voor het statusstipje op de chatbel.
+_HEALTH_TTL_S = 20.0
+_HEALTH_CONNECT_S = 5.0
+_HEALTH_TIMEOUT_S = 8.0
+# (verval-monotonic, url, healthy) — gecachet per URL zodat een wijziging via /beheer meteen opnieuw probeert.
+_health_cache: tuple[float, str, bool] | None = None
+
+
+async def _probe_bereikbaar(url: str) -> bool:
+    """True zodra de host een HTTP-respons geeft (ook 404/405 — een GET op een POST-webhook draait de
+    n8n-workflow niet). Alleen een connect-/timeout-/netwerkfout is onbereikbaar."""
+    timeout = httpx.Timeout(_HEALTH_TIMEOUT_S, connect=_HEALTH_CONNECT_S)
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            await client.get(url)
+        return True
+    except httpx.HTTPError:
+        return False
+
+
+@router.get("/chat/health", response_model=ChatHealthOut)
+async def chat_health(
+    _client_id: str = Depends(require_client),
+    store: JobStore = Depends(get_store),
+):
+    """Of de chat-host bereikbaar is (voedt het groen/oranje/rood-stipje). Nooit hard falen; het
+    resultaat is ~20s gecachet zodat pollen n8n niet belast."""
+    global _health_cache
+    enabled, url, _secret = await app_settings.chat_config(store)
+    if not enabled or not url:
+        return ChatHealthOut(enabled=enabled, healthy=False)
+    now = time.monotonic()
+    if _health_cache is not None and _health_cache[1] == url and _health_cache[0] > now:
+        return ChatHealthOut(enabled=True, healthy=_health_cache[2])
+    healthy = await _probe_bereikbaar(url)
+    _health_cache = (now + _HEALTH_TTL_S, url, healthy)
+    return ChatHealthOut(enabled=True, healthy=healthy)
 
 
 async def _vraag_agent(url: str, secret: str, session_id: str, vraag: str) -> str:

@@ -280,6 +280,58 @@ async def test_chat_te_grote_input_422(client, monkeypatch):
     assert r.status_code == 200
 
 
+class _FakeGetClient(_FakeClient):
+    """AsyncClient-vervanger voor de health-probe: `.get` geeft een (404-)respons → bereikbaar."""
+
+    async def get(self, url):
+        return _FakeResp({}, status=404)
+
+
+def _health_reset():
+    from app.routers import chat as chat_router
+
+    chat_router._health_cache = None
+
+
+async def test_chat_health_uit_is_niet_healthy(client):
+    _health_reset()
+    r = (await client.get("/v1/chat/health")).json()
+    assert r == {"enabled": False, "healthy": False}
+
+
+async def test_chat_health_bereikbaar(client, monkeypatch):
+    from app.routers import chat as chat_router
+
+    _health_reset()
+    monkeypatch.setattr(chat_router.httpx, "AsyncClient", _FakeGetClient)
+    await client.put(
+        "/v1/admin/settings",
+        headers=_ADMIN,
+        json={"chat_enabled": True, "chat_webhook_url": "https://n8n/x/chat"},
+    )
+    r = (await client.get("/v1/chat/health")).json()
+    assert r == {"enabled": True, "healthy": True}
+
+
+async def test_chat_health_onbereikbaar(client, monkeypatch):
+    from app.routers import chat as chat_router
+
+    _health_reset()
+
+    class _Down(_FakeClient):
+        async def get(self, url):
+            raise chat_router.httpx.ConnectError("onbereikbaar")
+
+    monkeypatch.setattr(chat_router.httpx, "AsyncClient", _Down)
+    await client.put(
+        "/v1/admin/settings",
+        headers=_ADMIN,
+        json={"chat_enabled": True, "chat_webhook_url": "https://n8n/x/chat"},
+    )
+    r = (await client.get("/v1/chat/health")).json()
+    assert r == {"enabled": True, "healthy": False}
+
+
 async def test_chat_rate_limit_per_gebruiker(client, monkeypatch):
     from app import ratelimit
     from app.config import get_settings

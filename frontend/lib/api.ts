@@ -109,6 +109,18 @@ export async function sendChat(
   return antwoord;
 }
 
+/** Of de chat-host bereikbaar is (voedt het status-stipje op de chatbel). Booleans; nooit throwen —
+ *  een fout telt als "niet gezond". */
+export async function getChatHealth(): Promise<{ enabled: boolean; healthy: boolean }> {
+  try {
+    const res = await fetch("/api/chat/health", { cache: "no-store" });
+    if (!res.ok) return { enabled: false, healthy: false };
+    return (await res.json()) as { enabled: boolean; healthy: boolean };
+  } catch {
+    return { enabled: false, healthy: false };
+  }
+}
+
 function veiligJson(s: string): { answer?: string; detail?: string } | null {
   try {
     return JSON.parse(s);
