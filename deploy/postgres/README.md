@@ -17,23 +17,32 @@ vergde).
 ## Eenmalige migratie (bestaande omgeving: postgres verhuizen uit de api-stack)
 
 De data blijft in het bestaande volume; we koppelen het alleen aan de nieuwe stack. Korte downtime
-(~30–60s; de API retryt de verbinding). **Volgorde is belangrijk** — twee postgres-containers mogen
-nooit tegelijk op hetzelfde volume draaien.
+(~30–60s; de API retryt de verbinding). **Volgorde is kritisch** — twee postgres-containers mogen nooit
+tegelijk op hetzelfde volume draaien, en de nieuwe stack mag pas worden aangemaakt als de oude
+container **écht weg** is (zie de valkuil hieronder).
 
-1. **Oude postgres stoppen + verwijderen** (geeft het volume en de naam vrij; het volume zelf blijft):
-   ```bash
-   docker stop wetsanalyse-postgres && docker rm wetsanalyse-postgres
-   ```
-2. **Nieuwe postgres-stack deployen** in Portainer vanaf `deploy/postgres/docker-compose.yml`
-   (stack-env `PROXY_NETWORK=homeinfra_internal`, `SECRETS_DIR=<host-pad>`). Postgres start op
-   dezelfde data (external volume). Noteer het nieuwe **stack-id** → repo-var
-   `PORTAINER_POSTGRES_STACK_ID`.
-3. **Api-stack redeployen** met de bijgewerkte `api/docker-compose.yml` (zonder postgres-service). De
-   API reconnect vanzelf via de retry en wordt `healthy`.
+Gebruik het meegeleverde script (gehard tegen de trage-daemon-race):
 
-**Rollback** (mocht stap 2 falen): het volume is ongemoeid — zet tijdelijk de oude
-`api/docker-compose.yml` (mét postgres-service) terug en redeploy de api-stack; je draait weer op de
-originele opzet.
+```bash
+PORTAINER_URL=https://portainer.ipalm.nl PORTAINER_API_KEY=<ptr-token> \
+SECRETS_DIR=/volume1/docker/wetsanalyse-api/secrets \
+  ./migrate.sh
+```
+
+Het doet: **volume-check → oude container stop + rm (poll tot echt weg) → nieuwe stack → health**.
+Daarna: het geprinte **stack-id** als repo-var `PORTAINER_POSTGRES_STACK_ID` zetten, en de api-stack
+redeployen met de bijgewerkte `api/docker-compose.yml` (zonder postgres — gaat vanzelf bij een merge
+op master; de API reconnect via de retry).
+
+> **Valkuil (waarom het script pollt):** op een trage host (bv. Synology) kan de `docker rm` via de
+> reverse-proxy een 504 geven terwijl de daemon de container nog traag verwijdert. Maak je de nieuwe
+> stack aan vóór de verwijdering klaar is, dan faalt de create op een **naam-conflict** en ligt de DB
+> eruit. Het script wacht daarom tot de container weg is en **breekt veilig af vóór** de create als
+> dat niet lukt.
+
+**Rollback** (mocht het misgaan): het volume is ongemoeid. Start de oude container terug
+(`POST /containers/<id>/start` of via Portainer) → de API reconnect en je draait weer op de originele
+opzet.
 
 > Verse omgeving (geen bestaand volume)? Vervang in de compose de `external: true`-regels tijdelijk
 > door een gewoon named volume, of maak het volume vooraf aan. Postgres initialiseert dan een lege DB
