@@ -1,0 +1,243 @@
+# Self-contained observability-backends-stack (configs inline i.p.v. bindmounts).
+# Gedeployd via Portainer-API als standalone-string-stack. Netwerk: homeinfra_internal.
+services:
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.119.0
+    container_name: otel-collector
+    restart: unless-stopped
+    command: ["--config=/etc/otelcol-contrib/config.yaml"]
+    configs:
+      - source: otelcol_config
+        target: /etc/otelcol-contrib/config.yaml
+    expose:
+      - "4317"
+      - "4318"
+      - "8889"
+    networks:
+      - proxy
+    depends_on:
+      - tempo
+      - loki
+      - prometheus
+    mem_limit: 512m
+
+  tempo:
+    image: grafana/tempo:2.7.1
+    container_name: tempo
+    restart: unless-stopped
+    command: ["-config.file=/etc/tempo.yaml"]
+    user: "0:0"
+    configs:
+      - source: tempo_config
+        target: /etc/tempo.yaml
+    volumes:
+      - tempo_data:/var/tempo
+    networks:
+      - proxy
+    mem_limit: 512m
+
+  loki:
+    image: grafana/loki:3.4.2
+    container_name: loki
+    restart: unless-stopped
+    command: ["-config.file=/etc/loki/loki-config.yaml"]
+    user: "0:0"
+    configs:
+      - source: loki_config
+        target: /etc/loki/loki-config.yaml
+    volumes:
+      - loki_data:/loki
+    networks:
+      - proxy
+    mem_limit: 512m
+
+  prometheus:
+    image: prom/prometheus:v3.13.1
+    container_name: prometheus
+    restart: unless-stopped
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=15d"
+    configs:
+      - source: prometheus_config
+        target: /etc/prometheus/prometheus.yml
+    volumes:
+      - prometheus_data:/prometheus
+    networks:
+      - proxy
+    mem_limit: 512m
+
+  alloy:
+    image: grafana/alloy:v1.5.1
+    container_name: alloy
+    restart: unless-stopped
+    command:
+      - "run"
+      - "--server.http.listen-addr=0.0.0.0:12345"
+      - "--storage.path=/var/lib/alloy/data"
+      - "/etc/alloy/config.alloy"
+    configs:
+      - source: alloy_config
+        target: /etc/alloy/config.alloy
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - alloy_data:/var/lib/alloy/data
+    networks:
+      - proxy
+    depends_on:
+      - loki
+    mem_limit: 256m
+
+configs:
+  alloy_config:
+    content: |
+      discovery.docker "containers" {
+        host = "unix:///var/run/docker.sock"
+      }
+      discovery.relabel "wetsanalyse" {
+        targets = discovery.docker.containers.targets
+        rule {
+          source_labels = ["__meta_docker_container_name"]
+          regex         = "/(wetsanalyse-frontend|wettenbank-mcp)"
+          action        = "keep"
+        }
+        rule {
+          source_labels = ["__meta_docker_container_name"]
+          regex         = "/(.*)"
+          target_label  = "service_name"
+        }
+      }
+      loki.source.docker "wetsanalyse" {
+        host       = "unix:///var/run/docker.sock"
+        targets    = discovery.relabel.wetsanalyse.output
+        forward_to = [loki.process.parse.receiver]
+      }
+      loki.process "parse" {
+        stage.json {
+          expressions = {
+            niveau    = "niveau",
+            trace_id  = "trace_id",
+            categorie = "categorie",
+          }
+        }
+        stage.labels {
+          values = { detected_level = "niveau" }
+        }
+        stage.structured_metadata {
+          values = { trace_id = "trace_id", categorie = "categorie" }
+        }
+        forward_to = [loki.write.default.receiver]
+      }
+      loki.write "default" {
+        endpoint {
+          url = "http://loki:3100/loki/api/v1/push"
+        }
+      }
+  otelcol_config:
+    content: |
+      receivers:
+        otlp:
+          protocols:
+            grpc:
+              endpoint: 0.0.0.0:4317
+            http:
+              endpoint: 0.0.0.0:4318
+      processors:
+        batch: {}
+      exporters:
+        otlp/tempo:
+          endpoint: tempo:4317
+          tls:
+            insecure: true
+        otlphttp/loki:
+          endpoint: http://loki:3100/otlp
+        prometheus:
+          endpoint: 0.0.0.0:8889
+      service:
+        pipelines:
+          traces:
+            receivers: [otlp]
+            processors: [batch]
+            exporters: [otlp/tempo]
+          logs:
+            receivers: [otlp]
+            processors: [batch]
+            exporters: [otlphttp/loki]
+          metrics:
+            receivers: [otlp]
+            processors: [batch]
+            exporters: [prometheus]
+  tempo_config:
+    content: |
+      server:
+        http_listen_port: 3200
+      distributor:
+        receivers:
+          otlp:
+            protocols:
+              grpc:
+                endpoint: 0.0.0.0:4317
+              http:
+                endpoint: 0.0.0.0:4318
+      ingester:
+        max_block_duration: 5m
+      compactor:
+        compaction:
+          block_retention: 48h
+      storage:
+        trace:
+          backend: local
+          wal:
+            path: /var/tempo/wal
+          local:
+            path: /var/tempo/blocks
+  loki_config:
+    content: |
+      auth_enabled: false
+      server:
+        http_listen_port: 3100
+      common:
+        instance_addr: 127.0.0.1
+        path_prefix: /loki
+        storage:
+          filesystem:
+            chunks_directory: /loki/chunks
+            rules_directory: /loki/rules
+        replication_factor: 1
+        ring:
+          kvstore:
+            store: inmemory
+      schema_config:
+        configs:
+          - from: 2024-01-01
+            store: tsdb
+            object_store: filesystem
+            schema: v13
+            index:
+              prefix: index_
+              period: 24h
+      limits_config:
+        allow_structured_metadata: true
+        volume_enabled: true
+        retention_period: 168h
+  prometheus_config:
+    content: |
+      global:
+        scrape_interval: 30s
+        evaluation_interval: 30s
+      scrape_configs:
+        - job_name: otel-collector
+          static_configs:
+            - targets: ["otel-collector:8889"]
+
+volumes:
+  tempo_data:
+  loki_data:
+  prometheus_data:
+  alloy_data:
+
+networks:
+  proxy:
+    external: true
+    name: ${PROXY_NETWORK:-homeinfra_internal}

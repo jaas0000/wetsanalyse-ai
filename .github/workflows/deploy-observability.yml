@@ -1,0 +1,76 @@
+# Reproduceerbare deploy van de observability-laag: de backends-stack (OTel-Collector + Tempo + Loki +
+# Prometheus + Alloy) naar Portainer, plus Grafana-provisioning (datasources + dashboard) en alerting.
+# Handmatig (workflow_dispatch) of bij wijzigingen in deploy/observability/**. Géén image-build:
+# upstream images. Inactief tot de secrets/vars bestaan.
+
+name: deploy-observability
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [master]
+    paths:
+      - "deploy/observability/**"
+      - "!deploy/observability/**/*.md"
+      - ".github/workflows/deploy-observability.yml"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      PORTAINER_URL: ${{ secrets.PORTAINER_URL }}
+      PORTAINER_API_KEY: ${{ secrets.PORTAINER_API_KEY }}
+      PORTAINER_STACK_ID: ${{ vars.PORTAINER_OBSERVABILITY_STACK_ID }}
+      PORTAINER_ENDPOINT_ID: "1"
+      PROXY_NETWORK: "homeinfra_internal"
+      GRAFANA_URL: ${{ secrets.GRAFANA_URL }}
+      GRAFANA_TOKEN: ${{ secrets.GRAFANA_TOKEN }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Backends-stack redeployen (Portainer)
+        if: ${{ env.PORTAINER_API_KEY != '' && env.PORTAINER_STACK_ID != '' }}
+        run: |
+          set -euo pipefail
+          jq -n --rawfile compose deploy/observability/docker-compose.stack.yml \
+            --arg net "$PROXY_NETWORK" \
+            '{stackFileContent:$compose,
+              env:[{name:"PROXY_NETWORK",value:$net}],
+              pullImage:true, prune:false}' > /tmp/obs-payload.json
+          # Idempotente PUT met retry op de transiënte 5xx-recreate-race.
+          put() {
+            curl -sS -X PUT --max-time 300 \
+              "$PORTAINER_URL/api/stacks/$PORTAINER_STACK_ID?endpointId=$PORTAINER_ENDPOINT_ID" \
+              -H "X-API-Key: $PORTAINER_API_KEY" -H "Content-Type: application/json" \
+              --data-binary @/tmp/obs-payload.json -o /tmp/resp.json -w "%{http_code}"
+          }
+          for a in 1 2 3; do
+            rc=0; code=$(put) || rc=$?
+            echo "PUT poging $a: rc=$rc http=$code"
+            [ "$rc" -ne 0 ] && { echo "::warning::curl-fout — container-check is bepalend."; break; }
+            case "$code" in
+              2*) echo "geaccepteerd"; break ;;
+              4*) echo "::error::geweigerd (HTTP $code)"; cat /tmp/resp.json; exit 1 ;;
+              *)  [ "$a" -lt 3 ] && { echo "::warning::HTTP $code — backoff"; sleep $((a*30)); } || echo "::warning::HTTP $code na 3 pogingen" ;;
+            esac
+          done
+          echo "Wachten tot de 5 backends draaien…"
+          DOCKER="$PORTAINER_URL/api/endpoints/$PORTAINER_ENDPOINT_ID/docker"
+          check_py="import sys,json; want={'otel-collector','tempo','loki','prometheus','alloy'}; run={n.strip('/') for c in json.load(sys.stdin) if c.get('State')=='running' for n in c.get('Names',[])}; print('OK' if want<=run else 'WACHT')"
+          for i in $(seq 1 20); do
+            ok=$(curl -sS -H "X-API-Key: $PORTAINER_API_KEY" "$DOCKER/containers/json" | python3 -c "$check_py" || echo ERR)
+            echo "poging $i: $ok"
+            [ "$ok" = "OK" ] && exit 0
+            sleep 10
+          done
+          echo "::error::niet alle backends draaien na de redeploy."; exit 1
+
+      - name: Grafana provisionen (datasources + dashboard)
+        if: ${{ env.GRAFANA_TOKEN != '' }}
+        run: bash deploy/observability/provision-grafana.sh
+
+      - name: Alerting toepassen (contactpunt + regels)
+        if: ${{ env.GRAFANA_TOKEN != '' }}
+        run: bash deploy/observability/alerting/apply.sh

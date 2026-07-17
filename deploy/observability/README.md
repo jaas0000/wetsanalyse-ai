@@ -107,3 +107,22 @@ niet — die komt al via OTLP, dus geen dubbeling), zet `service_name` op de con
   `notification_settings` rechtstreeks naar het contactpunt (raakt je globale notificatie-policies niet).
 - `apply.sh` — idempotent toepassen:
   `GRAFANA_URL=https://grafana.ipalm.nl GRAFANA_TOKEN=<sa-token> ./apply.sh`.
+
+## 8. Reproduceerbare deploy (CI, één dispatch)
+
+De hele observability-laag staat in één keer neer via **`.github/workflows/deploy-observability.yml`**
+(`workflow_dispatch`, of automatisch bij een push op `deploy/observability/**`):
+
+1. **Backends-stack** → Portainer (`docker-compose.stack.yml`, de self-contained variant met inline
+   `configs:` — géén host-bestanden nodig). Idempotente PUT + wachten tot de 5 containers draaien.
+2. **Grafana provisionen** → `provision-grafana.sh` (idempotent: de 3 datasources + de map + het
+   dashboard `grafana-dashboard-wetsanalyse.json`).
+3. **Alerting** → `alerting/apply.sh` (contactpunt + 4 regels).
+
+Benodigde secrets/vars: `PORTAINER_URL`/`PORTAINER_API_KEY`/`vars.PORTAINER_OBSERVABILITY_STACK_ID`,
+`GRAFANA_URL`/`GRAFANA_TOKEN`. Losse componenten draai je ook handmatig
+(`provision-grafana.sh`, `alerting/apply.sh`).
+
+> `docker-compose.stack.yml` is de **gedeployde** variant (inline configs, incl. Alloy); de
+> `docker-compose.yml` hiernaast is de bindmount-variant voor lokaal/handmatig. Houd ze equivalent.
+> De n8n-alert-webhook (ontvanger) leeft in n8n, buiten deze repo.
