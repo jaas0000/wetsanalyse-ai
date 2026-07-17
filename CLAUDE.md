@@ -76,14 +76,19 @@ zijn **projectrelatieve paden**, zodat de map portabel is tussen machines/OS'en:
   `args: ["tools/wettenbank-mcp/dist/index.js"]`) staat daar ook beschreven als fallback.
   Wil iemand buiten dit project alleen het publieke image `ghcr.io/palmw01/wettenbank-mcp`
   draaien, dan is `tools/wettenbank-mcp/HANDLEIDING-IMAGE.md` de beknopte instap.
+  `.mcp.json` bevat daarnaast twee **sessie-tools**: `wetsanalyse-admin` (stdio-server die de
+  admin-API `/v1/admin/*` als tools ontsluit; token via `WETSANALYSE_ADMIN_TOKEN` — zie
+  `tools/wetsanalyse-admin-mcp/README.md`) en `grafana` (de officiële `mcp/grafana`-server voor het
+  inrichten van datasources/dashboards; `GRAFANA_URL` + `GRAFANA_SERVICE_ACCOUNT_TOKEN=${GRAFANA_TOKEN}`).
 - `.claude/settings.json` → **gedeeld en gecommit**: bevat een `PreToolUse`-hook die
   `scripts/write_guard.py` aanroept bij elke Write/Edit-tool. De guard beschermt beide sporen:
   hij blokkeert schrijven naar `analyses/**/werk/**/feedback.json` (uitsluitend de review-server
   schrijft dat) en het overschrijven van een `analyse.json`/`model.json` in `werk/` zodra de
   ronde **voltooid** is — d.w.z. zodra `feedback.json` in de ronde-map bestaat (gereviewde
   rondes — wetsanalyse én regelspraak — zijn immutabel; correcties vóór de review mogen wél).
-- `.claude/settings.local.json` → `enabledMcpjsonServers: ["wettenbank"]` plus een **machine-lokale**
-  allowlist. Dit bestand is **gitignored** (`.gitignore`), dus het reist niet mee en is per definitie
+- `.claude/settings.local.json` → `enabledMcpjsonServers` (bv. `["wettenbank", "grafana"]`) plus een
+  **machine-lokale** allowlist en de tokens (`WETTENBANK_TOKEN`, `WETSANALYSE_ADMIN_TOKEN`,
+  `GRAFANA_TOKEN`). Dit bestand is **gitignored** (`.gitignore`), dus het reist niet mee en is per definitie
   niet gedeeld: een andere machine/analist bouwt z'n eigen lijst gewoon opnieuw op via de
   permissieprompts. De allowlist is bewust krap en portabel gehouden — de grants voor
   `review_server.py` en `rapport_server.py` gebruiken wildcards i.p.v. absolute paden — zodat
@@ -203,9 +208,12 @@ Alle draaiende onderdelen (API, frontend, MCP, chatbot-hop) zijn **geïnstrument
 ze emitteren gestructureerde JSON-logs (één gedeelde vorm, bron `tools/wettenbank-mcp/src/logger.ts`)
 en kunnen OpenTelemetry (traces/metrics/logs) naar een **configureerbaar OTLP-endpoint** sturen
 (`OTEL_EXPORTER_OTLP_ENDPOINT`; leeg = alleen logs, nul overhead). Eén trace-id verbindt de keten
-frontend → API → MCP/n8n. De verzamelstack (Collector/Grafana/Loki/Tempo) zit **niet** in de repo —
-koppel je eigen. De volledige uitleg (env-vars, logschema, AVG-redactie, n8n-follow-up) staat in
-**`docs/observability.md`**.
+frontend → API → MCP/n8n. Een **optionele verzamelstack staat in `deploy/observability/`**:
+OTel-Collector + Tempo + Loki + Prometheus, plus **Alloy** dat de stdout-logs van frontend en MCP
+naar Loki shipt, een kant-en-klaar **Grafana-dashboard** (`grafana-dashboard-wetsanalyse.json`) en
+**alerting** (`alerting/` → n8n-webhook). Je koppelt 'm aan je bestaande Grafana; laat het endpoint
+leeg om alles ongewijzigd met alléén JSON-logs te draaien. De volledige uitleg (env-vars, logschema,
+AVG-redactie, dashboard/alerting) staat in **`docs/observability.md`**.
 
 ## Skills
 

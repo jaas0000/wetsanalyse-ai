@@ -61,29 +61,35 @@ Zonder beide weigert de server te starten (fail-closed).
 
 ## Grafana-MCP (aparte, officiële server)
 
-Voor het inrichten van Grafana (datasources/dashboards) gebruik je de **officiële**
-`mcp/grafana`-server — geen eigen build. Bewust **niet** in `.mcp.json` gezet, omdat een
-`docker run mcp/grafana` bij elke sessiestart zwaar is (image-pull) en jouw Grafana-token vereist.
-Voeg 'm toe wanneer je 'm nodig hebt:
+Voor het inrichten van Grafana (datasources/dashboards/alerting) gebruik je de **officiële**
+`mcp/grafana`-server — geen eigen build. Die staat **al in `.mcp.json`** (server `grafana`, via
+`docker run --rm -i mcp/grafana -t stdio`); hij wordt alleen actief zodra het token gezet is. Twee
+stappen:
 
 1. **Grafana service-account + token**: in Grafana → *Administration → Users and access → Service
    accounts* → nieuw account (rol *Editor* of *Admin*) → *Add service account token*. Kopieer het.
-2. Zet in `.claude/settings.local.json` → `env`: `"GRAFANA_API_KEY": "…"` (en evt.
-   `"GRAFANA_URL": "https://grafana.ipalm.nl"`).
-3. Voeg aan `.mcp.json` → `mcpServers` toe:
+2. Zet in `.claude/settings.local.json` → `env` het token als **`GRAFANA_TOKEN`** (dat vult
+   `GRAFANA_SERVICE_ACCOUNT_TOKEN` in `.mcp.json`), plus `grafana` in `enabledMcpjsonServers`:
+
+   ```json
+   "env": { "GRAFANA_TOKEN": "glsa_…" },
+   "enabledMcpjsonServers": ["wettenbank", "grafana"]
+   ```
+
+   Het `.mcp.json`-blok zelf staat vast:
 
    ```json
    "grafana": {
      "command": "docker",
-     "args": ["run", "--rm", "-i",
-              "-e", "GRAFANA_URL", "-e", "GRAFANA_API_KEY",
+     "args": ["run", "--rm", "-i", "-e", "GRAFANA_URL", "-e", "GRAFANA_SERVICE_ACCOUNT_TOKEN",
               "mcp/grafana", "-t", "stdio"],
      "env": {
        "GRAFANA_URL": "https://grafana.ipalm.nl",
-       "GRAFANA_API_KEY": "${GRAFANA_API_KEY}"
+       "GRAFANA_SERVICE_ACCOUNT_TOKEN": "${GRAFANA_TOKEN}"
      }
    }
    ```
 
-4. `claude mcp list` → `grafana` verbonden. Daarna kan Claude de datasources (Tempo/Loki/Prometheus
-   uit `deploy/observability/`) toevoegen en dashboards inrichten.
+3. `claude mcp list` → `grafana` verbonden. De observability-stack is al gebouwd in
+   `deploy/observability/` (Collector + Tempo/Loki/Prometheus + Alloy, dashboard, alerting); via de
+   MCP beheer je de datasources, het dashboard en de alertregels. Zie `docs/observability.md`.

@@ -139,6 +139,14 @@ AUTH_SECRET=<openssl rand -base64 32>   # ondertekent de login-sessiecookie (Aut
 De **kennisgraaf-chatbot** (zwevende chatbel) heeft geen env-var: webhook-URL, secret en de
 aan/uit-schakelaar staan in de API-settings en worden via het `/beheer`-scherm beheerd.
 
+## Observability
+
+De BFF is geïnstrumenteerd via `@vercel/otel` (`instrumentation.ts`): auto-tracing van route handlers
++ uitgaande `fetch` met traceparent-propagatie, gated op `OTEL_EXPORTER_OTLP_ENDPOINT` (leeg = uit).
+`lib/logger.ts` is de server-only gestructureerde JSON-logger. Zie `CLAUDE.md` §Observability en de
+projectbrede [`../docs/observability.md`](../docs/observability.md) (incl. de optionele Grafana-stack
+in `deploy/observability/`, die frontend-stdout-logs via Alloy naar Loki shipt).
+
 ## Docker / deployment
 
 Multi-stage `Dockerfile` (standalone, non-root) + `docker-compose.yml` voor de Portainer-stack

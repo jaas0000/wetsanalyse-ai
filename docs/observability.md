@@ -1,10 +1,11 @@
 # Observability — logging, traces & metrics
 
 Dit project is **geïnstrumenteerd, niet bemeterd**: elke component emitteert gestructureerde logs én
-kan OpenTelemetry (traces/metrics/logs) naar een **configureerbaar OTLP-endpoint** sturen. De
-verzamelstack zelf (OTel-Collector, Grafana, Loki, Tempo, Prometheus) zit **niet** in deze repo — je
-koppelt je eigen stack via één env-var. Zonder endpoint draait alles ongewijzigd met alléén
-gestructureerde JSON-logging (nul overhead, geen gedragsverandering).
+kan OpenTelemetry (traces/metrics/logs) naar een **configureerbaar OTLP-endpoint** sturen. Een
+**optionele verzamelstack** (OTel-Collector + Tempo + Loki + Prometheus, plus Alloy voor de
+stdout-logs, mét dashboard en alerting) staat kant-en-klaar in **`deploy/observability/`** — géén eigen
+Grafana; die koppel je aan je bestaande. Je zet 'm aan via één env-var. Zonder endpoint draait alles
+ongewijzigd met alléén gestructureerde JSON-logging (nul overhead, geen gedragsverandering).
 
 ## Wat is geïnstrumenteerd
 
@@ -80,17 +81,26 @@ Traces → Tempo, logs → Loki, metrics → Prometheus/Mimir landen dan in je G
 ### b) Self-hosted (homelab/Portainer) — koppelen aan een bestaande Grafana
 
 Er staat een **kant-en-klare optionele backends-stack** in
-[`../deploy/observability/`](../deploy/observability/): een **OTel-Collector + Tempo + Loki +
+[`../deploy/observability/`](../deploy/observability/): **OTel-Collector + Tempo + Loki +
 Prometheus** (géén eigen Grafana — die koppel je aan je bestaande) op het gedeelde
 `homeinfra_internal`-netwerk. De collector ontvangt OTLP op 4317/4318 (intern) en routeert traces →
 Tempo, logs → Loki, metrics → Prometheus. Wijs daarna elke app-stack naar
 `http://otel-collector:4318` en voeg Tempo/Loki/Prometheus als datasources toe aan je bestaande
 Grafana. Volledige stappen: [`deploy/observability/README.md`](../deploy/observability/README.md).
 
-De gestructureerde stdout/stderr-JSON-logs kunnen óók zonder OTel door Alloy/Promtail naar Loki
-worden gescrapet — de twee sporen zijn complementair. Wie liever een all-in-één demo-image draait
-(inclusief Grafana) kan `grafana/otel-lgtm` gebruiken; deze repo mikt op koppeling aan een
-bestaande Grafana.
+De stack bevat bovendien:
+
+- **Alloy** — scrapet de container-stdout van **frontend + MCP** (die niet via OTLP loggen) en pusht
+  die naar Loki (`service_name` = containernaam, `niveau` → label `detected_level`, `trace_id`/
+  `categorie` als structured metadata). De API blijft via OTLP loggen, dus geen dubbeling.
+  Read-only `docker.sock`-mount. Config: `alloy-config.alloy`.
+- **Dashboard** — `grafana-dashboard-wetsanalyse.json` (engine-fase-duur/-fouten, LLM-tokens,
+  MCP-cache, HTTP-verkeer, logs, traces). Importeren via de UI of `POST /api/dashboards/db`.
+- **Alerting** — `alerting/` (contactpunt + regels: fase-fouten, HTTP 5xx, latency p95, backend down;
+  routeren naar een webhook, bv. n8n) met een idempotent `apply.sh`.
+
+Wie liever een all-in-één demo-image draait (inclusief Grafana) kan `grafana/otel-lgtm` gebruiken;
+deze repo mikt op koppeling aan een bestaande Grafana.
 
 Lokaal snel proberen: draai een collector met een debug-exporter (bijv. `otel-tui` of `otelcol` met
 de `debug`-exporter) op `localhost:4318` en zet het endpoint op alle vier de componenten.
@@ -110,3 +120,16 @@ eerlijker en eenduidiger.
 - **Trace-correlatie**: maak een analyse aan via de frontend → één trace omspant frontend → API →
   MCP; job-spans per orchestrator-stap. De chatbel → frontend → API → n8n-POST.
 - **Geen lek**: `grep` de logoutput op `bearer`/`secret`/de chat-`secret`-waarde → leeg.
+
+### Metric- en labelnamen (zoals ze in Prometheus/Loki landen)
+
+De OTLP→Prometheus-export voegt unit-/type-suffixen toe; onthoud dit bij het bouwen van queries:
+
+- `wetsanalyse_fase_duur_ms_milliseconds_{bucket,count,sum}` — histogram, label **`stap`**.
+- `wetsanalyse_llm_tokens_total`, `wetsanalyse_fase_fouten_total` (labels `stap`, `klasse`) — counters.
+- `wettenbank_cache_toegang_total` — counter, label **`resultaat`** (`hit`/`miss`).
+- Auto-HTTP: `http_server_duration_milliseconds_*` (labels `http_method`/`http_status_code`/`http_target`).
+- Services onderscheiden via het label **`exported_job`** (`wetsanalyse-api`/`wettenbank-mcp`/…).
+- **Loki**: de OTLP-logs dragen de velden als **structured metadata** (`detected_level`, `trace_id`,
+  `categorie`), niet als JSON in de regel — filter dus op die labels, niet met `| json`. De
+  Loki-datasource heeft een derived field `trace_id` → Tempo voor de doorklik.
