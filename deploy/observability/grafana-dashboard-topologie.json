@@ -49,13 +49,13 @@
         "type": "prometheus",
         "uid": "wa-prometheus"
       },
-      "description": "Live systeemtopologie van de keten. Elk blok licht op zodra er verkeer doorheen loopt (grijs = stil, blauw = actief); het getal is de doorvoer per seconde. Frontend/Postgres/n8n/overheid.nl komen uit de afgeleide span-/servicegraph-metrics — pas de queries desgewenst aan zodra live data de labelwaarden bevestigt.",
+      "description": "Live systeemtopologie van de keten. Een blok gloeit blauw op zodra er in de laatste 15 min verkeer doorheen liep (grijs = stil); het getal is het volume in dat venster. Zo blijft een bursty analyse ook ná de LLM-burst zichtbaar. Frontend/Postgres/n8n/overheid.nl komen uit de afgeleide span-/servicegraph-metrics.",
       "fieldConfig": {
         "defaults": {
           "color": {
             "mode": "thresholds"
           },
-          "decimals": 2,
+          "decimals": 0,
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -812,7 +812,7 @@
             "uid": "wa-prometheus"
           },
           "editorMode": "code",
-          "expr": "sum(rate(traces_service_graph_request_total{client=\"wetsanalyse-frontend\"}[$__rate_interval])) or vector(0)",
+          "expr": "sum(increase(traces_service_graph_request_total{client=\"wetsanalyse-frontend\"}[15m])) or vector(0)",
           "instant": true,
           "legendFormat": "Frontend",
           "range": false,
@@ -824,7 +824,7 @@
             "uid": "wa-prometheus"
           },
           "editorMode": "code",
-          "expr": "sum(rate(http_server_duration_milliseconds_count{exported_job=\"wetsanalyse-api\"}[$__rate_interval])) or vector(0)",
+          "expr": "sum(increase(http_server_duration_milliseconds_count{exported_job=\"wetsanalyse-api\"}[15m])) or vector(0)",
           "instant": true,
           "legendFormat": "API",
           "range": false,
@@ -836,7 +836,7 @@
             "uid": "wa-prometheus"
           },
           "editorMode": "code",
-          "expr": "sum(rate(http_server_duration_milliseconds_count{exported_job=\"wettenbank-mcp\"}[$__rate_interval])) or vector(0)",
+          "expr": "sum(increase(http_server_duration_milliseconds_count{exported_job=\"wettenbank-mcp\"}[15m])) or vector(0)",
           "instant": true,
           "legendFormat": "MCP",
           "range": false,
@@ -848,7 +848,7 @@
             "uid": "wa-prometheus"
           },
           "editorMode": "code",
-          "expr": "sum(rate(traces_service_graph_request_total{client=\"wettenbank-mcp\"}[$__rate_interval])) or vector(0)",
+          "expr": "sum(increase(traces_service_graph_request_total{client=\"wettenbank-mcp\"}[15m])) or vector(0)",
           "instant": true,
           "legendFormat": "overheid.nl",
           "range": false,
@@ -860,7 +860,7 @@
             "uid": "wa-prometheus"
           },
           "editorMode": "code",
-          "expr": "sum(rate(wetsanalyse_llm_tokens_total[$__rate_interval])) or vector(0)",
+          "expr": "sum(increase(wetsanalyse_llm_tokens_total[15m])) or vector(0)",
           "instant": true,
           "legendFormat": "LLM",
           "range": false,
@@ -872,7 +872,7 @@
             "uid": "wa-prometheus"
           },
           "editorMode": "code",
-          "expr": "sum(rate(traces_service_graph_request_total{client=\"wetsanalyse-api\", connection_type=\"database\"}[$__rate_interval])) or vector(0)",
+          "expr": "sum(increase(traces_service_graph_request_total{client=\"wetsanalyse-api\", connection_type=\"database\"}[15m])) or vector(0)",
           "instant": true,
           "legendFormat": "Postgres",
           "range": false,
@@ -884,7 +884,7 @@
             "uid": "wa-prometheus"
           },
           "editorMode": "code",
-          "expr": "sum(rate(traces_spanmetrics_calls_total{span_name=\"chat.n8n\"}[$__rate_interval])) or vector(0)",
+          "expr": "sum(increase(traces_spanmetrics_calls_total{span_name=\"chat.n8n\"}[15m])) or vector(0)",
           "instant": true,
           "legendFormat": "n8n",
           "range": false,
@@ -896,7 +896,7 @@
             "uid": "wa-prometheus"
           },
           "editorMode": "code",
-          "expr": "sum(rate(traces_spanmetrics_calls_total{span_name=\"chat.n8n\"}[$__rate_interval])) or vector(0)",
+          "expr": "sum(increase(traces_spanmetrics_calls_total{span_name=\"chat.n8n\"}[15m])) or vector(0)",
           "instant": true,
           "legendFormat": "GraphDB",
           "range": false,
