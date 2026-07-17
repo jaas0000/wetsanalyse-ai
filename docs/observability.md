@@ -60,6 +60,15 @@ De env-vars staan al in de drie `docker-compose.yml`'s, de `.env.example`'s en (
 `main.bicep` (param `otelEndpoint`). In de **API-image** is de `otel`-extra meegebouwd
 (`uv sync --extra otel`); lokaal draai je met `uv sync --extra otel`.
 
+> **Let op bij Portainer + CI-deploy:** een stack-update via de Portainer-API **vervangt** de
+> volledige stack-env door wat de deploy-payload meestuurt — een handmatig in Portainer gezette
+> `OTEL_EXPORTER_OTLP_ENDPOINT` overleeft de eerstvolgende redeploy dus niet. Daarom geven de drie
+> publish-workflows (`api`/`frontend`/`docker`-`-publish.yml`) het endpoint expliciet mee in de
+> `jq`-payload, default `http://otel-collector:4318` (override via repo-var
+> `vars.OTEL_EXPORTER_OTLP_ENDPOINT`). Laat die regel staan — zonder het endpoint valt de
+> compose-default terug op leeg en zet een deploy de hele observability stil (alleen de
+> Alloy→Loki-stdout-logs blijven dan nog lopen).
+
 ## Grafana koppelen
 
 Er is **geen app-wijziging** nodig — de instrumentatie stuurt standaard-OTLP; Grafana koppelen is

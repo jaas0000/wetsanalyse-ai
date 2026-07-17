@@ -143,6 +143,10 @@ jobs:
           # toevallig is" — deterministisch, en het deploy-script kan zo verifiëren dat de NIEUWE
           # image daadwerkelijk draait i.p.v. een oude container die de health-check false-passt.
           IMAGE_DIGEST_REF: ${{ env.IMAGE }}@${{ steps.build.outputs.digest }}
+          # OTel-export moet in de stack-env blijven staan — de compose-default is leeg (= uit),
+          # dus zónder deze regel zet een redeploy de observability stil. Overschrijf via repo-var
+          # vars.OTEL_EXPORTER_OTLP_ENDPOINT; default = de OTel-Collector op homeinfra_internal.
+          OTEL_EXPORTER_OTLP_ENDPOINT: ${{ vars.OTEL_EXPORTER_OTLP_ENDPOINT || 'http://otel-collector:4318' }}
         run: |
           set -euo pipefail
           # Secrets (LLM_API_KEY, tokens) leven on-host als bestanden; CI stuurt ze niet mee.
@@ -158,6 +162,7 @@ jobs:
             --arg model "$LLM_MODEL" \
             --arg base "${LLM_API_BASE:-}" \
             --arg ver "${LLM_API_VERSION:-}" \
+            --arg otel "$OTEL_EXPORTER_OTLP_ENDPOINT" \
             --arg secrets_dir "${SECRETS_DIR:-/volume1/docker/secrets/wetsanalyse-api}" \
             '{stackFileContent:$compose,
               env:[{name:"PROXY_NETWORK",value:$net},
@@ -166,6 +171,7 @@ jobs:
                    {name:"LLM_MODEL",value:$model},
                    {name:"LLM_API_BASE",value:$base},
                    {name:"LLM_API_VERSION",value:$ver},
+                   {name:"OTEL_EXPORTER_OTLP_ENDPOINT",value:$otel},
                    {name:"SECRETS_DIR",value:$secrets_dir}],
               pullImage:true, prune:false}' > /tmp/payload.json
           # PUT (idempotente retry) + convergentie: orphan-'Created'-containers opruimen en bevestigen

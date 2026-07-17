@@ -132,16 +132,22 @@ jobs:
         env:
           HEALTH_URL: https://wetsanalyse.ipalm.nl/api/health
           IMAGE_DIGEST_REF: ${{ env.IMAGE }}@${{ steps.build.outputs.digest }}
+          # OTel-export moet in de stack-env blijven staan — de compose-default is leeg (= uit),
+          # dus zónder deze regel zet een redeploy de observability stil. Overschrijf via repo-var
+          # vars.OTEL_EXPORTER_OTLP_ENDPOINT; default = de OTel-Collector op homeinfra_internal.
+          OTEL_EXPORTER_OTLP_ENDPOINT: ${{ vars.OTEL_EXPORTER_OTLP_ENDPOINT || 'http://otel-collector:4318' }}
         run: |
           set -euo pipefail
           jq -n \
             --rawfile compose frontend/docker-compose.yml \
             --arg net "$PROXY_NETWORK" \
             --arg img "$IMAGE_DIGEST_REF" \
+            --arg otel "$OTEL_EXPORTER_OTLP_ENDPOINT" \
             --arg secrets_dir "${SECRETS_DIR:-/volume1/docker/secrets/wetsanalyse-api}" \
             '{stackFileContent:$compose,
               env:[{name:"PROXY_NETWORK",value:$net},
                    {name:"WETSANALYSE_FRONTEND_IMAGE",value:$img},
+                   {name:"OTEL_EXPORTER_OTLP_ENDPOINT",value:$otel},
                    {name:"SECRETS_DIR",value:$secrets_dir}],
               pullImage:true, prune:false}' > /tmp/payload.json
           # PUT (idempotente retry) + convergentie: orphan-'Created'-containers opruimen en bevestigen

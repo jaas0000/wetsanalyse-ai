@@ -158,6 +158,10 @@ jobs:
           # "wat :latest op dat moment toevallig is". Een gecompromitteerd registry-token
           # kan zo niet ongemerkt een andere image laten draaien.
           IMAGE_DIGEST_REF: ${{ env.IMAGE }}@${{ steps.build.outputs.digest }}
+          # OTel-export moet in de stack-env blijven staan — de compose-default is leeg (= uit),
+          # dus zónder deze regel zet een redeploy de observability stil. Overschrijf via repo-var
+          # vars.OTEL_EXPORTER_OTLP_ENDPOINT; default = de OTel-Collector op homeinfra_internal.
+          OTEL_EXPORTER_OTLP_ENDPOINT: ${{ vars.OTEL_EXPORTER_OTLP_ENDPOINT || 'http://otel-collector:4318' }}
         run: |
           set -euo pipefail
           # Fail-fast: deploy geen stack zonder token. Een lege MCP_AUTH_TOKENS zou de
@@ -171,9 +175,11 @@ jobs:
             --arg tok "$MCP_AUTH_TOKENS" \
             --arg net "$PROXY_NETWORK" \
             --arg img "$IMAGE_DIGEST_REF" \
+            --arg otel "$OTEL_EXPORTER_OTLP_ENDPOINT" \
             '{stackFileContent:$compose,
               env:[{name:"MCP_AUTH_TOKENS",value:$tok},{name:"PROXY_NETWORK",value:$net},
-                   {name:"WETTENBANK_IMAGE",value:$img}],
+                   {name:"WETTENBANK_IMAGE",value:$img},
+                   {name:"OTEL_EXPORTER_OTLP_ENDPOINT",value:$otel}],
               pullImage:true, prune:false}' > /tmp/payload.json
           # PUT (idempotente retry) + convergentie: orphan-'Created'-containers opruimen en bevestigen
           # dat er precies één verse, gezonde container op de nieuwe digest draait. Zie het script.
