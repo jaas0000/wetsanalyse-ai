@@ -9,17 +9,38 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 : "${GRAFANA_URL:?zet GRAFANA_URL}"; : "${GRAFANA_TOKEN:?zet GRAFANA_TOKEN}"
 AUTH=(-H "Authorization: Bearer ${GRAFANA_TOKEN}" -H "Content-Type: application/json")
 
-# upsert_datasource <uid> <json>  — POST (nieuw) of PUT (bestaat al) op basis van de uid.
+# _http <outfile> <curl-args...>  — curl zonder -f (zodat 4xx/5xx niet via set -e killen);
+# echo't de HTTP-code, schrijft de body naar <outfile>.
+_http() {
+  local out="$1"; shift
+  curl -sS -o "$out" -w "%{http_code}" "$@"
+}
+
+# upsert_datasource <uid> <json>  — idempotent en robuust tegen een nog-opwarmende Grafana:
+# een GET bepaalt PUT (bestaat) vs POST (nieuw), maar tolereert transiënte 5xx/000 met backoff
+# (anders misroutet één 500 naar POST → 409). Een 409 op POST (race/bestond toch al) valt terug op PUT.
 upsert_datasource() {
-  local uid="$1" body="$2" code
-  code=$(curl -fsS "${AUTH[@]:0:2}" -o /tmp/ds.json -w "%{http_code}" "${GRAFANA_URL}/api/datasources/uid/${uid}" || true)
+  local uid="$1" body="$2" code i
+  code=""
+  for i in 1 2 3 4 5; do
+    code=$(_http /tmp/ds.json "${AUTH[@]:0:2}" -X GET "${GRAFANA_URL}/api/datasources/uid/${uid}")
+    case "$code" in
+      200|404) break ;;
+      *) echo "  datasource ${uid}: GET http=$code — transiënt, retry ($i)"; sleep $((i*3)) ;;
+    esac
+  done
   if [ "$code" = "200" ]; then
-    curl -fsS -X PUT "${AUTH[@]}" -d "$body" "${GRAFANA_URL}/api/datasources/uid/${uid}" >/dev/null
-    echo "  datasource ${uid}: bijgewerkt"
-  else
-    curl -fsS -X POST "${AUTH[@]}" -d "$body" "${GRAFANA_URL}/api/datasources" >/dev/null
-    echo "  datasource ${uid}: aangemaakt"
+    code=$(_http /tmp/ds.json "${AUTH[@]}" -X PUT -d "$body" "${GRAFANA_URL}/api/datasources/uid/${uid}")
+    [ "${code:0:1}" = "2" ] && { echo "  datasource ${uid}: bijgewerkt"; return 0; }
+    echo "::error::datasource ${uid}: PUT http=$code"; cat /tmp/ds.json; return 1
   fi
+  code=$(_http /tmp/ds.json "${AUTH[@]}" -X POST -d "$body" "${GRAFANA_URL}/api/datasources")
+  [ "${code:0:1}" = "2" ] && { echo "  datasource ${uid}: aangemaakt"; return 0; }
+  if [ "$code" = "409" ]; then
+    code=$(_http /tmp/ds.json "${AUTH[@]}" -X PUT -d "$body" "${GRAFANA_URL}/api/datasources/uid/${uid}")
+    [ "${code:0:1}" = "2" ] && { echo "  datasource ${uid}: bijgewerkt (na 409)"; return 0; }
+  fi
+  echo "::error::datasource ${uid}: POST http=$code"; cat /tmp/ds.json; return 1
 }
 
 echo "== datasources =="

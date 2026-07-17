@@ -75,16 +75,19 @@ jobs:
         run: |
           set -euo pipefail
           # Na de stack-redeploy kan Grafana nog opstarten/DB-migreren en 5xx geven op de API.
-          # Poll /api/health tot 'database":"ok' voordat we provisionen (voorkomt de transiënte-500-race).
+          # Poll tot /api/health 'database":"ok' ÉN /api/datasources 200 geeft — die tweede is bepalend,
+          # want de datasources-API kan nog 500'en terwijl health al ok is (voorkomt de transiënte-500/409-race).
           for i in $(seq 1 20); do
-            code=$(curl -sS -o /tmp/gh.json -w "%{http_code}" \
+            h=$(curl -sS -o /tmp/gh.json -w "%{http_code}" \
               -H "Authorization: Bearer $GRAFANA_TOKEN" "$GRAFANA_URL/api/health" || echo 000)
-            if [ "$code" = "200" ] && grep -q '"database": *"ok"' /tmp/gh.json; then
-              echo "poging $i: Grafana gezond"; exit 0
+            ds=$(curl -sS -o /dev/null -w "%{http_code}" \
+              -H "Authorization: Bearer $GRAFANA_TOKEN" "$GRAFANA_URL/api/datasources" || echo 000)
+            if [ "$h" = "200" ] && grep -q '"database": *"ok"' /tmp/gh.json && [ "$ds" = "200" ]; then
+              echo "poging $i: Grafana gezond (health=200, datasources=200)"; exit 0
             fi
-            echo "poging $i: http=$code — nog niet gezond, backoff"; sleep 10
+            echo "poging $i: health=$h datasources=$ds — nog niet gereed, backoff"; sleep 10
           done
-          echo "::error::Grafana werd niet gezond na de redeploy."; cat /tmp/gh.json || true; exit 1
+          echo "::error::Grafana werd niet gereed na de redeploy."; cat /tmp/gh.json || true; exit 1
 
       - name: Grafana provisionen (datasources + dashboard)
         if: ${{ env.GRAFANA_TOKEN != '' }}
