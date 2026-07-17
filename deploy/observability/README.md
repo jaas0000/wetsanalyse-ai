@@ -87,7 +87,7 @@ Er zijn **twee** kant-en-klare dashboards (map "Wetsanalyse"):
 - `grafana-dashboard-wetsanalyse.json` — *"Wetsanalyse — observability"* (trends: engine-fase-duur/
   -fouten, LLM-tokens, MCP-cache, HTTP, logs, traces).
 - `grafana-dashboard-topologie.json` — *"Wetsanalyse — systeemtopologie"*: de **live keten die
-  oplicht** (Canvas: frontend → API → MCP/LLM/Postgres → overheid.nl, en API → n8n → GraphDB), de
+  oplicht** (Canvas: frontend → API → MCP/LLM/Postgres → overheid.nl, en API → n8n), de
   **automatische Node Graph** (uit de service-graph), een **trace-waterfall + logs** om één executie
   te volgen, en de **live analyses-tabel** die het opgeheven frontend-`/dashboard` vervangt.
 

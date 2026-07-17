@@ -49,7 +49,7 @@
         "type": "prometheus",
         "uid": "wa-prometheus"
       },
-      "description": "Live systeemtopologie van de keten. Een blok gloeit blauw op zodra er in de laatste 15 min verkeer doorheen liep (grijs = stil); het getal is het volume in dat venster. Zo blijft een bursty analyse ook ná de LLM-burst zichtbaar. Frontend/Postgres/n8n/overheid.nl komen uit de afgeleide span-/servicegraph-metrics.",
+      "description": "Live systeemtopologie van de keten. Een blok gloeit blauw op zodra er in de laatste 15 min verkeer doorheen liep (grijs = stil); het getal is het volume in dat venster. Zo blijft een bursty analyse ook ná de LLM-burst zichtbaar. Frontend/Postgres komen uit de afgeleide servicegraph-metrics, n8n uit de spanmetrics; MCP telt de bediende cache-lookups en overheid.nl de uitgaande http-client-calls van de MCP.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -642,29 +642,7 @@
                 "left": 620,
                 "width": 160,
                 "height": 48
-              },
-              "connections": [
-                {
-                  "color": {
-                    "fixed": "#8a5a1a"
-                  },
-                  "size": {
-                    "fixed": 2,
-                    "min": 1,
-                    "max": 6
-                  },
-                  "path": "straight",
-                  "source": {
-                    "x": 1,
-                    "y": 0
-                  },
-                  "target": {
-                    "x": -1,
-                    "y": 0
-                  },
-                  "targetName": "n_graphdb"
-                }
-              ]
+              }
             },
             {
               "type": "text",
@@ -733,74 +711,6 @@
                 "width": 180,
                 "height": 50
               }
-            },
-            {
-              "type": "text",
-              "name": "l_graphdb",
-              "config": {
-                "align": "center",
-                "valign": "middle",
-                "size": 13,
-                "color": {
-                  "fixed": "#5f6368"
-                },
-                "text": {
-                  "mode": "fixed",
-                  "fixed": "GraphDB (kennisgraaf)"
-                }
-              },
-              "background": {
-                "color": {
-                  "fixed": "transparent"
-                }
-              },
-              "constraint": {
-                "horizontal": "left",
-                "vertical": "top"
-              },
-              "placement": {
-                "top": 295,
-                "left": 880,
-                "width": 180,
-                "height": 20
-              }
-            },
-            {
-              "type": "metric-value",
-              "name": "n_graphdb",
-              "config": {
-                "align": "center",
-                "valign": "middle",
-                "size": 20,
-                "color": {
-                  "fixed": "#ffffff"
-                },
-                "text": {
-                  "mode": "field",
-                  "field": "GraphDB"
-                }
-              },
-              "background": {
-                "color": {
-                  "field": "GraphDB"
-                }
-              },
-              "border": {
-                "color": {
-                  "fixed": "#5f6368"
-                },
-                "width": 2
-              },
-              "constraint": {
-                "horizontal": "left",
-                "vertical": "top"
-              },
-              "placement": {
-                "top": 317,
-                "left": 880,
-                "width": 180,
-                "height": 48
-              }
             }
           ]
         }
@@ -836,7 +746,7 @@
             "uid": "wa-prometheus"
           },
           "editorMode": "code",
-          "expr": "sum(increase(http_server_duration_milliseconds_count{exported_job=\"wettenbank-mcp\"}[15m])) or vector(0)",
+          "expr": "sum(increase(wettenbank_cache_toegang_total[15m])) or vector(0)",
           "instant": true,
           "legendFormat": "MCP",
           "range": false,
@@ -848,7 +758,7 @@
             "uid": "wa-prometheus"
           },
           "editorMode": "code",
-          "expr": "sum(increase(traces_service_graph_request_total{client=\"wettenbank-mcp\"}[15m])) or vector(0)",
+          "expr": "sum(increase(http_client_request_duration_seconds_count{exported_job=\"wettenbank-mcp\"}[15m])) or vector(0)",
           "instant": true,
           "legendFormat": "overheid.nl",
           "range": false,
@@ -889,18 +799,6 @@
           "legendFormat": "n8n",
           "range": false,
           "refId": "n8n"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "wa-prometheus"
-          },
-          "editorMode": "code",
-          "expr": "sum(increase(traces_spanmetrics_calls_total{span_name=\"chat.n8n\"}[15m])) or vector(0)",
-          "instant": true,
-          "legendFormat": "GraphDB",
-          "range": false,
-          "refId": "GraphDB"
         }
       ],
       "title": "Systeemtopologie (live)",
