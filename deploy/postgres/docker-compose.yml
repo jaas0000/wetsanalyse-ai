@@ -1,0 +1,47 @@
+# APARTE Postgres-stack voor de Wetsanalyse-API.
+#
+# Waarom los van de api-stack: zo recreate een api-image-redeploy de database NOOIT — dat haalt de
+# data-laag uit de blast-radius van de Portainer-recreate-race (die anders postgres in `Created` kon
+# achterlaten). De API verbindt cross-stack op hostnaam `postgres:5432` (beide op homeinfra_internal)
+# en heeft een bounded connect-retry bij cold start (app/main.py `_init_db_met_retry`), want een
+# cross-stack `depends_on` bestaat niet.
+#
+# BELANGRIJK — data behouden: deze stack hergebruikt het BESTAANDE named volume van de oude api-stack
+# als `external`. Maak géén nieuw volume aan (dat zou een lege DB geven). Migratiestappen: zie README.
+#
+# Secrets (postgres_user/postgres_password) leven als bestanden in SECRETS_DIR — dezelfde map als de
+# api-stack (de API leest de DATABASE_URL-secret met dezelfde credentials).
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: wetsanalyse-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER_FILE: /run/secrets/postgres_user
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+      POSTGRES_DB: wetsanalyse
+    volumes:
+      - wetsanalyse_postgres:/var/lib/postgresql/data
+      - ${SECRETS_DIR:-/opt/secrets/wetsanalyse-api}:/run/secrets:ro
+    networks:
+      - proxy
+    mem_limit: 2g
+    pids_limit: 512
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$(cat /run/secrets/postgres_user)\" -d wetsanalyse"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  # Hergebruik het bestaande volume van de oude api-stack (data behouden). NIET hernoemen.
+  wetsanalyse_postgres:
+    external: true
+    name: wetsanalyse-api_wetsanalyse_postgres
+
+networks:
+  proxy:
+    external: true
+    name: ${PROXY_NETWORK:-homeinfra_internal}

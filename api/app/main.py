@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -19,6 +20,34 @@ from .routers import admin, auth, catalog, chat, projects
 observability.setup(get_settings())
 
 logger = logging.getLogger(__name__)
+
+
+async def _init_db_met_retry() -> None:
+    """Verbind met de DB en zet/lijn het schema uit, met **bounded retry**. Postgres draait als
+    aparte stack (geen cross-stack `depends_on`), dus bij een cold start kan de DB nog niet klaar zijn
+    wanneer de API opstart — dan retrye we i.p.v. crash-loopen. Knoppen: `WETSANALYSE_DB_CONNECT_RETRIES`
+    (default 30) en `WETSANALYSE_DB_CONNECT_BACKOFF` (seconden, default 2) → ~60s venster."""
+    import sqlalchemy.exc
+
+    pogingen = int(os.environ.get("WETSANALYSE_DB_CONNECT_RETRIES", "30"))
+    backoff = float(os.environ.get("WETSANALYSE_DB_CONNECT_BACKOFF", "2"))
+    transient = (OSError, sqlalchemy.exc.OperationalError, sqlalchemy.exc.InterfaceError)
+    for poging in range(1, pogingen + 1):
+        try:
+            await db.create_all()
+            await db.reconcile_schema()
+            if poging > 1:
+                logger.info("DB-verbinding gelukt na %d pogingen", poging)
+            return
+        except transient as exc:  # noqa: PERF203
+            if poging >= pogingen:
+                logger.error("DB niet bereikbaar na %d pogingen — opgeven", pogingen)
+                raise
+            logger.warning(
+                "DB nog niet bereikbaar (poging %d/%d: %s) — %.1fs backoff",
+                poging, pogingen, type(exc).__name__, backoff,
+            )
+            await asyncio.sleep(backoff)
 
 
 async def _reaper_loop(interval_s: int) -> None:
@@ -41,10 +70,9 @@ async def lifespan(app: FastAPI):
     # Async SQLAlchemy-engine + tabellen. In productie zou een migratietool (Alembic) het schema
     # beheren; voor de beproevingsfase volstaat create_all (idempotent: alleen ontbrekende tabellen).
     db.init_engine(settings.database_url)
-    await db.create_all()
-    # Breng een bestaande projects-tabel in lijn met het werkgebied/bronnen-schema (create_all
-    # migreert geen kolommen). Idempotent; no-op op een verse DB.
-    await db.reconcile_schema()
+    # create_all + reconcile_schema (idempotent) met bounded retry — vangt een nog-niet-klare DB bij
+    # cold start op (postgres is een aparte stack zonder cross-stack depends_on).
+    await _init_db_met_retry()
     try:
         from . import profiles
 

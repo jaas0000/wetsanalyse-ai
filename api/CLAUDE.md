@@ -279,6 +279,14 @@ is PostgreSQL.
 
 ## Deployment
 
+**Postgres draait in productie als APARTE stack** (`deploy/postgres/`), niet meer in de api-stack —
+zo recreate een api-image-redeploy de DB nooit (haalt de data-laag uit de Portainer-recreate-race).
+De API verbindt cross-stack op `postgres:5432` met een **bounded connect-retry** bij cold start
+(`main.py` → `_init_db_met_retry`, knoppen `WETSANALYSE_DB_CONNECT_RETRIES`/`_BACKOFF`). De
+host-secrets (incl. `postgres_user`/`postgres_password`/`database_url`) zijn ongewijzigd en gedeeld via
+`SECRETS_DIR`. Migratie + volume-behoud: zie `deploy/postgres/README.md`. (Lokaal mag je postgres nog
+gewoon bundelen — zie *Lokaal draaien*.)
+
 Docker-image + Portainer-stack achter NPM, net als de MCP (`docker-compose.yml`). De dienst is
 **horizontaal schaalbaar**: state-transities lopen via een atomaire **state-CAS** (`store.claim`, één
 `UPDATE … RETURNING`), dus `--workers >1` en `deploy.replicas >1` zijn veilig. Een geclaimde job draagt
