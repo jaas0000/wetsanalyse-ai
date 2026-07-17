@@ -21,6 +21,17 @@ interface Bericht {
   tekst: string;
 }
 
+// Verbindingsstatus met de assistent: reactief afgeleid uit de laatste chatpoging (geen actieve
+// health-probe). "onbekend" = nog niet getest deze sessie (bv. na herladen).
+type Verbinding = "onbekend" | "ok" | "fout";
+
+function statusKleur(v: Verbinding): string {
+  return v === "ok" ? "bg-succes" : v === "fout" ? "bg-fout" : "bg-waarschuwing";
+}
+function statusLabel(v: Verbinding): string {
+  return v === "ok" ? "actief" : v === "fout" ? "probleem" : "onbekend";
+}
+
 const SESSIE_KEY = CHAT_SESSIE_KEY;
 const HIST_PREFIX = CHAT_HIST_PREFIX;
 const MAX_HIST = 50; // hoeveel berichten we bewaren bij herladen
@@ -82,6 +93,7 @@ export function ChatAssistent({ sessionId }: { sessionId?: string }) {
   const [laatsteVraag, setLaatsteVraag] = useState<string | null>(null);
   const [gekopieerdIdx, setGekopieerdIdx] = useState<number | null>(null);
   const [berichten, setBerichten] = useState<Bericht[]>([{ rol: "assistent", tekst: WELKOM }]);
+  const [verbinding, setVerbinding] = useState<Verbinding>("onbekend");
 
   const sessieRef = useRef<string>("");
   const abortRef = useRef<AbortController | null>(null);
@@ -147,13 +159,15 @@ export function ChatAssistent({ sessionId }: { sessionId?: string }) {
       const antwoord = await sendChat(tekst, sessieRef.current, controller.signal);
       setBerichten((b) => [...b, { rol: "assistent", tekst: stripEmoji(antwoord) || "(geen antwoord)" }]);
       setLaatsteVraag(null);
+      setVerbinding("ok");
     } catch (e) {
       if ((e as DOMException)?.name === "AbortError") {
-        // Door de gebruiker afgebroken — stil, geen foutmelding.
+        // Door de gebruiker afgebroken — stil, geen foutmelding; status ongewijzigd.
       } else {
         const detail =
           (e as { detail?: string })?.detail ?? "Er ging iets mis bij het ophalen van het antwoord.";
         setFout(detail);
+        setVerbinding("fout");
       }
     } finally {
       setBezig(false);
@@ -207,10 +221,18 @@ export function ChatAssistent({ sessionId }: { sessionId?: string }) {
           ref={belRef}
           type="button"
           onClick={() => setOpen(true)}
-          aria-label="Open Lex, de kennisgraaf-assistent"
+          aria-label={`Open Lex, de kennisgraaf-assistent — verbinding: ${statusLabel(verbinding)}`}
           className="fixed bottom-5 right-5 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-accent text-paper shadow-lg transition-colors hover:bg-accent-soft focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-lint"
         >
           <ChatIcoon />
+          {/* Verbindingsstatus: groen (actief) / oranje (onbekend) / rood (probleem). */}
+          <span
+            aria-hidden="true"
+            title={`Chatverbinding: ${statusLabel(verbinding)}`}
+            className={`absolute right-0 top-0 h-3.5 w-3.5 rounded-full border-2 border-paper ${statusKleur(
+              verbinding,
+            )} ${bezig ? "animate-pulse" : ""}`}
+          />
         </button>
       )}
 
@@ -227,7 +249,16 @@ export function ChatAssistent({ sessionId }: { sessionId?: string }) {
           {/* Kop */}
           <div className="flex items-center justify-between gap-2 border-b border-line bg-surface px-4 py-3">
             <div className="min-w-0">
-              <p className="truncate text-sm font-semibold text-lint">Lex</p>
+              <p className="truncate text-sm font-semibold text-lint">
+                <span
+                  aria-hidden="true"
+                  title={`Chatverbinding: ${statusLabel(verbinding)}`}
+                  className={`mr-1.5 inline-block h-2 w-2 rounded-full align-middle ${statusKleur(
+                    verbinding,
+                  )} ${bezig ? "animate-pulse" : ""}`}
+                />
+                Lex
+              </p>
               <p className="truncate text-xs text-faint">Kennisgraaf-assistent</p>
             </div>
             <div className="flex shrink-0 items-center gap-1">
