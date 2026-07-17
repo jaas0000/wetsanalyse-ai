@@ -27,6 +27,9 @@ jobs:
       PROXY_NETWORK: "homeinfra_internal"
       GRAFANA_URL: ${{ secrets.GRAFANA_URL }}
       GRAFANA_TOKEN: ${{ secrets.GRAFANA_TOKEN }}
+      # Optioneel: read-only jobstore-wachtwoord voor de live jobs-tabel (datasource wa-postgres).
+      # Leeg = provision-grafana.sh slaat die datasource over (de rest werkt gewoon).
+      GRAFANA_WA_PG_PASSWORD: ${{ secrets.GRAFANA_WA_PG_PASSWORD }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 

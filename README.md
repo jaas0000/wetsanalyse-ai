@@ -17,7 +17,7 @@ en aannames — zichtbaar maken in plaats van schijnzekerheid te produceren.
 | **wetsanalyse-skill** | `.claude/skills/wetsanalyse/` | Voert de analyse uit (activiteit 2 + 3) en levert een `rapport.json` op die via een lokale HTML-viewer wordt getoond. Markdown is beschikbaar als export. Gebruikt de MCP als bron. |
 | **regelspraak-skill** | `.claude/skills/regelspraak/` | Vervolgskill: formaliseert de geduide begrippen + afleidingsregels naar **RegelSpraak + GegevensSpraak** (Belastingdienst/ALEF). Levert een `model.json` (HTML-viewer; `.rs`/Markdown als export). Werkt vanuit een afgerond `rapport.json` of standalone vanaf wettekst. |
 | **wetsanalyse-api** | `api/` | Headless REST-backend (FastAPI) die dezelfde werkstroom als de skill aanbiedt als async API, met PostgreSQL als jobstore. Stuurt de LLM aan via beheerbare modelprofielen. Biedt ook de RegelSpraak-formaliseringsfase als on-demand vervolg (`POST /v1/projects/{id}/regelspraak`). |
-| **frontend** | `frontend/` | Webapp (Next.js) bovenop de API: analyse aanmaken, live voortgang, de review-lus, het rapport, de **RegelSpraak-fase** (knop "Naar RegelSpraak" + model-weergave), een live **`/dashboard`** (alle analyses tot op functieniveau), en een **`/beheer`-scherm** om LLM-modelprofielen, gebruikers en token-verbruik te beheren. Zit achter een **login** (userid + wachtwoord, rollen, optionele 2FA). Vormgegeven volgens de **Rijkshuisstijl** (Belastingdienst-stijlvak). |
+| **frontend** | `frontend/` | Webapp (Next.js) bovenop de API: analyse aanmaken, live voortgang, de review-lus, het rapport, de **RegelSpraak-fase** (knop "Naar RegelSpraak" + model-weergave), en een **`/beheer`-scherm** om LLM-modelprofielen, gebruikers en token-verbruik te beheren. Het geaggregeerde live-overzicht van alle analyses draait in Grafana (dashboard *"Wetsanalyse — systeemtopologie"*). Zit achter een **login** (userid + wachtwoord, rollen, optionele 2FA). Vormgegeven volgens de **Rijkshuisstijl** (Belastingdienst-stijlvak). |
 | **analyses** | `analyses/` | Output: per analyse een eindrapport plus `werk/`-tussenbestanden (en desgewenst een `regelspraak/`-submap met het RegelSpraak-`model.json`). |
 | **observability** | `deploy/observability/` | Optionele verzamelstack (OTel-Collector + Tempo + Loki + Prometheus + Alloy) met een kant-en-klaar Grafana-dashboard en alerting. Alle onderdelen zijn geïnstrumenteerd (JSON-logs + OpenTelemetry); koppel de stack aan je bestaande Grafana. |
 | **docs** | `docs/` | Methodische onderbouwing (handleiding, leidraad, JAS-kader) + `observability.md`. |
@@ -115,8 +115,8 @@ Naast de skill kun je de analyse als zelfstandige dienst draaien:
   **artikel-autocomplete + lid-keuze**, en optioneel een **bestaande begrippenlijst** plakken of
   uploaden als suggestieve act-3-invoer), voortgang volgen, de
   human-in-the-loop review-lus, het rapport bekijken, de **RegelSpraak-fase** starten en het model
-  bekijken/downloaden, en een live **`/dashboard`** dat alle analyses
-  tot op functieniveau (de engine-stap binnen een state) toont. Bevat ook een zwevende
+  bekijken/downloaden. Het live overzicht van álle analyses (tot op functieniveau) is verhuisd naar
+  het Grafana-dashboard *"Wetsanalyse — systeemtopologie"* (`deploy/observability/`). Bevat ook een zwevende
   **kennisgraaf-chatbot (Lex)** die via de API (`POST /v1/chat`) een n8n-agent op de GraphDB-kennisgraaf
   bevraagt (webhook + aan/uit beheerbaar via `/beheer`). Vormgegeven volgens de
   **Rijkshuisstijl** (Belastingdienst-stijlvak). Zie [`frontend/README.md`](frontend/README.md).

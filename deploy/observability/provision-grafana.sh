@@ -24,21 +24,35 @@ upsert_datasource() {
 
 echo "== datasources =="
 upsert_datasource wa-prometheus '{"name":"Prometheus (wetsanalyse)","uid":"wa-prometheus","type":"prometheus","access":"proxy","url":"http://prometheus:9090","isDefault":false,"jsonData":{"httpMethod":"POST"}}'
-upsert_datasource wa-tempo '{"name":"Tempo (wetsanalyse)","uid":"wa-tempo","type":"tempo","access":"proxy","url":"http://tempo:3200","isDefault":false}'
+upsert_datasource wa-tempo '{"name":"Tempo (wetsanalyse)","uid":"wa-tempo","type":"tempo","access":"proxy","url":"http://tempo:3200","isDefault":false,"jsonData":{"serviceMap":{"datasourceUid":"wa-prometheus"},"nodeGraph":{"enabled":true},"tracesToLogsV2":{"datasourceUid":"wa-loki","spanStartTimeShift":"-1h","spanEndTimeShift":"1h","filterByTraceID":true}}}'
 upsert_datasource wa-loki '{"name":"Loki (wetsanalyse)","uid":"wa-loki","type":"loki","access":"proxy","url":"http://loki:3100","isDefault":false,"jsonData":{"derivedFields":[{"name":"TraceID","matcherType":"label","matcherRegex":"trace_id","datasourceUid":"wa-tempo","url":"${__value.raw}"}]}}'
+
+# Read-only jobstore-view voor de live jobs-tabel op het systeemtopologie-dashboard. Alleen provisionen als het
+# wachtwoord is meegegeven (env GRAFANA_WA_PG_PASSWORD = het host-secret grafana_pg_password). De rol
+# grafana_ro + de view dashboard_jobs komen uit deploy/postgres/grafana-readonly.sql (eenmalig draaien).
+if [ -n "${GRAFANA_WA_PG_PASSWORD:-}" ]; then
+  upsert_datasource wa-postgres "{\"name\":\"Jobstore (wetsanalyse)\",\"uid\":\"wa-postgres\",\"type\":\"postgres\",\"access\":\"proxy\",\"url\":\"postgres:5432\",\"user\":\"grafana_ro\",\"isDefault\":false,\"jsonData\":{\"database\":\"wetsanalyse\",\"sslmode\":\"disable\",\"postgresVersion\":1600},\"secureJsonData\":{\"password\":\"${GRAFANA_WA_PG_PASSWORD}\"}}"
+else
+  echo "  datasource wa-postgres: OVERGESLAGEN (zet GRAFANA_WA_PG_PASSWORD om de jobs-tabel te voeden)"
+fi
 
 echo "== map 'Wetsanalyse' =="
 curl -fsS -X POST "${AUTH[@]}" -d '{"uid":"wetsanalyse","title":"Wetsanalyse"}' "${GRAFANA_URL}/api/folders" >/dev/null 2>&1 \
   && echo "  map aangemaakt" || echo "  map bestond al"
 
-echo "== dashboard =="
-python3 - "$DIR/grafana-dashboard-wetsanalyse.json" > /tmp/dash-payload.json <<'PY'
+echo "== dashboards =="
+import_dashboard() {
+  local file="$1"
+  python3 - "$file" > /tmp/dash-payload.json <<'PY'
 import sys, json
 dash = json.load(open(sys.argv[1]))
 dash["id"] = None
 json.dump({"dashboard": dash, "folderUid": "wetsanalyse", "overwrite": True,
           "message": "provisioned via CI"}, sys.stdout)
 PY
-curl -fsS -X POST "${AUTH[@]}" -d @/tmp/dash-payload.json "${GRAFANA_URL}/api/dashboards/db" >/dev/null
-echo "  dashboard geïmporteerd (map Wetsanalyse)"
+  curl -fsS -X POST "${AUTH[@]}" -d @/tmp/dash-payload.json "${GRAFANA_URL}/api/dashboards/db" >/dev/null
+  echo "  dashboard geïmporteerd: $(basename "$file")"
+}
+import_dashboard "$DIR/grafana-dashboard-wetsanalyse.json"   # "Wetsanalyse — observability" (trends)
+import_dashboard "$DIR/grafana-dashboard-topologie.json"     # "Wetsanalyse — systeemtopologie" (live keten)
 echo "klaar."

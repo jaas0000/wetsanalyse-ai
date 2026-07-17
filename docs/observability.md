@@ -103,8 +103,18 @@ De stack bevat bovendien:
   die naar Loki (`service_name` = containernaam, `niveau` → label `detected_level`, `trace_id`/
   `categorie` als structured metadata). De API blijft via OTLP loggen, dus geen dubbeling.
   Read-only `docker.sock`-mount. Config: `alloy-config.alloy`.
-- **Dashboard** — `grafana-dashboard-wetsanalyse.json` (engine-fase-duur/-fouten, LLM-tokens,
-  MCP-cache, HTTP-verkeer, logs, traces). Importeren via de UI of `POST /api/dashboards/db`.
+- **Service-graph/spanmetrics-connectors** — de collector leidt uit de traces ook RED-metrics per
+  service (`traces_spanmetrics_*`) en topologie-edges (`traces_service_graph_request_total`) af. Die
+  gaan de metrics-pipeline in (→ Prometheus op `:8889`) en voeden het Node Graph-panel + de live
+  systeemtopologie. Niet-geïnstrumenteerde afhankelijkheden (LLM, n8n, overheid.nl, Postgres)
+  verschijnen als virtuele peer-node. Configuratie: `connectors:` in `otel-collector-config.yaml`.
+- **Dashboards** (map "Wetsanalyse") — `grafana-dashboard-wetsanalyse.json` (*"observability"*:
+  engine-fase-duur/-fouten, LLM-tokens, MCP-cache, HTTP-verkeer, logs, traces) én
+  `grafana-dashboard-topologie.json` (*"systeemtopologie"*: de live keten die oplicht in een
+  Canvas-plaat, de automatische Node Graph, een trace-waterfall + logs om één executie te volgen, en
+  de live analyses-tabel die het opgeheven frontend-`/dashboard` vervangt — die laatste via de
+  read-only datasource `wa-postgres` op de jobstore, zie `deploy/postgres/grafana-readonly.sql`).
+  Importeren via de UI, `provision-grafana.sh` (beide) of `POST /api/dashboards/db`.
 - **Alerting** — `alerting/` (contactpunt + regels: fase-fouten, HTTP 5xx, latency p95, backend down;
   routeren naar een webhook, bv. n8n) met een idempotent `apply.sh`.
 
@@ -138,6 +148,12 @@ De OTLP→Prometheus-export voegt unit-/type-suffixen toe; onthoud dit bij het b
 - `wetsanalyse_llm_tokens_total`, `wetsanalyse_fase_fouten_total` (labels `stap`, `klasse`) — counters.
 - `wettenbank_cache_toegang_total` — counter, label **`resultaat`** (`hit`/`miss`).
 - Auto-HTTP: `http_server_duration_milliseconds_*` (labels `http_method`/`http_status_code`/`http_target`).
+  Let op: `http_client_*` draagt **géén** host/target-label — per-bestemming-edges komen uit de
+  service-graph, niet uit `http_client`.
+- Uit de connectors: `traces_service_graph_request_total`/`_server_seconds`/`_failed_total` (labels
+  **`client`**/**`server`**/`connection_type`) en `traces_spanmetrics_calls_total`/`_duration_*`
+  (labels **`service_name`**/**`span_name`**). Leeg tot de collector met de connectors draait én er
+  traces zijn.
 - Services onderscheiden via het label **`exported_job`** (`wetsanalyse-api`/`wettenbank-mcp`/…).
 - **Loki**: de OTLP-logs dragen de velden als **structured metadata** (`detected_level`, `trace_id`,
   `categorie`), niet als JSON in de regel — filter dus op die labels, niet met `| json`. De

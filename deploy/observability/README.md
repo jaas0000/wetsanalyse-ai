@@ -13,7 +13,10 @@ API / frontend / MCP  ──OTLP──►  otel-collector ──►  Tempo   (tr
 ```
 
 Componenten (alle op `homeinfra_internal`, geen host-poorten, geen NPM-route — intern zoals Postgres):
-- **otel-collector** (`otel/opentelemetry-collector-contrib`) — ontvangt OTLP op 4317/4318.
+- **otel-collector** (`otel/opentelemetry-collector-contrib`) — ontvangt OTLP op 4317/4318. Leidt met
+  de **`spanmetrics`- en `servicegraph`-connectors** ook RED-metrics per service én topologie-edges
+  (`traces_service_graph_request_total`) uit de traces af; die voeden het Node Graph-panel en de
+  live systeemtopologie.
 - **tempo** — traces, query op `http://tempo:3200`.
 - **loki** — logs, query op `http://loki:3100`.
 - **prometheus** — metrics, query op `http://prometheus:9090` (scrapet de collector op `:8889`).
@@ -63,6 +66,10 @@ Draai een analyse en een chat in de webapp, dan in Grafana → **Explore**:
   plakt de unit-suffix erachter), `wetsanalyse_fase_fouten_total`, `wetsanalyse_llm_tokens_total`,
   `wettenbank_cache_toegang_total` (label `resultaat=hit|miss`) en de auto-http-metrics
   (`http_server_duration_milliseconds_*`). Services onderscheiden via label `exported_job`.
+  Uit de connectors: `traces_service_graph_request_total` (labels `client`/`server`/`connection_type`)
+  en `traces_spanmetrics_calls_total`/`_duration_*` (labels `service_name`/`span_name`). Let op: de
+  `http_client_*`-metric draagt **geen host/target-label**, dus per-bestemming-edges (frontend →
+  API, MCP → overheid.nl, API → Postgres) komen uit de service-graph, niet uit `http_client`.
 
 ## Aandachtspunten
 
@@ -73,17 +80,51 @@ Draai een analyse en een chat in de webapp, dan in Grafana → **Explore**:
 - **Geen auth op de backends:** ze zijn alleen intern bereikbaar op `homeinfra_internal`. Zet ze niet
   achter NPM/host-poorten.
 
-## 5. Dashboard importeren
+## 5. Dashboards importeren
 
-`grafana-dashboard-wetsanalyse.json` is het kant-en-klare dashboard *"Wetsanalyse — observability"*
-(engine-fase-duur/-fouten, LLM-tokens, MCP-cache, HTTP, logs, traces). Importeren:
+Er zijn **twee** kant-en-klare dashboards (map "Wetsanalyse"):
+
+- `grafana-dashboard-wetsanalyse.json` — *"Wetsanalyse — observability"* (trends: engine-fase-duur/
+  -fouten, LLM-tokens, MCP-cache, HTTP, logs, traces).
+- `grafana-dashboard-topologie.json` — *"Wetsanalyse — systeemtopologie"*: de **live keten die
+  oplicht** (Canvas: frontend → API → MCP/LLM/Postgres → overheid.nl, en API → n8n → GraphDB), de
+  **automatische Node Graph** (uit de service-graph), een **trace-waterfall + logs** om één executie
+  te volgen, en de **live analyses-tabel** die het opgeheven frontend-`/dashboard` vervangt.
+
+Importeren:
 
 - **UI:** Grafana → *Dashboards → New → Import* → upload het JSON-bestand → map "Wetsanalyse".
-- **API:** `POST /api/dashboards/db` met body `{"dashboard": <inhoud>, "folderUid": "wetsanalyse",
+- **API/CI:** `provision-grafana.sh` importeert **beide** dashboards (idempotent), of
+  `POST /api/dashboards/db` met body `{"dashboard": <inhoud>, "folderUid": "wetsanalyse",
   "overwrite": true}`.
 
 Vereist de datasource-uid's **`wa-prometheus`**, **`wa-loki`**, **`wa-tempo`** (zoals in
-`grafana-datasources.yaml`) en een map met uid `wetsanalyse`.
+`grafana-datasources.yaml`) en een map met uid `wetsanalyse`. Het systeemtopologie-dashboard gebruikt
+daarnaast **`wa-postgres`** voor de live analyses-tabel (zie sectie 9); zonder die datasource werken
+alle andere panels gewoon, alleen de jobs-tabel/tellers blijven leeg.
+
+> **Systeemtopologie afronden.** De Canvas is bewust een startpunt: doorloopt/lichthoogte fijn je het
+> makkelijkst interactief bij (*Edit → Canvas*). De node-queries voor frontend/Postgres/n8n/overheid.nl
+> leunen op de service-graph-metrics — draai eerst een analyse + chat zodat de connectors data hebben,
+> en verifieer dan de labelwaarden (`client`/`server`) in *Explore* voordat je ze vastzet.
+
+## 9. Live analyses-tabel (read-only jobstore-datasource)
+
+Het systeemtopologie-dashboard toont een live tabel van alle analyses (state, fijnmazige fase,
+tijd-in-fase, tokens, fout) rechtstreeks uit de PostgreSQL-jobstore — de vervanger van het opgeheven
+frontend-`/dashboard`. Eenmalige inrichting:
+
+1. **Read-only rol + view** (`deploy/postgres/grafana-readonly.sql`): maakt de rol `grafana_ro` en de
+   smalle view `dashboard_jobs`. Grafana krijgt **alleen** SELECT op die view — nooit op `projects`
+   zelf, `users`, `api_tokens` of LLM-keys. Draai het script eenmalig als DB-owner (zie de kop van het
+   SQL-bestand voor het exacte `docker exec … psql`-commando en het wachtwoord-secret).
+2. **Datasource** `wa-postgres` (in `grafana-datasources.yaml` én `provision-grafana.sh`): verbindt als
+   `grafana_ro`. Het wachtwoord komt uit de env-var **`GRAFANA_WA_PG_PASSWORD`** op de Grafana-container
+   (bij provisioning: het gelijknamige host-secret) — niet uit de repo. Ontbreekt de env-var, dan slaat
+   `provision-grafana.sh` deze datasource over.
+
+> De tabel is **cross-client** (toont álle analyses van alle clients) — bewust, want Grafana staat
+> achter admin-toegang. De interactieve review/retry-acties blijven in de webapp; Grafana is read-only.
 
 ## 6. Frontend/MCP-logs naar Loki (Alloy)
 

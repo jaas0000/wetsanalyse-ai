@@ -1,7 +1,14 @@
 # OTel-Collector: ontvangt OTLP van API/frontend/MCP en routeert per signaal door naar de backends.
-#   traces  -> Tempo (OTLP)
+#   traces  -> Tempo (OTLP)  én  -> de connectors (afgeleide metrics, zie onder)
 #   logs    -> Loki  (OTLP-HTTP endpoint)
 #   metrics -> Prometheus (via de prometheus-exporter die Prometheus scrapet op :8889)
+#
+# De twee CONNECTORS zetten traces om in metrics binnen dezelfde collector (contrib-distributie):
+#   spanmetrics  -> RED per service/operatie (traces_spanmetrics_calls_total / _duration_*)
+#   servicegraph -> edges src->dst (traces_service_graph_request_total / _server_seconds / _failed_total)
+# Die metrics gaan de metrics-pipeline in en komen zo óók bij de prometheus-exporter op :8889 terecht;
+# Prometheus scrapet dat al (prometheus.yml) — geen extra scrape-config nodig. De servicegraph voedt
+# het Node Graph-panel (topologie die zich uit de traces tekent, incl. de frontend- en n8n-edges).
 
 receivers:
   otlp:
@@ -13,6 +20,37 @@ receivers:
 
 processors:
   batch: {}
+
+connectors:
+  # RED-metrics per service en operatie, afgeleid uit de spans.
+  spanmetrics:
+    namespace: traces.spanmetrics
+    histogram:
+      unit: ms
+      explicit:
+        buckets: [5ms, 10ms, 25ms, 50ms, 100ms, 250ms, 500ms, 1s, 2s, 5s, 10s, 30s]
+    dimensions:
+      - name: http.method
+      - name: http.status_code
+    exemplars:
+      enabled: true
+    metrics_flush_interval: 15s
+
+  # Topologie-edges (src service -> dst service) voor het Node Graph-panel.
+  servicegraph:
+    latency_histogram_buckets: [10ms, 50ms, 100ms, 250ms, 500ms, 1s, 2s, 5s, 10s, 30s]
+    store:
+      ttl: 5s
+      max_items: 2000
+    # Niet-geïnstrumenteerde afhankelijkheden (LLM-provider, n8n, overheid.nl, Postgres) verschijnen
+    # als VIRTUELE peer-node op basis van deze span-attributen — anders zou de edge onzichtbaar blijven.
+    virtual_node_peer_attributes:
+      - peer.service
+      - db.name
+      - db.system
+      - server.address
+      - net.peer.name
+    metrics_flush_interval: 15s
 
 exporters:
   # Traces naar Tempo (Tempo's eigen OTLP-receiver, plaintext op het interne netwerk).
@@ -29,15 +67,17 @@ exporters:
 
 service:
   pipelines:
+    # Traces gaan naar Tempo én de twee connectors (die er metrics uit afleiden).
     traces:
       receivers: [otlp]
       processors: [batch]
-      exporters: [otlp/tempo]
+      exporters: [otlp/tempo, spanmetrics, servicegraph]
     logs:
       receivers: [otlp]
       processors: [batch]
       exporters: [otlphttp/loki]
+    # Metrics komen zowel rechtstreeks via OTLP binnen als afgeleid uit de connectors.
     metrics:
-      receivers: [otlp]
+      receivers: [otlp, spanmetrics, servicegraph]
       processors: [batch]
       exporters: [prometheus]

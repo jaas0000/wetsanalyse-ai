@@ -45,9 +45,10 @@ inhoudelijke `references/`/`scripts/`. De samenwerkende delen:
 6. **`frontend/`** — Next.js-webapp (BFF) bovenop de API: analyses aanmaken (wet-dropdown met
    **artikel-autocomplete + lid-keuze** via de wetsstructuur, en optioneel een **bestaande
    begrippenlijst** plakken/uploaden als suggestieve act-3-invoer) en reviewen (incl. de knop
-   "Akkoord — afronden zonder act. 3" en het later alsnog starten van activiteit 3), een live
-   **`/dashboard`** dat alle analyses tot op functieniveau (de engine-stap binnen een state) volgt
-   via een aggregate-SSE-stream, en de modelprofielen, de **wet-catalogus** (BWB-id + naam,
+   "Akkoord — afronden zonder act. 3" en het later alsnog starten van activiteit 3). Het live
+   per-analyse overzicht (voorheen `/dashboard`) is **verplaatst naar Grafana** (dashboard
+   *"Wetsanalyse — systeemtopologie"*, `deploy/observability/`); de aggregate-SSE-stream blijft wél
+   bestaan en houdt de projectenlijst (`/`) live. In de webapp beheer je verder de modelprofielen, de **wet-catalogus** (BWB-id + naam,
    selecteerbaar via dropdown bij een nieuwe analyse) en het token-verbruik beheren via het
    **`/beheer`-scherm** (achter een apart admin-token). De hele webapp zit achter een
    **login met userid + wachtwoord** (Auth.js; e-mail wordt verplicht/uniek geregistreerd maar is
@@ -209,9 +210,12 @@ ze emitteren gestructureerde JSON-logs (één gedeelde vorm, bron `tools/wettenb
 en kunnen OpenTelemetry (traces/metrics/logs) naar een **configureerbaar OTLP-endpoint** sturen
 (`OTEL_EXPORTER_OTLP_ENDPOINT`; leeg = alleen logs, nul overhead). Eén trace-id verbindt de keten
 frontend → API → MCP/n8n. Een **optionele verzamelstack staat in `deploy/observability/`**:
-OTel-Collector + Tempo + Loki + Prometheus, plus **Alloy** dat de stdout-logs van frontend en MCP
-naar Loki shipt, een kant-en-klaar **Grafana-dashboard** (`grafana-dashboard-wetsanalyse.json`) en
-**alerting** (`alerting/` → n8n-webhook). Je koppelt 'm aan je bestaande Grafana; laat het endpoint
+OTel-Collector (met **spanmetrics/servicegraph-connectors** die topologie-edges uit de traces
+afleiden) + Tempo + Loki + Prometheus, plus **Alloy** dat de stdout-logs van frontend en MCP
+naar Loki shipt, **twee kant-en-klare Grafana-dashboards** (`grafana-dashboard-wetsanalyse.json` =
+trends; `grafana-dashboard-topologie.json` = *"systeemtopologie"*: de live keten die oplicht +
+de per-analyse jobs-tabel die het opgeheven frontend-`/dashboard` vervangt, via de read-only
+jobstore-datasource `wa-postgres`) en **alerting** (`alerting/` → n8n-webhook). Je koppelt 'm aan je bestaande Grafana; laat het endpoint
 leeg om alles ongewijzigd met alléén JSON-logs te draaien. De volledige uitleg (env-vars, logschema,
 AVG-redactie, dashboard/alerting) staat in **`docs/observability.md`**.
 

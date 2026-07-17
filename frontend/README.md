@@ -14,15 +14,14 @@ twee-checkpoint review-lus (GegevensSpraak-objectmodel en RegelSpraak-regels), w
 **RegelSpraak-weergave** het model toont (met herkomst per declaratie/regel) en een `.rs`/`.md`-download
 biedt.
 
-Daarbovenop een live **`/dashboard`** ("mission control"): één overzicht van álle analyses dat per
-analyse laat zien in welke stap de engine zit — niet alleen de macro-states, maar tot op
-**functieniveau** (LLM-generatie, verwijzingen volgen, brongetrouwheid-check), met verstreken tijd,
-token-verbruik, model en een retry-knop bij fout. Het draait op één `EventSource` naar een
-aggregate-SSE-route, dus de tellers lopen live mee.
+Het geaggregeerde live-overzicht van álle analyses (per analyse de engine-stap tot op
+**functieniveau**, met verstreken tijd, token-verbruik en foutstatus) is **verhuisd naar Grafana**
+— het dashboard *"Wetsanalyse — systeemtopologie"* (`deploy/observability/`), gevoed door een
+read-only view op de jobstore. De aggregate-SSE-route (`/api/projects/events`) blijft bestaan en
+houdt de **home-projectenlijst** live.
 
-De home-lijst en het dashboard delen één client-side **zoek-/filter-/sorteerbalk** (status, vrije
-tekst op naam/BWB-id/artikel, wet) met **paginering**; op het dashboard zijn de statustellers
-tegelijk klikbare snelfilters. Filteren/sorteren/bladeren gebeurt bovenop de live SSE-lijst.
+De home-projectenlijst heeft een client-side **zoek-/filter-/sorteerbalk** (status, vrije
+tekst op naam/BWB-id/artikel, wet) met **paginering**, bovenop de live SSE-lijst.
 
 Daarnaast een **`/beheer`-scherm** voor het LLM-beheer: de modelprofielen die de analyses aansturen
 (toevoegen/bewerken/verwijderen, default kiezen, verbinding testen), een **wet-catalogus** (BWB-id +

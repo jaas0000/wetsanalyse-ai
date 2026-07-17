@@ -1,0 +1,740 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": { "type": "grafana", "uid": "-- Grafana --" },
+        "enable": true,
+        "hide": true,
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "links": [
+    {
+      "asDropdown": false,
+      "icon": "external link",
+      "tags": ["wetsanalyse"],
+      "targetBlank": false,
+      "title": "Wetsanalyse — observability (trends)",
+      "tooltip": "",
+      "type": "dashboards"
+    }
+  ],
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "id": 1,
+      "panels": [],
+      "title": "Systeemtopologie — live keten en doorvoer",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "wa-prometheus" },
+      "description": "Live systeemtopologie van de keten. Elk blok licht op zodra er verkeer doorheen loopt (grijs = stil, blauw = actief); het getal is de doorvoer per seconde. Frontend/Postgres/n8n/overheid.nl komen uit de afgeleide span-/servicegraph-metrics — pas de queries desgewenst aan zodra live data de labelwaarden bevestigt.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "#2a2d33", "value": null },
+              { "color": "blue", "value": 0.0001 }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 13, "w": 24, "x": 0, "y": 1 },
+      "id": 2,
+      "options": {
+        "inlineEditing": true,
+        "infinitePan": false,
+        "panZoom": false,
+        "showAdvancedTypes": true,
+        "root": {
+          "type": "frame",
+          "name": "Root",
+          "background": { "color": { "fixed": "transparent" } },
+          "border": { "color": { "fixed": "dark-green" }, "width": 0 },
+          "constraint": { "horizontal": "left", "vertical": "top" },
+          "placement": { "top": 0, "left": 0, "width": 100, "height": 100 },
+          "elements": [
+            {
+              "type": "text",
+              "name": "l_frontend",
+              "config": { "align": "center", "valign": "middle", "size": 14, "color": { "fixed": "#d8d9da" }, "text": { "mode": "fixed", "fixed": "Frontend / BFF" } },
+              "background": { "color": { "fixed": "transparent" } },
+              "constraint": { "horizontal": "left", "vertical": "top" },
+              "placement": { "top": 120, "left": 20, "width": 160, "height": 20 }
+            },
+            {
+              "type": "metric-value",
+              "name": "n_frontend",
+              "config": { "align": "center", "valign": "middle", "size": 22, "color": { "fixed": "#ffffff" }, "text": { "mode": "field", "field": "Frontend" } },
+              "background": { "color": { "field": "Frontend" } },
+              "border": { "color": { "fixed": "#0b3d91" }, "width": 2 },
+              "constraint": { "horizontal": "left", "vertical": "top" },
+              "placement": { "top": 142, "left": 20, "width": 160, "height": 62 },
+              "connections": [
+                {
+                  "color": { "fixed": "#6ea8fe" },
+                  "size": { "fixed": 2, "min": 1, "max": 6 },
+                  "path": "straight",
+                  "source": { "x": 1, "y": 0 },
+                  "target": { "x": -1, "y": 0 },
+                  "targetName": "n_api"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "name": "l_api",
+              "config": { "align": "center", "valign": "middle", "size": 15, "color": { "fixed": "#d8d9da" }, "text": { "mode": "fixed", "fixed": "API — orchestrator" } },
+              "background": { "color": { "fixed": "transparent" } },
+              "constraint": { "horizontal": "left", "vertical": "top" },
+              "placement": { "top": 118, "left": 300, "width": 200, "height": 20 }
+            },
+            {
+              "type": "metric-value",
+              "name": "n_api",
+              "config": { "align": "center", "valign": "middle", "size": 26, "color": { "fixed": "#ffffff" }, "text": { "mode": "field", "field": "API" } },
+              "background": { "color": { "field": "API" } },
+              "border": { "color": { "fixed": "#0b3d91" }, "width": 2 },
+              "constraint": { "horizontal": "left", "vertical": "top" },
+              "placement": { "top": 140, "left": 300, "width": 200, "height": 78 },
+              "connections": [
+                {
+                  "color": { "fixed": "#6ea8fe" },
+                  "size": { "fixed": 2, "min": 1, "max": 6 },
+                  "path": "straight",
+                  "source": { "x": 1, "y": -0.6 },
+                  "target": { "x": -1, "y": 0 },
+                  "targetName": "n_mcp"
+                },
+                {
+                  "color": { "fixed": "#6ea8fe" },
+                  "size": { "fixed": 2, "min": 1, "max": 6 },
+                  "path": "straight",
+                  "source": { "x": 1, "y": 0 },
+                  "target": { "x": -1, "y": 0 },
+                  "targetName": "n_llm"
+                },
+                {
+                  "color": { "fixed": "#6ea8fe" },
+                  "size": { "fixed": 2, "min": 1, "max": 6 },
+                  "path": "straight",
+                  "source": { "x": 1, "y": 0.6 },
+                  "target": { "x": -1, "y": 0 },
+                  "targetName": "n_postgres"
+                },
+                {
+                  "color": { "fixed": "#f0a35e" },
+                  "size": { "fixed": 2, "min": 1, "max": 6 },
+                  "path": "straight",
+                  "source": { "x": 0, "y": 1 },
+                  "target": { "x": 0, "y": -1 },
+                  "targetName": "n_n8n"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "name": "l_mcp",
+              "config": { "align": "center", "valign": "middle", "size": 14, "color": { "fixed": "#d8d9da" }, "text": { "mode": "fixed", "fixed": "Wettenbank-MCP" } },
+              "background": { "color": { "fixed": "transparent" } },
+              "constraint": { "horizontal": "left", "vertical": "top" },
+              "placement": { "top": 40, "left": 660, "width": 160, "height": 20 }
+            },
+            {
+              "type": "metric-value",
+              "name": "n_mcp",
+              "config": { "align": "center", "valign": "middle", "size": 22, "color": { "fixed": "#ffffff" }, "text": { "mode": "field", "field": "MCP" } },
+              "background": { "color": { "field": "MCP" } },
+              "border": { "color": { "fixed": "#0b3d91" }, "width": 2 },
+              "constraint": { "horizontal": "left", "vertical": "top" },
+              "placement": { "top": 62, "left": 660, "width": 160, "height": 54 },
+              "connections": [
+                {
+                  "color": { "fixed": "#6ea8fe" },
+                  "size": { "fixed": 2, "min": 1, "max": 6 },
+                  "path": "straight",
+                  "source": { "x": 1, "y": 0 },
+                  "target": { "x": -1, "y": 0 },
+                  "targetName": "n_overheid"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "name": "l_overheid",
+              "config": { "align": "center", "valign": "middle", "size": 13, "color": { "fixed": "#9aa0a6" }, "text": { "mode": "fixed", "fixed": "overheid.nl (SRU)" } },
+              "background": { "color": { "fixed": "transparent" } },
+              "constraint": { "horizontal": "left", "vertical": "top" },
+              "placement": { "top": 40, "left": 900, "width": 180, "height": 20 }
+            },
+            {
+              "type": "metric-value",
+              "name": "n_overheid",
+              "config": { "align": "center", "valign": "middle", "size": 20, "color": { "fixed": "#ffffff" }, "text": { "mode": "field", "field": "overheid.nl" } },
+              "background": { "color": { "field": "overheid.nl" } },
+              "border": { "color": { "fixed": "#5f6368" }, "width": 2 },
+              "constraint": { "horizontal": "left", "vertical": "top" },
+              "placement": { "top": 62, "left": 900, "width": 180, "height": 54 }
+            },
+            {
+              "type": "text",
+              "name": "l_llm",
+              "config": { "align": "center", "valign": "middle", "size": 14, "color": { "fixed": "#d8d9da" }, "text": { "mode": "fixed", "fixed": "LLM (tokens/s)" } },
+              "background": { "color": { "fixed": "transparent" } },
+              "constraint": { "horizontal": "left", "vertical": "top" },
+              "placement": { "top": 150, "left": 660, "width": 160, "height": 20 }
+            },
+            {
+              "type": "metric-value",
+              "name": "n_llm",
+              "config": { "align": "center", "valign": "middle", "size": 22, "color": { "fixed": "#ffffff" }, "text": { "mode": "field", "field": "LLM" } },
+              "background": { "color": { "field": "LLM" } },
+              "border": { "color": { "fixed": "#0b3d91" }, "width": 2 },
+              "constraint": { "horizontal": "left", "vertical": "top" },
+              "placement": { "top": 172, "left": 660, "width": 160, "height": 54 }
+            },
+            {
+              "type": "text",
+              "name": "l_postgres",
+              "config": { "align": "center", "valign": "middle", "size": 14, "color": { "fixed": "#d8d9da" }, "text": { "mode": "fixed", "fixed": "PostgreSQL" } },
+              "background": { "color": { "fixed": "transparent" } },
+              "constraint": { "horizontal": "left", "vertical": "top" },
+              "placement": { "top": 262, "left": 660, "width": 160, "height": 20 }
+            },
+            {
+              "type": "metric-value",
+              "name": "n_postgres",
+              "config": { "align": "center", "valign": "middle", "size": 22, "color": { "fixed": "#ffffff" }, "text": { "mode": "field", "field": "Postgres" } },
+              "background": { "color": { "field": "Postgres" } },
+              "border": { "color": { "fixed": "#0b3d91" }, "width": 2 },
+              "constraint": { "horizontal": "left", "vertical": "top" },
+              "placement": { "top": 284, "left": 660, "width": 160, "height": 52 }
+            },
+            {
+              "type": "text",
+              "name": "l_n8n",
+              "config": { "align": "center", "valign": "middle", "size": 14, "color": { "fixed": "#d8d9da" }, "text": { "mode": "fixed", "fixed": "n8n-agent (chat)" } },
+              "background": { "color": { "fixed": "transparent" } },
+              "constraint": { "horizontal": "left", "vertical": "top" },
+              "placement": { "top": 262, "left": 300, "width": 160, "height": 20 }
+            },
+            {
+              "type": "metric-value",
+              "name": "n_n8n",
+              "config": { "align": "center", "valign": "middle", "size": 22, "color": { "fixed": "#ffffff" }, "text": { "mode": "field", "field": "n8n" } },
+              "background": { "color": { "field": "n8n" } },
+              "border": { "color": { "fixed": "#8a5a1a" }, "width": 2 },
+              "constraint": { "horizontal": "left", "vertical": "top" },
+              "placement": { "top": 284, "left": 300, "width": 160, "height": 52 },
+              "connections": [
+                {
+                  "color": { "fixed": "#f0a35e" },
+                  "size": { "fixed": 2, "min": 1, "max": 6 },
+                  "path": "straight",
+                  "source": { "x": 1, "y": 0 },
+                  "target": { "x": -1, "y": 0 },
+                  "targetName": "n_graphdb"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "name": "l_graphdb",
+              "config": { "align": "center", "valign": "middle", "size": 13, "color": { "fixed": "#9aa0a6" }, "text": { "mode": "fixed", "fixed": "GraphDB (kennisgraaf)" } },
+              "background": { "color": { "fixed": "transparent" } },
+              "constraint": { "horizontal": "left", "vertical": "top" },
+              "placement": { "top": 262, "left": 520, "width": 170, "height": 20 }
+            },
+            {
+              "type": "metric-value",
+              "name": "n_graphdb",
+              "config": { "align": "center", "valign": "middle", "size": 20, "color": { "fixed": "#ffffff" }, "text": { "mode": "field", "field": "GraphDB" } },
+              "background": { "color": { "field": "GraphDB" } },
+              "border": { "color": { "fixed": "#5f6368" }, "width": 2 },
+              "constraint": { "horizontal": "left", "vertical": "top" },
+              "placement": { "top": 284, "left": 520, "width": 170, "height": 52 }
+            }
+          ]
+        }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "wa-prometheus" },
+          "editorMode": "code",
+          "expr": "sum(rate(traces_service_graph_request_total{client=\"wetsanalyse-frontend\"}[$__rate_interval]))",
+          "instant": true,
+          "legendFormat": "Frontend",
+          "range": false,
+          "refId": "Frontend"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "wa-prometheus" },
+          "editorMode": "code",
+          "expr": "sum(rate(http_server_duration_milliseconds_count{exported_job=\"wetsanalyse-api\"}[$__rate_interval]))",
+          "instant": true,
+          "legendFormat": "API",
+          "range": false,
+          "refId": "API"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "wa-prometheus" },
+          "editorMode": "code",
+          "expr": "sum(rate(http_server_duration_milliseconds_count{exported_job=\"wettenbank-mcp\"}[$__rate_interval]))",
+          "instant": true,
+          "legendFormat": "MCP",
+          "range": false,
+          "refId": "MCP"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "wa-prometheus" },
+          "editorMode": "code",
+          "expr": "sum(rate(traces_service_graph_request_total{client=\"wettenbank-mcp\"}[$__rate_interval]))",
+          "instant": true,
+          "legendFormat": "overheid.nl",
+          "range": false,
+          "refId": "overheid"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "wa-prometheus" },
+          "editorMode": "code",
+          "expr": "sum(rate(wetsanalyse_llm_tokens_total[$__rate_interval]))",
+          "instant": true,
+          "legendFormat": "LLM",
+          "range": false,
+          "refId": "LLM"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "wa-prometheus" },
+          "editorMode": "code",
+          "expr": "sum(rate(traces_service_graph_request_total{client=\"wetsanalyse-api\", connection_type=\"database\"}[$__rate_interval]))",
+          "instant": true,
+          "legendFormat": "Postgres",
+          "range": false,
+          "refId": "Postgres"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "wa-prometheus" },
+          "editorMode": "code",
+          "expr": "sum(rate(traces_spanmetrics_calls_total{span_name=\"chat.n8n\"}[$__rate_interval]))",
+          "instant": true,
+          "legendFormat": "n8n",
+          "range": false,
+          "refId": "n8n"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "wa-prometheus" },
+          "editorMode": "code",
+          "expr": "sum(rate(traces_spanmetrics_calls_total{span_name=\"chat.n8n\"}[$__rate_interval]))",
+          "instant": true,
+          "legendFormat": "GraphDB",
+          "range": false,
+          "refId": "GraphDB"
+        }
+      ],
+      "title": "Systeemtopologie (live)",
+      "type": "canvas"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 14 },
+      "id": 3,
+      "panels": [],
+      "title": "Automatische topologie & één executie volgen",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "tempo", "uid": "wa-tempo" },
+      "description": "Service-graph die zich uit de traces tekent (servicegraph-connector). Bolgrootte = request-rate, rand-kleur = foutratio. Toont ook de frontend- en n8n-/DB-edges.",
+      "gridPos": { "h": 12, "w": 12, "x": 0, "y": 15 },
+      "id": 4,
+      "options": {},
+      "targets": [
+        {
+          "datasource": { "type": "tempo", "uid": "wa-tempo" },
+          "queryType": "serviceMap",
+          "refId": "A"
+        }
+      ],
+      "title": "Topologie (service-graph)",
+      "type": "nodeGraph"
+    },
+    {
+      "datasource": { "type": "tempo", "uid": "wa-tempo" },
+      "description": "Recente executies. Klik een TraceID → waterfall (frontend → API → MCP/LLM/Postgres) — de n8n-executieweergave als trace.",
+      "gridPos": { "h": 12, "w": 12, "x": 12, "y": 15 },
+      "id": 5,
+      "options": {},
+      "targets": [
+        {
+          "datasource": { "type": "tempo", "uid": "wa-tempo" },
+          "filters": [
+            { "id": "service-name", "operator": "=", "scope": "resource", "tag": "service.name" }
+          ],
+          "limit": 20,
+          "query": "{}",
+          "queryType": "traceqlSearch",
+          "refId": "A",
+          "tableType": "traces"
+        }
+      ],
+      "title": "Volg één executie (traces)",
+      "type": "table"
+    },
+    {
+      "datasource": { "type": "loki", "uid": "wa-loki" },
+      "description": "Live logregels van alle onderdelen. Klik een regel → veld TraceID linkt door naar de trace in Tempo (correlatie op trace_id).",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 27 },
+      "id": 6,
+      "options": {
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "showTime": true,
+        "sortOrder": "Descending",
+        "wrapLogMessage": true
+      },
+      "targets": [
+        {
+          "datasource": { "type": "loki", "uid": "wa-loki" },
+          "editorMode": "code",
+          "expr": "{service_name=~\"wetsanalyse-.*|wettenbank-mcp\"}",
+          "queryType": "range",
+          "refId": "A"
+        }
+      ],
+      "title": "Live logregels (hele keten)",
+      "type": "logs"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 35 },
+      "id": 7,
+      "panels": [],
+      "title": "Live analyses (voorheen het frontend-dashboard)",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "postgres", "uid": "wa-postgres" },
+      "description": "Aantal analyses dat nu loopt.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }] },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 36 },
+      "id": 8,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "value_and_name"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "postgres", "uid": "wa-postgres" },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT count(*)::int AS \"Lopend\" FROM dashboard_jobs WHERE bucket = 'lopend'",
+          "refId": "A"
+        }
+      ],
+      "title": "Lopend",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "postgres", "uid": "wa-postgres" },
+      "description": "Aantal analyses dat wacht op een review-checkpoint.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "orange", "value": null }] },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 36 },
+      "id": 9,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "value_and_name"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "postgres", "uid": "wa-postgres" },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT count(*)::int AS \"Review\" FROM dashboard_jobs WHERE bucket = 'review'",
+          "refId": "A"
+        }
+      ],
+      "title": "Review",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "postgres", "uid": "wa-postgres" },
+      "description": "Aantal afgeronde analyses.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 36 },
+      "id": 10,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "value_and_name"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "postgres", "uid": "wa-postgres" },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT count(*)::int AS \"Klaar\" FROM dashboard_jobs WHERE bucket = 'klaar'",
+          "refId": "A"
+        }
+      ],
+      "title": "Klaar",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "postgres", "uid": "wa-postgres" },
+      "description": "Aantal analyses in foutstatus.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }] },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 36 },
+      "id": 11,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "value_and_name"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "postgres", "uid": "wa-postgres" },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT count(*)::int AS \"Fout\" FROM dashboard_jobs WHERE bucket = 'fout'",
+          "refId": "A"
+        }
+      ],
+      "title": "Fout",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "postgres", "uid": "wa-postgres" },
+      "description": "Alle analyses live, met hun huidige state, fijnmazige fase, tijd-in-fase, tokenverbruik en eventuele fout. Vervangt het per-analyse frontend-/dashboard (read-only; interactieve review/retry blijft in de webapp).",
+      "fieldConfig": {
+        "defaults": { "custom": { "align": "auto", "filterable": true }, "unit": "short" },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "Tijd in fase (s)" },
+            "properties": [{ "id": "unit", "value": "s" }]
+          }
+        ]
+      },
+      "gridPos": { "h": 12, "w": 24, "x": 0, "y": 40 },
+      "id": 12,
+      "options": {
+        "cellHeight": "sm",
+        "footer": { "countRows": false, "fields": "", "reducer": ["sum"], "show": false },
+        "showHeader": true,
+        "sortBy": [{ "displayName": "Bijgewerkt", "desc": true }]
+      },
+      "targets": [
+        {
+          "datasource": { "type": "postgres", "uid": "wa-postgres" },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT naam AS \"Analyse\", state AS \"State\", current_activiteit AS \"Act\", current_ronde AS \"Ronde\", current_fase AS \"Fase\", EXTRACT(EPOCH FROM (now() - current_fase_sinds))::int AS \"Tijd in fase (s)\", tokens_in AS \"Tokens in\", tokens_out AS \"Tokens uit\", error_bericht AS \"Fout\", updated AS \"Bijgewerkt\" FROM dashboard_jobs ORDER BY updated DESC LIMIT 200",
+          "refId": "A"
+        }
+      ],
+      "title": "Live analyses",
+      "type": "table"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 52 },
+      "id": 13,
+      "panels": [],
+      "title": "Trends",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "wa-prometheus" },
+      "description": "95e-percentiel duur van een orchestrator-fase, per stap.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "drawStyle": "line", "fillOpacity": 8, "gradientMode": "opacity", "lineInterpolation": "smooth", "lineWidth": 2, "showPoints": "never", "stacking": { "group": "A", "mode": "none" } },
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 53 },
+      "id": 14,
+      "options": {
+        "legend": { "calcs": ["last", "max"], "displayMode": "table", "placement": "bottom" },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "wa-prometheus" },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum by (le, stap) (rate(wetsanalyse_fase_duur_ms_milliseconds_bucket[$__rate_interval])))",
+          "instant": false,
+          "legendFormat": "{{stap}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Fase-duur p95 per stap",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "wa-prometheus" },
+      "description": "Toename LLM-tokens per interval, per stap.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "drawStyle": "line", "fillOpacity": 8, "gradientMode": "opacity", "lineInterpolation": "smooth", "lineWidth": 2, "showPoints": "never", "stacking": { "group": "A", "mode": "normal" } },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 53 },
+      "id": 15,
+      "options": {
+        "legend": { "calcs": ["last", "max"], "displayMode": "table", "placement": "bottom" },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "wa-prometheus" },
+          "editorMode": "code",
+          "expr": "sum by (stap)(increase(wetsanalyse_llm_tokens_total[$__rate_interval]))",
+          "instant": false,
+          "legendFormat": "{{stap}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "LLM-tokenverbruik per stap",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "wa-prometheus" },
+      "description": "Gefaalde orchestrator-fasen per foutklasse (leeg zolang er geen fouten zijn).",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "drawStyle": "line", "fillOpacity": 20, "gradientMode": "opacity", "lineInterpolation": "smooth", "lineWidth": 2, "showPoints": "never", "stacking": { "group": "A", "mode": "none" } },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 7, "w": 18, "x": 0, "y": 61 },
+      "id": 16,
+      "options": {
+        "legend": { "calcs": ["last", "max"], "displayMode": "table", "placement": "bottom" },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "wa-prometheus" },
+          "editorMode": "code",
+          "expr": "sum by (stap, klasse)(increase(wetsanalyse_fase_fouten_total[$__rate_interval]))",
+          "instant": false,
+          "legendFormat": "{{stap}} / {{klasse}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Fase-fouten per klasse",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "wa-prometheus" },
+      "description": "Cumulatief aandeel cache-hits van de wetstekst-cache (levensduur van het MCP-proces).",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "decimals": 1,
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "red" }, { "color": "yellow", "value": 0.3 }, { "color": "green", "value": 0.7 }] },
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 7, "w": 6, "x": 18, "y": 61 },
+      "id": 17,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "wa-prometheus" },
+          "editorMode": "code",
+          "expr": "sum(wettenbank_cache_toegang_total{resultaat=\"hit\"}) / clamp_min(sum(wettenbank_cache_toegang_total), 1)",
+          "instant": true,
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Cache hit-ratio (MCP)",
+      "type": "stat"
+    }
+  ],
+  "refresh": "10s",
+  "schemaVersion": 42,
+  "tags": ["wetsanalyse", "topologie"],
+  "templating": { "list": [] },
+  "time": { "from": "now-1h", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Wetsanalyse — systeemtopologie",
+  "uid": "wetsanalyse-topologie",
+  "weekStart": "",
+  "id": null
+}

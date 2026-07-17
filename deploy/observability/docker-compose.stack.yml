@@ -145,6 +145,31 @@ configs:
               endpoint: 0.0.0.0:4318
       processors:
         batch: {}
+      connectors:
+        spanmetrics:
+          namespace: traces.spanmetrics
+          histogram:
+            unit: ms
+            explicit:
+              buckets: [5ms, 10ms, 25ms, 50ms, 100ms, 250ms, 500ms, 1s, 2s, 5s, 10s, 30s]
+          dimensions:
+            - name: http.method
+            - name: http.status_code
+          exemplars:
+            enabled: true
+          metrics_flush_interval: 15s
+        servicegraph:
+          latency_histogram_buckets: [10ms, 50ms, 100ms, 250ms, 500ms, 1s, 2s, 5s, 10s, 30s]
+          store:
+            ttl: 5s
+            max_items: 2000
+          virtual_node_peer_attributes:
+            - peer.service
+            - db.name
+            - db.system
+            - server.address
+            - net.peer.name
+          metrics_flush_interval: 15s
       exporters:
         otlp/tempo:
           endpoint: tempo:4317
@@ -159,13 +184,13 @@ configs:
           traces:
             receivers: [otlp]
             processors: [batch]
-            exporters: [otlp/tempo]
+            exporters: [otlp/tempo, spanmetrics, servicegraph]
           logs:
             receivers: [otlp]
             processors: [batch]
             exporters: [otlphttp/loki]
           metrics:
-            receivers: [otlp]
+            receivers: [otlp, spanmetrics, servicegraph]
             processors: [batch]
             exporters: [prometheus]
   tempo_config:

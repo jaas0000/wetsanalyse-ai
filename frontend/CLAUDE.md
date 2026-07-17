@@ -40,8 +40,9 @@ De **harde scheidingslijn**: alles met een token is server-only.
 - `app/api/projects/[id]/events/route.ts` + `app/api/projects/events/route.ts` — de twee
   **uitzonderingen**: SSE-passthrough (geen `proxy()`), pipen `upstream.body` rauw door met
   `X-Accel-Buffering: no` en `Cache-Control: no-transform`. De eerste is de per-project-stream
-  (projectdetail); de tweede is de **aggregate-stream** over álle analyses van de client die zowel
-  `/dashboard` als de projectenlijst (`/`) live houdt (upstream `GET /v1/projects/events`). Beide
+  (projectdetail); de tweede is de **aggregate-stream** over álle analyses van de client die de
+  projectenlijst (`/`) live houdt (upstream `GET /v1/projects/events`; het geaggregeerde per-analyse
+  overzicht draait sinds de opheffing van `/dashboard` in Grafana). Beide
   worden via de gedeelde hook `lib/useProjectenStream.ts` geconsumeerd. Bij wijzigen niet bufferen —
   dat breekt de live voortgang (en NPM moet proxy-buffering ook uit hebben).
 - `lib/server.ts` — server-side GET-helpers voor Server Components (rechtstreeks server→server, scheelt
@@ -70,12 +71,15 @@ De **harde scheidingslijn**: alles met een token is server-only.
   `naam; definitie`-regels).
 - `app/**/page.tsx` (Server Components) — data ophalen via `lib/server.ts`; interactie delegeren naar
   een `*Client.tsx` Client Component (bv. `app/projecten/[id]/ProjectClient.tsx`). `app/page.tsx`
-  (home) en `app/dashboard` renderen server-side de projectlijst en delegeren naar resp.
-  `ProjectenLijstClient` en `DashboardClient` — beide live via `useProjectenStream` op de
-  aggregate-route (tellers/functiefasen op het dashboard via `components/DashboardCard`). Beide
-  delen de client-side **zoek-/filter-/sorteer-/pagineerlaag**: `lib/projectFilter.ts`
-  (`filterEnSorteer`/`distinctWetten`/`paginate`) + `components/ProjectControls.tsx` +
-  `components/Pagination.tsx`; statusgroepen via `statusBucket` in `lib/states.ts`.
+  (home) rendert server-side de projectlijst en delegeert naar `ProjectenLijstClient` — live via
+  `useProjectenStream` op de aggregate-route. Het client-side **zoek-/filter-/sorteer-/pagineerlaag**
+  zit in `lib/projectFilter.ts` (`filterEnSorteer`/`distinctWetten`/`paginate`) +
+  `components/ProjectControls.tsx` + `components/Pagination.tsx`; statusgroepen via `statusBucket` in
+  `lib/states.ts`. **Let op:** het aparte per-analyse live-overzicht (`app/dashboard` +
+  `DashboardCard`) is **verwijderd** — dat overzicht draait nu in Grafana (dashboard
+  *"Wetsanalyse — systeemtopologie"*, gevoed door de read-only jobstore-datasource). De
+  aggregate-SSE-stream (`/api/projects/events` → `useProjectenStream`) blijft; de home-projectenlijst
+  gebruikt 'm nog. Voeg dus geen nieuwe consument toe die dat overzicht in de webapp terugbrengt.
 - `components/` — presentatie; `components/admin/` is het `/beheer`-scherm (achter het admin-token):
   modelprofielen, wetten, gebruikers, token-verbruik én **`LlmCapturePanel`** (toggle voor het
   vastleggen van LLM-calls + viewer per analyse-id; BFF-routes `/api/admin/settings` en
@@ -87,8 +91,7 @@ De **harde scheidingslijn**: alles met een token is server-only.
 - **Act2-only afronden + act3 on-demand.** `ReviewPanel.tsx` biedt bij activiteit 2 de knop
   **"Akkoord — afronden zonder act. 3"** (feedback-status `akkoord-afronden`; alleen geldig op
   activiteit 2 zonder opmerkingen — het API-contract valideert dat). De analyse krijgt dan
-  `scope: "act2"` (`Scope`-type in `lib/types.ts`); `DashboardCard` past de stationsweergave
-  daarop aan. Op zo'n act2-only rapport toont `ProjectClient.tsx` de knop **"Activiteit 3
+  `scope: "act2"` (`Scope`-type in `lib/types.ts`). Op zo'n act2-only rapport toont `ProjectClient.tsx` de knop **"Activiteit 3
   uitvoeren"** (`startAct3` in `lib/api.ts` → BFF-route `app/api/projects/[id]/act3/route.ts`),
   waarna de SSE-stream heropent.
 - **RegelSpraak-vervolgfase.** Op een afgeronde analyse (`klaar`) toont `ProjectClient.tsx` een knop

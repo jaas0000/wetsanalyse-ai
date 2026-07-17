@@ -37,3 +37,33 @@ datasources:
     type: tempo
     access: proxy
     url: http://tempo:3200
+    jsonData:
+      # Node Graph uit de servicegraph-metrics (collector-connector) — de topologie die zich uit de
+      # traces tekent. De service-map leest de traces_service_graph_*-reeksen uit Prometheus.
+      serviceMap:
+        datasourceUid: wa-prometheus
+      nodeGraph:
+        enabled: true
+      # Van een trace-span doorklikken naar de bijbehorende logregels in Loki (correlatie op trace_id).
+      tracesToLogsV2:
+        datasourceUid: wa-loki
+        spanStartTimeShift: -1h
+        spanEndTimeShift: 1h
+        filterByTraceID: true
+  # Read-only jobstore-view voor de live jobs-tabel op het systeemtopologie-dashboard (vervangt het
+  # frontend-/dashboard). Verbindt als de rol `grafana_ro` en ziet ALLEEN de view `dashboard_jobs`
+  # (zie deploy/postgres/grafana-readonly.sql) — nooit users/tokens/keys/prompts.
+  # Het wachtwoord komt uit een env-var op de Grafana-container (GRAFANA_WA_PG_PASSWORD), niet uit de
+  # repo. Zet die gelijk aan het host-secret grafana_pg_password (zie het SQL-bestand).
+  - name: Jobstore (wetsanalyse)
+    uid: wa-postgres
+    type: postgres
+    access: proxy
+    url: postgres:5432
+    user: grafana_ro
+    jsonData:
+      database: wetsanalyse
+      sslmode: disable
+      postgresVersion: 1600
+    secureJsonData:
+      password: $GRAFANA_WA_PG_PASSWORD
