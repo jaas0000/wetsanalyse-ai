@@ -31,7 +31,9 @@
 #                           (2FA hergebruikt de API-secret llm_config_secret; geen extra bestand.)
 services:
   wetsanalyse-frontend:
-    image: ghcr.io/palmw01/wetsanalyse-frontend:latest
+    # CI deployt op digest (WETSANALYSE_FRONTEND_IMAGE=…@sha256:…) zodat exact de gebouwde/gescande
+    # image draait; handmatig valt 'ie terug op :latest.
+    image: ${WETSANALYSE_FRONTEND_IMAGE:-ghcr.io/palmw01/wetsanalyse-frontend:latest}
     container_name: wetsanalyse-frontend
     restart: unless-stopped
     expose:

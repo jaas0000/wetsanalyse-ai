@@ -28,7 +28,9 @@
 # WETSANALYSE_REAPER_INTERVAL_S in.
 services:
   wetsanalyse-api:
-    image: ghcr.io/palmw01/wetsanalyse-api:latest
+    # CI deployt op digest (WETSANALYSE_API_IMAGE=…@sha256:…) zodat exact de gebouwde/gescande image
+    # draait; handmatig valt 'ie terug op :latest.
+    image: ${WETSANALYSE_API_IMAGE:-ghcr.io/palmw01/wetsanalyse-api:latest}
     container_name: wetsanalyse-api
     restart: unless-stopped
     expose:

@@ -135,10 +135,14 @@ jobs:
           severity: CRITICAL
           exit-code: "1"
 
-      - name: Portainer redeploy via stack-update (pull :latest)
+      - name: Portainer redeploy (op digest, met convergentie-verificatie)
         if: ${{ github.ref == 'refs/heads/master' && env.PORTAINER_API_KEY != '' && env.PORTAINER_STACK_ID != '' }}
         env:
           HEALTH_URL: https://wetsanalyse-api.ipalm.nl/health
+          # Deploy exact de zojuist gebouwde/gescande/geattesteerde image (digest), niet "wat :latest
+          # toevallig is" — deterministisch, en het deploy-script kan zo verifiëren dat de NIEUWE
+          # image daadwerkelijk draait i.p.v. een oude container die de health-check false-passt.
+          IMAGE_DIGEST_REF: ${{ env.IMAGE }}@${{ steps.build.outputs.digest }}
         run: |
           set -euo pipefail
           # Secrets (LLM_API_KEY, tokens) leven on-host als bestanden; CI stuurt ze niet mee.
@@ -146,9 +150,10 @@ jobs:
             echo "::error::LLM_MODEL is leeg — zet de repo-variabele vars.LLM_MODEL. Redeploy overgeslagen."
             exit 1
           fi
-          payload=$(jq -n \
+          jq -n \
             --rawfile compose api/docker-compose.yml \
             --arg net "$PROXY_NETWORK" \
+            --arg img "$IMAGE_DIGEST_REF" \
             --arg prov "${LLM_PROVIDER:-azure_ai}" \
             --arg model "$LLM_MODEL" \
             --arg base "${LLM_API_BASE:-}" \
@@ -156,53 +161,13 @@ jobs:
             --arg secrets_dir "${SECRETS_DIR:-/volume1/docker/secrets/wetsanalyse-api}" \
             '{stackFileContent:$compose,
               env:[{name:"PROXY_NETWORK",value:$net},
+                   {name:"WETSANALYSE_API_IMAGE",value:$img},
                    {name:"LLM_PROVIDER",value:$prov},
                    {name:"LLM_MODEL",value:$model},
                    {name:"LLM_API_BASE",value:$base},
                    {name:"LLM_API_VERSION",value:$ver},
                    {name:"SECRETS_DIR",value:$secrets_dir}],
-              pullImage:true, prune:false}')
-          # Idempotente redeploy. Portainers in-place recreate (pullImage:true) kan transient
-          # struikelen op een daemon-race — "removal of container … is already in progress" —
-          # en geeft dan HTTP 500, wat de stack half-applied achterlaat (postgres blijft `Created`).
-          # Een 5xx is per definitie tijdelijk: de removal voltooit en een herhaalde PUT laat
-          # Compose schoon convergeren. Daarom tot 3 pogingen met oplopende backoff. Alleen 4xx
-          # (config/auth) is hard fout; 2xx breekt direct af; een curl-timeout draait mogelijk
-          # async door (niet opnieuw PUT'en) en laat de health-check beslissen.
-          deploy_put() {
-            curl -sS -X PUT --max-time 300 \
-              "$PORTAINER_URL/api/stacks/$PORTAINER_STACK_ID?endpointId=$PORTAINER_ENDPOINT_ID" \
-              -H "X-API-Key: $PORTAINER_API_KEY" \
-              -H "Content-Type: application/json" \
-              -d "$payload" -o /tmp/portainer-resp.json -w "%{http_code}"
-          }
-          for attempt in 1 2 3; do
-            rc=0
-            code=$(deploy_put) || rc=$?
-            echo "redeploy poging $attempt: curl_rc=$rc http=$code"
-            if [ "$rc" -ne 0 ]; then
-              echo "::warning::curl-fout (rc=$rc, bv. timeout) — update draait mogelijk async door; health-check is bepalend."
-              break
-            fi
-            case "$code" in
-              2*) echo "Stack-update geaccepteerd."; break ;;
-              4*) echo "::error::Stack-update geweigerd (HTTP $code — config/auth)"; cat /tmp/portainer-resp.json || true; exit 1 ;;
-              *)  if [ "$attempt" -lt 3 ]; then
-                    backoff=$((attempt * 45))
-                    echo "::warning::HTTP $code — vermoedelijk transiënte recreate-race; backoff ${backoff}s en opnieuw…"
-                    sleep "$backoff"
-                  else
-                    echo "::warning::HTTP $code na 3 pogingen — update draait mogelijk async door; health-check is bepalend."
-                  fi ;;
-            esac
-          done
-          echo "Health-verificatie op $HEALTH_URL ..."
-          for i in $(seq 1 20); do
-            if curl -fsS --max-time 10 "$HEALTH_URL" -o /dev/null; then
-              echo "Service gezond na redeploy (poging $i)."
-              exit 0
-            fi
-            sleep 15
-          done
-          echo "::error::Service niet gezond na redeploy. Controleer de containerlogs in Portainer."
-          exit 1
+              pullImage:true, prune:false}' > /tmp/payload.json
+          # PUT (idempotente retry) + convergentie: orphan-'Created'-containers opruimen en bevestigen
+          # dat er precies één verse, gezonde container op de nieuwe digest draait. Zie het script.
+          bash .github/scripts/portainer-deploy.sh /tmp/payload.json wetsanalyse-api "$IMAGE_DIGEST_REF" "$HEALTH_URL"

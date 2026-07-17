@@ -166,7 +166,7 @@ jobs:
             echo "::error::MCP_AUTH_TOKENS is leeg — zet de GitHub-secret (id:token,... of een kale token). Redeploy overgeslagen."
             exit 1
           fi
-          payload=$(jq -n \
+          jq -n \
             --rawfile compose tools/wettenbank-mcp/docker-compose.yml \
             --arg tok "$MCP_AUTH_TOKENS" \
             --arg net "$PROXY_NETWORK" \
@@ -174,36 +174,7 @@ jobs:
             '{stackFileContent:$compose,
               env:[{name:"MCP_AUTH_TOKENS",value:$tok},{name:"PROXY_NETWORK",value:$net},
                    {name:"WETTENBANK_IMAGE",value:$img}],
-              pullImage:true, prune:false}')
-          # De synchrone stack-update kan langer duren dan de client-timeout; een curl-fout
-          # (timeout) of 5xx betekent NIET dat de deploy mislukte — Portainer draait async door.
-          # Daarom faalt alleen 4xx (config/auth) hier hard; de rest gaat door naar de health-check
-          # hieronder, die bepalend is. (Voorheen verdubbelde `|| echo "000"` de status tot
-          # "000000", waardoor een geslaagde-maar-trage deploy ten onrechte rood werd gevlagd.)
-          rc=0
-          code=$(curl -sS -X PUT --max-time 300 \
-            "$PORTAINER_URL/api/stacks/$PORTAINER_STACK_ID?endpointId=$PORTAINER_ENDPOINT_ID" \
-            -H "X-API-Key: $PORTAINER_API_KEY" \
-            -H "Content-Type: application/json" \
-            -d "$payload" -o /tmp/portainer-resp.json -w "%{http_code}") || rc=$?
-          echo "redeploy: curl_rc=$rc http=$code"
-          if [ "$rc" -ne 0 ]; then
-            echo "::warning::curl-fout (rc=$rc, bv. timeout) — update draait mogelijk async door; health-check is bepalend."
-          else
-            case "$code" in
-              2*) echo "Stack-update geaccepteerd." ;;
-              4*) echo "::error::Stack-update geweigerd (HTTP $code — config/auth)"; cat /tmp/portainer-resp.json || true; exit 1 ;;
-              *)  echo "::warning::HTTP $code — update draait mogelijk async door; health-check is bepalend." ;;
-            esac
-          fi
-          # Bevestig dat de nieuwe container daadwerkelijk gezond opstart (max ~5 min).
-          echo "Health-verificatie op $HEALTH_URL ..."
-          for i in $(seq 1 20); do
-            if curl -fsS --max-time 10 "$HEALTH_URL" -o /dev/null; then
-              echo "Service gezond na redeploy (poging $i)."
-              exit 0
-            fi
-            sleep 15
-          done
-          echo "::error::Service niet gezond na redeploy. Controleer de containerlogs in Portainer."
-          exit 1
+              pullImage:true, prune:false}' > /tmp/payload.json
+          # PUT (idempotente retry) + convergentie: orphan-'Created'-containers opruimen en bevestigen
+          # dat er precies één verse, gezonde container op de nieuwe digest draait. Zie het script.
+          bash .github/scripts/portainer-deploy.sh /tmp/payload.json wettenbank-mcp "$IMAGE_DIGEST_REF" "$HEALTH_URL"
