@@ -84,12 +84,19 @@ Draai een analyse en een chat in de webapp, dan in Grafana → **Explore**:
 
 Er zijn **twee** kant-en-klare dashboards (map "Wetsanalyse"):
 
-- `grafana-dashboard-wetsanalyse.json` — *"Wetsanalyse — observability"* (trends: engine-fase-duur/
-  -fouten, LLM-tokens, MCP-cache, HTTP, logs, traces).
-- `grafana-dashboard-topologie.json` — *"Wetsanalyse — systeemtopologie"*: de **live keten die
-  oplicht** (Canvas: frontend → API → MCP/LLM/Postgres → overheid.nl, en API → n8n), de
-  **automatische Node Graph** (uit de service-graph), een **trace-waterfall + logs** om één executie
-  te volgen, en de **live analyses-tabel** die het opgeheven frontend-`/dashboard` vervangt.
+De twee hebben een **duidelijke rolverdeling** (en linken naar elkaar): topologie = *live/ops*,
+observability = *trends/analytics*. Metrics staan zo op één plek, zonder duplicatie.
+
+- `grafana-dashboard-topologie.json` — *"Wetsanalyse — systeemtopologie"* (**live/ops**): de **live keten
+  die oplicht** (Canvas: frontend → API → MCP/LLM/Postgres → overheid.nl, en API → n8n; met een rode
+  **keten-fouten (15 min)**-badge), de **automatische Node Graph** (servicegraph-subset), een
+  **trace-waterfall + logs** om één executie te volgen, en de **live analyses-tabel** (met gekleurde
+  jobs-stats) die het opgeheven frontend-`/dashboard` vervangt. Geen trend-panels — die staan in het
+  observability-dashboard (dashboardlink bovenin).
+- `grafana-dashboard-wetsanalyse.json` — *"Wetsanalyse — observability"* (**trends/analytics**):
+  engine-fase-duur/-fouten (met `$stap`-filter), LLM-tokens, MCP-cache, HTTP (request-rate/latency-p95
+  met threshold-lijnen/foutrate + 5xx-foutratio), **scrape-health** (targets up/down) en de **overheid.nl-
+  dependency** (SRU-latency p95 + request-rate), plus logs en traces.
 
 Importeren:
 

@@ -71,7 +71,32 @@
           },
           "unit": "short"
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "keten-fouten"
+            },
+            "properties": [
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "#2a2d33",
+                      "value": null
+                    },
+                    {
+                      "color": "red",
+                      "value": 0.0001
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 13,
@@ -711,6 +736,74 @@
                 "width": 180,
                 "height": 50
               }
+            },
+            {
+              "type": "text",
+              "name": "l_fouten",
+              "config": {
+                "align": "center",
+                "valign": "middle",
+                "size": 12,
+                "color": {
+                  "fixed": "#5f6368"
+                },
+                "text": {
+                  "mode": "fixed",
+                  "fixed": "keten-fouten (15 min)"
+                }
+              },
+              "background": {
+                "color": {
+                  "fixed": "transparent"
+                }
+              },
+              "constraint": {
+                "horizontal": "left",
+                "vertical": "top"
+              },
+              "placement": {
+                "top": 6,
+                "left": 40,
+                "width": 200,
+                "height": 18
+              }
+            },
+            {
+              "type": "metric-value",
+              "name": "n_fouten",
+              "config": {
+                "align": "center",
+                "valign": "middle",
+                "size": 18,
+                "color": {
+                  "fixed": "#ffffff"
+                },
+                "text": {
+                  "mode": "field",
+                  "field": "keten-fouten"
+                }
+              },
+              "background": {
+                "color": {
+                  "field": "keten-fouten"
+                }
+              },
+              "border": {
+                "color": {
+                  "fixed": "#5f6368"
+                },
+                "width": 2
+              },
+              "constraint": {
+                "horizontal": "left",
+                "vertical": "top"
+              },
+              "placement": {
+                "top": 26,
+                "left": 40,
+                "width": 200,
+                "height": 34
+              }
             }
           ]
         }
@@ -799,6 +892,18 @@
           "legendFormat": "n8n",
           "range": false,
           "refId": "n8n"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "wa-prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum(increase(traces_service_graph_request_failed_total[15m])) or vector(0)",
+          "instant": true,
+          "legendFormat": "keten-fouten",
+          "range": false,
+          "refId": "Fouten"
         }
       ],
       "title": "Systeemtopologie (live)",
@@ -822,7 +927,7 @@
         "type": "tempo",
         "uid": "wa-tempo"
       },
-      "description": "Service-graph die zich uit de traces tekent (servicegraph-connector). Bolgrootte = request-rate, rand-kleur = foutratio. Toont ook de frontend- en n8n-/DB-edges.",
+      "description": "Automatisch uit de traces getekende service-graph (servicegraph-connector). Bolgrootte = request-rate, rand-kleur = foutratio. Bevat alleen de gekoppelde edges (user/frontend/API/DB); externe hops (MCP→overheid, n8n) ontbreken hier — die staan in de hand-gebouwde canvas hierboven.",
       "gridPos": {
         "h": 12,
         "w": 12,
@@ -1005,8 +1110,12 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "orange",
+                "color": "green",
                 "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
               }
             ]
           },
@@ -1125,8 +1234,12 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "red",
+                "color": "green",
                 "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
               }
             ]
           },
@@ -1239,282 +1352,6 @@
       ],
       "title": "Live analyses",
       "type": "table"
-    },
-    {
-      "collapsed": false,
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 52
-      },
-      "id": 13,
-      "panels": [],
-      "title": "Trends",
-      "type": "row"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "wa-prometheus"
-      },
-      "description": "95e-percentiel duur van een orchestrator-fase, per stap.",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "drawStyle": "line",
-            "fillOpacity": 8,
-            "gradientMode": "opacity",
-            "lineInterpolation": "smooth",
-            "lineWidth": 2,
-            "showPoints": "never",
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            }
-          },
-          "unit": "ms"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 53
-      },
-      "id": 14,
-      "options": {
-        "legend": {
-          "calcs": [
-            "last",
-            "max"
-          ],
-          "displayMode": "table",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "wa-prometheus"
-          },
-          "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum by (le, stap) (rate(wetsanalyse_fase_duur_ms_milliseconds_bucket[$__rate_interval])))",
-          "instant": false,
-          "legendFormat": "{{stap}}",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Fase-duur p95 per stap",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "wa-prometheus"
-      },
-      "description": "Toename LLM-tokens per interval, per stap.",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "drawStyle": "line",
-            "fillOpacity": 8,
-            "gradientMode": "opacity",
-            "lineInterpolation": "smooth",
-            "lineWidth": 2,
-            "showPoints": "never",
-            "stacking": {
-              "group": "A",
-              "mode": "normal"
-            }
-          },
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 53
-      },
-      "id": 15,
-      "options": {
-        "legend": {
-          "calcs": [
-            "last",
-            "max"
-          ],
-          "displayMode": "table",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "wa-prometheus"
-          },
-          "editorMode": "code",
-          "expr": "sum by (stap)(increase(wetsanalyse_llm_tokens_total[$__rate_interval]))",
-          "instant": false,
-          "legendFormat": "{{stap}}",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "LLM-tokenverbruik per stap",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "wa-prometheus"
-      },
-      "description": "Gefaalde orchestrator-fasen per foutklasse (leeg zolang er geen fouten zijn).",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "drawStyle": "line",
-            "fillOpacity": 20,
-            "gradientMode": "opacity",
-            "lineInterpolation": "smooth",
-            "lineWidth": 2,
-            "showPoints": "never",
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            }
-          },
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 7,
-        "w": 18,
-        "x": 0,
-        "y": 61
-      },
-      "id": 16,
-      "options": {
-        "legend": {
-          "calcs": [
-            "last",
-            "max"
-          ],
-          "displayMode": "table",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "wa-prometheus"
-          },
-          "editorMode": "code",
-          "expr": "sum by (stap, klasse)(increase(wetsanalyse_fase_fouten_total[$__rate_interval]))",
-          "instant": false,
-          "legendFormat": "{{stap}} / {{klasse}}",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Fase-fouten per klasse",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "wa-prometheus"
-      },
-      "description": "Cumulatief aandeel cache-hits van de wetstekst-cache (levensduur van het MCP-proces).",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "decimals": 1,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "red"
-              },
-              {
-                "color": "yellow",
-                "value": 0.3
-              },
-              {
-                "color": "green",
-                "value": 0.7
-              }
-            ]
-          },
-          "unit": "percentunit"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 7,
-        "w": 6,
-        "x": 18,
-        "y": 61
-      },
-      "id": 17,
-      "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "auto"
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "wa-prometheus"
-          },
-          "editorMode": "code",
-          "expr": "sum(wettenbank_cache_toegang_total{resultaat=\"hit\"}) / clamp_min(sum(wettenbank_cache_toegang_total), 1)",
-          "instant": true,
-          "range": false,
-          "refId": "A"
-        }
-      ],
-      "title": "Cache hit-ratio (MCP)",
-      "type": "stat"
     }
   ],
   "refresh": "10s",
