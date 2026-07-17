@@ -70,6 +70,22 @@ jobs:
           done
           echo "::error::niet alle backends draaien na de redeploy."; exit 1
 
+      - name: Wachten tot Grafana gezond is
+        if: ${{ env.GRAFANA_TOKEN != '' }}
+        run: |
+          set -euo pipefail
+          # Na de stack-redeploy kan Grafana nog opstarten/DB-migreren en 5xx geven op de API.
+          # Poll /api/health tot 'database":"ok' voordat we provisionen (voorkomt de transiënte-500-race).
+          for i in $(seq 1 20); do
+            code=$(curl -sS -o /tmp/gh.json -w "%{http_code}" \
+              -H "Authorization: Bearer $GRAFANA_TOKEN" "$GRAFANA_URL/api/health" || echo 000)
+            if [ "$code" = "200" ] && grep -q '"database": *"ok"' /tmp/gh.json; then
+              echo "poging $i: Grafana gezond"; exit 0
+            fi
+            echo "poging $i: http=$code — nog niet gezond, backoff"; sleep 10
+          done
+          echo "::error::Grafana werd niet gezond na de redeploy."; cat /tmp/gh.json || true; exit 1
+
       - name: Grafana provisionen (datasources + dashboard)
         if: ${{ env.GRAFANA_TOKEN != '' }}
         run: bash deploy/observability/provision-grafana.sh
