@@ -1,0 +1,82 @@
+[
+  {
+    "title": "Wetsanalyse — fase-fouten",
+    "ruleGroup": "wetsanalyse-1m",
+    "folderUID": "wetsanalyse",
+    "orgID": 1,
+    "condition": "C",
+    "for": "0m",
+    "noDataState": "OK",
+    "execErrState": "Error",
+    "isPaused": false,
+    "labels": { "team": "wetsanalyse", "severity": "warning" },
+    "annotations": { "summary": "Eén of meer orchestrator-fasen faalden (wetsanalyse_fase_fouten_total)." },
+    "notification_settings": { "receiver": "wetsanalyse-n8n" },
+    "data": [
+      { "refId": "A", "relativeTimeRange": { "from": 600, "to": 0 }, "datasourceUid": "wa-prometheus",
+        "model": { "expr": "sum(increase(wetsanalyse_fase_fouten_total[10m]))", "instant": true, "intervalMs": 1000, "maxDataPoints": 43200, "refId": "A" } },
+      { "refId": "C", "datasourceUid": "__expr__", "relativeTimeRange": { "from": 600, "to": 0 },
+        "model": { "type": "threshold", "expression": "A", "conditions": [ { "evaluator": { "type": "gt", "params": [0] } } ], "refId": "C" } }
+    ]
+  },
+  {
+    "title": "Wetsanalyse — HTTP 5xx",
+    "ruleGroup": "wetsanalyse-1m",
+    "folderUID": "wetsanalyse",
+    "orgID": 1,
+    "condition": "C",
+    "for": "5m",
+    "noDataState": "OK",
+    "execErrState": "Error",
+    "isPaused": false,
+    "labels": { "team": "wetsanalyse", "severity": "warning" },
+    "annotations": { "summary": "De API geeft 5xx-responses terug." },
+    "notification_settings": { "receiver": "wetsanalyse-n8n" },
+    "data": [
+      { "refId": "A", "relativeTimeRange": { "from": 300, "to": 0 }, "datasourceUid": "wa-prometheus",
+        "model": { "expr": "sum(rate(http_server_duration_milliseconds_count{exported_job=\"wetsanalyse-api\", http_status_code=~\"5..\"}[5m]))", "instant": true, "intervalMs": 1000, "maxDataPoints": 43200, "refId": "A" } },
+      { "refId": "C", "datasourceUid": "__expr__", "relativeTimeRange": { "from": 300, "to": 0 },
+        "model": { "type": "threshold", "expression": "A", "conditions": [ { "evaluator": { "type": "gt", "params": [0] } } ], "refId": "C" } }
+    ]
+  },
+  {
+    "title": "Wetsanalyse — latency p95 hoog",
+    "ruleGroup": "wetsanalyse-1m",
+    "folderUID": "wetsanalyse",
+    "orgID": 1,
+    "condition": "C",
+    "for": "10m",
+    "noDataState": "OK",
+    "execErrState": "Error",
+    "isPaused": false,
+    "labels": { "team": "wetsanalyse", "severity": "warning" },
+    "annotations": { "summary": "API server-latency p95 > 5s gedurende 10m." },
+    "notification_settings": { "receiver": "wetsanalyse-n8n" },
+    "data": [
+      { "refId": "A", "relativeTimeRange": { "from": 600, "to": 0 }, "datasourceUid": "wa-prometheus",
+        "model": { "expr": "histogram_quantile(0.95, sum by (le)(rate(http_server_duration_milliseconds_bucket{exported_job=\"wetsanalyse-api\"}[10m])))", "instant": true, "intervalMs": 1000, "maxDataPoints": 43200, "refId": "A" } },
+      { "refId": "C", "datasourceUid": "__expr__", "relativeTimeRange": { "from": 600, "to": 0 },
+        "model": { "type": "threshold", "expression": "A", "conditions": [ { "evaluator": { "type": "gt", "params": [5000] } } ], "refId": "C" } }
+    ]
+  },
+  {
+    "title": "Wetsanalyse — telemetrie-backend down",
+    "ruleGroup": "wetsanalyse-1m",
+    "folderUID": "wetsanalyse",
+    "orgID": 1,
+    "condition": "C",
+    "for": "5m",
+    "noDataState": "Alerting",
+    "execErrState": "Error",
+    "isPaused": false,
+    "labels": { "team": "wetsanalyse", "severity": "critical" },
+    "annotations": { "summary": "Prometheus kan de OTel-collector niet scrapen (up == 0)." },
+    "notification_settings": { "receiver": "wetsanalyse-n8n" },
+    "data": [
+      { "refId": "A", "relativeTimeRange": { "from": 300, "to": 0 }, "datasourceUid": "wa-prometheus",
+        "model": { "expr": "up{job=\"otel-collector\"}", "instant": true, "intervalMs": 1000, "maxDataPoints": 43200, "refId": "A" } },
+      { "refId": "C", "datasourceUid": "__expr__", "relativeTimeRange": { "from": 300, "to": 0 },
+        "model": { "type": "threshold", "expression": "A", "conditions": [ { "evaluator": { "type": "lt", "params": [1] } } ], "refId": "C" } }
+    ]
+  }
+]

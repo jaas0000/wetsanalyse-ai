@@ -59,8 +59,10 @@ Draai een analyse en een chat in de webapp, dan in Grafana → **Explore**:
 - **Tempo**: één trace `frontend → API → MCP` (gedeelde `trace_id`) en de `chat.n8n`-span.
 - **Loki**: de gecorreleerde logregels (filter op `trace_id`); via de derived field spring je door naar
   de trace in Tempo.
-- **Prometheus**: `wetsanalyse_fase_duur_ms`, `wetsanalyse_fase_fouten`, `wetsanalyse_llm_tokens`,
-  `wettenbank_cache_toegang` en de auto-http-metrics (OTel-puntjes worden `_` in Prometheus).
+- **Prometheus**: `wetsanalyse_fase_duur_ms_milliseconds_*` (histogram; de OTLP→Prometheus-export
+  plakt de unit-suffix erachter), `wetsanalyse_fase_fouten_total`, `wetsanalyse_llm_tokens_total`,
+  `wettenbank_cache_toegang_total` (label `resultaat=hit|miss`) en de auto-http-metrics
+  (`http_server_duration_milliseconds_*`). Services onderscheiden via label `exported_job`.
 
 ## Aandachtspunten
 
@@ -70,3 +72,38 @@ Draai een analyse en een chat in de webapp, dan in Grafana → **Explore**:
 - **Loki OTLP:** vereist `allow_structured_metadata: true` (staat aan in `loki-config.yaml`) en Loki 3.x.
 - **Geen auth op de backends:** ze zijn alleen intern bereikbaar op `homeinfra_internal`. Zet ze niet
   achter NPM/host-poorten.
+
+## 5. Dashboard importeren
+
+`grafana-dashboard-wetsanalyse.json` is het kant-en-klare dashboard *"Wetsanalyse — observability"*
+(engine-fase-duur/-fouten, LLM-tokens, MCP-cache, HTTP, logs, traces). Importeren:
+
+- **UI:** Grafana → *Dashboards → New → Import* → upload het JSON-bestand → map "Wetsanalyse".
+- **API:** `POST /api/dashboards/db` met body `{"dashboard": <inhoud>, "folderUid": "wetsanalyse",
+  "overwrite": true}`.
+
+Vereist de datasource-uid's **`wa-prometheus`**, **`wa-loki`**, **`wa-tempo`** (zoals in
+`grafana-datasources.yaml`) en een map met uid `wetsanalyse`.
+
+## 6. Frontend/MCP-logs naar Loki (Alloy)
+
+De **API** logt via OTLP naar Loki. De **frontend** en **MCP** loggen naar stdout/stderr; de
+`alloy`-service (in de compose) scrapet die container-logs en pusht ze naar Loki
+(`alloy-config.alloy`). De config filtert bewust op `wetsanalyse-frontend` + `wettenbank-mcp` (de API
+niet — die komt al via OTLP, dus geen dubbeling), zet `service_name` op de containernaam, promoveert
+`niveau` → label `detected_level` en `trace_id`/`categorie` → structured metadata.
+
+- **Docker-socket:** alloy mount `/var/run/docker.sock` **read-only** (alleen containerlogs lezen).
+- Verifiëren: Grafana → Explore → Loki → `{service_name="wettenbank-mcp"}` en
+  `{service_name="wetsanalyse-frontend"}` geven logregels.
+
+## 7. Alerting (→ n8n-webhook)
+
+`alerting/` bevat de definities (reproduceerbaar; de live-bron is de Grafana-provisioning-API):
+- `contact-point.json` — webhook-contactpunt `wetsanalyse-n8n` (**pas de `url` aan naar je eigen
+  n8n-webhook**).
+- `alert-rules.json` — 4 regels in groep `wetsanalyse-1m` (map "Wetsanalyse"): fase-fouten, HTTP 5xx,
+  latency p95 > 5s, telemetrie-backend down (`up{job="otel-collector"}==0`). Elke regel routeert via
+  `notification_settings` rechtstreeks naar het contactpunt (raakt je globale notificatie-policies niet).
+- `apply.sh` — idempotent toepassen:
+  `GRAFANA_URL=https://grafana.ipalm.nl GRAFANA_TOKEN=<sa-token> ./apply.sh`.

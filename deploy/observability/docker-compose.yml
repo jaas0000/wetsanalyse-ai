@@ -79,10 +79,32 @@ services:
       - proxy
     mem_limit: 512m
 
+  # Alloy scrapet de container-stdout van frontend + MCP (die niet via OTLP loggen) → Loki.
+  # De API blijft via OTLP loggen; alloy-config.alloy filtert die container er bewust uit.
+  alloy:
+    image: grafana/alloy:v1.5.1
+    container_name: alloy
+    restart: unless-stopped
+    command:
+      - "run"
+      - "--server.http.listen-addr=0.0.0.0:12345"
+      - "--storage.path=/var/lib/alloy/data"
+      - "/etc/alloy/config.alloy"
+    volumes:
+      - ./alloy-config.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro   # alleen-lezen: log-shipper leest containerlogs
+      - alloy_data:/var/lib/alloy/data
+    networks:
+      - proxy
+    depends_on:
+      - loki
+    mem_limit: 256m
+
 volumes:
   tempo_data:
   loki_data:
   prometheus_data:
+  alloy_data:
 
 networks:
   proxy:

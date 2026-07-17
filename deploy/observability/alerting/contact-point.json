@@ -1,0 +1,9 @@
+{
+  "name": "wetsanalyse-n8n",
+  "type": "webhook",
+  "settings": {
+    "url": "https://n8n.ipalm.nl/webhook/grafana-alerts",
+    "httpMethod": "POST"
+  },
+  "disableResolveMessage": false
+}

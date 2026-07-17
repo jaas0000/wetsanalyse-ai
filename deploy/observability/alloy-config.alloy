@@ -1,0 +1,59 @@
+// Grafana Alloy — scrapet container-stdout van de wetsanalyse-services die NIET via OTLP loggen
+// (frontend + MCP loggen naar stdout/stderr) en pusht ze naar Loki. De API blijft via OTLP loggen,
+// dus die container wordt hier bewust NIET meegenomen (geen dubbeling).
+//
+// De logregels delen het projectbrede JSON-schema (tools/wettenbank-mcp/src/logger.ts):
+//   {"ts","niveau","categorie","bericht","trace_id","span_id",...}
+// We promoveren `niveau` naar het label `detected_level` (zelfde as als de API-logs), en zetten
+// `trace_id`/`categorie` als structured metadata zodat de Loki→Tempo-sprong ook hier werkt.
+
+discovery.docker "containers" {
+  host = "unix:///var/run/docker.sock"
+}
+
+discovery.relabel "wetsanalyse" {
+  targets = discovery.docker.containers.targets
+
+  // Alleen frontend + MCP; containernaam heeft een leidende slash.
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(wetsanalyse-frontend|wettenbank-mcp)"
+    action        = "keep"
+  }
+  // service_name = containernaam (zonder slash) — zelfde label als de OTLP-logs.
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "service_name"
+  }
+}
+
+loki.source.docker "wetsanalyse" {
+  host       = "unix:///var/run/docker.sock"
+  targets    = discovery.relabel.wetsanalyse.output
+  forward_to = [loki.process.parse.receiver]
+}
+
+loki.process "parse" {
+  // Best-effort JSON-parse; niet-JSON-regels passeren ongewijzigd (labels blijven dan leeg).
+  stage.json {
+    expressions = {
+      niveau    = "niveau",
+      trace_id  = "trace_id",
+      categorie = "categorie",
+    }
+  }
+  stage.labels {
+    values = { detected_level = "niveau" }
+  }
+  stage.structured_metadata {
+    values = { trace_id = "trace_id", categorie = "categorie" }
+  }
+  forward_to = [loki.write.default.receiver]
+}
+
+loki.write "default" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}
