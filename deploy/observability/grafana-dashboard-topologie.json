@@ -49,7 +49,7 @@
         "type": "prometheus",
         "uid": "wa-prometheus"
       },
-      "description": "Live systeemtopologie van de keten. Een blok gloeit blauw op zodra er in de laatste 15 min verkeer doorheen liep (grijs = stil); het getal is het volume in dat venster. Zo blijft een bursty analyse ook ná de LLM-burst zichtbaar. Frontend/Postgres komen uit de afgeleide servicegraph-metrics, n8n uit de spanmetrics; MCP telt de bediende cache-lookups en overheid.nl de uitgaande http-client-calls van de MCP.",
+      "description": "Live systeemtopologie van de keten. Een blok gloeit blauw op zodra er in de laatste 15 min verkeer doorheen liep (grijs = stil); het getal is het volume in dat venster. Zo blijft een bursty analyse ook ná de LLM-burst zichtbaar. Frontend/Postgres komen uit de afgeleide servicegraph-metrics, de chat-agent uit de spanmetrics; MCP telt de bediende cache-lookups en overheid.nl de uitgaande http-client-calls van de MCP.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -613,7 +613,7 @@
                 },
                 "text": {
                   "mode": "fixed",
-                  "fixed": "n8n-agent (chat)"
+                  "fixed": "graph-qa (chat)"
                 }
               },
               "background": {
@@ -887,7 +887,7 @@
             "uid": "wa-prometheus"
           },
           "editorMode": "code",
-          "expr": "sum(increase(traces_spanmetrics_calls_total{span_name=\"chat.n8n\"}[15m])) or vector(0)",
+          "expr": "sum(increase(traces_spanmetrics_calls_total{span_name=\"chat.agent\"}[15m])) or vector(0)",
           "instant": true,
           "legendFormat": "n8n",
           "range": false,

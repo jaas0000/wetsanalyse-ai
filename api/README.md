@@ -44,7 +44,7 @@ Alle analyse-endpoints zijn client-gescopet (alleen je eigen analyses) en versio
 | `GET` | `/v1/wetten` | Keuzelijst wetten (BWB-id + naam; client-auth) voor de dropdown |
 | `GET` | `/v1/wetten/{bwbId}/structuur` | Afgeplatte artikellijst van een wet (voedt de artikel-autocomplete in het formulier) |
 | `GET` | `/v1/wetten/{bwbId}/artikelen/{artikel}` | Leden + opschrift + tekstsnippet van één artikel (voedt de lid-keuzelijst) |
-| `POST` | `/v1/chat` | Chatbot-hop: stuurt een vraag door naar de n8n-GraphDB-agent (kennisgraaf-chatbot; webhook/secret via de runtime-settings, aparte rate-limit) |
+| `POST` | `/v1/chat` | Chatbot-hop: stuurt een vraag door naar de kennisgraaf-agent (graph-qa; webhook/secret via de runtime-settings, aparte rate-limit) |
 | `GET` | `/health` | Liveness check |
 | `GET` | `/ready` | Readiness check (booleans: auth, LLM, MCP, database geconfigureerd) |
 
@@ -245,7 +245,7 @@ env-`LLM_API_KEY` terugvallen en weigert de UI een key op te slaan.
 De API is **geïnstrumenteerd**: gestructureerde JSON-logging (request-id-middleware, secret-redactie)
 plus OpenTelemetry (traces/metrics/logs), gated op **`OTEL_EXPORTER_OTLP_ENDPOINT`** — leeg = no-op,
 alleen logs. De orchestrator wikkelt elke fase in een span met metrics (fase-duur, fase-fouten per
-klasse, LLM-tokens); de chat-hop krijgt een `chat.n8n`-span. Eén trace-id verbindt frontend → API →
-MCP/n8n. Nooit tokens/secrets/prompt-inhoud loggen. Zie `app/observability.py` en de projectbrede
+klasse, LLM-tokens); de chat-hop krijgt een `chat.agent`-span. Eén trace-id verbindt frontend → API →
+MCP/agent. Nooit tokens/secrets/prompt-inhoud loggen. Zie `app/observability.py` en de projectbrede
 [`docs/observability.md`](../docs/observability.md) (env-vars, logschema, en de optionele
 Grafana-stack in `deploy/observability/`).

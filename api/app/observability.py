@@ -212,7 +212,7 @@ def _setup_logs(resource: Any) -> None:
 
 
 def _instrument_libraries() -> None:
-    """Auto-instrumenteer uitgaande httpx (MCP + n8n → traceparent) en de DB. Elk guarded."""
+    """Auto-instrumenteer uitgaande httpx (MCP + chat-agent → traceparent) en de DB. Elk guarded."""
     for naam, doe in (("httpx", _instr_httpx), ("sqlalchemy", _instr_sqlalchemy), ("asyncpg", _instr_asyncpg)):
         try:
             doe()
