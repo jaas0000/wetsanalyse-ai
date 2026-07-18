@@ -12,13 +12,17 @@ from typing import Any, Protocol, runtime_checkable
 
 @runtime_checkable
 class GraphPort(Protocol):
-    """Toegang tot de kennisgraaf via de MCP-server (of een fake)."""
+    """Toegang tot de kennisgraaf via de MCP-server (of een fake).
+
+    De domeintools bouwen SPARQL en voeren die uit via sparql(); de loop hoeft
+    het rauwe MCP-tooloppervlak niet te kennen.
+    """
 
     def initialize(self) -> dict[str, Any]: ...
 
-    def list_tools(self) -> list[dict[str, Any]]: ...
-
-    def call_tool(self, name: str, arguments: dict[str, Any]) -> list[Any]: ...
+    def sparql(self, query: str) -> str:
+        """Voer een read-only SPARQL-query uit en geef de resultaattekst terug."""
+        ...
 
     def close(self) -> None: ...
 

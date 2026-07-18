@@ -1,6 +1,7 @@
 """Fakes voor de poorten, zodat de agent-loop deterministisch en zonder netwerk test."""
 from __future__ import annotations
 
+from collections.abc import Callable
 from types import SimpleNamespace
 from typing import Any
 
@@ -35,33 +36,26 @@ class FakeLLM:
 
 
 class FakeGraph:
-    """GraphPort-fake met canned tool-resultaten."""
+    """GraphPort-fake: onthoudt de uitgevoerde SPARQL en geeft canned tekst terug."""
 
     def __init__(
         self,
-        result_text: str = "",
-        tools: list[dict[str, Any]] | None = None,
+        result: str = "",
+        results: Callable[[str], str] | None = None,
     ) -> None:
-        self._tools = tools or [
-            {
-                "name": "graphdb_sparql",
-                "description": "Voer een SPARQL-query uit.",
-                "inputSchema": {"type": "object", "properties": {"query": {"type": "string"}}},
-            }
-        ]
-        self._result_text = result_text
+        self._result = result
+        self._results = results
+        self.queries: list[str] = []
         self.closed = False
-        self.calls: list[tuple[str, dict[str, Any]]] = []
 
     def initialize(self) -> dict[str, Any]:
         return {}
 
-    def list_tools(self) -> list[dict[str, Any]]:
-        return self._tools
-
-    def call_tool(self, name: str, arguments: dict[str, Any]) -> list[Any]:
-        self.calls.append((name, arguments))
-        return [{"type": "text", "text": self._result_text}]
+    def sparql(self, query: str) -> str:
+        self.queries.append(query)
+        if self._results is not None:
+            return self._results(query)
+        return self._result
 
     def close(self) -> None:
         self.closed = True

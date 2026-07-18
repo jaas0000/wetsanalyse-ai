@@ -1,4 +1,4 @@
-"""WP-A + WP-C: de loop draait op fakes; bronnen komen uit de tool-trace."""
+"""WP-A + WP-C + WP-D: de loop draait op fakes via de getypeerde toollaag."""
 from __future__ import annotations
 
 import asyncio
@@ -19,27 +19,28 @@ def _run(gen):
 
 def _make():
     settings = Settings()  # defaults; secrets niet nodig want we injecteren fakes
-    graph = FakeGraph(result_text=f"<{ART_IRI}> bwb:nummer 9 .")
+    graph = FakeGraph(result=f"<{ART_IRI}> bwb:citeertitel \"Invorderingswet 1990\" .")
     llm = FakeLLM([
+        # Het model kiest een GETYPEERDE tool, geen rauwe SPARQL.
         response(
-            [text_block("Ik zoek het op."),
-             tool_block("t1", "graphdb_sparql", {"query": "SELECT ?s WHERE { ?s ?p ?o }"})],
+            [text_block("Ik zoek de regelingen op."),
+             tool_block("t1", "list_regelingen", {})],
             "tool_use",
         ),
         # Eindantwoord met een VERZONNEN citatie die nooit uit de graaf kwam.
-        response([text_block("Zie artikel 9. (verzonnen: BWBR9999999)")], "end_turn"),
+        response([text_block("Zie de Invorderingswet 1990. (verzonnen: BWBR9999999)")], "end_turn"),
     ])
     return settings, graph, llm
 
 
-def test_loop_draait_en_sluit_graaf():
+def test_loop_draait_via_getypeerde_tool():
     settings, graph, llm = _make()
     events = _run(answer_stream("vraag", settings=settings, llm=llm, graph=graph))
-    types = [e["type"] for e in events]
-    assert "done" in types
+    assert "done" in [e["type"] for e in events]
     assert graph.closed is True
-    assert graph.calls  # tool is aangeroepen
-    assert llm.calls  # llm is aangeroepen
+    assert graph.queries  # er is een SPARQL-query uitgevoerd
+    # De uitgevoerde query is die van list_regelingen (eigen-IRI-ruimtefilter).
+    assert any("bwb:Regeling" in q and "STRSTARTS" in q for q in graph.queries)
 
 
 def test_bronnen_uit_tooltrace_niet_uit_modeltekst():
@@ -47,24 +48,21 @@ def test_bronnen_uit_tooltrace_niet_uit_modeltekst():
     events = _run(answer_stream("vraag", settings=settings, llm=llm, graph=graph))
     sources = next(e for e in events if e["type"] == "sources")["sources"]
     uris = [s["uri"] for s in sources]
-
-    # Echte vindplaats uit de tool-output verschijnt wél...
-    assert ART_IRI in uris
-    # ...en de verzonnen citatie uit de modeltekst verschijnt NIET.
-    assert not any("BWBR9999999" in u for u in uris)
+    assert ART_IRI in uris  # echte vindplaats uit de tool-output
+    assert not any("BWBR9999999" in u for u in uris)  # verzinsel uit de tekst niet
 
 
-def test_repository_id_wordt_ingevuld():
-    settings, graph, llm = _make()
-    _run(answer_stream("vraag", settings=settings, llm=llm, graph=graph))
-    _name, args = graph.calls[0]
-    assert args.get("repositoryId") == settings.repository_id
+def test_geen_repository_id_meer_in_toolargs():
+    # De domeintools kennen de repo zelf; het model krijgt geen repositoryId-veld.
+    from agent.tools import anthropic_schemas
+
+    for tool in anthropic_schemas():
+        assert "repositoryId" not in tool["input_schema"].get("properties", {})
 
 
 def test_eindtekst_behoudt_blokstructuur():
-    # Twee tekstblokken mogen niet met een spatie aan elkaar geplakt worden.
     settings = Settings()
-    graph = FakeGraph(result_text=ART_IRI)
+    graph = FakeGraph(result=ART_IRI)
     llm = FakeLLM([
         response([text_block("Regel een."), text_block("Regel twee.")], "end_turn"),
     ])

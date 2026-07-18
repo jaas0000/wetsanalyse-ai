@@ -1,18 +1,16 @@
 """
 Agent-kern: tool-calling loop via een LLMPort + een GraphPort (GraphDB MCP).
 
-Gebruikt een blocking LLM-call (niet streaming) voor betrouwbaarheid op Azure
-Foundry. De FastAPI-laag stuurt na elke tool-ronde een voortgangs-event, en het
-eindantwoord token-voor-token als gesimuleerde stream.
-
-De providers worden via poorten geïnjecteerd (agent/ports.py); worden ze niet
-meegegeven, dan bouwt de loop defaults uit Settings. Zo draait de loop in tests op
-fakes zonder netwerk.
+Het model kiest uit de getypeerde domeintools (agent/tools/); de loop voert ze uit
+via de registry en hoeft het rauwe MCP-oppervlak niet te kennen. Providers worden
+via poorten geïnjecteerd; worden ze niet meegegeven, dan bouwt de loop defaults uit
+Settings. Zo draait de loop in tests op fakes zonder netwerk.
 
 Stroom per vraag:
-  1. Initialiseer de graaf-sessie; haal tool-definities op.
-  2. Stuur vraag + system prompt naar het LLM met de MCP-tools als tool-schema.
-  3. Het LLM roept tools aan → via de graaf uitvoeren → resultaat terug als tool_result.
+  1. Initialiseer de graaf-sessie.
+  2. Stuur vraag + system prompt naar het LLM met de domeintools als schema.
+  3. Het LLM roept een tool aan → registry.dispatch bouwt+voert de query uit → terug
+     als tool_result.
   4. Herhaal tot stop_reason == "end_turn" (max settings.max_turns rondes).
   5. Yield het eindantwoord als tokens + bronnen (uit de tool-trace).
 """
@@ -24,38 +22,15 @@ from typing import Any
 
 from .config import Settings
 from .memory import load_history, save_turn
-from .mcp_client import MCPError
 from .ports import GraphPort, LLMPort
 from .provenance import collect_sources
 from .prompts import SYSTEM_PROMPT
+from .tools import anthropic_schemas, dispatch
 
 
-def _mcp_tools_to_anthropic(tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    result = []
-    for t in tools:
-        schema = t.get("inputSchema", {})
-        if "type" not in schema:
-            schema = {"type": "object", "properties": schema}
-        result.append(
-            {
-                "name": t["name"],
-                "description": t.get("description", ""),
-                "input_schema": schema,
-            }
-        )
-    return result
-
-
-def _summarize_tool_result(content_list: list[Any], max_chars: int = 8000) -> str:
-    parts = []
-    for item in content_list:
-        if isinstance(item, dict):
-            parts.append(item.get("text", str(item)))
-        else:
-            parts.append(str(item))
-    text = "\n".join(parts)
+def _truncate(text: str, max_chars: int = 8000) -> str:
     if len(text) > max_chars:
-        text = text[:max_chars] + f"\n...[resultaat ingekort op {max_chars} tekens]"
+        return text[:max_chars] + f"\n...[resultaat ingekort op {max_chars} tekens]"
     return text
 
 
@@ -92,23 +67,13 @@ async def answer_stream(
 
             llm = AnthropicLLM(settings)
         await _run_sync(graph.initialize)
-        raw_tools = await _run_sync(graph.list_tools)
     except Exception as exc:
         yield {"type": "error", "message": f"MCP-verbinding mislukt: {exc}"}
         if graph is not None:
             graph.close()
         return
 
-    anthropic_tools = _mcp_tools_to_anthropic(raw_tools)
-    for tool in anthropic_tools:
-        props = tool["input_schema"].setdefault("properties", {})
-        if "repositoryId" not in props:
-            props["repositoryId"] = {
-                "type": "string",
-                "description": f"GraphDB repository (altijd '{settings.repository_id}')",
-                "default": settings.repository_id,
-            }
-
+    tool_schemas = anthropic_schemas()
     model = settings.llm_model
 
     # Laad gespreksgeschiedenis als conversation_id opgegeven
@@ -129,7 +94,7 @@ async def answer_stream(
                     model=model,
                     max_tokens=4096,
                     system=SYSTEM_PROMPT,
-                    tools=anthropic_tools,
+                    tools=tool_schemas,
                     messages=messages,
                 )
             )
@@ -185,21 +150,13 @@ async def answer_stream(
             tool_names = [tu["name"] for tu in tool_uses]
             yield {"type": "status", "message": f"Graaf bevragen: {', '.join(tool_names)}..."}
 
-            # Tool-calls uitvoeren via de graaf
+            # Tool-calls uitvoeren via de registry (bouwt + voert de query uit)
             tool_results: list[dict[str, Any]] = []
             for tu in tool_uses:
-                args = dict(tu["input"])
-                if "repositoryId" not in args or not args["repositoryId"]:
-                    args["repositoryId"] = settings.repository_id
-
-                try:
-                    content_list = await _run_sync(graph.call_tool, tu["name"], args)
-                    result_text = _summarize_tool_result(content_list)
-                    # Registreer de trace voor bronvermelding.
-                    source_trace.append((tu["name"], result_text))
-                except MCPError as exc:
-                    result_text = f"Fout bij tool-aanroep: {exc}"
-
+                result_text = await _run_sync(dispatch, tu["name"], graph, tu["input"])
+                result_text = _truncate(result_text)
+                # Registreer de trace voor bronvermelding.
+                source_trace.append((tu["name"], result_text))
                 tool_results.append({
                     "type": "tool_result",
                     "tool_use_id": tu["id"],

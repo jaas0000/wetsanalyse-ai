@@ -1,0 +1,171 @@
+"""
+Geparametriseerde SPARQL-bouwers voor de kennisgraaf.
+
+Deze module is de code-vorm van de recepten die voorheen als proza in de
+system-prompt stonden: de eigen-IRI-ruimte-filters die owl:sameAs-tweelingen
+ontdubbelen, de directe artikel-/lid-IRI-patronen, de Lucene-FTS en de
+verwijzings-/SKOS-vormen. De invoer wordt gevalideerd/ge-escaped zodat het model
+geen SPARQL kan injecteren via een tool-argument.
+
+Bron van de patronen: de eerdere agent/prompts.py (kennisgraaf-verkenning).
+"""
+from __future__ import annotations
+
+import re
+
+PREFIXES = """PREFIX bwb: <https://ipalm.nl/ns/bwb#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
+PREFIX luc: <http://www.ontotext.com/connectors/lucene#>
+PREFIX inst: <http://www.ontotext.com/connectors/lucene/instance#>
+PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+"""
+
+# Eigen IRI-ruimte — filter hierop om owl:sameAs-tweelingen (wetten.overheid.nl)
+# buiten tellingen/resultaten te houden.
+NS = "https://ipalm.nl/bwb/"
+
+_BWB_RE = re.compile(r"^BWBR\d+$")
+_ART_RE = re.compile(r"^[0-9]+[a-z]*$", re.IGNORECASE)
+_NUM_RE = re.compile(r"^[0-9]+[a-z]*$", re.IGNORECASE)
+
+
+def _bwb(value: str) -> str:
+    v = str(value).strip()
+    if not _BWB_RE.match(v):
+        raise ValueError(f"Ongeldig BWB-id: {value!r} (verwacht 'BWBR' gevolgd door cijfers).")
+    return v
+
+
+def _art(value: str) -> str:
+    v = str(value).strip()
+    if not _ART_RE.match(v):
+        raise ValueError(f"Ongeldig artikelnummer: {value!r}.")
+    return v
+
+
+def _num(value: str) -> str:
+    v = str(value).strip()
+    if not _NUM_RE.match(v):
+        raise ValueError(f"Ongeldig nummer: {value!r}.")
+    return v
+
+
+def _lit(text: str) -> str:
+    """Veilige SPARQL-stringliteral."""
+    s = str(text).replace("\\", "\\\\").replace('"', '\\"').replace("\n", " ").replace("\r", " ")
+    return f'"{s}"'
+
+
+# ------------------------------------------------------------------
+# IRI-bouwers
+# ------------------------------------------------------------------
+
+def regeling_iri(bwb_id: str) -> str:
+    return f"{NS}{_bwb(bwb_id)}"
+
+
+def artikel_iri(bwb_id: str, artikel: str) -> str:
+    return f"{NS}{_bwb(bwb_id)}/artikel/{_art(artikel)}"
+
+
+def lid_iri(bwb_id: str, artikel: str, lid: str) -> str:
+    return f"{artikel_iri(bwb_id, artikel)}/lid/{_num(lid)}"
+
+
+# ------------------------------------------------------------------
+# Query-bouwers
+# ------------------------------------------------------------------
+
+def fts(query: str, limit: int = 10) -> str:
+    """Full-text search via de Lucene-index inst:bwb_tekst."""
+    lim = max(1, min(int(limit), 50))
+    return PREFIXES + f"""SELECT ?node ?score ?label ?tekst WHERE {{
+  [] a inst:bwb_tekst ; luc:query {_lit(query)} ; luc:entities ?node .
+  ?node luc:score ?score .
+  OPTIONAL {{ ?node rdfs:label ?label }}
+  OPTIONAL {{ ?node bwb:tekst ?tekst }}
+}} ORDER BY DESC(?score) LIMIT {lim}"""
+
+
+def list_regelingen() -> str:
+    return PREFIXES + f"""SELECT DISTINCT ?regeling ?citeertitel ?soort WHERE {{
+  ?regeling a bwb:Regeling .
+  FILTER(STRSTARTS(STR(?regeling), "{NS}"))
+  OPTIONAL {{ ?regeling bwb:citeertitel ?citeertitel }}
+  OPTIONAL {{ ?regeling bwb:soort ?soort }}
+}} ORDER BY ?citeertitel"""
+
+
+def get_artikel(bwb_id: str, artikel: str) -> str:
+    iri = artikel_iri(bwb_id, artikel)
+    return PREFIXES + f"""SELECT ?tekst ?jci ?lid ?lidnummer ?lidtekst WHERE {{
+  OPTIONAL {{ <{iri}> bwb:tekst ?tekst }}
+  OPTIONAL {{ <{iri}> bwb:jci ?jci }}
+  OPTIONAL {{
+    <{iri}> bwb:heeftLid ?lid .
+    FILTER(STRSTARTS(STR(?lid), "{NS}"))
+    OPTIONAL {{ ?lid bwb:nummer ?lidnummer }}
+    OPTIONAL {{ ?lid bwb:tekst ?lidtekst }}
+  }}
+}} ORDER BY ?lid"""
+
+
+def get_lid(bwb_id: str, artikel: str, lid: str) -> str:
+    iri = lid_iri(bwb_id, artikel, lid)
+    return PREFIXES + f"""SELECT ?nummer ?tekst ?jci WHERE {{
+  OPTIONAL {{ <{iri}> bwb:nummer ?nummer }}
+  OPTIONAL {{ <{iri}> bwb:tekst ?tekst }}
+  OPTIONAL {{ <{iri}> bwb:jci ?jci }}
+}}"""
+
+
+def get_regeling_info(bwb_id: str) -> str:
+    iri = regeling_iri(bwb_id)
+    return PREFIXES + f"""SELECT ?citeertitel ?opschrift ?afkorting ?soort
+       ?geldigVanaf ?geldigTot ?organisatie ?ondertekenaar WHERE {{
+  OPTIONAL {{ <{iri}> bwb:citeertitel ?citeertitel }}
+  OPTIONAL {{ <{iri}> bwb:opschrift ?opschrift }}
+  OPTIONAL {{ <{iri}> bwb:afkorting ?afkorting }}
+  OPTIONAL {{ <{iri}> bwb:soort ?soort }}
+  OPTIONAL {{ <{iri}> bwb:geldigVanaf ?geldigVanaf }}
+  OPTIONAL {{ <{iri}> bwb:geldigTot ?geldigTot }}
+  OPTIONAL {{ <{iri}> bwb:uitgegevenDoor ?org . OPTIONAL {{ ?org rdfs:label ?organisatie }} }}
+  OPTIONAL {{ <{iri}> bwb:ondertekendDoor ?ond . OPTIONAL {{ ?ond rdfs:label ?ondertekenaar }} }}
+}}"""
+
+
+def follow_verwijzingen(bwb_id: str, artikel: str, lid: str | None = None) -> str:
+    node = lid_iri(bwb_id, artikel, lid) if lid else artikel_iri(bwb_id, artikel)
+    return PREFIXES + f"""SELECT ?ankerTekst ?naar ?soort ?doelSoort WHERE {{
+  <{node}> bwb:heeftVerwijzing ?v .
+  OPTIONAL {{ ?v bwb:ankerTekst ?ankerTekst }}
+  OPTIONAL {{ ?v bwb:naar ?naar }}
+  OPTIONAL {{ ?v bwb:soort ?soort }}
+  OPTIONAL {{ ?v bwb:doelSoort ?doelSoort }}
+}}"""
+
+
+def referenced_by(bwb_id: str, artikel: str) -> str:
+    iri = artikel_iri(bwb_id, artikel)
+    return PREFIXES + f"""SELECT DISTINCT ?regeling ?citeertitel WHERE {{
+  <{iri}> bwb:verwijzingDoor ?regeling .
+  FILTER(STRSTARTS(STR(?regeling), "{NS}"))
+  OPTIONAL {{ ?regeling bwb:citeertitel ?citeertitel }}
+}} ORDER BY ?citeertitel"""
+
+
+def resolve_begrip(term: str) -> str:
+    return PREFIXES + f"""SELECT DISTINCT ?concept ?label ?related WHERE {{
+  ?concept a skos:Concept .
+  {{ ?concept skos:prefLabel ?label }} UNION {{ ?concept rdfs:label ?label }}
+  FILTER(CONTAINS(LCASE(STR(?label)), LCASE({_lit(term)})))
+  OPTIONAL {{ ?concept skos:related|skos:broader|skos:narrower ?related }}
+}} LIMIT 25"""
+
+
+def count_by_type() -> str:
+    return PREFIXES + f"""SELECT ?type (COUNT(DISTINCT ?s) AS ?aantal) WHERE {{
+  ?s a ?type .
+  FILTER(STRSTARTS(STR(?s), "{NS}"))
+}} GROUP BY ?type ORDER BY DESC(?aantal)"""

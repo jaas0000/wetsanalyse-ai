@@ -1,0 +1,199 @@
+"""
+Getypeerde domein-toollaag over de kennisgraaf.
+
+Het model kiest voortaan uit deze bewerkingen i.p.v. vrije SPARQL te schrijven:
+onze code bouwt de query deterministisch (agent/graph/queries.py) en voert die uit
+via de GraphPort. Elke tool draagt in zijn beschrijving het "hoe"; de correctheid
+zit in geteste code, niet in prompt-proza. raw_sparql blijft als gated escape.
+
+De registry levert twee dingen aan de loop:
+  - anthropic_schemas(): de model-facing tool-schema's
+  - dispatch(name, graph, args): voert de tool uit en geeft resultaattekst terug
+"""
+from __future__ import annotations
+
+from collections.abc import Callable
+from typing import Any
+
+from ..graph import queries, schema
+from ..mcp_client import MCPError
+from ..ports import GraphPort
+
+Handler = Callable[[GraphPort, dict[str, Any]], str]
+
+
+def _obj(properties: dict[str, Any], required: list[str]) -> dict[str, Any]:
+    return {
+        "type": "object",
+        "properties": properties,
+        "required": required,
+        "additionalProperties": False,
+    }
+
+
+_STR = {"type": "string"}
+
+
+# ------------------------------------------------------------------
+# Handlers
+# ------------------------------------------------------------------
+
+def _h_search(g: GraphPort, a: dict[str, Any]) -> str:
+    return g.sparql(queries.fts(a["query"], a.get("limit", 10)))
+
+
+def _h_get_artikel(g: GraphPort, a: dict[str, Any]) -> str:
+    return g.sparql(queries.get_artikel(a["bwb_id"], a["artikel"]))
+
+
+def _h_get_lid(g: GraphPort, a: dict[str, Any]) -> str:
+    return g.sparql(queries.get_lid(a["bwb_id"], a["artikel"], a["lid"]))
+
+
+def _h_list_regelingen(g: GraphPort, a: dict[str, Any]) -> str:
+    return g.sparql(queries.list_regelingen())
+
+
+def _h_regeling_info(g: GraphPort, a: dict[str, Any]) -> str:
+    return g.sparql(queries.get_regeling_info(a["bwb_id"]))
+
+
+def _h_verwijzingen(g: GraphPort, a: dict[str, Any]) -> str:
+    return g.sparql(queries.follow_verwijzingen(a["bwb_id"], a["artikel"], a.get("lid")))
+
+
+def _h_referenced_by(g: GraphPort, a: dict[str, Any]) -> str:
+    return g.sparql(queries.referenced_by(a["bwb_id"], a["artikel"]))
+
+
+def _h_resolve_begrip(g: GraphPort, a: dict[str, Any]) -> str:
+    return g.sparql(queries.resolve_begrip(a["term"]))
+
+
+def _h_schema(g: GraphPort, a: dict[str, Any]) -> str:
+    return schema.graph_schema(g)
+
+
+def _h_raw_sparql(g: GraphPort, a: dict[str, Any]) -> str:
+    return g.sparql(a["query"])
+
+
+# ------------------------------------------------------------------
+# Tool-definities
+# ------------------------------------------------------------------
+
+_BWB = {"type": "string", "description": "BWB-id van de regeling, bijv. 'BWBR0004770'."}
+_ART = {"type": "string", "description": "Artikelnummer, bijv. '9' of '9a'."}
+
+TOOLS: list[dict[str, Any]] = [
+    {
+        "name": "search_wetgeving",
+        "description": (
+            "Full-text zoeken in alle wetteksten (Lucene). Gebruik dit om bepalingen "
+            "te vinden als je de vindplaats nog niet kent. Geeft treffers met label en "
+            "tekstfragment. Lucene-syntax: AND/OR/NOT, \"exacte frase\", wildcard*."
+        ),
+        "input_schema": _obj(
+            {
+                "query": {"type": "string", "description": "Zoekterm(en) in Lucene-syntax."},
+                "limit": {"type": "integer", "description": "Max. aantal treffers (1-50, default 10)."},
+            },
+            ["query"],
+        ),
+        "handler": _h_search,
+    },
+    {
+        "name": "get_artikel",
+        "description": "Haal de tekst, jci-vindplaats en alle leden van één artikel op.",
+        "input_schema": _obj({"bwb_id": _BWB, "artikel": _ART}, ["bwb_id", "artikel"]),
+        "handler": _h_get_artikel,
+    },
+    {
+        "name": "get_lid",
+        "description": "Haal de tekst en vindplaats van één specifiek lid van een artikel op.",
+        "input_schema": _obj(
+            {"bwb_id": _BWB, "artikel": _ART, "lid": {"type": "string", "description": "Lidnummer, bijv. '1'."}},
+            ["bwb_id", "artikel", "lid"],
+        ),
+        "handler": _h_get_lid,
+    },
+    {
+        "name": "list_regelingen",
+        "description": "Geef alle regelingen in de kennisgraaf (citeertitel + soort).",
+        "input_schema": _obj({}, []),
+        "handler": _h_list_regelingen,
+    },
+    {
+        "name": "get_regeling_info",
+        "description": (
+            "Metadata van één regeling: citeertitel, opschrift, soort (wet/regeling/"
+            "beleidsregel), geldigheid, uitgevende organisatie en ondertekenaar."
+        ),
+        "input_schema": _obj({"bwb_id": _BWB}, ["bwb_id"]),
+        "handler": _h_regeling_info,
+    },
+    {
+        "name": "follow_verwijzingen",
+        "description": (
+            "Geef de uitgaande verwijzingen vanuit een artikel (of lid): ankertekst, "
+            "doel en soort (intref/extref/tekstueel). Voor het volgen van kruisverwijzingen."
+        ),
+        "input_schema": _obj(
+            {"bwb_id": _BWB, "artikel": _ART, "lid": {"type": "string", "description": "Optioneel lidnummer."}},
+            ["bwb_id", "artikel"],
+        ),
+        "handler": _h_verwijzingen,
+    },
+    {
+        "name": "referenced_by",
+        "description": "Geef de regelingen die naar dit artikel verwijzen (verwijzingDoor).",
+        "input_schema": _obj({"bwb_id": _BWB, "artikel": _ART}, ["bwb_id", "artikel"]),
+        "handler": _h_referenced_by,
+    },
+    {
+        "name": "resolve_begrip",
+        "description": (
+            "Zoek een juridisch begrip in de SKOS-thesaurus op label en geef het "
+            "concept-IRI plus gerelateerde begrippen."
+        ),
+        "input_schema": _obj({"term": {"type": "string", "description": "Begrip of deel ervan."}}, ["term"]),
+        "handler": _h_resolve_begrip,
+    },
+    {
+        "name": "graph_schema",
+        "description": (
+            "Geef de live omvang van de graaf (aantallen per type) en de lijst regelingen. "
+            "Gebruik dit bij twijfel over wat er in de graaf zit."
+        ),
+        "input_schema": _obj({}, []),
+        "handler": _h_schema,
+    },
+    {
+        "name": "raw_sparql",
+        "description": (
+            "LAATSTE REDMIDDEL: voer een eigen read-only SPARQL-query (SELECT/CONSTRUCT/"
+            "DESCRIBE) uit als geen enkele andere tool volstaat. Updates worden geweigerd."
+        ),
+        "input_schema": _obj({"query": {"type": "string", "description": "SPARQL SELECT/CONSTRUCT/DESCRIBE."}}, ["query"]),
+        "handler": _h_raw_sparql,
+    },
+]
+
+_BY_NAME: dict[str, dict[str, Any]] = {t["name"]: t for t in TOOLS}
+
+
+def anthropic_schemas() -> list[dict[str, Any]]:
+    return [
+        {"name": t["name"], "description": t["description"], "input_schema": t["input_schema"]}
+        for t in TOOLS
+    ]
+
+
+def dispatch(name: str, graph: GraphPort, args: dict[str, Any] | None) -> str:
+    tool = _BY_NAME.get(name)
+    if tool is None:
+        return f"Onbekende tool: {name}"
+    try:
+        return tool["handler"](graph, args or {})
+    except (ValueError, MCPError, KeyError) as exc:
+        return f"Fout bij tool '{name}': {exc}"

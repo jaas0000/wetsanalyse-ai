@@ -20,6 +20,7 @@ class Settings(BaseModel):
     graphdb_mcp_url: str = "https://graphdb-mcp.ipalm.nl/mcp"
     graphdb_token: str | None = None
     repository_id: str = "inning"
+    graphdb_sparql_tool: str = "sparql_query"  # naam van de SPARQL-tool op de MCP-server
 
     # LLM (Azure AI Foundry / Anthropic)
     azure_foundry_api_key: str | None = None
@@ -46,6 +47,7 @@ class Settings(BaseModel):
             "graphdb_mcp_url": e.get("GRAPHDB_MCP_URL"),
             "graphdb_token": e.get("GRAPHDB_TOKEN"),
             "repository_id": e.get("GRAPHDB_REPOSITORY_ID"),
+            "graphdb_sparql_tool": e.get("GRAPHDB_SPARQL_TOOL"),
             "azure_foundry_api_key": e.get("AZURE_FOUNDRY_API_KEY"),
             "azure_foundry_base_url": e.get("AZURE_FOUNDRY_BASE_URL"),
             "llm_model": e.get("LLM_MODEL"),
