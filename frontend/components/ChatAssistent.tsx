@@ -33,7 +33,8 @@ function statusLabel(v: Verbinding): string {
   return v === "ok" ? "actief" : v === "fout" ? "probleem" : "hapering";
 }
 
-const HEALTH_POLL_MS = 60_000;
+// 20 s = de server-side cache-TTL van /v1/chat/health (sneller pollen levert enkel cache-hits op).
+const HEALTH_POLL_MS = 20_000;
 
 const SESSIE_KEY = CHAT_SESSIE_KEY;
 const HIST_PREFIX = CHAT_HIST_PREFIX;
