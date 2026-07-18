@@ -62,6 +62,10 @@ def _h_verwijzingen(g: GraphPort, a: dict[str, Any]) -> str:
     return g.sparql(queries.follow_verwijzingen(a["bwb_id"], a["artikel"], a.get("lid")))
 
 
+def _h_context(g: GraphPort, a: dict[str, Any]) -> str:
+    return g.sparql(queries.context(a["bwb_id"], a["artikel"], a.get("lid")))
+
+
 def _h_referenced_by(g: GraphPort, a: dict[str, Any]) -> str:
     return g.sparql(queries.referenced_by(a["bwb_id"], a["artikel"]))
 
@@ -149,6 +153,20 @@ TOOLS: list[dict[str, Any]] = [
         "description": "Geef de regelingen die naar dit artikel verwijzen (verwijzingDoor).",
         "input_schema": _obj({"bwb_id": _BWB, "artikel": _ART}, ["bwb_id", "artikel"]),
         "handler": _h_referenced_by,
+    },
+    {
+        "name": "get_context",
+        "description": (
+            "GraphRAG: haal een bepaling met haar volledige structurele context in één keer "
+            "op — de bevattende delen (hoofdstuk/afdeling/regeling), de leden, de uitgaande "
+            "verwijzingen én wie naar het artikel verwijst. Gebruik dit voor context- en "
+            "verwijzingsvragen i.p.v. losse tools te combineren."
+        ),
+        "input_schema": _obj(
+            {"bwb_id": _BWB, "artikel": _ART, "lid": {"type": "string", "description": "Optioneel lidnummer."}},
+            ["bwb_id", "artikel"],
+        ),
+        "handler": _h_context,
     },
     {
         "name": "resolve_begrip",

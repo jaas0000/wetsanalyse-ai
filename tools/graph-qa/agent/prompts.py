@@ -15,7 +15,8 @@ TOOLKEUZE — kies de meest gerichte tool:
 - search_wetgeving om een bepaling te vinden als je de vindplaats nog niet kent;
 - get_artikel / get_lid voor een bekende bepaling;
 - list_regelingen / get_regeling_info voor regelingen en hun soort/geldigheid;
-- follow_verwijzingen / referenced_by voor kruisverwijzingen tussen bepalingen;
+- follow_verwijzingen / referenced_by voor losse kruisverwijzingen tussen bepalingen;
+- get_context voor een bepaling mét haar structurele context (delen, leden, verwijzingen) in één keer;
 - resolve_begrip voor een juridisch begrip;
 - graph_schema bij twijfel over de omvang of inhoud van de graaf;
 - raw_sparql alleen als geen enkele andere tool volstaat.

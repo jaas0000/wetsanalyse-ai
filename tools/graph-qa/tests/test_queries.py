@@ -51,6 +51,23 @@ def test_count_by_type():
     assert "STRSTARTS" in sparql
 
 
+def test_context_subgraaf_dekt_alle_relaties():
+    sparql = q.context("BWBR0004770", "9")
+    # node zelf + structuur + leden + uit-/ingaande verwijzingen in één query
+    assert "<https://ipalm.nl/bwb/BWBR0004770/artikel/9>" in sparql
+    assert "bwb:bevat" in sparql
+    assert "bwb:heeftLid" in sparql
+    assert "bwb:heeftVerwijzing" in sparql
+    assert "bwb:verwijzingDoor" in sparql
+    assert "UNION" in sparql
+
+
+def test_context_lid_gebruikt_lid_iri_maar_verwijzingdoor_op_artikel():
+    sparql = q.context("BWBR0004770", "9", "1")
+    assert "/artikel/9/lid/1>" in sparql          # node = het lid
+    assert "<https://ipalm.nl/bwb/BWBR0004770/artikel/9> bwb:verwijzingDoor" in sparql  # incoming op artikel
+
+
 def test_resolve_begrip_escapet_term():
     # Een aanhalingsteken in de term mag de query niet breken.
     sparql = q.resolve_begrip('dwang"bevel')
