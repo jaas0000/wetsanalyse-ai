@@ -10,7 +10,8 @@ RUN pip install --no-cache-dir \
     httpx \
     pydantic \
     python-dotenv \
-    sse-starlette
+    sse-starlette \
+    langgraph
 
 COPY agent/ agent/
 COPY api/ api/

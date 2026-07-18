@@ -18,7 +18,8 @@ def _run(gen):
 
 
 def _make():
-    settings = Settings()  # defaults; secrets niet nodig want we injecteren fakes
+    # planning uit: test de kern-loop (agent↔tools→verify) zonder extra plan-call.
+    settings = Settings(enable_planning=False)
     graph = FakeGraph(result=f"<{ART_IRI}> bwb:citeertitel \"Invorderingswet 1990\" .")
     llm = FakeLLM([
         # Het model kiest een GETYPEERDE tool, geen rauwe SPARQL.
@@ -60,12 +61,13 @@ def test_geen_repository_id_meer_in_toolargs():
         assert "repositoryId" not in tool["input_schema"].get("properties", {})
 
 
-def test_eindtekst_behoudt_blokstructuur():
-    settings = Settings()
+def test_eindtekst_streamt_verbatim():
+    # De token-stream reproduceert de antwoordtekst (incl. newlines) letterlijk.
+    settings = Settings(enable_planning=False)
     graph = FakeGraph(result=ART_IRI)
     llm = FakeLLM([
-        response([text_block("Regel een."), text_block("Regel twee.")], "end_turn"),
+        response([text_block("Regel een.\n\nRegel twee.")], "end_turn"),
     ])
     events = _run(answer_stream("vraag", settings=settings, llm=llm, graph=graph))
     text = "".join(e["content"] for e in events if e["type"] == "token")
-    assert "Regel een.\n\nRegel twee." in text
+    assert text == "Regel een.\n\nRegel twee."

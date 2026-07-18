@@ -20,19 +20,48 @@ def response(content: list[SimpleNamespace], stop_reason: str) -> SimpleNamespac
     return SimpleNamespace(content=content, stop_reason=stop_reason)
 
 
+class _FakeStream:
+    """Streamt de tekstblokken van één response als deltas (LLMStream-protocol)."""
+
+    def __init__(self, resp: SimpleNamespace) -> None:
+        self._resp = resp
+
+    def __enter__(self) -> "_FakeStream":
+        return self
+
+    def __exit__(self, *_exc: Any) -> bool:
+        return False
+
+    @property
+    def text_deltas(self):
+        text = "".join(b.text for b in self._resp.content if b.type == "text")
+        for i in range(0, len(text), 12):  # in brokjes, als een echte stream
+            yield text[i:i + 12]
+
+    def final_message(self) -> SimpleNamespace:
+        return self._resp
+
+
 class FakeLLM:
-    """Speelt een vaste reeks responses af; onthoudt de create()-aanroepen."""
+    """Speelt een vaste reeks responses af via create() én stream() (gedeelde index)."""
 
     def __init__(self, responses: list[SimpleNamespace]) -> None:
         self._responses = list(responses)
         self.index = 0
         self.calls: list[dict[str, Any]] = []
 
-    def create(self, **kwargs: Any) -> SimpleNamespace:
-        self.calls.append(kwargs)
+    def _next(self) -> SimpleNamespace:
         resp = self._responses[self.index]
         self.index += 1
         return resp
+
+    def create(self, **kwargs: Any) -> SimpleNamespace:
+        self.calls.append(kwargs)
+        return self._next()
+
+    def stream(self, **kwargs: Any) -> _FakeStream:
+        self.calls.append(kwargs)
+        return _FakeStream(self._next())
 
 
 class FakeGraph:

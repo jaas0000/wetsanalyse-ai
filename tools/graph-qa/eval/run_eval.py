@@ -86,8 +86,9 @@ def _offline_scenario():
 
     graph = FakeGraph(result='<https://ipalm.nl/bwb/BWBR0004770> bwb:citeertitel "Invorderingswet 1990" .')
     llm = FakeLLM([
-        response([tool_block("t1", "list_regelingen", {})], "tool_use"),
-        response([text_block("De Invorderingswet 1990 (BWBR0004770) staat in de graaf.")], "end_turn"),
+        response([text_block("Ik raadpleeg list_regelingen.")], "end_turn"),          # plan-node (create)
+        response([tool_block("t1", "list_regelingen", {})], "tool_use"),              # agent-turn 1 (stream)
+        response([text_block("De Invorderingswet 1990 (BWBR0004770) staat in de graaf.")], "end_turn"),  # agent-turn 2
     ])
     case = {
         "question": "Welke regelingen zitten er in de kennisgraaf?",
