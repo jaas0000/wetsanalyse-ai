@@ -7,6 +7,7 @@ kwestie van een nieuwe adapter is.
 """
 from __future__ import annotations
 
+from collections.abc import Iterator
 from typing import Any, Protocol, runtime_checkable
 
 
@@ -45,3 +46,33 @@ class LLMPort(Protocol):
         tools: list[dict[str, Any]],
         messages: list[dict[str, Any]],
     ) -> Any: ...
+
+    def stream(
+        self,
+        *,
+        model: str,
+        max_tokens: int,
+        system: str,
+        tools: list[dict[str, Any]],
+        messages: list[dict[str, Any]],
+    ) -> "LLMStream":
+        """Als create(), maar streamend. Gebruik als context manager."""
+        ...
+
+
+@runtime_checkable
+class LLMStream(Protocol):
+    """Context manager over één streamende completion.
+
+    `text_deltas` levert de tekst-brokjes zodra ze binnenkomen; `final_message()`
+    geeft na afloop het volledige response-object (blokken + stop_reason).
+    """
+
+    def __enter__(self) -> "LLMStream": ...
+
+    def __exit__(self, *exc: Any) -> bool | None: ...
+
+    @property
+    def text_deltas(self) -> Iterator[str]: ...
+
+    def final_message(self) -> Any: ...

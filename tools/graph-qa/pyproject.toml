@@ -11,6 +11,7 @@ dependencies = [
     "pydantic>=2.0.0",
     "python-dotenv>=1.0.0",
     "sse-starlette>=2.1.0",
+    "langgraph>=1.2",
 ]
 # NB: Settings gebruikt bewust een gewone pydantic BaseModel (agent/config.py),
 # niet pydantic-settings — geen extra runtime-dependency nodig.

@@ -41,3 +41,44 @@ class AnthropicLLM:
             tools=tools,
             messages=messages,
         )
+
+    def stream(
+        self,
+        *,
+        model: str,
+        max_tokens: int,
+        system: str,
+        tools: list[dict[str, Any]],
+        messages: list[dict[str, Any]],
+    ) -> "_AnthropicStream":
+        return _AnthropicStream(
+            self._client.messages.stream(
+                model=model,
+                max_tokens=max_tokens,
+                system=system,
+                tools=tools,
+                messages=messages,
+            )
+        )
+
+
+class _AnthropicStream:
+    """Dunne wrapper om de Anthropic MessageStream (LLMStream-protocol)."""
+
+    def __init__(self, manager: Any) -> None:
+        self._manager = manager
+        self._stream: Any = None
+
+    def __enter__(self) -> "_AnthropicStream":
+        self._stream = self._manager.__enter__()
+        return self
+
+    def __exit__(self, *exc: Any) -> Any:
+        return self._manager.__exit__(*exc)
+
+    @property
+    def text_deltas(self) -> Any:
+        return self._stream.text_stream
+
+    def final_message(self) -> Any:
+        return self._stream.get_final_message()

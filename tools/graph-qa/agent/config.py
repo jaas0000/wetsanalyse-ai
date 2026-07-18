@@ -39,6 +39,9 @@ class Settings(BaseModel):
     rate_limit: int = 60          # verzoeken per venster (per proces, per IP)
     rate_window_seconds: float = 60.0
 
+    # Orkestrator
+    enable_planning: bool = True      # lichte plan-node vóór de agent (plan→retrieve→reason→verify)
+
     # Grounding
     grounding_correct: bool = False   # bij niet-onderbouwde citaties één corrigerende her-vraag
     curate_sources: bool = True       # bronnenlijst beperken tot in het antwoord aangehaalde regelingen
