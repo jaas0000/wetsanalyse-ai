@@ -107,7 +107,7 @@ def main() -> None:
 
     if args.offline:
         cases, llm, graph = _offline_scenario()
-        results = asyncio.run(run_suite(cases, settings=Settings(), llm=llm, graph=graph))
+        results = asyncio.run(run_suite(cases, settings=Settings(checkpoint_db_path=None), llm=llm, graph=graph))
     else:
         try:
             from dotenv import load_dotenv

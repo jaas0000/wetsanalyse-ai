@@ -1,20 +1,24 @@
 """
 LangGraph-orkestrator: plan → retrieve → reason → verify → finalize.
 
-LangGraph levert het toestandsgraaf-substraat (nodes, conditionele edges, streaming);
-de domeinlogica blijft die van Fase 1/2 — de nodes roepen de bestaande LLMPort/GraphPort,
-de typed tool-registry, provenance en grounding aan. Geen langchain-chatmodel: Azure
-Foundry blijft via AnthropicLLM.
+LangGraph levert het toestandsgraaf-substraat (nodes, conditionele edges, streaming,
+checkpointing); de domeinlogica blijft die van Fase 1/2 — de nodes roepen de bestaande
+LLMPort/GraphPort, de typed tool-registry, provenance en grounding aan. Geen
+langchain-chatmodel: Azure Foundry blijft via AnthropicLLM.
 
-Streaming loopt via LangGraph's custom-stream: nodes emitteren onze SSE-events
-(status/token/sources/grounding) met get_stream_writer(); answer_stream consumeert ze
-via app.astream(stream_mode="custom") en houdt het API/frontend-contract exact gelijk.
-De nodes zijn synchroon (LangGraph draait ze in een threadpool), zodat de blocking
-LLM-/MCP-calls de event-loop niet blokkeren.
+Geheugen zit in de state en wordt door de checkpointer (thread_id = conversation_id)
+gepersisteerd: `messages` (episodisch, append-reducer) en `entities_seen` (de "in
+beeld"-set geraadpleegde bepalingen, semantische/entiteit-tier). De wrapper compileert
+`build_graph()` met de gekozen checkpointer.
+
+Streaming loopt via LangGraph's custom-stream (get_stream_writer); answer_stream
+consumeert het en houdt het SSE-contract gelijk. Nodes zijn synchroon (threadpool),
+zodat de blocking LLM-/MCP-calls de event-loop niet blokkeren.
 """
 from __future__ import annotations
 
-from typing import Any, TypedDict
+import operator
+from typing import Annotated, Any, TypedDict
 
 from langgraph.config import get_stream_writer
 from langgraph.graph import END, START, StateGraph
@@ -37,7 +41,8 @@ _PLAN_SYSTEM = (
 
 class State(TypedDict, total=False):
     question: str
-    messages: list[dict[str, Any]]
+    messages: Annotated[list[dict[str, Any]], operator.add]      # episodisch, gepersisteerd
+    entities_seen: Annotated[list[str], operator.add]            # semantisch/entiteit-tier
     plan: str
     source_trace: list[tuple[str, str]]
     answer: str
@@ -50,10 +55,23 @@ class State(TypedDict, total=False):
     corrected: bool
 
 
-def build_app(settings: Settings, llm: LLMPort, graph: GraphPort):
-    """Bouw en compileer de toestandsgraaf met de deps via closure (DI blijft)."""
+def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGraph:
+    """Bouw de (ongecompileerde) toestandsgraaf; de wrapper compileert 'm met een checkpointer."""
     tool_schemas = anthropic_schemas()
     model = settings.llm_model
+
+    def _memory_context(state: State) -> str:
+        if not settings.enable_memory_context:
+            return ""
+        seen = list(dict.fromkeys(state.get("entities_seen") or []))  # dedup, volgorde behouden
+        if not seen:
+            return ""
+        lijst = "\n".join(f"- {u}" for u in seen[-12:])
+        return (
+            "\n\nGESPREKSCONTEXT — eerder in dit gesprek geraadpleegde bepalingen (alléén als "
+            "aanknopingspunt voor verwijzingen als 'dat artikel'; verifieer elk feit opnieuw via "
+            f"de tools):\n{lijst}"
+        )
 
     def plan_node(state: State) -> dict[str, Any]:
         writer = get_stream_writer()
@@ -61,7 +79,7 @@ def build_app(settings: Settings, llm: LLMPort, graph: GraphPort):
         resp = llm.create(
             model=model,
             max_tokens=300,
-            system=_PLAN_SYSTEM,
+            system=_PLAN_SYSTEM + _memory_context(state),
             tools=[],
             messages=[{"role": "user", "content": state["question"]}],
         )
@@ -72,7 +90,8 @@ def build_app(settings: Settings, llm: LLMPort, graph: GraphPort):
         writer = get_stream_writer()
         system = SYSTEM_PROMPT
         if state.get("plan"):
-            system = f"{SYSTEM_PROMPT}\n\nAANPAK (door jou gepland):\n{state['plan']}"
+            system = f"{system}\n\nAANPAK (door jou gepland):\n{state['plan']}"
+        system += _memory_context(state)
 
         with llm.stream(
             model=model,
@@ -98,10 +117,9 @@ def build_app(settings: Settings, llm: LLMPort, graph: GraphPort):
             {"type": "tool_use", "id": t["id"], "name": t["name"], "input": t["input"]}
             for t in tool_uses
         ]
-        messages = state["messages"] + [{"role": "assistant", "content": assistant_content}]
 
         upd: dict[str, Any] = {
-            "messages": messages,
+            "messages": [{"role": "assistant", "content": assistant_content}],  # delta (append-reducer)
             "pending_tools": tool_uses,
             "turns": state.get("turns", 0) + 1,
         }
@@ -118,15 +136,17 @@ def build_app(settings: Settings, llm: LLMPort, graph: GraphPort):
         writer = get_stream_writer()
         pending = state.get("pending_tools", [])
         writer({"type": "status", "message": f"Graaf bevragen: {', '.join(t['name'] for t in pending)}..."})
-        messages = list(state["messages"])
         trace = list(state.get("source_trace", []))
         results = []
         for tu in pending:
             result_text = truncate(dispatch(tu["name"], graph, tu["input"]))
             trace.append((tu["name"], result_text))
             results.append({"type": "tool_result", "tool_use_id": tu["id"], "content": result_text})
-        messages.append({"role": "user", "content": results})
-        return {"messages": messages, "source_trace": trace, "pending_tools": []}
+        return {
+            "messages": [{"role": "user", "content": results}],  # delta
+            "source_trace": trace,
+            "pending_tools": [],
+        }
 
     def verify_node(state: State) -> dict[str, Any]:
         report = check_grounding(state.get("answer", ""), state.get("source_trace", []))
@@ -139,15 +159,17 @@ def build_app(settings: Settings, llm: LLMPort, graph: GraphPort):
 
     def correct_node(state: State) -> dict[str, Any]:
         bad = ", ".join(state.get("unsupported", []))
-        messages = list(state["messages"])
-        messages.append({
-            "role": "user",
-            "content": (
-                f"Let op: je noemde verwijzing(en) {bad} die niet uit de graaf-resultaten kwamen. "
-                "Corrigeer je antwoord: onderbouw ze met de tools of verwijder ze."
-            ),
-        })
-        return {"messages": messages, "corrected": True, "answer": ""}
+        return {
+            "messages": [{
+                "role": "user",
+                "content": (
+                    f"Let op: je noemde verwijzing(en) {bad} die niet uit de graaf-resultaten kwamen. "
+                    "Corrigeer je antwoord: onderbouw ze met de tools of verwijder ze."
+                ),
+            }],
+            "corrected": True,
+            "answer": "",
+        }
 
     def finalize_node(state: State) -> dict[str, Any]:
         writer = get_stream_writer()
@@ -162,7 +184,10 @@ def build_app(settings: Settings, llm: LLMPort, graph: GraphPort):
             "cited": state.get("cited", 0),
             "unsupported": state.get("unsupported", []),
         })
-        return {"sources": src_dicts}
+        # entiteit-tier: alleen nieuwe IRI's toevoegen (append-reducer + dedup).
+        existing = set(state.get("entities_seen") or [])
+        new = [s["uri"] for s in src_dicts if s["uri"] not in existing]
+        return {"sources": src_dicts, "entities_seen": new}
 
     g = StateGraph(State)
     g.add_node("agent", agent_node)
@@ -184,4 +209,4 @@ def build_app(settings: Settings, llm: LLMPort, graph: GraphPort):
     g.add_edge("correct", "agent")
     g.add_edge("finalize", END)
 
-    return g.compile()
+    return g

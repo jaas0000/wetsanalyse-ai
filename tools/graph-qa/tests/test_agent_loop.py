@@ -4,8 +4,7 @@ from __future__ import annotations
 import asyncio
 
 from agent.agent import answer_stream
-from agent.config import Settings
-from fakes import FakeGraph, FakeLLM, response, text_block, tool_block
+from fakes import FakeGraph, FakeLLM, make_settings, response, text_block, tool_block
 
 ART_IRI = "https://ipalm.nl/bwb/BWBR0004770/artikel/9"
 
@@ -19,7 +18,7 @@ def _run(gen):
 
 def _make():
     # planning uit: test de kern-loop (agent↔tools→verify) zonder extra plan-call.
-    settings = Settings(enable_planning=False)
+    settings = make_settings(enable_planning=False)
     graph = FakeGraph(result=f"<{ART_IRI}> bwb:citeertitel \"Invorderingswet 1990\" .")
     llm = FakeLLM([
         # Het model kiest een GETYPEERDE tool, geen rauwe SPARQL.
@@ -63,7 +62,7 @@ def test_geen_repository_id_meer_in_toolargs():
 
 def test_eindtekst_streamt_verbatim():
     # De token-stream reproduceert de antwoordtekst (incl. newlines) letterlijk.
-    settings = Settings(enable_planning=False)
+    settings = make_settings(enable_planning=False)
     graph = FakeGraph(result=ART_IRI)
     llm = FakeLLM([
         response([text_block("Regel een.\n\nRegel twee.")], "end_turn"),

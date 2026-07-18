@@ -5,6 +5,14 @@ from collections.abc import Callable
 from types import SimpleNamespace
 from typing import Any
 
+from agent.config import Settings
+
+
+def make_settings(**kw: Any) -> Settings:
+    """Settings voor tests: in-memory checkpointer (geen db-file) tenzij overschreven."""
+    kw.setdefault("checkpoint_db_path", None)
+    return Settings(**kw)
+
 
 # ---- LLM-response bouwstenen (vorm van de Anthropic-response) ----
 

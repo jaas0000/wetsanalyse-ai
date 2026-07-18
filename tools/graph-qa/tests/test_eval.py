@@ -3,8 +3,8 @@ from __future__ import annotations
 
 import asyncio
 
-from agent.config import Settings
 from eval import run_eval, scoring
+from fakes import make_settings
 
 
 def test_faithfulness_uit_grounding_event():
@@ -53,7 +53,7 @@ def test_score_case_zakt_op_ongegronde_citatie():
 
 def test_offline_eval_run_slaagt():
     cases, llm, graph = run_eval._offline_scenario()
-    results = asyncio.run(run_eval.run_suite(cases, settings=Settings(), llm=llm, graph=graph))
+    results = asyncio.run(run_eval.run_suite(cases, settings=make_settings(), llm=llm, graph=graph))
     assert len(results) == 1
     assert results[0].passed is True
     assert results[0].faithfulness == 1.0

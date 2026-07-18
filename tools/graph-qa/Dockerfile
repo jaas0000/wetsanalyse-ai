@@ -11,7 +11,8 @@ RUN pip install --no-cache-dir \
     pydantic \
     python-dotenv \
     sse-starlette \
-    langgraph
+    langgraph \
+    langgraph-checkpoint-sqlite
 
 COPY agent/ agent/
 COPY api/ api/
