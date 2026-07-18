@@ -27,6 +27,7 @@ import secrets
 import time
 from collections import deque
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, Header, HTTPException, Request, status
@@ -45,7 +46,18 @@ from agent.models import ChatRequest  # noqa: E402
 settings = Settings.from_env()
 observability.setup(settings)  # logging + gated OTel, vóór de app draait
 
-app = FastAPI(title="Graph QA Agent", version="0.2.0")
+@asynccontextmanager
+async def _lifespan(_app: FastAPI):
+    # Fail-fast bij boot: GRAPHDB_TOKEN is niet-optioneel. Zonder token zou graph-qa anders
+    # 'gezond' opstarten en pas per chatvraag falen — én tegen de open+writable graaf mag er
+    # nooit tokenloos verkeer lopen. Ontbreekt de token, dan weigert de service te starten
+    # (uvicorn stopt → container ongezond/herstart-loop, i.p.v. stil kapot). De per-request
+    # require_graph() blijft als tweede net bestaan.
+    settings.require_graph()
+    yield
+
+
+app = FastAPI(title="Graph QA Agent", version="0.2.0", lifespan=_lifespan)
 app.add_middleware(observability.RequestContextMiddleware)
 observability.instrument_fastapi(app)
 
