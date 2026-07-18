@@ -2,8 +2,10 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-# Runtime-deps (gelijk aan pyproject.toml; geen build-tools nodig)
-RUN pip install --no-cache-dir \
+# Runtime-deps (gelijk aan pyproject.toml; geen build-tools nodig). Pip eerst upgraden zodat de
+# base-image-pip (met bekende CVE's) niet in de image achterblijft — Trivy scant 'm anders als alert.
+RUN pip install --no-cache-dir --upgrade pip \
+ && pip install --no-cache-dir \
     anthropic \
     fastapi \
     "uvicorn[standard]" \
