@@ -29,9 +29,10 @@ from collections import deque
 from collections.abc import AsyncIterator
 
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, HTTPException, Request, status
+from fastapi import Depends, FastAPI, Header, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from pydantic import BaseModel, Field
 from sse_starlette.sse import EventSourceResponse
 
 load_dotenv()  # laad .env als die naast de server staat
@@ -109,6 +110,61 @@ async def chat(
             yield {"data": json.dumps(event, ensure_ascii=False)}
 
     return EventSourceResponse(event_generator())
+
+
+# ---- n8n-compat endpoint: drop-in vervanger van de n8n-chat-webhook -------------------------
+# De Wetsanalyse-API-chatproxy stuurt {action, sessionId, chatInput} + header X-Chat-Secret en
+# verwacht één JSON {output: "..."} terug. Dit endpoint spreekt exact dat contract, draait de
+# agent en mapt sessionId → conversation_id (durabel geheugen). Bewust geen per-IP rate-limit:
+# alle webapp-gebruikers komen achter één API-bron-IP binnen; het gedeelde secret is de gate.
+
+class N8nChatIn(BaseModel):
+    chatInput: str = Field(max_length=8000)
+    sessionId: str = Field("web", max_length=200)
+    secret: str | None = None
+    action: str | None = None  # genegeerd; n8n stuurt "sendMessage"
+
+
+def _check_chat_secret(body_secret: str | None, header_secret: str | None) -> None:
+    expected = settings.qa_api_token
+    if not expected:
+        return  # geen secret geconfigureerd → open (lokale dev)
+    provided = header_secret or body_secret or ""
+    if not secrets.compare_digest(provided, expected):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Ongeldig of ontbrekend chat-secret")
+
+
+@app.post("/v1/n8n-chat")
+async def n8n_chat(
+    body: N8nChatIn,
+    x_chat_secret: str | None = Header(default=None, alias="X-Chat-Secret"),
+) -> dict[str, str]:
+    _check_chat_secret(body.secret, x_chat_secret)
+    question = (body.chatInput or "").strip()
+    if not question:
+        return {"output": ""}
+
+    parts: list[str] = []
+    sources: list[dict] = []
+    error: str | None = None
+    async for event in answer_stream(question, body.sessionId or "web"):
+        t = event.get("type")
+        if t == "token":
+            parts.append(event["content"])
+        elif t == "sources":
+            sources = event["sources"]
+        elif t == "error":
+            error = event["message"]
+
+    answer = "".join(parts).strip()
+    if not answer:
+        return {"output": f"Er ging iets mis: {error}" if error else "Geen antwoord."}
+    if sources:
+        lijst = "\n".join(
+            f"- [{s.get('label') or s.get('uri')}]({s.get('uri')})" for s in sources[:20]
+        )
+        answer = f"{answer}\n\n**Bronnen:**\n{lijst}"
+    return {"output": answer}
 
 
 def run() -> None:

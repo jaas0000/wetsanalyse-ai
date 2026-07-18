@@ -11,8 +11,20 @@ from __future__ import annotations
 
 import os
 from collections.abc import Mapping
+from pathlib import Path
 
 from pydantic import BaseModel
+
+
+def _read_secret(env: Mapping[str, str], name: str) -> str | None:
+    """Lees een secret: eerst `<NAME>_FILE` (host-bestand, Docker-conventie), anders `<NAME>`."""
+    path = env.get(name + "_FILE")
+    if path:
+        try:
+            return Path(path).read_text(encoding="utf-8").strip()
+        except OSError:
+            return None
+    return env.get(name)
 
 
 class Settings(BaseModel):
@@ -64,16 +76,16 @@ class Settings(BaseModel):
         cors = [o.strip() for o in e.get("CORS_ORIGINS", "*").split(",") if o.strip()]
         raw: dict[str, object] = {
             "graphdb_mcp_url": e.get("GRAPHDB_MCP_URL"),
-            "graphdb_token": e.get("GRAPHDB_TOKEN"),
+            "graphdb_token": _read_secret(e, "GRAPHDB_TOKEN"),
             "repository_id": e.get("GRAPHDB_REPOSITORY_ID"),
             "graphdb_sparql_tool": e.get("GRAPHDB_SPARQL_TOOL"),
             "similarity_index": e.get("SIMILARITY_INDEX"),
-            "azure_foundry_api_key": e.get("AZURE_FOUNDRY_API_KEY"),
+            "azure_foundry_api_key": _read_secret(e, "AZURE_FOUNDRY_API_KEY"),
             "azure_foundry_base_url": e.get("AZURE_FOUNDRY_BASE_URL"),
             "llm_model": e.get("LLM_MODEL"),
             "max_turns": e.get("MAX_TURNS"),
             "memory_db_path": e.get("MEMORY_DB_PATH"),
-            "qa_api_token": e.get("QA_API_TOKEN"),
+            "qa_api_token": _read_secret(e, "QA_API_TOKEN"),
             "cors_origins": cors or None,
             "rate_limit": e.get("QA_RATE_LIMIT"),
             "otel_endpoint": e.get("OTEL_EXPORTER_OTLP_ENDPOINT"),

@@ -2,7 +2,7 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-# Systeemdeps (geen build-tools nodig voor deze deps)
+# Runtime-deps (gelijk aan pyproject.toml; geen build-tools nodig)
 RUN pip install --no-cache-dir \
     anthropic \
     fastapi \
@@ -16,6 +16,10 @@ RUN pip install --no-cache-dir \
 
 COPY agent/ agent/
 COPY api/ api/
+
+# Non-root + /data voor de durable checkpointer-db (named volume; CHECKPOINT_DB_PATH=/data/...).
+RUN useradd -u 10001 -m appuser && mkdir -p /data && chown appuser:appuser /data
+USER appuser
 
 EXPOSE 8080
 
