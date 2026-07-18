@@ -21,6 +21,12 @@ def test_schemas_compleet_en_welgevormd():
         assert t["description"]
 
 
+def test_anthropic_schemas_filter():
+    assert len(tools.anthropic_schemas()) == 12
+    subset = tools.anthropic_schemas(only={"get_artikel", "search_wetgeving"})
+    assert {t["name"] for t in subset} == {"get_artikel", "search_wetgeving"}
+
+
 def test_dispatch_onbekende_tool():
     assert "Onbekende tool" in tools.dispatch("bestaat_niet", FakeGraph(), {})
 
