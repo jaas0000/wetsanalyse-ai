@@ -29,13 +29,17 @@ from .grounding import check_grounding, curate_sources
 from .ports import GraphPort, LLMPort
 from .prompts import SYSTEM_PROMPT
 from .provenance import collect_sources
+from .specialists import get as get_specialist
 from .tools import anthropic_schemas, dispatch
 
-_PLAN_SYSTEM = (
-    "Je plant de aanpak voor een juridische vraag over de kennisgraaf. Geef in 1-3 zinnen "
-    "welke bepalingen of tools je gaat raadplegen om de vraag te beantwoorden — GEEN antwoord, "
-    "alleen de aanpak. Gaat de vraag niet over de Nederlandse wet- en regelgeving in de graaf, "
-    "antwoord dan uitsluitend: AFWIJZEN."
+_ROUTER_SYSTEM = (
+    "Je routeert een juridische vraag over de kennisgraaf naar een specialist en schetst kort de "
+    "aanpak. Antwoord in EXACT dit formaat, twee regels:\n"
+    "SPECIALIST: <definitie|duiding|algemeen>\n"
+    "PLAN: <1-2 zinnen aanpak, of AFWIJZEN als de vraag niet over de Nederlandse wet- en "
+    "regelgeving in de graaf gaat>\n"
+    "Kies 'definitie' voor begrip-/definitievragen, 'duiding' voor de betekenis/structuur/samenhang "
+    "van een bepaling, anders 'algemeen'."
 )
 
 
@@ -43,6 +47,7 @@ class State(TypedDict, total=False):
     question: str
     messages: Annotated[list[dict[str, Any]], operator.add]      # episodisch, gepersisteerd
     entities_seen: Annotated[list[str], operator.add]            # semantisch/entiteit-tier
+    specialist: str
     plan: str
     source_trace: list[tuple[str, str]]
     answer: str
@@ -57,7 +62,6 @@ class State(TypedDict, total=False):
 
 def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGraph:
     """Bouw de (ongecompileerde) toestandsgraaf; de wrapper compileert 'm met een checkpointer."""
-    tool_schemas = anthropic_schemas()
     model = settings.llm_model
 
     def _memory_context(state: State) -> str:
@@ -73,22 +77,36 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
             f"de tools):\n{lijst}"
         )
 
-    def plan_node(state: State) -> dict[str, Any]:
+    def router_node(state: State) -> dict[str, Any]:
         writer = get_stream_writer()
-        writer({"type": "status", "message": "Aanpak bepalen..."})
         resp = llm.create(
             model=model,
             max_tokens=300,
-            system=_PLAN_SYSTEM + _memory_context(state),
+            system=_ROUTER_SYSTEM + _memory_context(state),
             tools=[],
             messages=[{"role": "user", "content": state["question"]}],
         )
-        plan = "".join(b.text for b in resp.content if b.type == "text").strip()
-        return {"plan": plan}
+        text = "".join(b.text for b in resp.content if b.type == "text")
+        specialist, plan = "algemeen", ""
+        for line in text.splitlines():
+            low = line.strip()
+            if low.upper().startswith("SPECIALIST:"):
+                val = low.split(":", 1)[1].strip().lower()
+                if val in ("definitie", "duiding", "algemeen"):
+                    specialist = val
+            elif low.upper().startswith("PLAN:"):
+                plan = low.split(":", 1)[1].strip()
+        if not plan:
+            plan = text.strip()
+        writer({"type": "status", "message": f"Specialist: {specialist} — {plan[:80]}"})
+        return {"specialist": specialist, "plan": plan}
 
     def agent_node(state: State) -> dict[str, Any]:
         writer = get_stream_writer()
+        spec = get_specialist(state.get("specialist"))
         system = SYSTEM_PROMPT
+        if spec.system:
+            system = f"{system}\n\n{spec.system}"
         if state.get("plan"):
             system = f"{system}\n\nAANPAK (door jou gepland):\n{state['plan']}"
         system += _memory_context(state)
@@ -97,7 +115,7 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
             model=model,
             max_tokens=4096,
             system=system,
-            tools=tool_schemas,
+            tools=anthropic_schemas(only=spec.tools),
             messages=state["messages"],
         ) as stream:
             for delta in stream.text_deltas:
@@ -197,9 +215,9 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
     g.add_node("finalize", finalize_node)
 
     if settings.enable_planning:
-        g.add_node("plan", plan_node)
-        g.add_edge(START, "plan")
-        g.add_edge("plan", "agent")
+        g.add_node("router", router_node)
+        g.add_edge(START, "router")
+        g.add_edge("router", "agent")
     else:
         g.add_edge(START, "agent")
 

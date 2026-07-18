@@ -226,10 +226,12 @@ TOOLS: list[dict[str, Any]] = [
 _BY_NAME: dict[str, dict[str, Any]] = {t["name"]: t for t in TOOLS}
 
 
-def anthropic_schemas() -> list[dict[str, Any]]:
+def anthropic_schemas(only: set[str] | frozenset[str] | None = None) -> list[dict[str, Any]]:
+    """Model-facing tool-schema's; filter op een toegestane set (None = alle)."""
     return [
         {"name": t["name"], "description": t["description"], "input_schema": t["input_schema"]}
         for t in TOOLS
+        if only is None or t["name"] in only
     ]
 
 
