@@ -115,8 +115,12 @@ def main() -> None:
             load_dotenv(Path(__file__).parent.parent / ".env")
         except ImportError:
             pass
+        settings = Settings.from_env()
         cases = load_golden(args.golden)
-        results = asyncio.run(run_suite(cases, settings=Settings.from_env()))
+        if not settings.retrieval_connector:
+            # semantic_search-cases overslaan tot de embedding-connector bestaat.
+            cases = [c for c in cases if c.get("requires") != "semantic"]
+        results = asyncio.run(run_suite(cases, settings=settings))
 
     ok = print_report(results)
     sys.exit(0 if ok else 1)

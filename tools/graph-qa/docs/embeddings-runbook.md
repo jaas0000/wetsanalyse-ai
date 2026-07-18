@@ -57,16 +57,21 @@ de `CREATE`-SPARQL van de connector). Kernvelden:
 **Kosten/omvang:** ~1150 artikelen + ~2350 leden + ~800 divisies ≈ enkele duizenden literals →
 eenmalige embedding-kosten zijn beperkt; alleen bij her-indexeren of nieuwe regelingen komt er bij.
 
-## Daarna in graph-qa (vervolg-PR)
+## Graph-qa-kant (AL GEBOUWD — PR 2.5)
 
-Zodra een index/connector bestaat, is de graph-qa-kant klein en volgt het bestaande patroon:
-- nieuwe tool **`semantic_search(query, limit)`** in `agent/tools/` die via `GraphPort` de
-  MCP-tool `similarity_search` (Route A) of `retrieval_search` (Route B, met `connectorInstance`)
-  aanroept — analoog aan hoe `search_wetgeving` nu `queries.fts` gebruikt;
-- de systeemprompt krijgt één regel: "gebruik `semantic_search` als de gebruiker andere woorden
-  gebruikt dan de wettekst; `search_wetgeving` voor exacte termen" (hybride: keyword + semantisch);
-- meet het effect met de **eval-harnas** (`eval/run_eval.py`): voeg cases toe die met synoniemen/
-  omschrijvingen zoeken en vergelijk faithfulness/recall met en zonder `semantic_search`.
+De `semantic_search`-tool bestaat en is **config-gedreven**; hij activeert zodra de connector er is:
+- **Zet `RETRIEVAL_CONNECTOR=<instance-naam>`** (bv. `bwb_embeddings`) in de env van graph-qa
+  (`Settings.retrieval_connector`). Leeg = de tool geeft netjes "nog niet geconfigureerd" en de agent
+  valt terug op `search_wetgeving` (geen crash).
+- De tool roept de MCP-tool `retrieval_search` aan met `connectorInstance = RETRIEVAL_CONNECTOR`
+  (`agent/mcp_client.py:semantic_search`). De systeemprompt kent al de hybride-zoekregel.
+- **Eval:** `eval/golden.jsonl` bevat `requires: "semantic"`-cases; `eval/run_eval.py` slaat ze over
+  zolang `RETRIEVAL_CONNECTOR` leeg is en meet ze zodra de connector staat.
+
+**Live-afronding na het aanmaken van de connector:** zet `RETRIEVAL_CONNECTOR`, draai een
+omschrijvende vraag en `run_eval.py`, en stem zo nodig de `retrieval_search`-argumenten in
+`mcp_client.semantic_search` fijn (bv. `queries` als array of een `queryTemplate`) op wat de
+connector verwacht.
 
 ## Verificatie
 

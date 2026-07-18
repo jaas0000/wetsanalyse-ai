@@ -25,6 +25,10 @@ class GraphPort(Protocol):
         """Voer een read-only SPARQL-query uit en geef de resultaattekst terug."""
         ...
 
+    def semantic_search(self, query: str, limit: int = 10) -> str:
+        """Semantisch (vector) zoeken via de embedding-connector; resultaattekst."""
+        ...
+
     def close(self) -> None: ...
 
 

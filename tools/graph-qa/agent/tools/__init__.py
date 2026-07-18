@@ -82,6 +82,15 @@ def _h_raw_sparql(g: GraphPort, a: dict[str, Any]) -> str:
     return g.sparql(a["query"])
 
 
+def _h_semantic_search(g: GraphPort, a: dict[str, Any], settings: Any) -> str:
+    if settings is None or not getattr(settings, "retrieval_connector", ""):
+        return (
+            "Semantisch zoeken is nog niet geconfigureerd (geen embedding-connector). "
+            "Gebruik search_wetgeving voor tekstueel zoeken."
+        )
+    return g.semantic_search(a["query"], a.get("limit", 10))
+
+
 # ------------------------------------------------------------------
 # Tool-definities
 # ------------------------------------------------------------------
@@ -105,6 +114,23 @@ TOOLS: list[dict[str, Any]] = [
             ["query"],
         ),
         "handler": _h_search,
+    },
+    {
+        "name": "semantic_search",
+        "description": (
+            "Semantisch (op betekenis) zoeken met vector-embeddings. Gebruik dit als de gebruiker "
+            "een situatie omschrijft of andere woorden gebruikt dan de wettekst; search_wetgeving "
+            "is voor exacte termen. Combineer beide bij twijfel (hybride)."
+        ),
+        "input_schema": _obj(
+            {
+                "query": {"type": "string", "description": "Natuurlijke omschrijving van wat je zoekt."},
+                "limit": {"type": "integer", "description": "Max. aantal treffers (default 10)."},
+            },
+            ["query"],
+        ),
+        "handler": _h_semantic_search,
+        "needs_settings": True,
     },
     {
         "name": "get_artikel",
@@ -207,11 +233,13 @@ def anthropic_schemas() -> list[dict[str, Any]]:
     ]
 
 
-def dispatch(name: str, graph: GraphPort, args: dict[str, Any] | None) -> str:
+def dispatch(name: str, graph: GraphPort, args: dict[str, Any] | None, settings: Any = None) -> str:
     tool = _BY_NAME.get(name)
     if tool is None:
         return f"Onbekende tool: {name}"
     try:
+        if tool.get("needs_settings"):
+            return tool["handler"](graph, args or {}, settings)
         return tool["handler"](graph, args or {})
     except (ValueError, MCPError, KeyError) as exc:
         return f"Fout bij tool '{name}': {exc}"
