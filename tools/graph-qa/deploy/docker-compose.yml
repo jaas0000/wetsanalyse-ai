@@ -38,10 +38,11 @@ services:
       # --- secrets via host-bestanden (*_FILE) ---
       GRAPHDB_TOKEN_FILE: /run/secrets/graphdb_token
       AZURE_FOUNDRY_API_KEY_FILE: /run/secrets/azure_foundry_api_key
-      # QA_API_TOKEN bewust NIET gezet: de service is intern-only (alleen de Wetsanalyse-API bereikt
-      # 'm op het Docker-netwerk), dus het chat-webhook-endpoint heeft geen secret-slot nodig. Wil je
-      # graph-qa tóch publiek exposen: zet QA_API_TOKEN_FILE=/run/secrets/qa_api_token en vul het
-      # chat_secret in /beheer met dezelfde waarde.
+      # QA_API_TOKEN beschermt de eigen endpoints (/v1/chat, /v1/chat-webhook) — nodig zodra graph-qa
+      # publiek via NPM bereikbaar is (/health blijft open). Het host-bestand qa_api_token MOÉT bestaan
+      # en niet-leeg zijn (anders valt _read_secret stil terug op "geen slot" → endpoints open), én de
+      # waarde MOET gelijk zijn aan chat_secret in /beheer, anders krijgt de webapp-chatbot 401.
+      QA_API_TOKEN_FILE: /run/secrets/qa_api_token
       # --- observability (leeg = alleen JSON-logs) ---
       LOG_LEVEL: ${LOG_LEVEL:-info}
       LOG_FORMAT: ${LOG_FORMAT:-json}
