@@ -37,6 +37,11 @@ graph-qa = "api.main:run"
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+# De code leeft in agent/ + api/ (geen `graph_qa/`-map), dus hatchling expliciet vertellen
+# welke packages in de wheel horen — anders faalt `uv sync` (kan geen files bepalen).
+[tool.hatch.build.targets.wheel]
+packages = ["agent", "api"]
+
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
