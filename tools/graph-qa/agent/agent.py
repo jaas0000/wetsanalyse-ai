@@ -115,7 +115,10 @@ async def answer_stream(
                     elif mode == "values" and "grounded" in chunk:
                         grounded = chunk["grounded"]
                 span.set_attribute("graph_qa.grounded", grounded)
-                logger.info("antwoord klaar", extra={"grounded": grounded})
+                logger.info(
+                    "antwoord klaar",
+                    extra={"grounded": grounded, "chat_session_id": conversation_id or ""},
+                )
 
         if conversation_id:
             yield {"type": "conversation_id", "conversation_id": conversation_id}
