@@ -38,6 +38,13 @@ class SourcesEvent(BaseModel):
     sources: list[Source]
 
 
+class GroundingEvent(BaseModel):
+    type: Literal["grounding"] = "grounding"
+    grounded: bool
+    cited: int = 0
+    unsupported: list[str] = []
+
+
 class DoneEvent(BaseModel):
     type: Literal["done"] = "done"
 
