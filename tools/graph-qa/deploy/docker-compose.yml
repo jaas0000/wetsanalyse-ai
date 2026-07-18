@@ -13,13 +13,12 @@
 #   AZURE_FOUNDRY_BASE_URL / LLM_MODEL / GRAPHDB_MCP_URL — niet-geheime config.
 #
 # Secrets leven als bestanden op de host in SECRETS_DIR en gaan via *_FILE-variabelen (nooit als
-# plain env in de container/Portainer-UI): graphdb_token, azure_foundry_api_key, qa_api_token.
-# Provisioneren op de host (non-root uid 10001 leest via de "other"-bit → chmod 644):
+# plain env in de container/Portainer-UI). Twee bestanden nodig (intern-only → géén chat-secret):
 #   SECRETS_DIR=/volume1/docker/secrets/graph-qa; sudo mkdir -p "$SECRETS_DIR"
 #   echo -n "<graphdb-token>"  | sudo tee "$SECRETS_DIR/graphdb_token" >/dev/null
 #   echo -n "<azure-key>"      | sudo tee "$SECRETS_DIR/azure_foundry_api_key" >/dev/null
-#   echo -n "<chat-secret>"    | sudo tee "$SECRETS_DIR/qa_api_token" >/dev/null   # = chat_secret in /beheer
 #   sudo chmod 755 "$SECRETS_DIR"; sudo chmod 644 "$SECRETS_DIR"/*
+# (non-root uid 10001 leest via de "other"-bit → chmod 644.)
 
 services:
   graph-qa:
@@ -39,7 +38,10 @@ services:
       # --- secrets via host-bestanden (*_FILE) ---
       GRAPHDB_TOKEN_FILE: /run/secrets/graphdb_token
       AZURE_FOUNDRY_API_KEY_FILE: /run/secrets/azure_foundry_api_key
-      QA_API_TOKEN_FILE: /run/secrets/qa_api_token
+      # QA_API_TOKEN bewust NIET gezet: de service is intern-only (alleen de Wetsanalyse-API bereikt
+      # 'm op het Docker-netwerk), dus het chat-webhook-endpoint heeft geen secret-slot nodig. Wil je
+      # graph-qa tóch publiek exposen: zet QA_API_TOKEN_FILE=/run/secrets/qa_api_token en vul het
+      # chat_secret in /beheer met dezelfde waarde.
       # --- observability (leeg = alleen JSON-logs) ---
       LOG_LEVEL: ${LOG_LEVEL:-info}
       LOG_FORMAT: ${LOG_FORMAT:-json}
