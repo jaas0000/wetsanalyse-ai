@@ -139,7 +139,7 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
         trace = list(state.get("source_trace", []))
         results = []
         for tu in pending:
-            result_text = truncate(dispatch(tu["name"], graph, tu["input"]))
+            result_text = truncate(dispatch(tu["name"], graph, tu["input"], settings))
             trace.append((tu["name"], result_text))
             results.append({"type": "tool_result", "tool_use_id": tu["id"], "content": result_text})
         return {

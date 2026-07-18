@@ -3,10 +3,10 @@ from __future__ import annotations
 
 from agent import tools
 from agent.graph import schema
-from fakes import FakeGraph
+from fakes import FakeGraph, make_settings
 
 EXPECTED = {
-    "search_wetgeving", "get_artikel", "get_lid", "list_regelingen",
+    "search_wetgeving", "semantic_search", "get_artikel", "get_lid", "list_regelingen",
     "get_regeling_info", "follow_verwijzingen", "referenced_by", "get_context",
     "resolve_begrip", "graph_schema", "raw_sparql",
 }
@@ -58,3 +58,18 @@ def test_dispatch_get_context():
     assert out == "subgraaf"
     q = g.queries[0]
     assert "verwijzingDoor" in q and "heeftVerwijzing" in q and "bwb:bevat" in q
+
+
+def test_semantic_search_zonder_connector_degradeert():
+    g = FakeGraph(result="treffers")
+    out = tools.dispatch("semantic_search", g, {"query": "belasting te laat"}, make_settings())
+    assert "niet geconfigureerd" in out.lower()
+    assert g.semantic_queries == []  # graaf niet geraakt
+
+
+def test_semantic_search_met_connector_roept_graaf():
+    g = FakeGraph(result="treffers")
+    settings = make_settings(retrieval_connector="bwb_embeddings")
+    out = tools.dispatch("semantic_search", g, {"query": "belasting te laat"}, settings)
+    assert out == "treffers"
+    assert g.semantic_queries == ["belasting te laat"]

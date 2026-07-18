@@ -18,4 +18,5 @@ def make_graph(settings: Settings) -> GraphPort:
         token=settings.graphdb_token,
         repository_id=settings.repository_id,
         sparql_tool=settings.graphdb_sparql_tool,
+        retrieval_connector=settings.retrieval_connector,
     )

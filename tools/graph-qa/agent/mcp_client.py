@@ -65,6 +65,7 @@ class MCPClient:
         timeout: float = 30.0,
         repository_id: str | None = None,
         sparql_tool: str = "sparql_query",
+        retrieval_connector: str = "",
     ) -> None:
         self.url = (url or os.environ["GRAPHDB_MCP_URL"]).rstrip("/")
         token = token or os.environ["GRAPHDB_TOKEN"]
@@ -72,6 +73,7 @@ class MCPClient:
         self._timeout = timeout
         self._repository_id = repository_id or os.environ.get("GRAPHDB_REPOSITORY_ID", "inning")
         self._sparql_tool = sparql_tool
+        self._retrieval_connector = retrieval_connector
         self._session_id: str | None = None
         self._client = httpx.Client(
             timeout=httpx.Timeout(connect=10.0, read=60.0, write=10.0, pool=10.0),
@@ -177,6 +179,14 @@ class MCPClient:
         content = self.call_tool(
             self._sparql_tool,
             {"query": query, "repositoryId": self._repository_id},
+        )
+        return _content_to_text(content)
+
+    def semantic_search(self, query: str, limit: int = 10) -> str:
+        """Semantisch zoeken via de ChatGPT-Retrieval-connector (MCP-tool retrieval_search)."""
+        content = self.call_tool(
+            "retrieval_search",
+            {"queries": query, "connectorInstance": self._retrieval_connector},
         )
         return _content_to_text(content)
 

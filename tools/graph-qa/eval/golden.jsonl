@@ -4,3 +4,5 @@
 {"question": "Welke soort regeling is de Leidraad Invordering 2008?", "expected_sources": ["BWBR0024096"], "expected_contains": ["beleidsregel"], "should_refuse": false}
 {"question": "Wie heeft de Invorderingswet 1990 ondertekend?", "expected_sources": ["BWBR0004770"], "should_refuse": false}
 {"question": "Wat is het weer vandaag?", "should_refuse": true}
+{"question": "Wat geldt er als iemand zijn belasting niet op tijd betaalt?", "expected_sources": ["BWBR0004770"], "should_refuse": false, "requires": "semantic"}
+{"question": "Kan de ontvanger een betalingsregeling weigeren?", "expected_sources": ["BWBR0024096"], "should_refuse": false, "requires": "semantic"}

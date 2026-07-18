@@ -83,6 +83,7 @@ class FakeGraph:
         self._result = result
         self._results = results
         self.queries: list[str] = []
+        self.semantic_queries: list[str] = []
         self.closed = False
 
     def initialize(self) -> dict[str, Any]:
@@ -92,6 +93,10 @@ class FakeGraph:
         self.queries.append(query)
         if self._results is not None:
             return self._results(query)
+        return self._result
+
+    def semantic_search(self, query: str, limit: int = 10) -> str:
+        self.semantic_queries.append(query)
         return self._result
 
     def close(self) -> None:
