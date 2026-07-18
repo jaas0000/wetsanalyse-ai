@@ -1,8 +1,8 @@
 # graph-qa — deployment (Portainer, intern)
 
-De graph-qa-agent is de eigen kennisgraaf-chatbot achter de webapp-chatbel (voorheen n8n). De
-Wetsanalyse-API-chatproxy roept 'm aan op `http://graph-qa:8080/v1/chat-webhook` (server→server via
-het gedeelde Docker-netwerk). **Geen host-poort, geen publieke NPM-host nodig.** Image van GHCR via
+De graph-qa-agent draait als intern-only Portainer-stack. De Wetsanalyse-API-chatproxy roept 'm aan op
+`http://graph-qa:8080/v1/chat-webhook` (server→server via het gedeelde Docker-netwerk). **Geen
+host-poort, geen publieke NPM-host nodig.** Image van GHCR via
 `.github/workflows/graph-qa-docker-publish.yml`.
 
 ## 1. Host-secrets (eenmalig, op de host)
@@ -44,10 +44,6 @@ Verifieer via de chatbel.
 
 > Wil je graph-qa tóch publiek exposen (NPM-host): zet dan `QA_API_TOKEN_FILE=/run/secrets/qa_api_token`
 > in de stack, leg `qa_api_token` op de host, en vul dat als chat-secret in `/beheer`.
-
-## 4. n8n uitfaseren
-
-De `n8n`- + `n8n-postgres`-stacks (Portainer) kunnen weg, tenzij ze nog iets anders draaien.
 
 ## CI-driven deploy
 
