@@ -1,0 +1,152 @@
+# Bouwt de graph-qa-agent-image (de eigen kennisgraaf-chatbot-agent) en pusht naar GHCR.
+# Draait bij wijzigingen in tools/graph-qa/ op master en bij versietags (v*). Portainer pullt
+# vervolgens ghcr.io/<owner>/graph-qa. Spiegelt .github/workflows/api-docker-publish.yml.
+#
+# De service is INTERN (geen publieke NPM-host): de Wetsanalyse-API bereikt 'm op
+# http://graph-qa:8080/v1/n8n-chat via het gedeelde Docker-netwerk. De health-verificatie in de
+# deploy loopt daarom op container-status (Docker-healthcheck), niet op een publieke URL.
+
+name: graph-qa-docker-publish
+
+on:
+  push:
+    branches: [master]
+    tags: ["v*"]
+    paths:
+      - "tools/graph-qa/**"
+      - "!tools/graph-qa/**/*.md"
+      - ".github/workflows/graph-qa-docker-publish.yml"
+  workflow_dispatch:
+
+env:
+  IMAGE: ghcr.io/${{ github.repository_owner }}/graph-qa
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: tools/graph-qa
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - name: Set up uv
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
+        with:
+          enable-cache: true
+      - run: uv sync --extra dev
+      - run: uv run pytest -q
+
+  build-and-push:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      security-events: write
+    env:
+      PORTAINER_URL: ${{ secrets.PORTAINER_URL }}
+      PORTAINER_API_KEY: ${{ secrets.PORTAINER_API_KEY }}
+      PORTAINER_STACK_ID: ${{ vars.PORTAINER_GRAPH_QA_STACK_ID }}
+      PORTAINER_ENDPOINT_ID: "1"
+      PROXY_NETWORK: "homeinfra_internal"
+      # Niet-geheime stack-variabelen (secrets leven on-host als bestanden).
+      LLM_MODEL: ${{ vars.LLM_MODEL }}
+      GRAPHDB_MCP_URL: ${{ vars.GRAPHDB_MCP_URL }}
+      AZURE_FOUNDRY_BASE_URL: ${{ vars.AZURE_FOUNDRY_BASE_URL }}
+      SIMILARITY_INDEX: ${{ vars.GRAPH_QA_SIMILARITY_INDEX }}
+      SECRETS_DIR: ${{ vars.GRAPH_QA_SECRETS_DIR }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4
+
+      - name: Log in bij GHCR
+        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Metadata (tags + labels)
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=ref,event=tag
+            type=sha,format=short
+
+      - name: Build en push
+        id: build
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
+        with:
+          context: tools/graph-qa
+          file: tools/graph-qa/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          sbom: true
+          provenance: mode=max
+
+      - name: Trivy image-scan (SARIF)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.IMAGE }}@${{ steps.build.outputs.digest }}
+          format: sarif
+          output: trivy-results.sarif
+          ignore-unfixed: true
+          vuln-type: os,library
+
+      - name: Upload Trivy-resultaten naar Security-tab
+        if: always()
+        uses: github/codeql-action/upload-sarif@54f647b7e1bb85c95cddabcd46b0c578ec92bc1a # v4
+        with:
+          sarif_file: trivy-results.sarif
+
+      - name: Trivy gate (faalt bij CRITICAL)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.IMAGE }}@${{ steps.build.outputs.digest }}
+          format: table
+          ignore-unfixed: true
+          severity: CRITICAL
+          exit-code: "1"
+
+      - name: Portainer redeploy (op digest; container-healthcheck gate + optionele externe health)
+        if: ${{ github.ref == 'refs/heads/master' && env.PORTAINER_API_KEY != '' && env.PORTAINER_STACK_ID != '' }}
+        env:
+          IMAGE_DIGEST_REF: ${{ env.IMAGE }}@${{ steps.build.outputs.digest }}
+          OTEL_EXPORTER_OTLP_ENDPOINT: ${{ vars.OTEL_EXPORTER_OTLP_ENDPOINT || 'http://otel-collector:4318' }}
+          # Container-healthcheck (compose) gate't elke deploy. Zet daarnaast vars.GRAPH_QA_HEALTH_URL
+          # (bv. https://graph-qa.ipalm.nl/health) voor een externe verificatie zodra er een NPM-host is.
+          HEALTH_URL: ${{ vars.GRAPH_QA_HEALTH_URL }}
+        run: |
+          set -euo pipefail
+          jq -n \
+            --rawfile compose tools/graph-qa/deploy/docker-compose.yml \
+            --arg net "$PROXY_NETWORK" \
+            --arg img "$IMAGE_DIGEST_REF" \
+            --arg model "${LLM_MODEL:-claude-sonnet-4-6}" \
+            --arg mcp "${GRAPHDB_MCP_URL:-https://graphdb-mcp.ipalm.nl/mcp}" \
+            --arg base "${AZURE_FOUNDRY_BASE_URL:-}" \
+            --arg sim "${SIMILARITY_INDEX:-bwb_similarity}" \
+            --arg otel "$OTEL_EXPORTER_OTLP_ENDPOINT" \
+            --arg secrets_dir "${SECRETS_DIR:-/volume1/docker/secrets/graph-qa}" \
+            '{stackFileContent:$compose,
+              env:[{name:"PROXY_NETWORK",value:$net},
+                   {name:"GRAPH_QA_IMAGE",value:$img},
+                   {name:"LLM_MODEL",value:$model},
+                   {name:"GRAPHDB_MCP_URL",value:$mcp},
+                   {name:"AZURE_FOUNDRY_BASE_URL",value:$base},
+                   {name:"SIMILARITY_INDEX",value:$sim},
+                   {name:"OTEL_EXPORTER_OTLP_ENDPOINT",value:$otel},
+                   {name:"SECRETS_DIR",value:$secrets_dir}],
+              pullImage:true, prune:false}' > /tmp/payload.json
+          bash .github/scripts/portainer-deploy.sh /tmp/payload.json graph-qa "$IMAGE_DIGEST_REF" "${HEALTH_URL:-}"
