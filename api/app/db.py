@@ -290,14 +290,25 @@ async def reconcile_schema() -> None:
                 "ALTER TABLE projects ADD COLUMN scope VARCHAR(16) NOT NULL DEFAULT 'volledig'"
             )
         # current_activiteit/rondes.activiteit verbreed (rs-codes). Alleen op Postgres relevant —
-        # SQLite handhaaft de VARCHAR-lengte niet. Idempotent.
+        # SQLite handhaaft de VARCHAR-lengte niet. **Echt idempotent**: alleen ALTER-en als de kolom
+        # nog niet ≥16 is. Een onvoorwaardelijke ALTER TYPE botst met een view die van de kolom
+        # afhangt (bv. Grafana's `dashboard_jobs`) → "cannot alter type of a column used by a view"
+        # → startup-crash. Skippen zodra de breedte al klopt vermijdt die view-afhankelijkheid.
         if is_pg:
-            await conn.exec_driver_sql(
-                "ALTER TABLE projects ALTER COLUMN current_activiteit TYPE VARCHAR(16)"
-            )
-            await conn.exec_driver_sql(
-                "ALTER TABLE rondes ALTER COLUMN activiteit TYPE VARCHAR(16)"
-            )
+            async def _verbreed_indien_nodig(tabel: str, kolom: str) -> None:
+                res = await conn.exec_driver_sql(
+                    "SELECT character_maximum_length FROM information_schema.columns "
+                    f"WHERE table_name = '{tabel}' AND column_name = '{kolom}'"
+                )
+                rij = res.first()
+                huidige = rij[0] if rij else None
+                if huidige is not None and huidige < 16:
+                    await conn.exec_driver_sql(
+                        f"ALTER TABLE {tabel} ALTER COLUMN {kolom} TYPE VARCHAR(16)"
+                    )
+
+            await _verbreed_indien_nodig("projects", "current_activiteit")
+            await _verbreed_indien_nodig("rondes", "activiteit")
         # Hot-path indexen op een bestaande tabel: create_all maakt indexen alleen mee bij een
         # verse tabel, dus voor een bestaande prod-DB hier idempotent toevoegen. IF NOT EXISTS
         # werkt op zowel PostgreSQL als SQLite, dus ook veilig ná create_all in de tests.
