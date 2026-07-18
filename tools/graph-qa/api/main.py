@@ -23,6 +23,7 @@ zodat graph-qa in de frontend→API→MCP-trace valt.
 from __future__ import annotations
 
 import json
+import logging
 import secrets
 import time
 from collections import deque
@@ -42,6 +43,8 @@ from agent import observability  # noqa: E402
 from agent.agent import answer_stream  # noqa: E402
 from agent.config import Settings  # noqa: E402
 from agent.models import ChatRequest  # noqa: E402
+
+logger = logging.getLogger("graph_qa.chat")
 
 settings = Settings.from_env()
 observability.setup(settings)  # logging + gated OTel, vóór de app draait
@@ -117,6 +120,15 @@ async def chat(
     _rl: None = Depends(_rate_limit),
     _auth: None = Depends(_check_auth),
 ) -> EventSourceResponse:
+    logger.info(
+        "chat ontvangen",
+        extra={
+            "categorie": "functioneel",
+            "chat_session_id": request.conversation_id or "",
+            "chat_vraag_lengte": len(request.question or ""),
+        },
+    )
+
     async def event_generator() -> AsyncIterator[dict]:
         async for event in answer_stream(request.question, request.conversation_id):
             yield {"data": json.dumps(event, ensure_ascii=False)}
@@ -157,8 +169,17 @@ async def chat_webhook(
     if not question:
         return {"output": ""}
 
+    # AVG: alleen metadata (sessie-id + lengtes + grounded), nooit de vraag/antwoord-inhoud.
+    _log = {
+        "categorie": "functioneel",
+        "chat_session_id": body.sessionId or "web",
+        "chat_vraag_lengte": len(question),
+    }
+    logger.info("chat-webhook ontvangen", extra=_log)
+
     parts: list[str] = []
     sources: list[dict] = []
+    grounded: bool | None = None
     error: str | None = None
     async for event in answer_stream(question, body.sessionId or "web"):
         t = event.get("type")
@@ -166,12 +187,24 @@ async def chat_webhook(
             parts.append(event["content"])
         elif t == "sources":
             sources = event["sources"]
+        elif t == "grounding":
+            grounded = event.get("grounded")
         elif t == "error":
             error = event["message"]
 
     answer = "".join(parts).strip()
     if not answer:
+        logger.warning("chat-webhook fout", extra={**_log, "chat_fout": error or "geen antwoord"})
         return {"output": f"Er ging iets mis: {error}" if error else "Geen antwoord."}
+    logger.info(
+        "chat-webhook klaar",
+        extra={
+            **_log,
+            "chat_antwoord_lengte": len(answer),
+            "chat_bron_aantal": len(sources),
+            "grounded": grounded,
+        },
+    )
     if sources:
         lijst = "\n".join(
             f"- [{s.get('label') or s.get('uri')}]({s.get('uri')})" for s in sources[:20]
