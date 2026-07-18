@@ -118,7 +118,15 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
             tools=anthropic_schemas(only=spec.tools),
             messages=state["messages"],
         ) as stream:
+            # Beurt-narratie stroomt per beurt binnen; op een beurt-grens ontbreekt anders een
+            # scheiding, zodat "…tegelijkertijd." + "De thesaurus…" aan elkaar plakt. Emit één
+            # alinea-scheiding vóór de éérste tekst van een vervolgbeurt (turns>0). Lazy, zodat
+            # een tool-only beurt (geen tekst) geen loshangende of dubbele witregel geeft.
+            first_delta = True
             for delta in stream.text_deltas:
+                if first_delta and state.get("turns", 0) > 0:
+                    writer({"type": "token", "content": "\n\n"})
+                first_delta = False
                 writer({"type": "token", "content": delta})
             final = stream.final_message()
 

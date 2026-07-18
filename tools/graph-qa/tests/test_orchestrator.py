@@ -65,6 +65,24 @@ def test_grounding_correctie_doet_extra_ronde():
     assert "done" in [e["type"] for e in events]
 
 
+def test_beurt_narratie_krijgt_alinea_scheiding():
+    # Regressie: tekst van beurt 1 ("…op.") plakte aan beurt 2 ("De definitie…") vast omdat de
+    # tokens met "" werden samengevoegd. Op de beurt-grens hoort nu één alinea-scheiding.
+    settings = make_settings(enable_planning=False)
+    graph = FakeGraph(result=f"<{ART_IRI}> bwb:tekst 'x' .")
+    llm = FakeLLM([
+        response([
+            text_block("Ik zoek nu op."),
+            tool_block("t1", "get_artikel", {"bwb_id": "BWBR0004770", "artikel": "9"}),
+        ], "tool_use"),
+        response([text_block("De definitie is helder.")], "end_turn"),
+    ])
+    events = _run(answer_stream("vraag", settings=settings, llm=llm, graph=graph))
+    tekst = "".join(e["content"] for e in events if e["type"] == "token")
+    assert "op.De" not in tekst                       # niet meer vastgeplakt
+    assert "Ik zoek nu op.\n\nDe definitie is helder." in tekst
+
+
 def test_geen_planning_geen_plan_status():
     settings = make_settings(enable_planning=False)
     graph = FakeGraph(result=ART_IRI)
