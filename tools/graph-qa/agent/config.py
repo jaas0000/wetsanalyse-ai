@@ -41,6 +41,10 @@ class Settings(BaseModel):
 
     # Orkestrator
     enable_planning: bool = True      # lichte plan-node vóór de agent (plan→retrieve→reason→verify)
+    enable_memory_context: bool = True  # eerder geraadpleegde bepalingen als pointer-context injecteren
+
+    # Geheugen (LangGraph-checkpointer). Pad gezet → durable AsyncSqliteSaver; None → in-memory.
+    checkpoint_db_path: str | None = "conversations_checkpoints.db"
 
     # Grounding
     grounding_correct: bool = False   # bij niet-onderbouwde citaties één corrigerende her-vraag
@@ -74,6 +78,7 @@ class Settings(BaseModel):
             "otel_service_name": e.get("OTEL_SERVICE_NAME"),
             "log_format": e.get("LOG_FORMAT"),
             "log_level": e.get("LOG_LEVEL"),
+            "checkpoint_db_path": e.get("CHECKPOINT_DB_PATH"),
         }
         # None weglaten zodat de veld-defaults van kracht blijven
         return cls(**{k: v for k, v in raw.items() if v is not None})

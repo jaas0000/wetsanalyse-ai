@@ -4,8 +4,7 @@ from __future__ import annotations
 import asyncio
 
 from agent.agent import answer_stream
-from agent.config import Settings
-from fakes import FakeGraph, FakeLLM, response, text_block, tool_block
+from fakes import FakeGraph, FakeLLM, make_settings, response, text_block, tool_block
 
 ART_IRI = "https://ipalm.nl/bwb/BWBR0004770/artikel/9"
 
@@ -18,7 +17,7 @@ def _run(gen):
 
 
 def test_volledige_stroom_plan_tools_verify_finalize():
-    settings = Settings()  # planning AAN
+    settings = make_settings()  # planning AAN
     graph = FakeGraph(result=f"<{ART_IRI}> bwb:tekst 'zes weken' .")
     llm = FakeLLM([
         response([text_block("Aanpak: get_artikel 9 IW.")], "end_turn"),                      # plan (create)
@@ -38,7 +37,7 @@ def test_volledige_stroom_plan_tools_verify_finalize():
 
 
 def test_bronnen_uit_tooltrace_grounding_verdict():
-    settings = Settings(enable_planning=False)
+    settings = make_settings(enable_planning=False)
     graph = FakeGraph(result=f"<{ART_IRI}> bwb:tekst 'x' .")
     llm = FakeLLM([
         response([tool_block("t1", "get_artikel", {"bwb_id": "BWBR0004770", "artikel": "9"})], "tool_use"),
@@ -53,7 +52,7 @@ def test_bronnen_uit_tooltrace_grounding_verdict():
 
 
 def test_grounding_correctie_doet_extra_ronde():
-    settings = Settings(enable_planning=False, grounding_correct=True)
+    settings = make_settings(enable_planning=False, grounding_correct=True)
     graph = FakeGraph(result="")  # geen tools → verzonnen citatie blijft ongegrond
     llm = FakeLLM([
         response([text_block("Antwoord met verzonnen BWBR9999999.")], "end_turn"),  # ronde 1: ongegrond
@@ -67,7 +66,7 @@ def test_grounding_correctie_doet_extra_ronde():
 
 
 def test_geen_planning_geen_plan_status():
-    settings = Settings(enable_planning=False)
+    settings = make_settings(enable_planning=False)
     graph = FakeGraph(result=ART_IRI)
     llm = FakeLLM([response([text_block("Direct antwoord.")], "end_turn")])
     events = _run(answer_stream("vraag", settings=settings, llm=llm, graph=graph))
