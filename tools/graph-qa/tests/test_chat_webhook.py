@@ -4,6 +4,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 
 import api.main as main
+import pytest
 from fastapi.testclient import TestClient
 
 ART = "https://ipalm.nl/bwb/BWBR0004770/artikel/9"
@@ -59,3 +60,17 @@ def test_geen_secret_geconfigureerd_is_open(monkeypatch):
     client = _client(monkeypatch, None)
     r = client.post("/v1/chat-webhook", json={"chatInput": "x"})
     assert r.status_code == 200
+
+
+def test_startup_weigert_zonder_graphdb_token(monkeypatch):
+    # `with TestClient` draait de lifespan-startup. Zonder GRAPHDB_TOKEN mag de service niet booten.
+    monkeypatch.setattr(main.settings, "graphdb_token", None)
+    with pytest.raises(ValueError, match="GRAPHDB_TOKEN"):
+        with TestClient(main.app):
+            pass
+
+
+def test_startup_lukt_met_graphdb_token(monkeypatch):
+    monkeypatch.setattr(main.settings, "graphdb_token", "tok-123")
+    with TestClient(main.app):  # lifespan-startup slaagt → geen exception
+        pass
