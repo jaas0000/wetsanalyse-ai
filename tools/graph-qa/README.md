@@ -1,87 +1,130 @@
-# graph-qa — juridische vraagbeantwoording over de BWB-kennisgraaf
+# graph-qa
 
-`graph-qa` is de **eigen juridische QA-agent** van dit project: een FastAPI-dienst die vragen over
-Nederlandse wet- en regelgeving beantwoordt door een **GraphDB-kennisgraaf** (de BWB-graaf) te
-bevragen via de **MCP**-toollaag, en het antwoord **brongetrouw** onderbouwt. Hij vervangt de eerdere
-n8n-chatbot achter de webapp-chatbel: de API proxyt de chatbel naar dit endpoint
-(`api/app/routers/chat.py` → `POST /v1/chat-webhook`).
+Een vraag-antwoorddienst voor **Nederlandse invorderings- en belastingwetgeving** die in een
+**GraphDB-kennisgraaf** is opgeslagen. `graph-qa` beantwoordt een natuurlijke-taalvraag door die graaf
+te bevragen en het antwoord **uitsluitend** te baseren op wat de graaf teruggeeft — met een
+letterlijke vindplaats (regeling / artikel / lid) en een bronnenlijst die herleidbaar is tot de
+daadwerkelijk uitgevoerde queries. Het is een Python/FastAPI-dienst; de agentlogica draait op een
+LangGraph-toestandsmachine met een LLM (Anthropic via Azure AI Foundry).
 
-De kern is dat het antwoord **niet** op modelgeheugen leunt maar op de graaf: elke bewering is
-herleidbaar naar een opgehaalde bepaling (artikel/lid + BWB-id), en een **grounding**-controle
-verifieert de citaten tegen wat de tools daadwerkelijk teruggaven.
+## Wat de agent doet
 
-## Wat het doet
+De kern is **brongetrouwheid**: het model mag niet uit eigen kennis antwoorden. Voor elke inhoudelijke
+vraag bevraagt de agent eerst de graaf via een **getypeerde toollaag**, en een aparte controlestap
+verifieert achteraf dat elke citaat in het antwoord ook echt uit een tool-resultaat komt. Vragen die
+niet over de wetgeving in de graaf gaan, worden beleefd afgewezen.
 
-- **Retrieval over de graaf** via een getypeerde toollaag (geen vrije SPARQL voor het model):
-  `resolve_begrip`, `search_wetgeving`, `semantic_search`, `get_artikel`, `get_lid`, `get_context`
-  (GraphRAG-subgraaf), `follow_verwijzingen`, `referenced_by`, `list_regelingen`, `get_regeling_info`,
-  `graph_schema` en (afgeschermd) `raw_sparql`.
-- **Multi-agent supervisor**: een router kiest per vraag één specialist — `definitie` (begrippen),
-  `duiding` (betekenis/samenhang) of `algemeen` — elk met een eigen tool-subset en systeeminstructie.
-- **Grounding + bron-curatie**: bronnen komen uit de tool-trace (niet uit modeltekst); niet-onderbouwde
-  citaties worden gemarkeerd en de bronnenlijst wordt beperkt tot wat in het antwoord is aangehaald.
-- **Geheugen** over de conversatie via een durable LangGraph-checkpointer (`thread_id` =
-  `conversation_id`/`sessionId`).
-- **Streaming** (SSE) met live status- en token-events.
+Eén vraag doorloopt een vaste keten (een LangGraph-graaf):
 
-De agent is gebouwd in drie fasen (uit een architectuurreview): **Fase 1** fundament (DI-poorten,
-provenance uit de tool-trace, security, getypeerde tools), **Fase 2** grounding + eval + observability,
-GraphRAG-retrieval, LangGraph-orkestrator, geheugen-tiers en semantic search, **Fase 3** het
-multi-agent supervisor-patroon.
+1. **Router** — één LLM-call bepaalt welke *specialist* de vraag behandelt en schetst kort de aanpak;
+   een vraag buiten het onderwerp wordt hier al afgewezen.
+2. **Specialist (reason ↔ retrieve)** — de gekozen specialist redeneert en roept tools aan; de agent
+   voert die uit tegen de graaf en voegt de resultaten toe aan een *tool-trace*. Dit herhaalt tot er
+   geen tool-aanroep meer volgt (of tot een beurten-limiet).
+3. **Verify (grounding)** — deterministische controle of de vindplaatsen in het antwoord voorkomen in
+   de tool-trace. Niet-onderbouwde citaten worden gemarkeerd; desgewenst volgt één corrigerende
+   her-vraag.
+4. **Finalize** — de bronnenlijst wordt uit de tool-trace opgebouwd en beperkt tot de in het antwoord
+   aangehaalde regelingen; het antwoord, de bronnen en het grounding-oordeel worden uitgestuurd.
+
+### Specialisten (multi-agent supervisor)
+
+De router kiest per vraag één specialist; elk krijgt een eigen instructie én een **subset** van de
+tools:
+
+| Specialist | Waarvoor | Kern-tools |
+|---|---|---|
+| `definitie` | Begrippen en definities herleiden en letterlijk citeren. | `resolve_begrip`, `get_artikel`/`get_lid`, `search_wetgeving`/`semantic_search` |
+| `duiding` | Betekenis, structuur en samenhang van een bepaling; kruisverwijzingen volgen. | `get_context`, `follow_verwijzingen`, `referenced_by`, `get_artikel`/`get_lid` |
+| `algemeen` | Overige juridische vragen. | Alle tools |
+
+### De toollaag (retrieval)
+
+Het model krijgt **geen** vrije SPARQL, maar een set van twaalf getypeerde tools; alleen `raw_sparql`
+is een afgeschermd laatste redmiddel:
+
+- **Zoeken** — `search_wetgeving` (full-text/Lucene, exacte termen) en `semantic_search` (op betekenis,
+  via een GraphDB-similarity-index; te combineren als hybride zoekstap).
+- **Ophalen** — `get_artikel`, `get_lid`.
+- **Regelingen** — `list_regelingen`, `get_regeling_info` (soort, geldigheid, uitgevende organisatie).
+- **Verwijzingen** — `follow_verwijzingen` (uitgaand), `referenced_by` (inkomend).
+- **Context (GraphRAG)** — `get_context`: een bepaling mét haar bevattende delen, leden en
+  verwijzingen in één query.
+- **Begrippen** — `resolve_begrip` (SKOS-thesaurus).
+- **Introspectie** — `graph_schema` (live omvang van de graaf).
+- **Laatste redmiddel** — `raw_sparql` (read-only SELECT/CONSTRUCT/DESCRIBE).
+
+### Brongetrouwheid, expliciet gemaakt
+
+- **Bronnen uit de tool-trace, niet uit modeltekst.** De vindplaatsen (BWB-IRI's, jci-strings,
+  BWB-id's) worden herkend in wat de graaf terugstuurde — een geparafraseerde of verzonnen citaat in
+  de prozatekst wordt zo nooit als "bron" gepresenteerd.
+- **Grounding-controle.** Deterministisch (geen extra LLM-call): een citaat geldt als onderbouwd zodra
+  zijn BWB-id ergens in de opgehaalde tekst voorkomt; anders wordt het als *unsupported* gemeld.
+- **Onderwerp-afbakening en injectie-weerbaarheid.** De agent behandelt tekst die uit de graaf komt
+  als data, nooit als instructie, en houdt zich aan de scope ook als een bericht vraagt dat te negeren.
+
+### Geheugen
+
+Gesprekscontinuïteit loopt via een durable LangGraph-checkpointer (sleutel = het meegegeven
+gespreks-/sessie-id). Naast de episodische berichten houdt de agent een set eerder geraadpleegde
+bepalingen bij; die dient als aanknopingspunt voor verwijzingen als "dat artikel" — feiten worden
+altijd opnieuw via de tools geverifieerd.
 
 ## API
 
 | Endpoint | Doel |
 |---|---|
 | `GET /health` | Liveness (geen auth). |
-| `POST /v1/chat` | **SSE-stream**: `{question}` → events `status`/`token`/`sources`/`grounding`/`done`/`error`. |
-| `POST /v1/chat-webhook` | **Niet-streamend** compat-contract voor de webapp-chatbel: `{chatInput, sessionId, secret?}` + header `X-Chat-Secret` → `{"output": "<antwoord + bronnen>"}`. |
+| `POST /v1/chat` | **SSE-stream**: body `{question, conversation_id?}` → events `status` · `token` · `sources` · `grounding` · `done` · `error`. |
+| `POST /v1/chat-webhook` | **Niet-streamend** contract voor een chat-UI: body `{chatInput, sessionId, secret?}` (of header `X-Chat-Secret`) → `{"output": "<antwoord + bronnenlijst>"}`. In dit project belt de webapp-chatbel dit endpoint via de API-chatproxy. |
 
-Auth is optioneel (`QA_API_TOKEN` / `X-Chat-Secret`, timing-safe); bij een intern-only deployment
-staat het slot doorgaans uit.
+Authenticatie is optioneel (`QA_API_TOKEN` / `X-Chat-Secret`, timing-safe vergeleken); bij een
+intern-only deployment staat het slot doorgaans uit. Verdere beveiliging: CORS met credentials
+uitsluitend bij een expliciete origin-lijst, een per-IP rate-limit, en een read-only-vangnet dat
+SPARQL-updates weigert.
 
-## Snel starten (lokaal)
+## Lokaal draaien
 
 Vereist [`uv`](https://docs.astral.sh/uv/). Zet minimaal `GRAPHDB_TOKEN` en de Azure-Foundry-variabelen
-(zie `.env.example`) — **zonder `GRAPHDB_TOKEN` weigert de service te starten**.
+(zie `.env.example`). **Zonder `GRAPHDB_TOKEN` weigert de dienst te starten** — er mag geen tokenloos
+verkeer naar de graaf lopen.
 
 ```bash
 cd tools/graph-qa
 cp .env.example .env          # vul GRAPHDB_TOKEN + AZURE_FOUNDRY_* in
-uv run graph-qa               # start uvicorn op poort 8080 (POST /v1/chat)
+uv run graph-qa               # uvicorn op poort 8080
 
-# tests
-uv run --extra dev pytest -q
-
-# eval-harnas (offline = fakes, geen netwerk/kosten)
-.venv/bin/python eval/run_eval.py --offline
+uv run --extra dev pytest -q                    # tests
+.venv/bin/python eval/run_eval.py --offline     # eval-harnas (fakes, geen netwerk/kosten)
 ```
 
 ## Configuratie (env)
 
 | Variabele | Betekenis |
 |---|---|
-| `GRAPHDB_TOKEN` *(verplicht)* | Bearer-token voor de GraphDB-MCP. Kan als `GRAPHDB_TOKEN_FILE` (bestandspad, voor Docker-secrets). |
-| `GRAPHDB_MCP_URL` | MCP-endpoint (default `https://graphdb-mcp.ipalm.nl/mcp`). |
+| `GRAPHDB_TOKEN` *(verplicht)* | Bearer-token voor de GraphDB-MCP. Ook als `GRAPHDB_TOKEN_FILE` (bestandspad, voor container-secrets). |
+| `GRAPHDB_MCP_URL` | MCP-endpoint van de graaf. |
 | `GRAPHDB_REPOSITORY_ID` | Repository (default `inning`). |
-| `SIMILARITY_INDEX` | GraphDB-similarity-index voor `semantic_search` (deployment: `bwb_similarity`). Leeg → degradeert naar `search_wetgeving`. |
+| `SIMILARITY_INDEX` | Naam van de GraphDB-similarity-index voor `semantic_search`. Leeg → die tool degradeert naar `search_wetgeving`. Zie `docs/embeddings-runbook.md`. |
 | `AZURE_FOUNDRY_API_KEY` *(verplicht)* | Azure-AI-Foundry-key (of `_FILE`). |
 | `AZURE_FOUNDRY_BASE_URL` *(verplicht)* | Foundry-endpoint **met** `/anthropic`-suffix. |
 | `LLM_MODEL` | Modelnaam (default `claude-sonnet-4-6`). |
 | `QA_API_TOKEN` | API-/chat-secret (of `_FILE`); leeg = open. |
 | `CORS_ORIGINS` | Kommagescheiden origins; `*` = open (alleen dev). |
-| `CHECKPOINT_DB_PATH` | Pad voor de durable checkpointer (deployment: `/data/...`); leeg = in-memory. |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | OTLP-endpoint; leeg = alleen JSON-logs (nul overhead). |
+| `CHECKPOINT_DB_PATH` | Pad voor de durable checkpointer; leeg = in-memory (geen continuïteit over herstarts). |
+| `MAX_TURNS` | Max. reason↔retrieve-beurten per vraag. |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | OTLP-endpoint; leeg = alleen gestructureerde JSON-logs (nul overhead). |
 
-## Deployment
+## De graaf
 
-Zie **`deploy/README.md`**. Kort: CI (`.github/workflows/graph-qa-docker-publish.yml`) bouwt het image
-`ghcr.io/palmw01/graph-qa`, en een Portainer-stack draait het **intern-only** (geen host-poort; de API
-bereikt het op `http://graph-qa:8080`). Secrets zijn host-bestanden die via `*_FILE`-env worden
-ingelezen (`/run/secrets:ro`). De semantic-index staat beschreven in `docs/embeddings-runbook.md`.
+De dienst leest **read-only** uit een GraphDB-repository (`inning`) via een MCP-server (Streamable
+HTTP transport; tools `sparql_query` en `similarity_search`). De data betreft invorderings- en
+belastingregelingen: regelingen, artikelen, leden, kruisverwijzingen, een SKOS-begrippenthesaurus en
+organisatie-/geldigheidsmetadata, met stabiele BWB-IRI's en jci-vindplaatsen.
 
 ## Verder lezen
 
 - **`CLAUDE.md`** — werkgids bij het aanpassen van de code (architectuur, invarianten, valkuilen).
-- `deploy/README.md` — Portainer-stack, secrets, CI.
-- `docs/embeddings-runbook.md` — de GraphDB-similarity-index voor `semantic_search`.
+- `deploy/README.md` — containerimage, secrets als bestanden, Portainer-stack en CI.
+- `docs/embeddings-runbook.md` — de GraphDB-similarity-index achter `semantic_search`.
