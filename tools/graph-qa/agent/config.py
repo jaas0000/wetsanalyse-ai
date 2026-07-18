@@ -39,6 +39,17 @@ class Settings(BaseModel):
     rate_limit: int = 60          # verzoeken per venster (per proces, per IP)
     rate_window_seconds: float = 60.0
 
+    # Grounding
+    grounding_correct: bool = False   # bij niet-onderbouwde citaties één corrigerende her-vraag
+    curate_sources: bool = True       # bronnenlijst beperken tot in het antwoord aangehaalde regelingen
+
+    # Observability (gated op otel_endpoint; leeg = alleen JSON-logs)
+    otel_endpoint: str = ""
+    otel_service_name: str = "graph-qa"
+    otel_metrics_enabled: bool = True
+    log_format: str = "json"
+    log_level: str = "info"
+
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> "Settings":
         e = env if env is not None else os.environ
@@ -56,6 +67,10 @@ class Settings(BaseModel):
             "qa_api_token": e.get("QA_API_TOKEN"),
             "cors_origins": cors or None,
             "rate_limit": e.get("QA_RATE_LIMIT"),
+            "otel_endpoint": e.get("OTEL_EXPORTER_OTLP_ENDPOINT"),
+            "otel_service_name": e.get("OTEL_SERVICE_NAME"),
+            "log_format": e.get("LOG_FORMAT"),
+            "log_level": e.get("LOG_LEVEL"),
         }
         # None weglaten zodat de veld-defaults van kracht blijven
         return cls(**{k: v for k, v in raw.items() if v is not None})

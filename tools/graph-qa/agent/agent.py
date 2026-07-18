@@ -6,26 +6,35 @@ via de registry en hoeft het rauwe MCP-oppervlak niet te kennen. Providers worde
 via poorten geïnjecteerd; worden ze niet meegegeven, dan bouwt de loop defaults uit
 Settings. Zo draait de loop in tests op fakes zonder netwerk.
 
+Na het eindantwoord controleert een grounding-pas of de citaties in de tekst
+herleidbaar zijn tot de tool-trace (agent/grounding.py); niet-onderbouwde
+verwijzingen worden gemarkeerd via een grounding-event.
+
 Stroom per vraag:
   1. Initialiseer de graaf-sessie.
   2. Stuur vraag + system prompt naar het LLM met de domeintools als schema.
   3. Het LLM roept een tool aan → registry.dispatch bouwt+voert de query uit → terug
      als tool_result.
   4. Herhaal tot stop_reason == "end_turn" (max settings.max_turns rondes).
-  5. Yield het eindantwoord als tokens + bronnen (uit de tool-trace).
+  5. Yield het eindantwoord als tokens + bronnen + grounding-verdict.
 """
 from __future__ import annotations
 
 import asyncio
+import logging
 from collections.abc import AsyncIterator
 from typing import Any
 
 from .config import Settings
+from .grounding import check_grounding, curate_sources
 from .memory import load_history, save_turn
+from .observability import get_tracer
 from .ports import GraphPort, LLMPort
 from .provenance import collect_sources
 from .prompts import SYSTEM_PROMPT
 from .tools import anthropic_schemas, dispatch
+
+logger = logging.getLogger(__name__)
 
 
 def _truncate(text: str, max_chars: int = 8000) -> str:
@@ -51,6 +60,7 @@ async def answer_stream(
     Async generator die SSE-events yield:
       {"type": "token", "content": "..."}
       {"type": "sources", "sources": [...]}
+      {"type": "grounding", "grounded": bool, "unsupported": [...]}
       {"type": "done"}
       {"type": "error", "message": "..."}
     """
@@ -68,6 +78,7 @@ async def answer_stream(
             llm = AnthropicLLM(settings)
         await _run_sync(graph.initialize)
     except Exception as exc:
+        logger.warning("MCP-verbinding mislukt", exc_info=True)
         yield {"type": "error", "message": f"MCP-verbinding mislukt: {exc}"}
         if graph is not None:
             graph.close()
@@ -75,6 +86,7 @@ async def answer_stream(
 
     tool_schemas = anthropic_schemas()
     model = settings.llm_model
+    tracer = get_tracer(__name__)
 
     # Laad gespreksgeschiedenis als conversation_id opgegeven
     history: list[dict[str, Any]] = []
@@ -87,88 +99,115 @@ async def answer_stream(
     source_trace: list[tuple[str, str]] = []
 
     try:
-        for _turn in range(settings.max_turns):
-            # Blocking call in executor
-            response = await _run_sync(
-                lambda: llm.create(
-                    model=model,
-                    max_tokens=4096,
-                    system=SYSTEM_PROMPT,
-                    tools=tool_schemas,
-                    messages=messages,
+        with tracer.start_as_current_span("graph_qa.answer") as span:
+            for turn in range(settings.max_turns):
+                # Blocking call in executor
+                response = await _run_sync(
+                    lambda: llm.create(
+                        model=model,
+                        max_tokens=4096,
+                        system=SYSTEM_PROMPT,
+                        tools=tool_schemas,
+                        messages=messages,
+                    )
                 )
-            )
 
-            stop_reason = response.stop_reason
-            tool_uses = []
-            text_parts = []
+                stop_reason = response.stop_reason
+                tool_uses = []
+                text_parts = []
 
-            for block in response.content:
-                if block.type == "text":
-                    text_parts.append(block.text)
-                elif block.type == "tool_use":
-                    tool_uses.append({
-                        "id": block.id,
-                        "name": block.name,
-                        "input": block.input,
+                for block in response.content:
+                    if block.type == "text":
+                        text_parts.append(block.text)
+                    elif block.type == "tool_use":
+                        tool_uses.append({
+                            "id": block.id,
+                            "name": block.name,
+                            "input": block.input,
+                        })
+
+                # Bouw assistant-bericht
+                assistant_content: list[dict[str, Any]] = []
+                for part in text_parts:
+                    assistant_content.append({"type": "text", "text": part})
+                for tu in tool_uses:
+                    assistant_content.append({
+                        "type": "tool_use",
+                        "id": tu["id"],
+                        "name": tu["name"],
+                        "input": tu["input"],
+                    })
+                messages.append({"role": "assistant", "content": assistant_content})
+
+                if stop_reason != "tool_use" or not tool_uses:
+                    # Eindantwoord: stream tekst als tokens (bloktekst behouden, geen spatie-lijm)
+                    full_text = "\n\n".join(p for p in text_parts if p)
+                    chunk_size = 50
+                    for i in range(0, len(full_text), chunk_size):
+                        yield {"type": "token", "content": full_text[i:i + chunk_size]}
+                        await asyncio.sleep(0)  # geef event loop ruimte
+
+                    # Sla uitwisseling op in geheugen
+                    if conversation_id:
+                        await _run_sync(save_turn, conversation_id, question, full_text)
+
+                    # Bronnen + grounding
+                    sources = collect_sources(source_trace)
+                    if settings.curate_sources:
+                        sources = curate_sources(sources, full_text)
+                    report = check_grounding(full_text, source_trace)
+
+                    span.set_attribute("graph_qa.turns", turn + 1)
+                    span.set_attribute("graph_qa.grounded", report.grounded)
+                    span.set_attribute("graph_qa.sources", len(sources))
+                    logger.info(
+                        "antwoord klaar",
+                        extra={
+                            "turns": turn + 1,
+                            "sources": len(sources),
+                            "grounded": report.grounded,
+                            "unsupported": len(report.unsupported),
+                        },
+                    )
+
+                    yield {"type": "sources", "sources": [s.model_dump() for s in sources]}
+                    yield {
+                        "type": "grounding",
+                        "grounded": report.grounded,
+                        "cited": len(report.cited),
+                        "unsupported": report.unsupported,
+                    }
+                    if conversation_id:
+                        yield {"type": "conversation_id", "conversation_id": conversation_id}
+                    yield {"type": "done"}
+                    return
+
+                # Voortgangsevent: agent is tools aan het gebruiken
+                tool_names = [tu["name"] for tu in tool_uses]
+                logger.info("tools", extra={"turn": turn + 1, "tools": tool_names})
+                yield {"type": "status", "message": f"Graaf bevragen: {', '.join(tool_names)}..."}
+
+                # Tool-calls uitvoeren via de registry (bouwt + voert de query uit)
+                tool_results: list[dict[str, Any]] = []
+                for tu in tool_uses:
+                    result_text = await _run_sync(dispatch, tu["name"], graph, tu["input"])
+                    result_text = _truncate(result_text)
+                    # Registreer de trace voor bronvermelding.
+                    source_trace.append((tu["name"], result_text))
+                    tool_results.append({
+                        "type": "tool_result",
+                        "tool_use_id": tu["id"],
+                        "content": result_text,
                     })
 
-            # Bouw assistant-bericht
-            assistant_content: list[dict[str, Any]] = []
-            for part in text_parts:
-                assistant_content.append({"type": "text", "text": part})
-            for tu in tool_uses:
-                assistant_content.append({
-                    "type": "tool_use",
-                    "id": tu["id"],
-                    "name": tu["name"],
-                    "input": tu["input"],
-                })
-            messages.append({"role": "assistant", "content": assistant_content})
+                messages.append({"role": "user", "content": tool_results})
 
-            if stop_reason != "tool_use" or not tool_uses:
-                # Eindantwoord: stream tekst als tokens (bloktekst behouden, geen spatie-lijm)
-                full_text = "\n\n".join(p for p in text_parts if p)
-                # Stuur in chunks van ~50 tekens voor vloeiend effect
-                chunk_size = 50
-                for i in range(0, len(full_text), chunk_size):
-                    yield {"type": "token", "content": full_text[i:i + chunk_size]}
-                    await asyncio.sleep(0)  # geef event loop ruimte
-
-                # Sla uitwisseling op in geheugen
-                if conversation_id:
-                    await _run_sync(save_turn, conversation_id, question, full_text)
-
-                sources = collect_sources(source_trace)
-                yield {"type": "sources", "sources": [s.model_dump() for s in sources]}
-                if conversation_id:
-                    yield {"type": "conversation_id", "conversation_id": conversation_id}
-                yield {"type": "done"}
-                return
-
-            # Voortgangsevent: agent is tools aan het gebruiken
-            tool_names = [tu["name"] for tu in tool_uses]
-            yield {"type": "status", "message": f"Graaf bevragen: {', '.join(tool_names)}..."}
-
-            # Tool-calls uitvoeren via de registry (bouwt + voert de query uit)
-            tool_results: list[dict[str, Any]] = []
-            for tu in tool_uses:
-                result_text = await _run_sync(dispatch, tu["name"], graph, tu["input"])
-                result_text = _truncate(result_text)
-                # Registreer de trace voor bronvermelding.
-                source_trace.append((tu["name"], result_text))
-                tool_results.append({
-                    "type": "tool_result",
-                    "tool_use_id": tu["id"],
-                    "content": result_text,
-                })
-
-            messages.append({"role": "user", "content": tool_results})
-
-        # Max turns bereikt
-        yield {"type": "error", "message": "Maximum aantal zoekopdrachten bereikt zonder eindantwoord."}
+            # Max turns bereikt
+            logger.warning("max turns bereikt", extra={"max_turns": settings.max_turns})
+            yield {"type": "error", "message": "Maximum aantal zoekopdrachten bereikt zonder eindantwoord."}
 
     except Exception as exc:
+        logger.error("agent-fout", exc_info=True)
         yield {"type": "error", "message": f"Agent-fout: {exc}"}
     finally:
         graph.close()

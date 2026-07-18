@@ -1,0 +1,6 @@
+{"question": "Wat zijn de invorderingstermijnen bij belastingen?", "expected_sources": ["BWBR0004770"], "expected_contains": ["artikel 9"], "should_refuse": false}
+{"question": "Welke regelingen zitten er in de kennisgraaf?", "expected_contains": ["Invorderingswet 1990", "Algemene wet bestuursrecht"], "should_refuse": false}
+{"question": "Binnen welke termijn is een naheffingsaanslag invorderbaar?", "expected_sources": ["BWBR0004770"], "expected_contains": ["14 dagen"], "should_refuse": false}
+{"question": "Welke soort regeling is de Leidraad Invordering 2008?", "expected_sources": ["BWBR0024096"], "expected_contains": ["beleidsregel"], "should_refuse": false}
+{"question": "Wie heeft de Invorderingswet 1990 ondertekend?", "expected_sources": ["BWBR0004770"], "should_refuse": false}
+{"question": "Wat is het weer vandaag?", "should_refuse": true}
