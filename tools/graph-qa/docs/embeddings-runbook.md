@@ -2,8 +2,13 @@
 
 Doel: naast de bestaande Lucene-FTS (`bwb_tekst`) **semantisch zoeken** mogelijk maken,
 zodat de agent bepalingen vindt op *betekenis* (andere woorden dan de wettekst) i.p.v. alleen
-op exacte termen. Dit document beschrijft de infra-stap; de graph-qa-tool die de index bevraagt
-komt in een vervolg-PR.
+op exacte termen.
+
+> ✅ **STATUS (juli 2026): route A is LIVE.** Er draait een native GraphDB text-similarity-index
+> `bwb_similarity` op `inning`; `semantic_search` gebruikt 'm via de MCP-tool `similarity_search`
+> en is geactiveerd met `SIMILARITY_INDEX=bwb_similarity`. Live geverifieerd (omschrijvende vragen +
+> eval-paraphrase-cases). Route C (Azure-embeddings) blijft de kwaliteits-upgrade wanneer er een
+> embeddings-deployment is. De exact gebruikte index-config staat onder *Route A — uitgevoerd*.
 
 ## Uitgangssituatie (geverifieerd, juli 2026)
 
@@ -28,7 +33,20 @@ en de MCP-`similarity_search` kan het meteen bevragen.
 - Workbench → **Setup → Similarity → Create similarity index** (type: *Text*).
 - Bron: de `bwb:tekst`-literals (evt. beperkt tot Artikel/Lid/Divisie).
 - Na het bouwen levert `get_similarity_options` de indexnaam; `similarity_search` werkt met
-  `{"query": …, "similarityIndex": "<naam>", "repositoryId": "inning"}`.
+  `{"query": …, "similarityIndex": "<naam>", "connectorType": "similarity", "repositoryId": "inning"}`.
+
+#### Route A — uitgevoerd (`bwb_similarity`)
+Aangemaakt via `POST /rest/similarity` (header `X-GraphDB-Repository: inning`), body:
+- `name`: `bwb_similarity`
+- `type`: `text`, `infer`: true, `sameAs`: true
+- `analyzerClass`: `org.apache.lucene.analysis.nl.DutchAnalyzer`
+- `options`: `-trainingcycles 5 -dimension 200`  (SemanticVectors — let op: `-dimension`, niet `-vectorsize`)
+- `selectQuery`: `SELECT ?documentID ?documentText { ?documentID bwb:tekst ?documentText
+  FILTER(STRSTARTS(STR(?documentID), "https://ipalm.nl/bwb/")) }`  (eigen IRI-ruimte → geen sameAs-dubbels)
+- `searchQuery`: de standaard similarity-template (`:searchTerm`/`:documentResult`/`:value`/`:score`).
+
+Build duurde ~enkele seconden (native training over ~4000 literals). Herbouwen bij nieuwe/gewijzigde
+tekst: DELETE + POST, of de Workbench-rebuild.
 
 Kies dit als je **nu** semantiek wilt zonder infra. Later te vervangen door Route B.
 
@@ -57,21 +75,21 @@ de `CREATE`-SPARQL van de connector). Kernvelden:
 **Kosten/omvang:** ~1150 artikelen + ~2350 leden + ~800 divisies ≈ enkele duizenden literals →
 eenmalige embedding-kosten zijn beperkt; alleen bij her-indexeren of nieuwe regelingen komt er bij.
 
-## Graph-qa-kant (AL GEBOUWD — PR 2.5)
+## Graph-qa-kant (LIVE — route A)
 
-De `semantic_search`-tool bestaat en is **config-gedreven**; hij activeert zodra de connector er is:
-- **Zet `RETRIEVAL_CONNECTOR=<instance-naam>`** (bv. `bwb_embeddings`) in de env van graph-qa
-  (`Settings.retrieval_connector`). Leeg = de tool geeft netjes "nog niet geconfigureerd" en de agent
-  valt terug op `search_wetgeving` (geen crash).
-- De tool roept de MCP-tool `retrieval_search` aan met `connectorInstance = RETRIEVAL_CONNECTOR`
-  (`agent/mcp_client.py:semantic_search`). De systeemprompt kent al de hybride-zoekregel.
+De `semantic_search`-tool is **config-gedreven** en geactiveerd:
+- **`SIMILARITY_INDEX=bwb_similarity`** in de env (`Settings.similarity_index`). Leeg = de tool geeft
+  netjes "niet geconfigureerd" en de agent valt terug op `search_wetgeving` (geen crash).
+- De tool roept de MCP-tool `similarity_search` aan met `{query, similarityIndex, connectorType:
+  "similarity", repositoryId, limit}` (`agent/mcp_client.py:semantic_search`). De systeemprompt kent
+  de hybride-zoekregel (exact vs. betekenis).
 - **Eval:** `eval/golden.jsonl` bevat `requires: "semantic"`-cases; `eval/run_eval.py` slaat ze over
-  zolang `RETRIEVAL_CONNECTOR` leeg is en meet ze zodra de connector staat.
+  zolang `SIMILARITY_INDEX` leeg is en meet ze zodra de index staat (nu: ze slagen).
 
-**Live-afronding na het aanmaken van de connector:** zet `RETRIEVAL_CONNECTOR`, draai een
-omschrijvende vraag en `run_eval.py`, en stem zo nodig de `retrieval_search`-argumenten in
-`mcp_client.semantic_search` fijn (bv. `queries` als array of een `queryTemplate`) op wat de
-connector verwacht.
+**Route C (upgrade) later:** met een Azure OpenAI embeddings-deployment maak je een ChatGPT-Retrieval-
+connector aan (Deel hierboven) en schakel je `mcp_client.semantic_search` om naar `retrieval_search`
+met `connectorInstance` + `queryTemplate` (die tool eist `{queries, connectorInstance, repositoryId,
+queryTemplate}`). De rest van de tool/agent blijft gelijk.
 
 ## Verificatie
 
