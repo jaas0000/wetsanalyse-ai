@@ -44,6 +44,17 @@ def _looks_like_update(query: str) -> bool:
     return bool(_UPDATE_RE.search(query))
 
 
+def _content_to_text(content: list[Any]) -> str:
+    """Plat een MCP-content-lijst tot één tekst."""
+    parts = []
+    for item in content:
+        if isinstance(item, dict):
+            parts.append(item.get("text", str(item)))
+        else:
+            parts.append(str(item))
+    return "\n".join(parts)
+
+
 class MCPClient:
     """Dunne synchrone client voor de GraphDB MCP-server."""
 
@@ -52,11 +63,15 @@ class MCPClient:
         url: str | None = None,
         token: str | None = None,
         timeout: float = 30.0,
+        repository_id: str | None = None,
+        sparql_tool: str = "sparql_query",
     ) -> None:
         self.url = (url or os.environ["GRAPHDB_MCP_URL"]).rstrip("/")
         token = token or os.environ["GRAPHDB_TOKEN"]
         self._auth_header = f"Bearer {token}"
         self._timeout = timeout
+        self._repository_id = repository_id or os.environ.get("GRAPHDB_REPOSITORY_ID", "inning")
+        self._sparql_tool = sparql_tool
         self._session_id: str | None = None
         self._client = httpx.Client(
             timeout=httpx.Timeout(connect=10.0, read=60.0, write=10.0, pool=10.0),
@@ -156,6 +171,14 @@ class MCPClient:
         if result is None:
             return []
         return result.get("content", [])
+
+    def sparql(self, query: str) -> str:
+        """Voer een read-only SPARQL-query uit via de MCP-sparql-tool."""
+        content = self.call_tool(
+            self._sparql_tool,
+            {"query": query, "repositoryId": self._repository_id},
+        )
+        return _content_to_text(content)
 
     @staticmethod
     def _reject_updates(arguments: dict[str, Any]) -> None:
