@@ -112,31 +112,32 @@ async def chat(
     return EventSourceResponse(event_generator())
 
 
-# ---- n8n-compat endpoint: drop-in vervanger van de n8n-chat-webhook -------------------------
-# De Wetsanalyse-API-chatproxy stuurt {action, sessionId, chatInput} + header X-Chat-Secret en
-# verwacht één JSON {output: "..."} terug. Dit endpoint spreekt exact dat contract, draait de
-# agent en mapt sessionId → conversation_id (durabel geheugen). Bewust geen per-IP rate-limit:
-# alle webapp-gebruikers komen achter één API-bron-IP binnen; het gedeelde secret is de gate.
+# ---- chat-webhook: de kennisgraaf-agent achter de webapp-chatbel --------------------------------
+# De Wetsanalyse-API-chatproxy stuurt {action, sessionId, chatInput} (+ optioneel header
+# X-Chat-Secret) en verwacht één JSON {output: "..."} terug. Dit endpoint spreekt dat contract,
+# draait de agent en mapt sessionId → conversation_id (durabel geheugen). Bewust geen per-IP
+# rate-limit: alle webapp-gebruikers komen achter één API-bron-IP binnen. Het secret is optioneel
+# (X-Chat-Secret / body.secret) — de service draait intern-only, dus zonder QA_API_TOKEN is 'ie open.
 
-class N8nChatIn(BaseModel):
+class ChatWebhookIn(BaseModel):
     chatInput: str = Field(max_length=8000)
     sessionId: str = Field("web", max_length=200)
     secret: str | None = None
-    action: str | None = None  # genegeerd; n8n stuurt "sendMessage"
+    action: str | None = None  # genegeerd (compat: de proxy stuurt "sendMessage")
 
 
 def _check_chat_secret(body_secret: str | None, header_secret: str | None) -> None:
     expected = settings.qa_api_token
     if not expected:
-        return  # geen secret geconfigureerd → open (lokale dev)
+        return  # geen secret geconfigureerd → open (intern-only)
     provided = header_secret or body_secret or ""
     if not secrets.compare_digest(provided, expected):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Ongeldig of ontbrekend chat-secret")
 
 
-@app.post("/v1/n8n-chat")
-async def n8n_chat(
-    body: N8nChatIn,
+@app.post("/v1/chat-webhook")
+async def chat_webhook(
+    body: ChatWebhookIn,
     x_chat_secret: str | None = Header(default=None, alias="X-Chat-Secret"),
 ) -> dict[str, str]:
     _check_chat_secret(body.secret, x_chat_secret)

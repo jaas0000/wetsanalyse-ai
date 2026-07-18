@@ -1,4 +1,4 @@
-"""n8n-compat endpoint: drop-in vervanger van de n8n-chat-webhook ({chatInput}→{output})."""
+"""chat-webhook endpoint: de kennisgraaf-agent achter de webapp-chatbel ({chatInput}→{output})."""
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
@@ -27,7 +27,7 @@ def _client(monkeypatch, secret: str | None):
 
 def test_output_bevat_antwoord_en_bronnen(monkeypatch):
     client = _client(monkeypatch, "geheim")
-    r = client.post("/v1/n8n-chat", json={"chatInput": "wat is art 9?", "sessionId": "sess-1"},
+    r = client.post("/v1/chat-webhook", json={"chatInput": "wat is art 9?", "sessionId": "sess-1"},
                     headers={"X-Chat-Secret": "geheim"})
     assert r.status_code == 200
     out = r.json()["output"]
@@ -39,23 +39,23 @@ def test_output_bevat_antwoord_en_bronnen(monkeypatch):
 
 def test_fout_secret_401(monkeypatch):
     client = _client(monkeypatch, "geheim")
-    r = client.post("/v1/n8n-chat", json={"chatInput": "x"}, headers={"X-Chat-Secret": "fout"})
+    r = client.post("/v1/chat-webhook", json={"chatInput": "x"}, headers={"X-Chat-Secret": "fout"})
     assert r.status_code == 401
 
 
 def test_ontbrekend_secret_401(monkeypatch):
     client = _client(monkeypatch, "geheim")
-    r = client.post("/v1/n8n-chat", json={"chatInput": "x"})
+    r = client.post("/v1/chat-webhook", json={"chatInput": "x"})
     assert r.status_code == 401
 
 
 def test_secret_in_body_wordt_geaccepteerd(monkeypatch):
     client = _client(monkeypatch, "geheim")
-    r = client.post("/v1/n8n-chat", json={"chatInput": "x", "secret": "geheim"})
+    r = client.post("/v1/chat-webhook", json={"chatInput": "x", "secret": "geheim"})
     assert r.status_code == 200
 
 
 def test_geen_secret_geconfigureerd_is_open(monkeypatch):
     client = _client(monkeypatch, None)
-    r = client.post("/v1/n8n-chat", json={"chatInput": "x"})
+    r = client.post("/v1/chat-webhook", json={"chatInput": "x"})
     assert r.status_code == 200
