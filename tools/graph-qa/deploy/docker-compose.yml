@@ -1,8 +1,8 @@
-# Portainer-stack voor de graph-qa-agent (de eigen kennisgraaf-chatbot-agent), intern.
+# Portainer-stack voor de graph-qa-agent (de kennisgraaf-QA-agent), intern.
 #
-# Vervangt de n8n-chatbot: de Wetsanalyse-API-chatproxy roept dit endpoint aan op
-# http://graph-qa:8080/v1/n8n-chat (server→server via het gedeelde Docker-netwerk). GÉÉN host-poort
-# en GÉÉN publieke NPM-host nodig — de agent is alleen intern bereikbaar. De image komt van GHCR
+# De Wetsanalyse-API-chatproxy roept dit endpoint aan op http://graph-qa:8080/v1/chat-webhook
+# (server→server via het gedeelde Docker-netwerk). GÉÉN host-poort en GÉÉN publieke NPM-host nodig —
+# de agent is alleen intern bereikbaar. De image komt van GHCR
 # (.github/workflows/graph-qa-docker-publish.yml).
 #
 # Stack-omgeving (Portainer, of via CI-stack-update):
