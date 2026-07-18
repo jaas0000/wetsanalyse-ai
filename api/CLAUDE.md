@@ -176,7 +176,7 @@ triviale geval; het rapport heeft de vorm `{werkgebied, bronnen[], begrippen, af
 (traces/metrics/logs), gated op `OTEL_EXPORTER_OTLP_ENDPOINT` — leeg = no-op, alleen logs. `setup()`
 draait vroeg in `main.py`; `RequestContextMiddleware` (pure ASGI, veilig voor de SSE-streams) zet een
 `X-Request-Id` en logt per request. De orchestrator wikkelt elke fase (`_guard`) in een span met
-metrics (fase-duur, fase-fouten per `FoutKlasse`, LLM-tokens); de chat-hop krijgt een `chat.n8n`-span.
+metrics (fase-duur, fase-fouten per `FoutKlasse`, LLM-tokens); de chat-hop krijgt een `chat.agent`-span.
 `get_tracer()`/`get_meter()` geven no-op-shims terug zonder de `otel`-extra, dus code mag
 onvoorwaardelijk spans/metrics maken. De `otel`-extra zit in de productie-image (`Dockerfile`:
 `uv sync --extra otel`). Nooit tokens/secrets/prompt-inhoud loggen. Zie `docs/observability.md`.

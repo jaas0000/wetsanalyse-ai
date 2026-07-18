@@ -1,4 +1,4 @@
-"""Client-facing kennisgraaf-chatbot: proxy naar de n8n-agent (GraphDB-kennisgraaf).
+"""Client-facing kennisgraaf-chatbot: proxy naar de kennisgraaf-agent (graph-qa).
 
 De webapp toont een chatbel die via de BFF hierheen praat. De webhook-URL + het secret staan in
 de runtime-instellingen (`app_settings`, beheerbaar via /beheer) en blijven dus **server-side**;
@@ -74,7 +74,7 @@ _health_cache: tuple[float, str, bool] | None = None
 
 async def _probe_bereikbaar(url: str) -> bool:
     """True zodra de host een HTTP-respons geeft (ook 404/405 — een GET op een POST-webhook draait de
-    n8n-workflow niet). Alleen een connect-/timeout-/netwerkfout is onbereikbaar."""
+    agent niet). Alleen een connect-/timeout-/netwerkfout is onbereikbaar."""
     timeout = httpx.Timeout(_HEALTH_TIMEOUT_S, connect=_HEALTH_CONNECT_S)
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
@@ -90,7 +90,7 @@ async def chat_health(
     store: JobStore = Depends(get_store),
 ):
     """Of de chat-host bereikbaar is (voedt het groen/oranje/rood-stipje). Nooit hard falen; het
-    resultaat is ~20s gecachet zodat pollen n8n niet belast."""
+    resultaat is ~20s gecachet zodat pollen de agent niet belast."""
     global _health_cache
     enabled, url, _secret = await app_settings.chat_config(store)
     if not enabled or not url:
@@ -104,16 +104,15 @@ async def chat_health(
 
 
 async def _vraag_agent(url: str, secret: str, session_id: str, vraag: str) -> str:
-    """Roep de n8n-webhook aan en geef het (defensief geparste) antwoord terug."""
+    """Roep de agent-webhook aan en geef het (defensief geparste) antwoord terug."""
     headers = {"Content-Type": "application/json"}
     payload = {
         "action": "sendMessage",
         "sessionId": session_id or "web",
         "chatInput": vraag[:_MAX_INPUT],
     }
-    # Het gedeelde geheim gaat in de BODY mee (de n8n Chat-Trigger geeft request-headers níét door
-    # aan downstream-nodes, wél extra body-velden); een gate-node in de workflow checkt het. Ook als
-    # header meesturen kan geen kwaad voor eventueel toekomstig gebruik.
+    # Het gedeelde geheim gaat zowel in de BODY als in een header mee; de agent controleert het
+    # indien geconfigureerd (bij een intern-only deployment staat het slot doorgaans uit).
     if secret:
         payload["secret"] = secret
         headers["X-Chat-Secret"] = secret
@@ -122,10 +121,10 @@ async def _vraag_agent(url: str, secret: str, session_id: str, vraag: str) -> st
     # zodat een geslaagd-maar-traag antwoord niet vóórtijdig sneuvelt maar een hangende socket na
     # de SSE-deadline alsnog wordt losgelaten. De connect-timeout blijft kort tegen een onbereikbare host.
     timeout = httpx.Timeout(_MAX_WAIT_S + 30, connect=_CONNECT_S)
-    # Span rond de n8n-hop (de uitgaande POST wordt via httpx-instrumentatie zelf al getraced en
+    # Span rond de chat-hop (de uitgaande POST wordt via httpx-instrumentatie zelf al getraced en
     # krijgt traceparent mee). Nooit het secret of de vraag-inhoud als attribuut — alleen metadata.
     with _tracer.start_as_current_span(
-        "chat.n8n",
+        "chat.agent",
         attributes={"chat.session_id": session_id or "web", "chat.vraag_lengte": len(vraag)},
     ) as span:
         async with httpx.AsyncClient(timeout=timeout) as client:
@@ -133,7 +132,7 @@ async def _vraag_agent(url: str, secret: str, session_id: str, vraag: str) -> st
         span.set_attribute("chat.status", resp.status_code)
     if resp.status_code >= 400:
         raise RuntimeError(f"webhook status {resp.status_code}")
-    # De n8n Chat Trigger antwoordt met { output: "…" }; defensief ook text/answer/plat afvangen.
+    # De agent antwoordt met { output: "…" }; defensief ook text/answer/plat afvangen.
     answer = ""
     try:
         data = resp.json()

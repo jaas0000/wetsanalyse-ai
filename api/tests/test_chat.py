@@ -99,7 +99,7 @@ def _sse_error(resp) -> str:
 def _traag_client(vertraging: float):
     """Bouw een httpx.AsyncClient-vervanger waarvan de POST `vertraging` seconden sluimert.
 
-    Simuleert een trage n8n-run zonder netwerk: de POST wordt (net als de echte call) door de
+    Simuleert een trage agent-run zonder netwerk: de POST wordt (net als de echte call) door de
     SSE-lus afgekapt zodra die de wachtcap bereikt — precies het scenario dat we willen dekken.
     """
 
@@ -120,11 +120,11 @@ async def test_settings_roundtrip_secret_gemaskeerd(client):
     await client.put(
         "/v1/admin/settings",
         headers=_ADMIN,
-        json={"chat_enabled": True, "chat_webhook_url": "https://n8n/x/chat", "chat_secret": "geheim"},
+        json={"chat_enabled": True, "chat_webhook_url": "https://agent/x/chat", "chat_secret": "geheim"},
     )
     r = (await client.get("/v1/admin/settings", headers=_ADMIN)).json()
     assert r["chat_enabled"] is True
-    assert r["chat_webhook_url"] == "https://n8n/x/chat"
+    assert r["chat_webhook_url"] == "https://agent/x/chat"
     assert r["chat_secret_set"] is True
     assert "chat_secret" not in r  # het secret verlaat de server nooit
 
@@ -146,7 +146,7 @@ async def test_chat_aan_proxyt_naar_webhook(client, monkeypatch):
     await client.put(
         "/v1/admin/settings",
         headers=_ADMIN,
-        json={"chat_enabled": True, "chat_webhook_url": "https://n8n/x/chat", "chat_secret": "s3"},
+        json={"chat_enabled": True, "chat_webhook_url": "https://agent/x/chat", "chat_secret": "s3"},
     )
     assert (await client.get("/v1/chat/config")).json()["enabled"] is True
 
@@ -154,7 +154,7 @@ async def test_chat_aan_proxyt_naar_webhook(client, monkeypatch):
     assert r.status_code == 200
     assert "text/event-stream" in r.headers.get("content-type", "")
     assert "Financiën" in _sse_answer(r)
-    # De router stuurde de n8n-chat-body (incl. het secret als body-veld) + de header door.
+    # De router stuurde de agent-chat-body (incl. het secret als body-veld) + de header door.
     assert _FakeClient.last["json"] == {
         "action": "sendMessage",
         "sessionId": "sess-1",
@@ -171,7 +171,7 @@ async def test_chat_lege_vraag_400(client, monkeypatch):
     await client.put(
         "/v1/admin/settings",
         headers=_ADMIN,
-        json={"chat_enabled": True, "chat_webhook_url": "https://n8n/x/chat"},
+        json={"chat_enabled": True, "chat_webhook_url": "https://agent/x/chat"},
     )
     assert (await client.post("/v1/chat", json={"chatInput": "   "})).status_code == 400
 
@@ -189,7 +189,7 @@ async def test_chat_traag_maar_succesvol_levert_antwoord(client, monkeypatch):
     await client.put(
         "/v1/admin/settings",
         headers=_ADMIN,
-        json={"chat_enabled": True, "chat_webhook_url": "https://n8n/x/chat"},
+        json={"chat_enabled": True, "chat_webhook_url": "https://agent/x/chat"},
     )
     r = await client.post("/v1/chat", json={"chatInput": "traag?"})
     assert r.status_code == 200
@@ -209,7 +209,7 @@ async def test_chat_te_traag_geeft_nette_timeout_melding(client, monkeypatch):
     await client.put(
         "/v1/admin/settings",
         headers=_ADMIN,
-        json={"chat_enabled": True, "chat_webhook_url": "https://n8n/x/chat"},
+        json={"chat_enabled": True, "chat_webhook_url": "https://agent/x/chat"},
     )
     r = await client.post("/v1/chat", json={"chatInput": "hangt?"})
     assert r.status_code == 200
@@ -219,7 +219,7 @@ async def test_chat_te_traag_geeft_nette_timeout_melding(client, monkeypatch):
 
 @pytest.mark.parametrize(
     "url",
-    ["http://localhost:5678/webhook", "http://127.0.0.1/x", "https://10.0.0.5/chat", "ftp://n8n/x"],
+    ["http://localhost:5678/webhook", "http://127.0.0.1/x", "https://10.0.0.5/chat", "ftp://agent/x"],
 )
 async def test_settings_webhook_url_intern_of_ongeldig_geweigerd(client, url):
     """SSRF-verdedigingslinie: een interne/loopback-host of niet-http(s)-scheme → 422 bij PUT."""
@@ -238,13 +238,13 @@ async def test_secret_versleuteld_at_rest_in_db(client):
     await client.put(
         "/v1/admin/settings",
         headers=_ADMIN,
-        json={"chat_enabled": True, "chat_webhook_url": "https://n8n/x/chat", "chat_secret": "topgeheim"},
+        json={"chat_enabled": True, "chat_webhook_url": "https://agent/x/chat", "chat_secret": "topgeheim"},
     )
     store = get_store()
     ruw = await store.lees_app_setting(app_settings.CHAT_SECRET)
     assert ruw != "topgeheim"  # niet plaintext opgeslagen
     assert secrets_crypto.decrypt(ruw) == "topgeheim"  # wél terug te ontsleutelen
-    # En de service-laag levert het plaintext-secret (zoals de router het aan n8n stuurt).
+    # En de service-laag levert het plaintext-secret (zoals de router het aan agent stuurt).
     app_settings._wis_cache()
     _enabled, _url, secret = await app_settings.chat_config(store)
     assert secret == "topgeheim"
@@ -270,7 +270,7 @@ async def test_chat_te_grote_input_422(client, monkeypatch):
     await client.put(
         "/v1/admin/settings",
         headers=_ADMIN,
-        json={"chat_enabled": True, "chat_webhook_url": "https://n8n/x/chat"},
+        json={"chat_enabled": True, "chat_webhook_url": "https://agent/x/chat"},
     )
     # Body-lengtegrens grijpt vóór verwerking in → 422 (geen truncatie, geen stream).
     r = await client.post("/v1/chat", json={"chatInput": "a" * 8001})
@@ -307,7 +307,7 @@ async def test_chat_health_bereikbaar(client, monkeypatch):
     await client.put(
         "/v1/admin/settings",
         headers=_ADMIN,
-        json={"chat_enabled": True, "chat_webhook_url": "https://n8n/x/chat"},
+        json={"chat_enabled": True, "chat_webhook_url": "https://agent/x/chat"},
     )
     r = (await client.get("/v1/chat/health")).json()
     assert r == {"enabled": True, "healthy": True}
@@ -326,7 +326,7 @@ async def test_chat_health_onbereikbaar(client, monkeypatch):
     await client.put(
         "/v1/admin/settings",
         headers=_ADMIN,
-        json={"chat_enabled": True, "chat_webhook_url": "https://n8n/x/chat"},
+        json={"chat_enabled": True, "chat_webhook_url": "https://agent/x/chat"},
     )
     r = (await client.get("/v1/chat/health")).json()
     assert r == {"enabled": True, "healthy": False}
@@ -345,7 +345,7 @@ async def test_chat_rate_limit_per_gebruiker(client, monkeypatch):
     await client.put(
         "/v1/admin/settings",
         headers=_ADMIN,
-        json={"chat_enabled": True, "chat_webhook_url": "https://n8n/x/chat"},
+        json={"chat_enabled": True, "chat_webhook_url": "https://agent/x/chat"},
     )
     alice = {"X-User-Id": "alice"}
     assert (await client.post("/v1/chat", json={"chatInput": "1"}, headers=alice)).status_code == 200
