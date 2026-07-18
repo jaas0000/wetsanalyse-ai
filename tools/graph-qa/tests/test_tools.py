@@ -66,16 +66,16 @@ def test_dispatch_get_context():
     assert "verwijzingDoor" in q and "heeftVerwijzing" in q and "bwb:bevat" in q
 
 
-def test_semantic_search_zonder_connector_degradeert():
+def test_semantic_search_zonder_index_degradeert():
     g = FakeGraph(result="treffers")
     out = tools.dispatch("semantic_search", g, {"query": "belasting te laat"}, make_settings())
     assert "niet geconfigureerd" in out.lower()
     assert g.semantic_queries == []  # graaf niet geraakt
 
 
-def test_semantic_search_met_connector_roept_graaf():
+def test_semantic_search_met_index_roept_graaf():
     g = FakeGraph(result="treffers")
-    settings = make_settings(retrieval_connector="bwb_embeddings")
+    settings = make_settings(similarity_index="bwb_similarity")
     out = tools.dispatch("semantic_search", g, {"query": "belasting te laat"}, settings)
     assert out == "treffers"
     assert g.semantic_queries == ["belasting te laat"]

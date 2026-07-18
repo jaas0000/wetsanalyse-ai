@@ -83,9 +83,9 @@ def _h_raw_sparql(g: GraphPort, a: dict[str, Any]) -> str:
 
 
 def _h_semantic_search(g: GraphPort, a: dict[str, Any], settings: Any) -> str:
-    if settings is None or not getattr(settings, "retrieval_connector", ""):
+    if settings is None or not getattr(settings, "similarity_index", ""):
         return (
-            "Semantisch zoeken is nog niet geconfigureerd (geen embedding-connector). "
+            "Semantisch zoeken is nog niet geconfigureerd (geen similarity-index). "
             "Gebruik search_wetgeving voor tekstueel zoeken."
         )
     return g.semantic_search(a["query"], a.get("limit", 10))

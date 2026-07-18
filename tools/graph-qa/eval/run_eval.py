@@ -117,8 +117,8 @@ def main() -> None:
             pass
         settings = Settings.from_env()
         cases = load_golden(args.golden)
-        if not settings.retrieval_connector:
-            # semantic_search-cases overslaan tot de embedding-connector bestaat.
+        if not settings.similarity_index:
+            # semantic_search-cases overslaan tot de similarity-index bestaat.
             cases = [c for c in cases if c.get("requires") != "semantic"]
         results = asyncio.run(run_suite(cases, settings=settings))
 
