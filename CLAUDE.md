@@ -59,6 +59,14 @@ inhoudelijke `references/`/`scripts/`. De samenwerkende delen:
    JAS-klassekleuren uit `docs/wa-table.png`. Op een afgeronde analyse kan de gebruiker met
    **"Naar RegelSpraak"** de formaliseringsfase starten en het RegelSpraak-model bekijken/downloaden.
    Heeft een eigen `CLAUDE.md` + `README.md` — lees die bij werk *in* de frontend.
+7. **`tools/graph-qa/`** — de **eigen juridische QA-agent** (Python/FastAPI) die vragen over wet- en
+   regelgeving beantwoordt door de BWB-**kennisgraaf** (GraphDB via MCP) te bevragen en het antwoord
+   **brongetrouw** te onderbouwen (grounding + bronnen uit de tool-trace). Zit achter de
+   **webapp-chatbel**: de API proxyt die naar `POST /v1/chat-webhook` (voorheen n8n; nu deze agent).
+   Een LangGraph-orkestrator (router → specialist ↔ tools → verify → finalize) met een multi-agent
+   supervisor (`definitie`/`duiding`/`algemeen`), getypeerde toollaag, durable geheugen en SSE-
+   streaming. Draait intern-only als Portainer-stack via CI (image `ghcr.io/palmw01/graph-qa`).
+   Heeft een eigen `CLAUDE.md` + `README.md` — lees die bij werk *in* de agent.
 
 De skill is geen vervanger van de analist: de kern is interpretatiekeuzes **expliciet** maken,
 inclusief twijfel en aannames. Brongetrouwheid is niet onderhandelbaar — werk alleen met
@@ -209,7 +217,7 @@ Alle draaiende onderdelen (API, frontend, MCP, chatbot-hop) zijn **geïnstrument
 ze emitteren gestructureerde JSON-logs (één gedeelde vorm, bron `tools/wettenbank-mcp/src/logger.ts`)
 en kunnen OpenTelemetry (traces/metrics/logs) naar een **configureerbaar OTLP-endpoint** sturen
 (`OTEL_EXPORTER_OTLP_ENDPOINT`; leeg = alleen logs, nul overhead). Eén trace-id verbindt de keten
-frontend → API → MCP/n8n. Een **optionele verzamelstack staat in `deploy/observability/`**:
+frontend → API → MCP/graph-qa. Een **optionele verzamelstack staat in `deploy/observability/`**:
 OTel-Collector (met **spanmetrics/servicegraph-connectors** die topologie-edges uit de traces
 afleiden) + Tempo + Loki + Prometheus, plus **Alloy** dat de stdout-logs van frontend en MCP
 naar Loki shipt, **twee kant-en-klare Grafana-dashboards** (`grafana-dashboard-wetsanalyse.json` =
