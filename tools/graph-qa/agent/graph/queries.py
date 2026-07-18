@@ -169,3 +169,28 @@ def count_by_type() -> str:
   ?s a ?type .
   FILTER(STRSTARTS(STR(?s), "{NS}"))
 }} GROUP BY ?type ORDER BY DESC(?aantal)"""
+
+
+def context(bwb_id: str, artikel: str, lid: str | None = None) -> str:
+    """GraphRAG-subgraaf: de bepaling met haar structurele buurt in één query.
+
+    Levert per relatie-soort (?relatie) een rij: de bepaling zelf (label/tekst/jci),
+    de bevattende structuurdelen, de leden, de uitgaande verwijzingen en wie naar het
+    artikel verwijst. Zo ziet het model de bepaling ingebed in samenhang i.p.v. losse
+    triples. Eén round-trip via UNION.
+    """
+    node = lid_iri(bwb_id, artikel, lid) if lid else artikel_iri(bwb_id, artikel)
+    art = artikel_iri(bwb_id, artikel)
+    return PREFIXES + f"""SELECT ?relatie ?a ?b WHERE {{
+  {{ BIND("1-zelf-label" AS ?relatie) <{node}> rdfs:label ?a . }}
+  UNION {{ BIND("2-zelf-tekst" AS ?relatie) <{node}> bwb:tekst ?a . }}
+  UNION {{ BIND("3-zelf-jci" AS ?relatie) <{node}> bwb:jci ?a . }}
+  UNION {{ BIND("4-bevat-door" AS ?relatie) ?p bwb:bevat <{node}> .
+    FILTER(STRSTARTS(STR(?p), "{NS}")) OPTIONAL {{ ?p rdfs:label ?a }} BIND(STR(?p) AS ?b) }}
+  UNION {{ BIND("5-lid" AS ?relatie) <{node}> bwb:heeftLid ?l .
+    FILTER(STRSTARTS(STR(?l), "{NS}")) OPTIONAL {{ ?l bwb:nummer ?a }} OPTIONAL {{ ?l bwb:tekst ?b }} }}
+  UNION {{ BIND("6-verwijst-naar" AS ?relatie) <{node}> bwb:heeftVerwijzing ?v .
+    OPTIONAL {{ ?v bwb:ankerTekst ?a }} OPTIONAL {{ ?v bwb:naar ?b }} }}
+  UNION {{ BIND("7-verwezen-door" AS ?relatie) <{art}> bwb:verwijzingDoor ?r .
+    FILTER(STRSTARTS(STR(?r), "{NS}")) OPTIONAL {{ ?r bwb:citeertitel ?a }} BIND(STR(?r) AS ?b) }}
+}} ORDER BY ?relatie"""
