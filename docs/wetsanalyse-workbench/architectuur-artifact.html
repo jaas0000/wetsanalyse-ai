@@ -1,0 +1,492 @@
+<!doctype html><html lang="nl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><!-- Bron: claude.ai Artifact (native mermaid). Deze repo-kopie laadt mermaid via CDN voor standalone weergave. --></head><body>
+<title>Wetsanalyse-workbench — architectuur & fasering</title>
+<style>
+  :root {
+    --paper: #f6f8fb;
+    --paper-2: #ffffff;
+    --ink: #10202f;
+    --ink-soft: #40566b;
+    --ink-faint: #6b7f92;
+    --lint: #154273;       /* Rijkshuisstijl lintblauw */
+    --hemel: #007bc7;      /* hemelblauw accent */
+    --edge: #dbe3ec;
+    --edge-strong: #c3d0dd;
+    --card: #ffffff;
+    --card-2: #eef3f8;
+    --shadow: 0 1px 2px rgba(16,32,47,.05), 0 8px 24px rgba(16,32,47,.06);
+    --radius: 14px;
+    --measure: 68ch;
+
+    /* JAS categorische klassekleuren (illustratief; canoniek uit docs/wa-table.png) */
+    --c1:#c0392b; --c2:#e67e22; --c3:#12897b; --c4:#8e44ad; --c5:#2f6db0;
+    --c6:#2f9e56; --c7:#c69214; --c8:#c2185b; --c9:#00838f; --c10:#5d6d7e;
+    --c11:#7e57c2; --c12:#e0691a; --c13:#1565c0;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper:#0c1420; --paper-2:#101c2b; --ink:#e8eef5; --ink-soft:#a9bccd;
+      --ink-faint:#7f95a8; --lint:#5fa8e6; --hemel:#54b6f0; --edge:#22344a;
+      --edge-strong:#2c425c; --card:#111f2f; --card-2:#0e1a28;
+      --shadow: 0 1px 2px rgba(0,0,0,.4), 0 10px 30px rgba(0,0,0,.35);
+    }
+  }
+  :root[data-theme="light"] {
+    --paper:#f6f8fb; --paper-2:#fff; --ink:#10202f; --ink-soft:#40566b; --ink-faint:#6b7f92;
+    --lint:#154273; --hemel:#007bc7; --edge:#dbe3ec; --edge-strong:#c3d0dd; --card:#fff; --card-2:#eef3f8;
+    --shadow: 0 1px 2px rgba(16,32,47,.05), 0 8px 24px rgba(16,32,47,.06);
+  }
+  :root[data-theme="dark"] {
+    --paper:#0c1420; --paper-2:#101c2b; --ink:#e8eef5; --ink-soft:#a9bccd; --ink-faint:#7f95a8;
+    --lint:#5fa8e6; --hemel:#54b6f0; --edge:#22344a; --edge-strong:#2c425c; --card:#111f2f; --card-2:#0e1a28;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 10px 30px rgba(0,0,0,.35);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--paper); color: var(--ink);
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    line-height: 1.6; -webkit-font-smoothing: antialiased; letter-spacing: .002em;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
+  .measure { max-width: var(--measure); }
+
+  .eyebrow {
+    text-transform: uppercase; letter-spacing: .16em; font-size: .72rem; font-weight: 700;
+    color: var(--hemel); margin: 0 0 .6rem;
+  }
+  h1 { font-size: clamp(2.1rem, 5.2vw, 3.5rem); line-height: 1.04; letter-spacing: -.02em; font-weight: 800; margin: 0 0 .5rem; text-wrap: balance; }
+  h2 { font-size: clamp(1.4rem, 3vw, 1.9rem); line-height: 1.12; letter-spacing: -.015em; font-weight: 750; margin: 0 0 .3rem; text-wrap: balance; }
+  h3 { font-size: 1.06rem; font-weight: 700; margin: 0 0 .3rem; letter-spacing: -.005em; }
+  p { margin: 0 0 1rem; color: var(--ink-soft); }
+  strong { color: var(--ink); font-weight: 650; }
+  code { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; font-size: .86em;
+    background: var(--card-2); border: 1px solid var(--edge); border-radius: 6px; padding: .08em .38em; color: var(--ink); }
+
+  /* Hero */
+  header.hero { padding: 74px 0 34px; border-bottom: 1px solid var(--edge); background:
+      radial-gradient(120% 80% at 88% -10%, color-mix(in srgb, var(--hemel) 12%, transparent), transparent 60%); }
+  .kicker-row { display:flex; flex-wrap:wrap; gap:.5rem; align-items:center; margin-top:1.1rem; }
+  .pill { font-size:.74rem; font-weight:650; color:var(--ink-soft); background:var(--card);
+    border:1px solid var(--edge-strong); border-radius:999px; padding:.32rem .7rem; }
+  .pill b { color: var(--lint); }
+  .lead { font-size: clamp(1.05rem, 2.2vw, 1.28rem); color: var(--ink-soft); max-width: 60ch; }
+
+  section { padding: 46px 0; border-bottom: 1px solid var(--edge); }
+  .sec-head { margin-bottom: 1.6rem; }
+
+  /* Cards / grid */
+  .grid { display: grid; gap: 16px; }
+  .cols-2 { grid-template-columns: repeat(2, 1fr); }
+  .cols-3 { grid-template-columns: repeat(3, 1fr); }
+  @media (max-width: 780px){ .cols-2, .cols-3 { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--card); border: 1px solid var(--edge); border-radius: var(--radius);
+    padding: 20px 22px; box-shadow: var(--shadow);
+  }
+  .card .lbl { text-transform:uppercase; letter-spacing:.12em; font-size:.68rem; font-weight:700; color:var(--ink-faint); }
+  .card p { margin-bottom: 0; font-size: .95rem; }
+
+  .mode { border-left: 4px solid var(--hemel); }
+  .mode.human { border-left-color: var(--lint); }
+
+  /* Layer diagram (hand-built) */
+  .layers { display:grid; grid-template-columns: repeat(3,1fr); gap:14px; }
+  @media (max-width:780px){ .layers{ grid-template-columns:1fr; } }
+  .layer { background: var(--card); border:1px solid var(--edge); border-radius: var(--radius); padding:18px; box-shadow:var(--shadow); position:relative; }
+  .layer .tag { font-size:.7rem; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:#fff; padding:.2rem .55rem; border-radius:999px; display:inline-block; margin-bottom:.6rem; }
+  .layer.fe .tag{ background: var(--hemel); }
+  .layer.api .tag{ background: var(--lint); }
+  .layer.ag .tag{ background:#0e7c66; }
+  .layer ul{ margin:.5rem 0 0; padding-left:1.05rem; color:var(--ink-soft); font-size:.9rem; }
+  .layer li{ margin:.25rem 0; }
+
+  figure { margin: 8px 0 0; }
+  figcaption { color: var(--ink-faint); font-size:.82rem; margin-top:.5rem; text-align:center; }
+  .diagram { background: var(--card); border:1px solid var(--edge); border-radius: var(--radius); padding: 14px; box-shadow: var(--shadow); overflow-x:auto; }
+  pre.mermaid { margin:0; text-align:center; min-width: 520px; }
+
+  /* JAS chips */
+  .jas { display:grid; grid-template-columns: repeat(auto-fill, minmax(230px,1fr)); gap:12px; }
+  .chip { display:flex; gap:12px; align-items:flex-start; background:var(--card); border:1px solid var(--edge);
+    border-radius:12px; padding:12px 14px; box-shadow:var(--shadow); }
+  .chip .sw { width:12px; align-self:stretch; border-radius:5px; flex:0 0 12px; }
+  .chip .nm { font-weight:700; font-size:.92rem; line-height:1.2; }
+  .chip .q { color:var(--ink-faint); font-size:.8rem; margin-top:.15rem; }
+
+  /* Phasing timeline */
+  .timeline { position:relative; margin-top:.5rem; }
+  .phase { position:relative; padding: 4px 0 22px 34px; border-left:2px solid var(--edge-strong); margin-left:8px; }
+  .phase:last-child{ border-left-color: transparent; }
+  .phase .dot { position:absolute; left:-9px; top:4px; width:16px; height:16px; border-radius:50%;
+    background:var(--paper); border:3px solid var(--hemel); }
+  .phase.d0 .dot{ border-color:#0e7c66; }
+  .phase.now .dot{ background:var(--hemel); }
+  .phase h3 { display:flex; align-items:baseline; gap:.5rem; flex-wrap:wrap; }
+  .phase .ph-tag{ font-size:.68rem; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--hemel); }
+  .phase .badge{ font-size:.66rem; font-weight:700; padding:.12rem .5rem; border-radius:999px; border:1px solid var(--edge-strong); color:var(--ink-soft); }
+  .phase .badge.mvp{ color:#0e7c66; border-color: color-mix(in srgb,#0e7c66 45%, var(--edge)); }
+  .phase p{ font-size:.93rem; margin-bottom:0; }
+
+  .principles li{ margin:.35rem 0; color:var(--ink-soft); }
+  .principles b{ color:var(--ink); }
+  ul.clean{ list-style:none; padding-left:0; }
+  ul.clean li{ position:relative; padding-left:1.4rem; }
+  ul.clean li::before{ content:"→"; position:absolute; left:0; color:var(--hemel); font-weight:700; }
+
+  footer { padding: 40px 0 64px; color: var(--ink-faint); font-size:.85rem; }
+  .note { background: var(--card-2); border:1px dashed var(--edge-strong); border-radius:12px; padding:12px 16px; font-size:.86rem; color:var(--ink-soft); }
+</style>
+
+<header class="hero">
+  <div class="wrap">
+    <p class="eyebrow">Ontwerp · gefaseerd · ter beoordeling</p>
+    <h1>Wetsanalyse-workbench<br>&amp; annotatie-agent</h1>
+    <p class="lead">Een werkbank waarin de jurist wetsartikelen ophaalt en volgens het Juridisch
+      Analyseschema annoteert — handmatig én met een AI-agent die elk voorstel ter menselijke
+      beslissing voorlegt, alles brongetrouw en met een onwrikbare audit trail.</p>
+    <div class="kicker-row">
+      <span class="pill"><b>13</b> JAS-klassen</span>
+      <span class="pill"><b>3</b> lagen · api · agent · workbench</span>
+      <span class="pill">Human-in-the-loop</span>
+      <span class="pill">Leerlus zonder hertrainen</span>
+      <span class="pill">Graaf-promotie</span>
+    </div>
+  </div>
+</header>
+
+<main>
+  <section>
+    <div class="wrap">
+      <div class="sec-head measure">
+        <h2>Wat we bouwen</h2>
+      </div>
+      <div class="measure">
+        <p>Een chat-scherm in ChatGPT/Claude-stijl waarin je de multi-agent aanspreekt, met <strong>links een
+        documentpaneel</strong> dat het opgehaalde artikel toont. Op die tekst annoteer je volgens het
+        <strong>Juridisch Analyseschema (JAS)</strong>. De workbench kent twee samenwerkende modi.</p>
+      </div>
+      <div class="grid cols-2" style="margin-top:1.2rem">
+        <div class="card mode human">
+          <div class="lbl">Modus 1 · de jurist stuurt</div>
+          <h3>Handmatig annoteren</h3>
+          <p>Selecteer een tekstfragment, ken een JAS-klasse + toelichting toe; onder de tekst groeit een
+            annotatietabel (klasse · fragment · toelichting · vindplaats). Vraag de agent desgewenst als
+            <strong>sparringpartner</strong> om suggesties op je selectie.</p>
+        </div>
+        <div class="card mode">
+          <div class="lbl">Modus 2 · de agent stelt voor</div>
+          <h3>Agent-annotatie met HITL</h3>
+          <p>De agent voert zelf een JAS-annotatie uit en biedt <strong>elk element afzonderlijk</strong> aan
+            voor een menselijke beslissing — <strong>approve · edit · reject · comment</strong> — met per
+            beslissing een <em>lesson learned</em>. Elke stap belandt in de audit trail.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <div class="sec-head measure">
+        <p class="eyebrow">Architectuur</p>
+        <h2>Drie lagen, elk met één taak</h2>
+        <p>De zware, transactionele state leeft waar de infrastructuur al is; de intelligentie blijft een
+          schaalbare, brongetrouwe agent; de graaf is de uiteindelijke bestemming.</p>
+      </div>
+
+      <div class="layers">
+        <div class="layer fe">
+          <span class="tag">Frontend</span>
+          <h3>Workbench-UI</h3>
+          <ul>
+            <li>Documentpaneel + selectie</li>
+            <li>Annotatietabel · decision-cards</li>
+            <li>Chat naar de agent</li>
+            <li>BFF → api &amp; → graph-qa</li>
+          </ul>
+        </div>
+        <div class="layer api">
+          <span class="tag">api · system of record</span>
+          <h3>Bewaart &amp; bewaakt</h3>
+          <ul>
+            <li>Documenten · elementen</li>
+            <li>Human-decisions · <strong>audit</strong></li>
+            <li>Lessons-learned</li>
+            <li>Enig geauth. graaf-schrijfpad</li>
+          </ul>
+        </div>
+        <div class="layer ag">
+          <span class="tag">graph-qa · agent</span>
+          <h3>Denkt &amp; stelt voor</h3>
+          <ul>
+            <li><code>annotatie</code>-specialist</li>
+            <li>Tools · streamt voorstellen</li>
+            <li>Haalt leerpunten op</li>
+            <li><strong>Read-only</strong> op de graaf</li>
+          </ul>
+        </div>
+      </div>
+
+      <figure style="margin-top:18px">
+        <div class="diagram">
+<pre class="mermaid">
+%%{init: {'theme':'base','themeVariables':{'primaryColor':'#e8eef6','primaryTextColor':'#10202f','primaryBorderColor':'#154273','lineColor':'#007bc7','fontFamily':'ui-sans-serif, system-ui','fontSize':'14px'}}}%%
+flowchart LR
+  U([Jurist]) --> FE[Frontend<br/>Workbench-UI]
+  FE -->|documenten · beslissingen<br/>audit · lessons| API[api<br/>System of record]
+  FE -->|vraag · annotatie-voorstellen| GQ[graph-qa<br/>Annotatie-agent]
+  GQ -->|read-only| G[(GraphDB<br/>Kennisgraaf)]
+  GQ -.->|haal leerpunten| API
+  API -->|Fase 4 · geauth. write<br/>JAS-annotatielaag| G
+  G -.->|context voor QA + suggesties| GQ
+</pre>
+        </div>
+        <figcaption>Frontend orkestreert; api bewaart en schrijft; de agent denkt en blijft lezend.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <div class="sec-head measure">
+        <p class="eyebrow">Kern voor kwaliteit</p>
+        <h2>De leerlus — beter zonder hertrainen</h2>
+        <p>Menselijke correcties zijn geen wegwerpdata. Ze worden opgeslagen en als few-shot-context per
+          JAS-klasse en werkgebied teruggevoed naar de agent. Approved annotaties verrijken de graaf, die
+          de agent opnieuw voedt. Data groeit, de agent wordt beter.</p>
+      </div>
+      <figure>
+        <div class="diagram">
+<pre class="mermaid">
+%%{init: {'theme':'base','themeVariables':{'primaryColor':'#e8eef6','primaryTextColor':'#10202f','primaryBorderColor':'#154273','lineColor':'#007bc7','fontFamily':'ui-sans-serif, system-ui','fontSize':'14px'}}}%%
+flowchart LR
+  AG[Agent stelt element voor] --> HD{Human decision}
+  HD -->|approve| OK[Vastgelegd + audit]
+  HD -->|edit| ED[Aangepast + audit]
+  HD -->|reject| RJ[Verworpen + audit]
+  HD -->|comment| CM[Opmerking + audit]
+  ED --> LS[(Lessons-store)]
+  RJ --> LS
+  CM --> LS
+  LS -.->|few-shot per klasse/werkgebied| AG
+  OK --> DOC[Geaccordeerd document]
+  DOC -->|Fase 4| GRA[(Graaf · JAS-laag)]
+  GRA -.->|context| AG
+</pre>
+        </div>
+        <figcaption>Elk element is een beslissing; elke beslissing maakt de volgende voorstellen beter.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <div class="sec-head measure">
+        <p class="eyebrow">Het onderscheidende</p>
+        <h2>Review-workflow — de ervaring is het product</h2>
+        <p>Het verschil zit niet in "nog slimmere AI", maar in een review-ervaring die aanvoelt als GitHub
+          pull requests, VS Code, Figma en Copilot samen: de AI doet een voorstel, de mens beslist —
+          sneller en consistenter. HITL is daarom geen enkele knop maar een meertraps workflow.</p>
+      </div>
+      <figure>
+        <div class="diagram">
+<pre class="mermaid">
+%%{init: {'theme':'base','themeVariables':{'primaryColor':'#e8eef6','primaryTextColor':'#10202f','primaryBorderColor':'#154273','lineColor':'#007bc7','fontFamily':'ui-sans-serif, system-ui','fontSize':'14px'}}}%%
+flowchart LR
+  A[Agent-voorstel<br/>met zelfcheck] --> C[Critic-agent<br/>ontbrekend · klasse · bron]
+  C --> H{Mens beslist<br/>approve/edit/reject/comment}
+  H --> K[Knowledge-check<br/>consistentie vs. graaf]
+  K --> P[Publiceren]
+  H -.->|edit/reject + reason| L[(Lessons-store)]
+  L -.->|few-shot + pre-flight| A
+</pre>
+        </div>
+        <figcaption>Twee AI-passes vóór de jurist het ziet; elke correctie voedt de volgende ronde.</figcaption>
+      </figure>
+
+      <div class="grid cols-3" style="margin-top:18px">
+        <div class="card">
+          <div class="lbl">Critic-agent</div>
+          <p>Een aparte agent controleert vóór de jurist: ontbrekende elementen, verkeerde klasse,
+          inconsistentie, zwakke bron. Scheelt reviewwerk; past in het multi-agent-patroon.</p>
+        </div>
+        <div class="card">
+          <div class="lbl">Disambiguatie</div>
+          <p>Bij twijfel geen cijfer, maar <strong>alternatieven met motivatie</strong> — de jurist kiest.
+          Maakt de interpretatiekeuze expliciet, kernwaarde van de methode.</p>
+        </div>
+        <div class="card">
+          <div class="lbl">Missing-elements</div>
+          <p>Meldt óók wat waarschijnlijk <strong>ontbreekt</strong> (uitzondering, definitie, verwijzing,
+          overgangsrecht) o.b.v. vergelijkbare artikelen — als aan te vinken suggestie, nooit als bewering.</p>
+        </div>
+        <div class="card">
+          <div class="lbl">Element-diff</div>
+          <p>Na een edit een veld- en tekst-diff (+ toegevoegd / − verwijderd / ~ gewijzigd) — de
+          correctie-delta die de jurist ziet én die de lessons voedt.</p>
+        </div>
+        <div class="card">
+          <div class="lbl">Review-queue + tijdlijn</div>
+          <p>Rechts een reviewpaneel met statustelling (akkoord / controleren / ontbreekt); de audit als
+          leesbare tijdlijn (actor · actie · tijd).</p>
+        </div>
+        <div class="card" style="border-color:color-mix(in srgb, #c69214 45%, var(--edge))">
+          <div class="lbl" style="color:#b07d0c">Confidence — met zorg</div>
+          <p>Geen rauwe modelfloats (slecht gekalibreerd → schijnprecisie). In plaats daarvan een
+          <strong>aandacht-niveau</strong> 🟢🟡🔴 afgeleid van echte signalen (critic-flag, alternatieven,
+          grounding, patroon-afwijking).</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <div class="sec-head measure">
+        <p class="eyebrow">Datamodel · api-contracten</p>
+        <h2>Wat een annotatie is</h2>
+      </div>
+      <div class="grid cols-2">
+        <div class="card">
+          <div class="lbl">AnnotatieElement</div>
+          <p><code>id</code> · <code>klasse</code> (1 van 13) · <code>tekst</code> · <code>span</code> [start,end] ·
+          <code>vindplaats</code> · <code>toelichting</code> · <code>herkomst</code> (mens|agent) ·
+          <code>lifecycle</code> (concept→ai_proposed→critic_checked→human_approved→published→reused) ·
+          <code>alternatieven[]</code> · <code>aandacht</code> (🟢🟡🔴) ·
+          <code>beslissingen[]</code> (+ <code>review_reason</code>) · <code>diff</code> · <code>lessons[]</code>.</p>
+        </div>
+        <div class="card">
+          <div class="lbl">AnnotatieDocument</div>
+          <p>Groepeert elementen per bron (bwbId + artikel[+lid]) binnen een <strong>werkgebied</strong>;
+          <code>status</code> in-bewerking → geaccordeerd → gepromoveerd. Draagt de audit trail.</p>
+        </div>
+        <div class="card">
+          <div class="lbl">AuditRecord · append-only</div>
+          <p>Elke mutatie en beslissing onwrikbaar vastgelegd: wie, wat, wanneer, waarom. Nooit
+          overschreven — de juridische verantwoording.</p>
+        </div>
+        <div class="card">
+          <div class="lbl">Lessons-store</div>
+          <p>Geaggregeerde leerpunten per JAS-klasse/werkgebied, opvraagbaar door de agent als
+          few-shot-voorbeelden bij nieuwe voorstellen.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <div class="sec-head measure">
+        <p class="eyebrow">Uit de bron · <code>docs/wetsanalyse/</code></p>
+        <h2>De dertien JAS-klassen</h2>
+        <p>De classificatie-intelligentie wordt vers opgebouwd uit de brondocumentatie: per klasse een
+          omschrijving, een herken-vraag en een uitdrukkingswijze. Kleuren illustratief — canoniek uit
+          <code>wa-table.png</code>.</p>
+      </div>
+      <div class="jas">
+        <div class="chip"><span class="sw" style="background:var(--c1)"></span><div><div class="nm">Rechtssubject</div><div class="q">Wie heeft het recht of de plicht?</div></div></div>
+        <div class="chip"><span class="sw" style="background:var(--c2)"></span><div><div class="nm">Rechtsobject</div><div class="q">Wat is het voorwerp van recht/plicht?</div></div></div>
+        <div class="chip"><span class="sw" style="background:var(--c3)"></span><div><div class="nm">Rechtsbetrekking</div><div class="q">Hoe verhouden twee subjecten zich?</div></div></div>
+        <div class="chip"><span class="sw" style="background:var(--c4)"></span><div><div class="nm">Rechtsfeit</div><div class="q">Welke handeling wijzigt de toestand?</div></div></div>
+        <div class="chip"><span class="sw" style="background:var(--c5)"></span><div><div class="nm">Voorwaarde</div><div class="q">Welke eis moet vervuld zijn?</div></div></div>
+        <div class="chip"><span class="sw" style="background:var(--c6)"></span><div><div class="nm">Afleidingsregel</div><div class="q">Hoe wordt een waarde afgeleid?</div></div></div>
+        <div class="chip"><span class="sw" style="background:var(--c7)"></span><div><div class="nm">Variabele(waarde)</div><div class="q">Welk kenmerk, welke waarde?</div></div></div>
+        <div class="chip"><span class="sw" style="background:var(--c8)"></span><div><div class="nm">Parameter(waarde)</div><div class="q">Vaste waarde voor allen, per periode?</div></div></div>
+        <div class="chip"><span class="sw" style="background:var(--c9)"></span><div><div class="nm">Operator</div><div class="q">Hoe worden waarden verbonden?</div></div></div>
+        <div class="chip"><span class="sw" style="background:var(--c10)"></span><div><div class="nm">Tijdsaanduiding</div><div class="q">Wanneer, sinds of tot wanneer?</div></div></div>
+        <div class="chip"><span class="sw" style="background:var(--c11)"></span><div><div class="nm">Plaatsaanduiding</div><div class="q">Voor welk gebied geldt de regel?</div></div></div>
+        <div class="chip"><span class="sw" style="background:var(--c12)"></span><div><div class="nm">Delegatiebevoegdheid</div><div class="q">Opdracht om nadere regels te stellen?</div></div></div>
+        <div class="chip"><span class="sw" style="background:var(--c13)"></span><div><div class="nm">Brondefinitie</div><div class="q">Is de term wettelijk omschreven?</div></div></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <div class="sec-head measure">
+        <p class="eyebrow">Uitvoering</p>
+        <h2>Fasering</h2>
+        <p>We beginnen met dit document, dan het fundament, dan een direct bruikbare handmatige workbench —
+          en bouwen de agent, de diepere JAS-laag en de graaf-promotie daar bovenop.</p>
+      </div>
+      <div class="timeline">
+        <div class="phase d0 now">
+          <span class="dot"></span>
+          <h3><span class="ph-tag">Deliverable 0</span> Architectuur-artifact <span class="badge">dit document</span></h3>
+          <p>De volledige visie, architectuur, datamodel en fasering — visueel en deelbaar — ter beoordeling
+            vóór er code komt.</p>
+        </div>
+        <div class="phase">
+          <span class="dot"></span>
+          <h3><span class="ph-tag">Fase 0</span> Fundament &amp; datamodel <span class="badge">api</span></h3>
+          <p>JAS-klassen-referentie uit de bron; tabellen + contracten (element/document/audit/lessons) +
+            skelet-endpoints; auth hergebruikt. Append-only audit vanaf dag één.</p>
+        </div>
+        <div class="phase now">
+          <span class="dot"></span>
+          <h3><span class="ph-tag">Fase 1</span> Workbench-UI + handmatige annotatie <span class="badge mvp">MVP</span></h3>
+          <p>Nieuw scherm: chatpaneel (bestaande QA-agent) + documentpaneel + selectie → klasse + toelichting
+            → annotatietabel; persistent met audit. Rijkshuisstijl + JAS-kleuren.</p>
+        </div>
+        <div class="phase">
+          <span class="dot"></span>
+          <h3><span class="ph-tag">Fase 2</span> Annotatie-agent + Critic + review-workflow <span class="badge">graph-qa</span></h3>
+          <p><code>annotatie</code>-specialist uit de JAS-bron + een <strong>Critic-agent</strong>;
+            review-queue met decision-cards, disambiguatie, missing-elements en diff; lessons-learned die
+            de agent terugvoedt.</p>
+        </div>
+        <div class="phase">
+          <span class="dot"></span>
+          <h3><span class="ph-tag">Fase 3</span> Diepere JAS · activiteit 3</h3>
+          <p>Van markeren naar begrippen + afleidingsregels, methode-getrouw; werkgebied-brede ontdubbeling.
+            Zelfde HITL + audit.</p>
+        </div>
+        <div class="phase">
+          <span class="dot"></span>
+          <h3><span class="ph-tag">Fase 4</span> Promoveren naar de graaf <span class="badge">api</span></h3>
+          <p>JAS-annotatie-vocabulaire; één geauthenticeerd, idempotent, geaudit schrijfpad. Adresseert
+            meteen het open+writable-graaf-risico. Daarna bevraagbaar door de QA-agent.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section style="border-bottom:none">
+    <div class="wrap">
+      <div class="grid cols-2">
+        <div>
+          <p class="eyebrow">Niet onderhandelbaar</p>
+          <h2 style="margin-bottom:1rem">Principes</h2>
+          <ul class="principles" style="padding-left:0; list-style:none">
+            <li><b>Brongetrouwheid.</b> Elk element herleidbaar naar bwbId + artikel/lid + tekst-span.</li>
+            <li><b>Mens beslist.</b> Een agent-voorstel is nooit definitief zonder approve/edit.</li>
+            <li><b>Vers vanaf de bron.</b> De JAS-methode uit <code>docs/wetsanalyse/</code>, niet de bestaande skill.</li>
+            <li><b>Conform de agent.</b> Specialist in de multi-agent · SSE · getypeerde tools · observability.</li>
+            <li><b>Auditbaar.</b> Elke beslissing onwrikbaar, van begin af aan.</li>
+            <li><b>Graaf-veilig.</b> Read-only agent; één gecontroleerd schrijfpad.</li>
+          </ul>
+        </div>
+        <div>
+          <p class="eyebrow">Per fase</p>
+          <h2 style="margin-bottom:1rem">Verificatie</h2>
+          <ul class="clean">
+            <li>Unit-tests met DI/fakes.</li>
+            <li>Een offline, gescript end-to-end pad.</li>
+            <li>Live rooktest via de workbench.</li>
+            <li>Geen graaf-mutatie vóór Fase 4.</li>
+            <li>Audit-integriteit + span↔bron expliciet getest.</li>
+          </ul>
+          <div class="note" style="margin-top:1rem">Elke fase apart: branch → PR → merge → deploy, conform de
+            huidige werkwijze.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    Wetsanalyse-workbench · ontwerpdocument · gebaseerd op het Juridisch Analyseschema (Ausems, Bulles &amp; Lokin)
+    en de brondocumentatie in <code>docs/wetsanalyse/</code>. Kleuren en fasering indicatief tot vastgesteld.
+  </div>
+</footer>
+<script type="module">import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";mermaid.initialize({startOnLoad:true,securityLevel:"loose"});</script></body></html>
