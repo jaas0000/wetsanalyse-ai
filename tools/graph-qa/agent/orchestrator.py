@@ -278,12 +278,16 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
     def solve_node(state: State) -> dict[str, Any]:
         """Beantwoord elke deelvraag met een eigen agent⇄tools-loop (lokale scratch-messages).
 
-        Deelvraag-tokens stromen niet naar de user (alleen de synthese streamt); de gedeelde
-        source_trace accumuleert over álle deelvragen zodat grounding/provenance ongewijzigd werken.
+        Bij MEERDERE deelvragen stromen de deelvraag-tokens niet naar de user (alleen de synthese
+        streamt). Bij ÉÉN deelvraag (een simpele vraag) is er geen aparte synthese nodig: dan streamt
+        het antwoord direct en wordt `answer` gezet, zodat een eenvoudige vraag geen synthese-tax
+        betaalt. De gedeelde source_trace accumuleert over álle deelvragen zodat grounding/provenance
+        ongewijzigd werken.
         """
         writer = get_stream_writer()
         spec = get_specialist(state.get("specialist"))
         subs = state.get("sub_questions") or [state["question"]]
+        stream_to_user = len(subs) == 1  # simpele vraag: direct streamen, synthese overslaan
         base_system = SYSTEM_PROMPT + (f"\n\n{spec.system}" if spec.system else "")
         schemas = anthropic_schemas(only=spec.tools)
         trace = list(state.get("source_trace", []))
@@ -304,8 +308,13 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
                 with llm.stream(
                     model=model, max_tokens=4096, system=system, tools=schemas, messages=msgs,
                 ) as stream:
-                    for _ in stream.text_deltas:
-                        pass  # deelvraag-narratie niet naar de user
+                    first = True
+                    for delta in stream.text_deltas:
+                        if stream_to_user:
+                            if first and _turn > 0:
+                                writer({"type": "token", "content": "\n\n"})  # alinea-scheiding tussen beurten
+                            writer({"type": "token", "content": delta})
+                        first = False
                     final = stream.final_message()
                 tool_uses, text_parts = _parse_final(final)
                 assistant_content: list[dict[str, Any]] = [{"type": "text", "text": p} for p in text_parts]
@@ -325,7 +334,15 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
                     results.append({"type": "tool_result", "tool_use_id": tu["id"], "content": result_text})
                 msgs.append({"role": "user", "content": results})
             findings.append({"vraag": sub, "antwoord": antwoord})
-        return {"sub_findings": findings, "source_trace": trace}
+        upd: dict[str, Any] = {"sub_findings": findings, "source_trace": trace}
+        if stream_to_user:
+            # Simpele vraag: het gestreamde sub-antwoord ís het eind-antwoord (geen synthese).
+            upd["answer"] = findings[0]["antwoord"] if findings else ""
+        return upd
+
+    def route_after_solve(state: State) -> str:
+        # Eén deelvraag → antwoord staat al (gestreamd in solve); sla de synthese over.
+        return "verify" if len(state.get("sub_questions") or []) <= 1 else "synthesize"
 
     def synthesize_node(state: State) -> dict[str, Any]:
         """Stel het eind-antwoord samen uit de deelbevindingen (streamt de tokens)."""
@@ -371,7 +388,7 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
         g.add_edge(START, "router")
         g.add_edge("router", "decompose")
         g.add_edge("decompose", "solve")
-        g.add_edge("solve", "synthesize")
+        g.add_conditional_edges("solve", route_after_solve, {"verify": "verify", "synthesize": "synthesize"})
         g.add_edge("synthesize", "verify")
         g.add_conditional_edges("verify", route_after_verify, {"correct": "resynth", "finalize": "finalize"})
         g.add_edge("resynth", "synthesize")

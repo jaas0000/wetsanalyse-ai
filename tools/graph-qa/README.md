@@ -33,8 +33,10 @@ Met `ENABLE_DECOMPOSITION=1` splitst een aparte stap een samengestelde vraag eer
 **deelvragen**; elke deelvraag krijgt een eigen retrieval-loop (waarbij eerdere bevindingen latere
 deelvragen voeden), en een synthese-stap stelt het eind-antwoord samen uit de bevindingen. Grounding en
 bron-provenance werken ongewijzigd op het gesynthetiseerde antwoord tegen de over álle deelvragen
-geaccumuleerde tool-trace. Een enkelvoudige vraag levert één deelvraag op, dus het pad blijft uniform.
-Staat de toggle uit (default), dan draait de bovenstaande enkele reason↔retrieve-lus.
+geaccumuleerde tool-trace. Een **enkelvoudige** vraag levert één deelvraag op en wordt **direct
+gestreamd zonder synthese-stap** — zo betaalt een simpele lookup geen extra kosten; alleen écht
+samengestelde vragen krijgen de volle multi-hop. Staat de toggle uit, dan draait de bovenstaande
+enkele reason↔retrieve-lus.
 
 ### Specialisten (multi-agent supervisor)
 

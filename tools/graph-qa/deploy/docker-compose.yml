@@ -33,6 +33,9 @@ services:
       AZURE_FOUNDRY_BASE_URL: ${AZURE_FOUNDRY_BASE_URL:?zet AZURE_FOUNDRY_BASE_URL in de stack-omgeving}
       LLM_MODEL: ${LLM_MODEL:-claude-sonnet-4-6}
       SIMILARITY_INDEX: ${SIMILARITY_INDEX:-bwb_similarity}
+      # Multi-hop decompositie aan (default 1). Simpele vraag → 1 deelvraag, streamt direct zonder
+      # synthese-tax; samengestelde vraag → decompose → per-deelvraag retrieval → synthese.
+      ENABLE_DECOMPOSITION: ${ENABLE_DECOMPOSITION:-1}
       CHECKPOINT_DB_PATH: /data/conversations_checkpoints.db
       CORS_ORIGINS: ${CORS_ORIGINS:-}
       # --- secrets via host-bestanden (*_FILE) ---

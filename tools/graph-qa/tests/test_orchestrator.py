@@ -112,6 +112,28 @@ def test_decompositie_deelvragen_retrieval_en_synthese():
     assert types.index("sources") < types.index("grounding") < types.index("done")
 
 
+def test_decompositie_een_deelvraag_slaat_synthese_over():
+    # Simpele vraag → decompose geeft één deelvraag → solve streamt direct, GEEN synthese-call.
+    settings = make_settings(enable_decomposition=True)
+    graph = FakeGraph(result=f"<{ART_IRI}> bwb:tekst 'zes weken' .")
+    llm = FakeLLM([
+        response([text_block("SPECIALIST: algemeen\nPLAN: direct")], "end_turn"),           # router
+        response([text_block("1. Wat is de termijn?")], "end_turn"),                          # decompose (één regel)
+        response([tool_block("t1", "get_artikel", {"bwb_id": "BWBR0004770", "artikel": "9"})], "tool_use"),  # solve turn1
+        response([text_block(f"Termijn: zes weken ({ART_IRI}).")], "end_turn"),               # solve turn2 (antwoord)
+        # géén synthese-respons: als synthesize tóch liep, zou FakeLLM._next een IndexError geven.
+    ])
+    events = _run(answer_stream("vraag", settings=settings, llm=llm, graph=graph))
+    assert llm.index == 4                                    # router+decompose+2×solve; synthese niet gedraaid
+    assert not any("Opgesplitst in" in e.get("message", "") for e in events)
+    # het sub-antwoord is direct gestreamd
+    tokens = "".join(e["content"] for e in events if e["type"] == "token")
+    assert "Termijn: zes weken" in tokens
+    sources = next(e for e in events if e["type"] == "sources")["sources"]
+    assert ART_IRI in [s["uri"] for s in sources]
+    assert "done" in [e["type"] for e in events]
+
+
 def test_decompositie_uit_geen_deelvraag_status():
     # Regressie: met de toggle uit is er geen decompositie-gedrag.
     settings = make_settings(enable_planning=False)
