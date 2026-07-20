@@ -83,6 +83,44 @@ def test_beurt_narratie_krijgt_alinea_scheiding():
     assert "Ik zoek nu op.\n\nDe definitie is helder." in tekst
 
 
+def test_decompositie_deelvragen_retrieval_en_synthese():
+    settings = make_settings(enable_decomposition=True)
+    graph = FakeGraph(result=f"<{ART_IRI}> bwb:tekst 'zes weken' .")
+    llm = FakeLLM([
+        response([text_block("SPECIALIST: algemeen\nPLAN: opsplitsen")], "end_turn"),               # router
+        response([text_block("1. Wat is de termijn?\n2. Wie is de belastingschuldige?")], "end_turn"),  # decompose
+        response([tool_block("t1", "get_artikel", {"bwb_id": "BWBR0004770", "artikel": "9"})], "tool_use"),  # dv1 turn1
+        response([text_block(f"Termijn: zes weken ({ART_IRI}).")], "end_turn"),                       # dv1 turn2
+        response([text_block(f"Belastingschuldige: degene te wiens naam ({ART_IRI}).")], "end_turn"),  # dv2 (direct)
+        response([text_block(f"Samenvatting: zes weken; belastingschuldige is degene ({ART_IRI}).")], "end_turn"),  # synthese
+    ])
+    events = _run(answer_stream("samengestelde vraag", settings=settings, llm=llm, graph=graph))
+    types = [e["type"] for e in events]
+
+    # opsplitsing + per-deelvraag status
+    assert any(e["type"] == "status" and "Opgesplitst in 2 deelvragen" in e["message"] for e in events)
+    assert any(e["type"] == "status" and "Deelvraag 1/2" in e["message"] for e in events)
+    assert any(e["type"] == "status" and "Deelvraag 2/2" in e["message"] for e in events)
+    # alleen de synthese streamt tokens (deelvraag-narratie niet)
+    tokens = "".join(e["content"] for e in events if e["type"] == "token")
+    assert "Samenvatting" in tokens
+    assert "Termijn: zes weken" not in tokens
+    # retrieval echt uitgevoerd; bronnen uit de trace; volgorde sources→grounding→done
+    assert graph.queries
+    sources = next(e for e in events if e["type"] == "sources")["sources"]
+    assert ART_IRI in [s["uri"] for s in sources]
+    assert types.index("sources") < types.index("grounding") < types.index("done")
+
+
+def test_decompositie_uit_geen_deelvraag_status():
+    # Regressie: met de toggle uit is er geen decompositie-gedrag.
+    settings = make_settings(enable_planning=False)
+    graph = FakeGraph(result=ART_IRI)
+    llm = FakeLLM([response([text_block("Direct antwoord.")], "end_turn")])
+    events = _run(answer_stream("vraag", settings=settings, llm=llm, graph=graph))
+    assert not any(e["type"] == "status" and "Deelvraag" in e.get("message", "") for e in events)
+
+
 def test_geen_planning_geen_plan_status():
     settings = make_settings(enable_planning=False)
     graph = FakeGraph(result=ART_IRI)

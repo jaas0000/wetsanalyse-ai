@@ -27,6 +27,15 @@ Eén vraag doorloopt een vaste keten (een LangGraph-graaf):
 4. **Finalize** — de bronnenlijst wordt uit de tool-trace opgebouwd en beperkt tot de in het antwoord
    aangehaalde regelingen; het antwoord, de bronnen en het grounding-oordeel worden uitgestuurd.
 
+### Decompositie (multi-hop, optioneel)
+
+Met `ENABLE_DECOMPOSITION=1` splitst een aparte stap een samengestelde vraag eerst in geordende
+**deelvragen**; elke deelvraag krijgt een eigen retrieval-loop (waarbij eerdere bevindingen latere
+deelvragen voeden), en een synthese-stap stelt het eind-antwoord samen uit de bevindingen. Grounding en
+bron-provenance werken ongewijzigd op het gesynthetiseerde antwoord tegen de over álle deelvragen
+geaccumuleerde tool-trace. Een enkelvoudige vraag levert één deelvraag op, dus het pad blijft uniform.
+Staat de toggle uit (default), dan draait de bovenstaande enkele reason↔retrieve-lus.
+
 ### Specialisten (multi-agent supervisor)
 
 De router kiest per vraag één specialist; elk krijgt een eigen instructie én een **subset** van de
@@ -114,6 +123,9 @@ uv run --extra dev pytest -q                    # tests
 | `CORS_ORIGINS` | Kommagescheiden origins; `*` = open (alleen dev). |
 | `CHECKPOINT_DB_PATH` | Pad voor de durable checkpointer; leeg = in-memory (geen continuïteit over herstarts). |
 | `MAX_TURNS` | Max. reason↔retrieve-beurten per vraag. |
+| `ENABLE_DECOMPOSITION` | `1` = multi-hop decompositie aan (default uit). |
+| `MAX_SUBQUESTIONS` | Cap op het aantal deelvragen (default 5). |
+| `SUB_MAX_TURNS` | Max. reason↔retrieve-beurten per deelvraag (default 8). |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | OTLP-endpoint; leeg = alleen gestructureerde JSON-logs (nul overhead). |
 
 ## De graaf

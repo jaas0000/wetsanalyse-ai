@@ -56,6 +56,12 @@ class Settings(BaseModel):
     enable_planning: bool = True      # lichte plan-node vóór de agent (plan→retrieve→reason→verify)
     enable_memory_context: bool = True  # eerder geraadpleegde bepalingen als pointer-context injecteren
 
+    # Decompositie (multi-hop): samengestelde vraag → deelvragen → retrieval per deelvraag → synthese.
+    # Uit = de bestaande één-loop-stroom (byte-voor-byte ongewijzigd).
+    enable_decomposition: bool = False
+    max_subquestions: int = 5         # cap op het aantal deelvragen (kosten/latency begrenzen)
+    sub_max_turns: int = 8            # agent⇄tools-beurten per deelvraag (los van max_turns)
+
     # Geheugen (LangGraph-checkpointer). Pad gezet → durable AsyncSqliteSaver; None → in-memory.
     checkpoint_db_path: str | None = "conversations_checkpoints.db"
 
@@ -84,6 +90,9 @@ class Settings(BaseModel):
             "azure_foundry_base_url": e.get("AZURE_FOUNDRY_BASE_URL"),
             "llm_model": e.get("LLM_MODEL"),
             "max_turns": e.get("MAX_TURNS"),
+            "enable_decomposition": e.get("ENABLE_DECOMPOSITION"),
+            "max_subquestions": e.get("MAX_SUBQUESTIONS"),
+            "sub_max_turns": e.get("SUB_MAX_TURNS"),
             "memory_db_path": e.get("MEMORY_DB_PATH"),
             "qa_api_token": _read_secret(e, "QA_API_TOKEN"),
             "cors_origins": cors or None,

@@ -18,6 +18,7 @@ zodat de blocking LLM-/MCP-calls de event-loop niet blokkeren.
 from __future__ import annotations
 
 import operator
+import re
 from typing import Annotated, Any, TypedDict
 
 from langgraph.config import get_stream_writer
@@ -42,6 +43,34 @@ _ROUTER_SYSTEM = (
     "van een bepaling, anders 'algemeen'."
 )
 
+_DECOMPOSE_SYSTEM = (
+    "Je splitst een juridische vraag over de kennisgraaf op in de deelvragen die je apart moet "
+    "beantwoorden om de hele vraag te dekken. Geef ELKE deelvraag op een eigen regel, genummerd "
+    "(1., 2., …), in logische volgorde (een deelvraag mag voortbouwen op een eerdere). Splits ALLEEN "
+    "als de vraag echt meerdere losse onderdelen heeft; een enkelvoudige vraag geef je als één regel "
+    "terug (de vraag zelf). Verzin geen deelvragen die niet in de oorspronkelijke vraag besloten "
+    "liggen. Geen inleiding of uitleg — alleen de genummerde regels."
+)
+
+_SYNTHESE_SYSTEM = (
+    "Je stelt één samenhangend eindantwoord samen uit de per-deelvraag verzamelde bevindingen. "
+    "Steun UITSLUITEND op die bevindingen — voeg geen nieuwe feiten toe en verzin geen vindplaatsen. "
+    "Behoud de vindplaatsen (regeling/artikel/lid) letterlijk zoals ze in de bevindingen staan. "
+    "Antwoord bondig en goed gestructureerd; adresseer elk onderdeel van de oorspronkelijke vraag."
+)
+
+
+def _parse_final(final: Any) -> tuple[list[dict[str, Any]], list[str]]:
+    """Splits een Anthropic-response in (tool_uses, text_parts)."""
+    tool_uses: list[dict[str, Any]] = []
+    text_parts: list[str] = []
+    for block in final.content:
+        if block.type == "text":
+            text_parts.append(block.text)
+        elif block.type == "tool_use":
+            tool_uses.append({"id": block.id, "name": block.name, "input": block.input})
+    return tool_uses, text_parts
+
 
 class State(TypedDict, total=False):
     question: str
@@ -58,6 +87,10 @@ class State(TypedDict, total=False):
     pending_tools: list[dict[str, Any]]
     turns: int
     corrected: bool
+    # Decompositie (multi-hop): deelvragen + per-deelvraag bevindingen (last-value-wins;
+    # solve_node zet ze in één keer). De per-deelvraag agent⇄tools-loop draait lokaal in solve_node.
+    sub_questions: list[str]
+    sub_findings: list[dict[str, str]]
 
 
 def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGraph:
@@ -130,13 +163,7 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
                 writer({"type": "token", "content": delta})
             final = stream.final_message()
 
-        tool_uses: list[dict[str, Any]] = []
-        text_parts: list[str] = []
-        for block in final.content:
-            if block.type == "text":
-                text_parts.append(block.text)
-            elif block.type == "tool_use":
-                tool_uses.append({"id": block.id, "name": block.name, "input": block.input})
+        tool_uses, text_parts = _parse_final(final)
 
         assistant_content: list[dict[str, Any]] = [{"type": "text", "text": p} for p in text_parts]
         assistant_content += [
@@ -213,14 +240,148 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
         # entiteit-tier: alleen nieuwe IRI's toevoegen (append-reducer + dedup).
         existing = set(state.get("entities_seen") or [])
         new = [s["uri"] for s in src_dicts if s["uri"] not in existing]
-        return {"sources": src_dicts, "entities_seen": new}
+        upd: dict[str, Any] = {"sources": src_dicts, "entities_seen": new}
+        # In de decompositie-stroom stroomt het eind-antwoord uit synthesize_node en is het nog niet
+        # in het durabele messages-kanaal beland (agent_node doet dat in de één-loop-stroom). Voeg het
+        # hier één keer toe zodat het gespreksgeheugen het antwoord onthoudt.
+        if settings.enable_decomposition:
+            upd["messages"] = [
+                {"role": "assistant", "content": [{"type": "text", "text": state.get("answer", "")}]}
+            ]
+        return upd
+
+    # ---- Decompositie-nodes (multi-hop; alleen actief bij enable_decomposition) --------------------
+
+    def decompose_node(state: State) -> dict[str, Any]:
+        """Splits de vraag in geordende deelvragen (één LLM-call). Enkelvoudig → één deelvraag."""
+        writer = get_stream_writer()
+        resp = llm.create(
+            model=model,
+            max_tokens=400,
+            system=_DECOMPOSE_SYSTEM + _memory_context(state),
+            tools=[],
+            messages=[{"role": "user", "content": state["question"]}],
+        )
+        text = "".join(b.text for b in resp.content if b.type == "text")
+        subs: list[str] = []
+        for line in text.splitlines():
+            m = re.match(r"^\s*\d+[.)]\s*(.+)$", line)
+            if m:
+                subs.append(m.group(1).strip())
+        if not subs:
+            subs = [state["question"]]
+        subs = subs[: settings.max_subquestions]
+        if len(subs) > 1:
+            writer({"type": "status", "message": f"Opgesplitst in {len(subs)} deelvragen."})
+        return {"sub_questions": subs}
+
+    def solve_node(state: State) -> dict[str, Any]:
+        """Beantwoord elke deelvraag met een eigen agent⇄tools-loop (lokale scratch-messages).
+
+        Deelvraag-tokens stromen niet naar de user (alleen de synthese streamt); de gedeelde
+        source_trace accumuleert over álle deelvragen zodat grounding/provenance ongewijzigd werken.
+        """
+        writer = get_stream_writer()
+        spec = get_specialist(state.get("specialist"))
+        subs = state.get("sub_questions") or [state["question"]]
+        base_system = SYSTEM_PROMPT + (f"\n\n{spec.system}" if spec.system else "")
+        schemas = anthropic_schemas(only=spec.tools)
+        trace = list(state.get("source_trace", []))
+        findings: list[dict[str, str]] = []
+        for i, sub in enumerate(subs, 1):
+            if len(subs) > 1:
+                writer({"type": "status", "message": f"Deelvraag {i}/{len(subs)}: {sub[:80]}"})
+            system = base_system
+            if findings:
+                ctx = "\n".join(f"- {f['vraag']} → {f['antwoord'][:300]}" for f in findings)
+                system += (
+                    "\n\nEERDERE DEELBEVINDINGEN (context; verifieer elk feit opnieuw via de tools):\n" + ctx
+                )
+            system += _memory_context(state)
+            msgs: list[dict[str, Any]] = [{"role": "user", "content": sub}]
+            antwoord = ""
+            for _turn in range(settings.sub_max_turns):
+                with llm.stream(
+                    model=model, max_tokens=4096, system=system, tools=schemas, messages=msgs,
+                ) as stream:
+                    for _ in stream.text_deltas:
+                        pass  # deelvraag-narratie niet naar de user
+                    final = stream.final_message()
+                tool_uses, text_parts = _parse_final(final)
+                assistant_content: list[dict[str, Any]] = [{"type": "text", "text": p} for p in text_parts]
+                assistant_content += [
+                    {"type": "tool_use", "id": t["id"], "name": t["name"], "input": t["input"]}
+                    for t in tool_uses
+                ]
+                msgs.append({"role": "assistant", "content": assistant_content})
+                if not tool_uses:
+                    antwoord = "\n\n".join(p for p in text_parts if p)
+                    break
+                writer({"type": "status", "message": f"Graaf bevragen: {', '.join(t['name'] for t in tool_uses)}..."})
+                results = []
+                for tu in tool_uses:
+                    result_text = truncate(dispatch(tu["name"], graph, tu["input"], settings))
+                    trace.append((tu["name"], result_text))
+                    results.append({"type": "tool_result", "tool_use_id": tu["id"], "content": result_text})
+                msgs.append({"role": "user", "content": results})
+            findings.append({"vraag": sub, "antwoord": antwoord})
+        return {"sub_findings": findings, "source_trace": trace}
+
+    def synthesize_node(state: State) -> dict[str, Any]:
+        """Stel het eind-antwoord samen uit de deelbevindingen (streamt de tokens)."""
+        writer = get_stream_writer()
+        findings = state.get("sub_findings") or []
+        bevindingen = "\n\n".join(
+            f"DEELVRAAG: {f['vraag']}\nBEVINDING: {f['antwoord']}" for f in findings
+        )
+        system = _SYNTHESE_SYSTEM
+        if state.get("corrected") and state.get("unsupported"):
+            system += (
+                "\n\nVerwijder of onderbouw deze eerder niet-gegronde verwijzingen: "
+                + ", ".join(state["unsupported"]) + "."
+            )
+        user = f"OORSPRONKELIJKE VRAAG:\n{state['question']}\n\nBEVINDINGEN PER DEELVRAAG:\n{bevindingen}"
+        parts: list[str] = []
+        with llm.stream(
+            model=model, max_tokens=4096, system=system, tools=[],
+            messages=[{"role": "user", "content": user}],
+        ) as stream:
+            for delta in stream.text_deltas:
+                parts.append(delta)
+                writer({"type": "token", "content": delta})
+            stream.final_message()
+        return {"answer": "".join(parts).strip()}
+
+    def resynth_node(state: State) -> dict[str, Any]:
+        """Ongegronde synthese → markeer voor één her-synthese (synthesize_node leest corrected)."""
+        return {"corrected": True, "answer": ""}
 
     g = StateGraph(State)
+    g.add_node("verify", verify_node)
+    g.add_node("finalize", finalize_node)
+
+    if settings.enable_decomposition:
+        # Multi-hop: router → decompose → solve (retrieval per deelvraag) → synthesize → verify →
+        # (resynth → synthesize | finalize). De per-deelvraag agent⇄tools-loop draait lokaal in solve.
+        g.add_node("router", router_node)
+        g.add_node("decompose", decompose_node)
+        g.add_node("solve", solve_node)
+        g.add_node("synthesize", synthesize_node)
+        g.add_node("resynth", resynth_node)
+        g.add_edge(START, "router")
+        g.add_edge("router", "decompose")
+        g.add_edge("decompose", "solve")
+        g.add_edge("solve", "synthesize")
+        g.add_edge("synthesize", "verify")
+        g.add_conditional_edges("verify", route_after_verify, {"correct": "resynth", "finalize": "finalize"})
+        g.add_edge("resynth", "synthesize")
+        g.add_edge("finalize", END)
+        return g
+
+    # Één-loop-stroom (ongewijzigd).
     g.add_node("agent", agent_node)
     g.add_node("tools", tools_node)
-    g.add_node("verify", verify_node)
     g.add_node("correct", correct_node)
-    g.add_node("finalize", finalize_node)
 
     if settings.enable_planning:
         g.add_node("router", router_node)
