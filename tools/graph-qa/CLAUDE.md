@@ -40,6 +40,15 @@ router → agent ⇄ tools → verify → (correct) → finalize
 - **`finalize_node`** — `collect_sources` (uit de trace) → `curate_sources` (beperken tot aangehaalde
   regelingen) → emit `sources` + `grounding`; werkt `entities_seen` bij (nieuwe IRI's, dedup).
 
+Met `enable_decomposition` (env `ENABLE_DECOMPOSITION`, default uit) vertakt `build_graph` naar een
+multi-hop-graaf **router → decompose → solve → synthesize → verify → (resynth) → finalize**:
+`decompose_node` splitst in deelvragen, `solve_node` draait de agent⇄tools-loop **per deelvraag** met
+lokale scratch-messages (deelvraag-tokens streamen niet; alleen de synthese) en accumuleert de gedeelde
+`source_trace`, en `synthesize_node` streamt het eind-antwoord uit de bevindingen. Grounding/provenance
+draaien ongewijzigd op dat eind-antwoord. Staat de toggle uit, dan is de één-loop-stroom byte-voor-byte
+ongewijzigd (aparte edges/nodes; `agent_node`/`tools_node`/`correct_node` worden dan niet gebruikt door
+de decompositie-tak).
+
 `State` (een `TypedDict`) houdt o.a. `messages` en `entities_seen` als `operator.add`-reducers
 (append), plus de werkvelden (`source_trace`, `answer`, `grounded`, …). `agent/agent.py`
 (`answer_stream`) is de dunne wrapper: hij bouwt/injecteert de providers, kiest de checkpointer,

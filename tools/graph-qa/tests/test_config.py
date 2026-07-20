@@ -26,3 +26,16 @@ def test_env_var_zonder_file(tmp_path):
 def test_ontbrekend_bestand_geeft_none(tmp_path):
     s = Settings.from_env({"GRAPHDB_TOKEN_FILE": str(tmp_path / "bestaat-niet")})
     assert s.graphdb_token is None
+
+
+def test_decompositie_defaults_uit():
+    s = Settings.from_env({})
+    assert s.enable_decomposition is False
+    assert s.max_subquestions == 5
+
+
+def test_decompositie_via_env():
+    s = Settings.from_env({"ENABLE_DECOMPOSITION": "1", "MAX_SUBQUESTIONS": "3", "SUB_MAX_TURNS": "4"})
+    assert s.enable_decomposition is True
+    assert s.max_subquestions == 3
+    assert s.sub_max_turns == 4

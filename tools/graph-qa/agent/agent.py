@@ -101,6 +101,8 @@ async def answer_stream(
         "turns": 0,
         "corrected": False,
         "answer": "",
+        "sub_questions": [],
+        "sub_findings": [],
     }
 
     tracer = get_tracer(__name__)
