@@ -29,6 +29,11 @@
 #   frontend_auth_secret  — geheim voor de login-sessie (Auth.js). Genereer met
 #                           `openssl rand -base64 32`. De entrypoint laadt dit in AUTH_SECRET.
 #                           (2FA hergebruikt de API-secret llm_config_secret; geen extra bestand.)
+#   graph_qa_token        — het graph-qa-token (= dezelfde waarde als qa_api_token op de graph-qa-host)
+#                           voor de annotatie-workbench. Zonder dit faalt alléén het "Annoteer"-knopje;
+#                           de rest van de webapp werkt. Kopieer:
+#                             sudo cp /volume1/docker/secrets/graph-qa/qa_api_token \
+#                                     $SECRETS_DIR/graph_qa_token && sudo chmod 644 $SECRETS_DIR/graph_qa_token
 services:
   wetsanalyse-frontend:
     # CI deployt op digest (WETSANALYSE_FRONTEND_IMAGE=…@sha256:…) zodat exact de gebouwde/gescande
@@ -43,6 +48,9 @@ services:
       API_TOKEN_FILE: /run/secrets/frontend_api_token
       ADMIN_API_TOKEN_FILE: /run/secrets/frontend_admin_token
       AUTH_SECRET_FILE: /run/secrets/frontend_auth_secret
+      # Annotatie-workbench: de BFF streamt voorstellen rechtstreeks van graph-qa (intern, token-gated).
+      GRAPH_QA_URL: "${GRAPH_QA_URL:-http://graph-qa:8080}"
+      GRAPH_QA_TOKEN_FILE: /run/secrets/graph_qa_token
       # Publieke origin voor Auth.js-redirects (achter NPM). Override via de stack-env AUTH_URL.
       AUTH_URL: "${AUTH_URL:-https://wetsanalyse.ipalm.nl}"
       NODE_ENV: production
