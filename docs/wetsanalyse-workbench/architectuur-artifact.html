@@ -161,26 +161,29 @@
         <h2>Wat we bouwen</h2>
       </div>
       <div class="measure">
-        <p>Een chat-scherm in ChatGPT/Claude-stijl waarin je de multi-agent aanspreekt, met <strong>links een
-        documentpaneel</strong> dat het opgehaalde artikel toont. Op die tekst annoteer je volgens het
-        <strong>Juridisch Analyseschema (JAS)</strong>. De workbench kent twee samenwerkende modi.</p>
+        <p>Een chat-scherm in ChatGPT/Claude-stijl waarin je de agent aanspreekt, met <strong>links een
+        documentpaneel</strong> dat het opgehaalde artikel toont. <strong>De agent annoteert volgens het
+        Juridisch Analyseschema (JAS); jij reviewt.</strong> Dat is het hart — de AI produceert, de mens
+        beslist en corrigeert.</p>
       </div>
       <div class="grid cols-2" style="margin-top:1.2rem">
-        <div class="card mode human">
-          <div class="lbl">Modus 1 · de jurist stuurt</div>
-          <h3>Handmatig annoteren</h3>
-          <p>Selecteer een tekstfragment, ken een JAS-klasse + toelichting toe; onder de tekst groeit een
-            annotatietabel (klasse · fragment · toelichting · vindplaats). Vraag de agent desgewenst als
-            <strong>sparringpartner</strong> om suggesties op je selectie.</p>
-        </div>
         <div class="card mode">
-          <div class="lbl">Modus 2 · de agent stelt voor</div>
-          <h3>Agent-annotatie met HITL</h3>
-          <p>De agent voert zelf een JAS-annotatie uit en biedt <strong>elk element afzonderlijk</strong> aan
-            voor een menselijke beslissing — <strong>approve · edit · reject · comment</strong> — met per
-            beslissing een <em>lesson learned</em>. Elke stap belandt in de audit trail.</p>
+          <div class="lbl">De agent · produceert</div>
+          <h3>Stelt de annotatie voor</h3>
+          <p>De agent voert een JAS-annotatie uit op het opgehaalde artikel en biedt <strong>elk element
+            afzonderlijk</strong> aan, brongetrouw (klasse · fragment · vindplaats · toelichting), met bij
+            twijfel alternatieven en mogelijk-ontbrekende elementen.</p>
+        </div>
+        <div class="card mode human">
+          <div class="lbl">De jurist · beslist</div>
+          <h3>Reviewt en corrigeert</h3>
+          <p>Per element een menselijke beslissing — <strong>approve · edit · reject · comment</strong> —
+            met per beslissing een <em>lesson learned</em>. Elke stap in de audit trail. Corrigeren tijdens
+            de review is de enige handmatige touch.</p>
         </div>
       </div>
+      <div class="note" style="margin-top:1rem">Handmatig annoteren from scratch is <strong>geen product-doel</strong>
+        en verdwijnt: het einddoel is agent-gedreven annotatie met menselijke review.</div>
     </div>
   </section>
 
@@ -405,40 +408,33 @@ flowchart LR
       <div class="sec-head measure">
         <p class="eyebrow">Uitvoering</p>
         <h2>Fasering</h2>
-        <p>We beginnen met dit document, dan het fundament, dan een direct bruikbare handmatige workbench —
-          en bouwen de agent, de diepere JAS-laag en de graaf-promotie daar bovenop.</p>
+        <p>Na dit document bouwen we meteen het eindtoestand-hart in het klein: een dun agent→review-segment.
+          Daar bovenop komen de volledige review-workflow, de diepere JAS-laag en de graaf-promotie.</p>
       </div>
       <div class="timeline">
-        <div class="phase d0 now">
+        <div class="phase d0">
           <span class="dot"></span>
-          <h3><span class="ph-tag">Deliverable 0</span> Architectuur-artifact <span class="badge">dit document</span></h3>
-          <p>De volledige visie, architectuur, datamodel en fasering — visueel en deelbaar — ter beoordeling
-            vóór er code komt.</p>
-        </div>
-        <div class="phase">
-          <span class="dot"></span>
-          <h3><span class="ph-tag">Fase 0</span> Fundament &amp; datamodel <span class="badge">api</span></h3>
-          <p>JAS-klassen-referentie uit de bron; tabellen + contracten (element/document/audit/lessons) +
-            skelet-endpoints; auth hergebruikt. Append-only audit vanaf dag één.</p>
+          <h3><span class="ph-tag">Deliverable 0</span> Architectuur-artifact <span class="badge">geleverd</span></h3>
+          <p>De volledige visie, architectuur, datamodel en fasering — visueel en deelbaar.</p>
         </div>
         <div class="phase now">
           <span class="dot"></span>
-          <h3><span class="ph-tag">Fase 1</span> Workbench-UI + handmatige annotatie <span class="badge mvp">MVP</span></h3>
-          <p>Nieuw scherm: chatpaneel (bestaande QA-agent) + documentpaneel + selectie → klasse + toelichting
-            → annotatietabel; persistent met audit. Rijkshuisstijl + JAS-kleuren.</p>
+          <h3><span class="ph-tag">Fase 1</span> MVP · dun agent→review-segment <span class="badge mvp">MVP</span></h3>
+          <p>Het hart in het klein, over alle drie de lagen: <strong>vers</strong> annotatie-domein (api) +
+            <code>annotatie</code>-specialist (graph-qa, uit de bron) + workbench met documentpaneel,
+            review-queue en decision-cards. Artikel ophalen → agent stelt voor → jij reviewt → persist + audit.</p>
         </div>
         <div class="phase">
           <span class="dot"></span>
-          <h3><span class="ph-tag">Fase 2</span> Annotatie-agent + Critic + review-workflow <span class="badge">graph-qa</span></h3>
-          <p><code>annotatie</code>-specialist uit de JAS-bron + een <strong>Critic-agent</strong>;
-            review-queue met decision-cards, disambiguatie, missing-elements en diff; lessons-learned die
-            de agent terugvoedt.</p>
+          <h3><span class="ph-tag">Fase 2</span> Volledige review-workflow + leerlus <span class="badge">graph-qa</span></h3>
+          <p><strong>Critic-agent</strong>, disambiguatie, missing-elements, element-diff, aandacht-niveau,
+            en de lessons-learned + pre-flight die de agent terugvoeden.</p>
         </div>
         <div class="phase">
           <span class="dot"></span>
           <h3><span class="ph-tag">Fase 3</span> Diepere JAS · activiteit 3</h3>
-          <p>Van markeren naar begrippen + afleidingsregels, methode-getrouw; werkgebied-brede ontdubbeling.
-            Zelfde HITL + audit.</p>
+          <p>Van markeren naar begrippen + afleidingsregels, vers uit de bron; werkgebied-brede ontdubbeling.
+            Zelfde review-workflow + audit.</p>
         </div>
         <div class="phase">
           <span class="dot"></span>
