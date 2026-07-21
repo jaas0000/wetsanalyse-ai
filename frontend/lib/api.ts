@@ -93,7 +93,9 @@ export async function sendChat(
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
-      buffer += decoder.decode(value, { stream: true });
+      // sse-starlette (graph-qa) scheidt frames met \r\n; strip de CR zodat indexOf("\n\n") de
+      // frame-grens vindt (robuust over chunk-grenzen — een losse \r blijft nooit hangen).
+      buffer += decoder.decode(value, { stream: true }).replace(/\r/g, "");
       let scheiding: number;
       while ((scheiding = buffer.indexOf("\n\n")) !== -1) {
         const frame = buffer.slice(0, scheiding);
@@ -540,7 +542,9 @@ export async function annoteerStream(
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
-      buffer += decoder.decode(value, { stream: true });
+      // sse-starlette (graph-qa) scheidt frames met \r\n; strip de CR zodat indexOf("\n\n") de
+      // frame-grens vindt (robuust over chunk-grenzen — een losse \r blijft nooit hangen).
+      buffer += decoder.decode(value, { stream: true }).replace(/\r/g, "");
       let scheiding: number;
       while ((scheiding = buffer.indexOf("\n\n")) !== -1) {
         const frame = buffer.slice(0, scheiding);
