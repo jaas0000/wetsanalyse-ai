@@ -120,10 +120,18 @@ export function WerkplekClient() {
 
       const doel = doelRef.d;
       if (doel && doel.bwbId) {
-        const [document, graaf] = await Promise.all([
-          maakDocument({ bwbId: doel.bwbId, artikel: doel.artikel, lid: doel.lid || null }),
-          haalArtikelGraaf(doel.bwbId, doel.artikel, doel.lid),
-        ]);
+        // De ophaal-agent stuurt de opgehaalde tekst mee in het doel — gebruik dát (één bron; werkt ook
+        // voor beleidsregels/divisies zoals '9.1'). Val alleen terug op de graaf als het ontbreekt.
+        const graaf: GraafArtikel = doel.leden_teksten?.length
+          ? {
+              bwbId: doel.bwbId,
+              artikel: doel.artikel,
+              citeertitel: doel.citeertitel ?? "",
+              opschrift: "",
+              leden_teksten: doel.leden_teksten,
+            }
+          : await haalArtikelGraaf(doel.bwbId, doel.artikel, doel.lid);
+        const document = await maakDocument({ bwbId: doel.bwbId, artikel: doel.artikel, lid: doel.lid || null });
         const bijgewerkt = await zetElementen(document.slug, els);
         setDocs((m) => ({ ...m, [bijgewerkt.slug]: bijgewerkt }));
         setInfos((m) => ({ ...m, [bijgewerkt.slug]: graaf }));
@@ -192,8 +200,8 @@ export function WerkplekClient() {
         onVerwijder={verwijder}
       />
 
-      <div className="flex min-h-[70vh] flex-col">
-        <div ref={lijstRef} className="flex-1 space-y-4 overflow-y-auto pb-4" aria-live="polite">
+      <div className="flex h-[calc(100dvh-15rem)] min-h-[24rem] flex-col">
+        <div ref={lijstRef} className="min-h-0 flex-1 space-y-4 overflow-y-auto pb-4" aria-live="polite">
           {items.length === 0 && (
             <p className="text-sm text-muted">
               Stel een vraag over de wet- en regelgeving, of vraag een annotatie — bijv.{" "}
@@ -252,7 +260,7 @@ export function WerkplekClient() {
           {bezig && <Punten />}
         </div>
 
-        <div className="border-t border-line pt-3">
+        <div className="shrink-0 border-t border-line bg-paper pt-3">
           <div className="flex items-end gap-2">
             <textarea
               value={invoer}

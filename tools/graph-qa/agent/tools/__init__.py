@@ -50,6 +50,10 @@ def _h_get_lid(g: GraphPort, a: dict[str, Any]) -> str:
     return g.sparql(queries.get_lid(a["bwb_id"], a["artikel"], a["lid"]))
 
 
+def _h_get_bepaling(g: GraphPort, a: dict[str, Any]) -> str:
+    return g.sparql(queries.get_bepaling(a["bwb_id"], a["nummer"]))
+
+
 def _h_list_regelingen(g: GraphPort, a: dict[str, Any]) -> str:
     return g.sparql(queries.list_regelingen())
 
@@ -146,6 +150,19 @@ TOOLS: list[dict[str, Any]] = [
             ["bwb_id", "artikel", "lid"],
         ),
         "handler": _h_get_lid,
+    },
+    {
+        "name": "get_bepaling",
+        "description": (
+            "Haal een bepaling op via haar NUMMER binnen een regeling — werkt voor artikelen ('9', "
+            "'25', '22a') én voor beleidsregels/circulaires met decimale nummers zoals '9.1' (bv. de "
+            "Leidraad Invordering 2008), waar get_artikel/get_lid niet passen."
+        ),
+        "input_schema": _obj(
+            {"bwb_id": _BWB, "nummer": {"type": "string", "description": "Bepaling-nummer, bijv. '9.1' of '22a'."}},
+            ["bwb_id", "nummer"],
+        ),
+        "handler": _h_get_bepaling,
     },
     {
         "name": "list_regelingen",
