@@ -1,15 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
-import { Button } from "@/components/ui/Button";
 import { Melding } from "@/components/ui/Melding";
 import { AgentIngang } from "@/components/workbench/AgentIngang";
 import { DocumentLijst } from "@/components/workbench/DocumentLijst";
 import { DocumentPaneel, type Markeerbaar } from "@/components/workbench/DocumentPaneel";
 import { ReviewQueue } from "@/components/workbench/ReviewQueue";
 import {
-  annoteerStream,
   beslis,
   haalArtikelGraaf,
   haalDocument,
@@ -21,11 +19,11 @@ import {
   zetElementen,
 } from "@/lib/api";
 import type {
+  AgentDoel,
   AnnotatieDocument,
   BeslissingInvoer,
   DocumentSamenvatting,
   GraafArtikel,
-  IntentBegrepen,
   VoorstelElement,
   WetChoice,
 } from "@/lib/types";
@@ -39,17 +37,12 @@ export function WorkbenchClient() {
   const [wetten, setWetten] = useState<WetChoice[]>([]);
   const [documenten, setDocumenten] = useState<DocumentSamenvatting[]>([]);
   const [modus, setModus] = useState<"nieuw" | "open">("nieuw");
-  const [handmatig, setHandmatig] = useState(false);
-  const [bwbId, setBwbId] = useState("");
-  const [artikel, setArtikel] = useState("");
   const [doc, setDoc] = useState<AnnotatieDocument | null>(null);
   const [info, setInfo] = useState<GraafArtikel | null>(null);
-  const [voorstellen, setVoorstellen] = useState<VoorstelElement[]>([]);
   const [status, setStatus] = useState("");
   const [bezig, setBezig] = useState(false);
   const [fout, setFout] = useState<string | null>(null);
   const [actiefId, setActiefId] = useState<string | undefined>();
-  const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     listWetten().then(setWetten).catch(() => setWetten([]));
@@ -64,87 +57,41 @@ export function WorkbenchClient() {
     setModus("nieuw");
     setDoc(null);
     setInfo(null);
-    setVoorstellen([]);
     setStatus("");
     setFout(null);
     setActiefId(undefined);
-    setBwbId("");
-    setArtikel("");
   }
 
-  /** Kern: maak document + haal graaf-tekst + stream annotatie + persist. `voorafGraaf` hergebruikt de
-   *  al opgehaalde tekst uit de agent-ingang (geen dubbele fetch). Met `doelLid` blijft alles bij één lid. */
-  async function annoteerDoel(doelBwb: string, doelArt: string, doelLid: string, voorafGraaf?: GraafArtikel) {
+  /** De agent heeft een artikel/lid opgehaald en geannoteerd → persisteer als document + elementen. */
+  async function onAgentResultaat(doel: AgentDoel, elementen: VoorstelElement[]) {
     setFout(null);
     setBezig(true);
-    setVoorstellen([]);
-    setStatus("Artikel ophalen…");
+    setStatus("Opslaan…");
     try {
-      const graaf = voorafGraaf ?? (await haalArtikelGraaf(doelBwb, doelArt, doelLid));
-      if (!graaf.leden_teksten.length) {
-        setStatus("");
-        setFout(`Dit staat (nog) niet in de graaf: artikel ${doelArt}${doelLid ? ` lid ${doelLid}` : ""}.`);
-        return;
-      }
-      const document = await maakDocument({ bwbId: doelBwb, artikel: doelArt, lid: doelLid || null });
-      setBwbId(doelBwb);
-      setArtikel(doelArt);
-      setDoc(document);
+      const [document, graaf] = await Promise.all([
+        maakDocument({ bwbId: doel.bwbId, artikel: doel.artikel, lid: doel.lid || null }),
+        haalArtikelGraaf(doel.bwbId, doel.artikel, doel.lid),
+      ]);
+      const bijgewerkt = await zetElementen(document.slug, elementen);
+      setDoc(bijgewerkt);
       setInfo(graaf);
       setModus("open");
-
-      const controller = new AbortController();
-      abortRef.current = controller;
-      const verzameld: VoorstelElement[] = [];
-      await annoteerStream(
-        doelBwb,
-        doelArt,
-        doelLid,
-        {
-          onStatus: setStatus,
-          onElement: (el) => {
-            verzameld.push(el);
-            setVoorstellen([...verzameld]);
-          },
-        },
-        controller.signal,
-      );
-
-      const bijgewerkt = await zetElementen(document.slug, verzameld);
-      setDoc(bijgewerkt);
-      setVoorstellen([]);
       setStatus(`${bijgewerkt.elementen.length} elementen voorgesteld.`);
       verversLijst();
     } catch (e) {
       setFout(foutTekst(e));
     } finally {
       setBezig(false);
-      abortRef.current = null;
     }
-  }
-
-  function startVanuitAgent(doel: IntentBegrepen, graaf: GraafArtikel) {
-    annoteerDoel(doel.bwbId, doel.artikel, doel.lid, graaf);
-  }
-
-  function startHandmatig() {
-    if (!bwbId || !artikel.trim()) {
-      setFout("Kies een wet en vul een artikelnummer in.");
-      return;
-    }
-    annoteerDoel(bwbId, artikel.trim(), "");
   }
 
   async function openDocument(slug: string) {
     setFout(null);
     setStatus("");
     setBezig(true);
-    setVoorstellen([]);
     try {
       const document = await haalDocument(slug);
       setDoc(document);
-      setBwbId(document.bwbId);
-      setArtikel(document.artikel);
       setModus("open");
       setInfo(await haalArtikelGraaf(document.bwbId, document.artikel, document.lid));
     } catch (e) {
@@ -177,12 +124,10 @@ export function WorkbenchClient() {
     }
   }
 
-  const markeerbaar: Markeerbaar[] = useMemo(() => {
-    if (doc && doc.elementen.length) {
-      return doc.elementen.map((e) => ({ id: e.id, klasse: e.klasse, tekst: e.tekst }));
-    }
-    return voorstellen.map((v, i) => ({ id: `v${i}`, klasse: v.klasse, tekst: v.tekst }));
-  }, [doc, voorstellen]);
+  const markeerbaar: Markeerbaar[] = useMemo(
+    () => (doc?.elementen ?? []).map((e) => ({ id: e.id, klasse: e.klasse, tekst: e.tekst })),
+    [doc],
+  );
 
   // Documenttekst uit de graaf: "N. tekst" per lid (of de kale tekst bij een ongenummerd lid).
   const leden = useMemo(() => {
@@ -204,54 +149,7 @@ export function WorkbenchClient() {
       />
 
       <div className="space-y-4">
-        {/* Agent-ingang (primair) — alleen bij een nieuwe annotatie */}
-        {modus === "nieuw" && (
-          <>
-            <AgentIngang wetten={wetten} onStart={startVanuitAgent} disabled={bezig} />
-
-            <div className="text-right">
-              <button
-                type="button"
-                onClick={() => setHandmatig((v) => !v)}
-                className="text-xs text-muted underline-offset-2 hover:text-lint hover:underline"
-              >
-                {handmatig ? "handmatig verbergen" : "handmatig invoeren"}
-              </button>
-            </div>
-
-            {handmatig && (
-              <div className="flex flex-col gap-2 rounded-xl border border-line bg-white p-4 sm:flex-row sm:items-end">
-                <label className="flex-1 text-sm">
-                  <span className="mb-1 block font-medium text-ink">Wet</span>
-                  <select
-                    value={bwbId}
-                    onChange={(e) => setBwbId(e.target.value)}
-                    className="w-full rounded-lg border border-line px-3 py-2 text-sm"
-                  >
-                    <option value="">— kies een wet —</option>
-                    {wetten.map((w) => (
-                      <option key={w.bwbId} value={w.bwbId}>
-                        {w.naam || w.bwbId}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="w-full text-sm sm:w-40">
-                  <span className="mb-1 block font-medium text-ink">Artikel</span>
-                  <input
-                    value={artikel}
-                    onChange={(e) => setArtikel(e.target.value)}
-                    placeholder="bijv. 9"
-                    className="w-full rounded-lg border border-line px-3 py-2 text-sm"
-                  />
-                </label>
-                <Button onClick={startHandmatig} disabled={bezig} className="w-full sm:w-auto">
-                  {bezig ? "Bezig…" : "Annoteer"}
-                </Button>
-              </div>
-            )}
-          </>
-        )}
+        {modus === "nieuw" && <AgentIngang onResultaat={onAgentResultaat} disabled={bezig} />}
 
         {fout && <Melding type="fout">{fout}</Melding>}
         {status && <p className="text-sm text-muted">{status}</p>}
@@ -259,7 +157,7 @@ export function WorkbenchClient() {
         {info && (
           <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
             <DocumentPaneel
-              opschrift={`${info.citeertitel || bwbId} — artikel ${info.artikel}${doc?.lid ? ` lid ${doc.lid}` : ""}`}
+              opschrift={`${info.citeertitel || doc?.bwbId || ""} — artikel ${info.artikel}${doc?.lid ? ` lid ${doc.lid}` : ""}`}
               leden={leden}
               elementen={markeerbaar}
               actiefId={actiefId}
@@ -274,17 +172,7 @@ export function WorkbenchClient() {
                   onBeslissing={beslissing}
                 />
               ) : (
-                <div className="space-y-2">
-                  {voorstellen.length === 0 && !bezig && (
-                    <p className="text-sm text-muted">Nog geen voorstellen.</p>
-                  )}
-                  {voorstellen.map((v, i) => (
-                    <div key={i} className="rounded-xl border border-line bg-white p-3">
-                      <span className="rounded px-2 py-0.5 text-xs font-semibold">{v.klasse}</span>
-                      <p className="mt-1 text-sm text-ink">“{v.tekst}”</p>
-                    </div>
-                  ))}
-                </div>
+                <p className="text-sm text-muted">Nog geen elementen.</p>
               )}
             </div>
           </div>

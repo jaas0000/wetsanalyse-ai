@@ -48,8 +48,6 @@ from agent.models import (  # noqa: E402
     AnnoteerRequest,
     ArtikelResult,
     ChatRequest,
-    IntentRequest,
-    IntentResult,
 )
 
 logger = logging.getLogger("graph_qa.chat")
@@ -165,26 +163,6 @@ async def annoteer(
             yield {"data": json.dumps(event, ensure_ascii=False)}
 
     return EventSourceResponse(event_generator())
-
-
-@app.post("/v1/annoteer/intent", response_model=IntentResult)
-async def annoteer_intent(
-    request: IntentRequest,
-    _rl: None = Depends(_rate_limit),
-    _auth: None = Depends(_check_auth),
-) -> IntentResult:
-    """Parseer een vrije vraag ('annoteer art. 9 lid 1 IW') naar een doel + bevestiging (geen SSE)."""
-    from agent.adapters.anthropic_llm import AnthropicLLM
-    from agent.annotatie_intent import parse_intent_sync
-
-    llm = AnthropicLLM(settings)
-    catalogus = [c.model_dump() for c in request.catalogus]
-    result = await run_sync(parse_intent_sync, request.prompt, catalogus, settings, llm)
-    logger.info(
-        "annoteer-intent",
-        extra={"categorie": "functioneel", "intent_begrepen": bool(result.get("begrepen"))},
-    )
-    return IntentResult.model_validate(result)
 
 
 @app.get("/v1/artikel", response_model=ArtikelResult)

@@ -787,20 +787,13 @@ export interface BeslissingInvoer {
   wijziging?: Wijziging | null;
 }
 
-// --- Agent-ingang: intent-parse + artikeltekst uit de graaf (graph-qa) ------
+// --- Unified agent + artikeltekst uit de graaf (graph-qa) --------------------
 
-export interface IntentBegrepen {
+/** Het doel dat de annotatie-worker heeft opgehaald (uit het `doel`-SSE-event). */
+export interface AgentDoel {
   bwbId: string;
   artikel: string;
   lid: string;
-  wetnaam: string;
-}
-
-/** Resultaat van de intent-parse: het begrepen doel + bevestiging, of een verduidelijkingsvraag. */
-export interface IntentResultaat {
-  begrepen: IntentBegrepen | null;
-  bevestiging: string;
-  vraag: string;
 }
 
 /** Artikeltekst uit de graaf (weergave == annotatie-corpus). */

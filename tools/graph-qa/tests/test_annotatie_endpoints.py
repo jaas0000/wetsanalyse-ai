@@ -1,31 +1,12 @@
-"""De nieuwe agent-ingang-endpoints (/v1/annoteer/intent, /v1/artikel) met gepatchte zware deps.
+"""Het /v1/artikel-endpoint (workbench-documentpaneel-tekst) met gepatchte graaf.
 
-Bare TestClient (geen lifespan → geen startup-tokencheck); de LLM/graaf worden gemonkeypatcht zodat
-er geen netwerk aan te pas komt. De inhoudelijke logica zit in test_annotatie_intent/test_artikel.
+Bare TestClient (geen lifespan → geen startup-tokencheck); de graaf wordt gemonkeypatcht zodat er
+geen netwerk aan te pas komt. De inhoudelijke logica zit in test_artikel.
 """
 from __future__ import annotations
 
 import api.main as main
 from fastapi.testclient import TestClient
-
-
-def test_intent_endpoint(monkeypatch):
-    monkeypatch.setattr("agent.adapters.anthropic_llm.AnthropicLLM", lambda _s: object())
-    monkeypatch.setattr(
-        "agent.annotatie_intent.parse_intent_sync",
-        lambda prompt, catalogus, settings, llm: {
-            "begrepen": {"bwbId": "BWBR0004770", "artikel": "9", "lid": "1", "wetnaam": "IW 1990"},
-            "bevestiging": "Ik ga IW 1990 artikel 9 lid 1 annoteren.",
-            "vraag": "",
-        },
-    )
-    client = TestClient(main.app)
-    r = client.post(
-        "/v1/annoteer/intent",
-        json={"prompt": "annoteer art 9 lid 1 IW", "catalogus": [{"bwbId": "BWBR0004770", "naam": "IW 1990"}]},
-    )
-    assert r.status_code == 200
-    assert r.json()["begrepen"]["artikel"] == "9"
 
 
 def test_artikel_endpoint(monkeypatch):
