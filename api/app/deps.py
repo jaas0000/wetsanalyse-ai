@@ -58,6 +58,13 @@ def get_store() -> JobStore:
 
 
 @lru_cache
+def get_annotatie_store() -> "AnnotatieStore":
+    from .annotatie_store import AnnotatieStore
+
+    return AnnotatieStore()
+
+
+@lru_cache
 def get_wettenbank() -> WettenbankClient:
     return WettenbankClient(get_settings())
 

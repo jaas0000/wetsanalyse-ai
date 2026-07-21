@@ -169,6 +169,25 @@ triviale geval; het rapport heeft de vorm `{werkgebied, bronnen[], begrippen, af
   (afgeplatte artikellijst → artikel-autocomplete) en `GET /v1/wetten/{bwbId}/artikelen/{artikel}`
   (leden + opschrift + snippet → lid-keuze), gevoed door `wet_info.py` (TTL-cache over de MCP).
 
+## Annotatie-domein (wetsanalyse-workbench)
+
+Een **vers, apart domein** voor de wetsanalyse-workbench (agent annoteert → mens reviewt) — bewust
+**los** van de analyse-job/skill-contracten (geen `Markering`/`projects`/`rondes`). Zie
+`docs/wetsanalyse-workbench/PLAN.md`. Onderdelen:
+
+- `annotatie_contracts.py` — verse Pydantic-modellen + enums (`AnnotatieDocument`, `AnnotatieElement`
+  met `lifecycle`/`beslissingen`/`alternatieven`/`aandacht`/`diff`, `Beslissing`, `AuditRecord`,
+  `ReviewReason`). Review-klaar: velden voor latere fasen zitten er vanaf het begin in.
+- `db.py` — twee nieuwe tabellen: `annotatie_documenten` (huidige staat; elementen als JSON) en
+  `annotatie_audit` (**append-only** event-log; alleen inserts, tijdlijn = `ORDER BY id`). Nieuwe
+  tabellen → `create_all` maakt ze aan (geen `reconcile_schema` nodig).
+- `annotatie_store.py` — `AnnotatieStore` (aparte store op dezelfde engine; niet de `JobStore`).
+- `routers/annotatie.py` — `/v1/annotatie/*`, client-gescopet (`require_client` + `_document_or_404`
+  → 404 bij andermans document). Levenscyclus: document aanmaken → `PUT elementen` (voorstellen van de
+  agent; klasse gevalideerd tegen `validation.GELDIGE_JAS_KLASSEN`) → per element een human-decision
+  (approve/edit/reject/comment; edit/reject vereisen `review_reason`; edit berekent een `diff`) →
+  `GET audit`. Elke actie schrijft één auditregel. **Geen graaf-mutatie** (dat is een latere fase).
+
 ## Observability
 
 `app/observability.py` configureert **gestructureerde JSON-logging** (mirror van de MCP-logger:
