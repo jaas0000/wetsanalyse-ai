@@ -11,11 +11,30 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from .annotatie_prompt import annotatie_systeemprompt
+
 
 @dataclass(frozen=True)
 class Specialist:
     system: str
     tools: frozenset[str] | None  # None = alle tools
+
+
+# De annotatie-worker: haalt de tekst zelf op via de tools (net als de chatbot) en levert JAS-elementen
+# als JSON. Overschrijft bewust de QA-antwoordinstructies uit SYSTEM_PROMPT.
+_ANNOTATIE_SYSTEM = (
+    "LET OP — voor deze taak geldt NIET de antwoord-werkwijze hierboven. Je taak is ANNOTEREN, niet "
+    "vragen beantwoorden.\n\n"
+    + annotatie_systeemprompt()
+    + "\n\nOPHALEN (agent-werkwijze): bepaal welk artikel — en indien genoemd welk LID — de gebruiker "
+    "wil annoteren. Ken je de bwbId nog niet, zoek die dan met search_wetgeving. Haal de tekst op met "
+    "get_lid (als er een lid is genoemd) of get_artikel (heel artikel), en annoteer UITSLUITEND die "
+    "opgehaalde tekst. Geef daarna je JSON terug, uitgebreid met een `doel`-object dat vertelt wat je "
+    "hebt opgehaald:\n"
+    '{"doel": {"bwbId": "<BWBR…>", "artikel": "<nr>", "lid": "<lidnummer of leeg>"}, '
+    '"elementen": [ … ]}\n'
+    "Gebruik in `doel` exact de bwbId/artikel/lid die je aan get_lid/get_artikel meegaf; verzin niets."
+)
 
 
 SPECIALISTS: dict[str, Specialist] = {
@@ -42,6 +61,12 @@ SPECIALISTS: dict[str, Specialist] = {
         }),
     ),
     "algemeen": Specialist(system="", tools=None),
+    "annotatie": Specialist(
+        system=_ANNOTATIE_SYSTEM,
+        tools=frozenset({
+            "search_wetgeving", "get_lid", "get_artikel", "get_regeling_info", "resolve_begrip",
+        }),
+    ),
 }
 
 DEFAULT = "algemeen"

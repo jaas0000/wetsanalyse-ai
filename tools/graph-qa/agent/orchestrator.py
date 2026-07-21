@@ -25,23 +25,46 @@ from langgraph.config import get_stream_writer
 from langgraph.graph import END, START, StateGraph
 
 from .agent_common import truncate
+from .annotatie import _parse_elementen, _verwerk
 from .config import Settings
+from .graph.results import parse_select
 from .grounding import check_grounding, curate_sources
 from .ports import GraphPort, LLMPort
 from .prompts import SYSTEM_PROMPT
 from .provenance import collect_sources
 from .specialists import get as get_specialist
+from .supervisor import SUPERVISOR_SYSTEM, parse_supervisor
 from .tools import anthropic_schemas, dispatch
 
-_ROUTER_SYSTEM = (
-    "Je routeert een juridische vraag over de kennisgraaf naar een specialist en schetst kort de "
-    "aanpak. Antwoord in EXACT dit formaat, twee regels:\n"
-    "SPECIALIST: <definitie|duiding|algemeen>\n"
-    "PLAN: <1-2 zinnen aanpak, of AFWIJZEN als de vraag niet over de Nederlandse wet- en "
-    "regelgeving in de graaf gaat>\n"
-    "Kies 'definitie' voor begrip-/definitievragen, 'duiding' voor de betekenis/structuur/samenhang "
-    "van een bepaling, anders 'algemeen'."
-)
+
+def _doel_uit_json(text: str) -> dict[str, str]:
+    """Haal het `doel`-object ({bwbId,artikel,lid}) uit de JSON-respons van de annotatie-agent."""
+    import json
+
+    s, e = text.find("{"), text.rfind("}")
+    if s != -1 and e > s:
+        try:
+            data = json.loads(text[s : e + 1])
+            d = data.get("doel") if isinstance(data, dict) else None
+            if isinstance(d, dict):
+                return {k: str(d.get(k, "")).strip() for k in ("bwbId", "artikel", "lid")}
+        except json.JSONDecodeError:
+            pass
+    return {"bwbId": "", "artikel": "", "lid": ""}
+
+
+def _corpus_uit_trace(source_trace: list[tuple[str, str]]) -> str:
+    """Reconstrueer de opgehaalde artikeltekst uit de get_lid/get_artikel-resultaten in de trace,
+    zodat de brongetrouwheid-check dezelfde tekst gebruikt die de agent zag."""
+    delen: list[str] = []
+    for naam, resultaat in source_trace:
+        if naam not in ("get_lid", "get_artikel"):
+            continue
+        for r in parse_select(resultaat):
+            tekst = (r.get("lidtekst") or r.get("tekst") or "").strip()
+            if tekst:
+                delen.append(tekst)
+    return "\n\n".join(delen)
 
 _DECOMPOSE_SYSTEM = (
     "Je splitst een juridische vraag over de kennisgraaf op in de deelvragen die je apart moet "
@@ -78,6 +101,8 @@ class State(TypedDict, total=False):
     entities_seen: Annotated[list[str], operator.add]            # semantisch/entiteit-tier
     specialist: str
     plan: str
+    worker_plan: list[str]   # geordende worker-keten (specialist-namen) die de supervisor koos
+    worker_idx: int          # index van de huidige worker in worker_plan
     source_trace: list[tuple[str, str]]
     answer: str
     grounded: bool
@@ -110,29 +135,43 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
             f"de tools):\n{lijst}"
         )
 
-    def router_node(state: State) -> dict[str, Any]:
+    def supervisor_node(state: State) -> dict[str, Any]:
+        """Bepaalt de worker-keten (antwoord/annotatie) voor deze vraag; zet de eerste worker actief."""
         writer = get_stream_writer()
         resp = llm.create(
             model=model,
             max_tokens=300,
-            system=_ROUTER_SYSTEM + _memory_context(state),
+            system=SUPERVISOR_SYSTEM + _memory_context(state),
             tools=[],
             messages=[{"role": "user", "content": state["question"]}],
         )
         text = "".join(b.text for b in resp.content if b.type == "text")
-        specialist, plan = "algemeen", ""
-        for line in text.splitlines():
-            low = line.strip()
-            if low.upper().startswith("SPECIALIST:"):
-                val = low.split(":", 1)[1].strip().lower()
-                if val in ("definitie", "duiding", "algemeen"):
-                    specialist = val
-            elif low.upper().startswith("PLAN:"):
-                plan = low.split(":", 1)[1].strip()
-        if not plan:
-            plan = text.strip()
-        writer({"type": "status", "message": f"Specialist: {specialist} — {plan[:80]}"})
-        return {"specialist": specialist, "plan": plan}
+        worker_plan, plan = parse_supervisor(text)
+        eerste = worker_plan[0]
+        writer({"type": "status", "message": f"Specialist: {eerste} — {plan[:80]}"})
+        return {"specialist": eerste, "plan": plan, "worker_plan": worker_plan, "worker_idx": 0}
+
+    def _entry_node(state: State) -> str:
+        """Ingang voor de huidige worker: de annotatie-worker draait altijd de agent⇄tools-lus; een
+        antwoord-worker gaat in decompositie-modus langs decompose, anders ook langs de agent-lus."""
+        if state.get("specialist") == "annotatie":
+            return "agent"
+        return "decompose" if settings.enable_decomposition else "agent"
+
+    def advance_node(state: State) -> dict[str, Any]:
+        """Ga naar de volgende worker in de keten; reset de per-worker werkvelden."""
+        idx = state.get("worker_idx", 0) + 1
+        plan = state.get("worker_plan") or []
+        upd: dict[str, Any] = {"worker_idx": idx}
+        if idx < len(plan):
+            upd.update({"specialist": plan[idx], "turns": 0, "corrected": False, "answer": ""})
+        return upd
+
+    def route_after_advance(state: State) -> str:
+        plan = state.get("worker_plan") or []
+        if state.get("worker_idx", 0) < len(plan):
+            return _entry_node(state)
+        return "einde"
 
     def agent_node(state: State) -> dict[str, Any]:
         writer = get_stream_writer()
@@ -144,6 +183,9 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
             system = f"{system}\n\nAANPAK (door jou gepland):\n{state['plan']}"
         system += _memory_context(state)
 
+        # De annotatie-worker produceert JSON, geen leesbaar antwoord — die tokens niet naar de user
+        # streamen (annoteer_finalize emit straks een korte samenvatting).
+        stream_to_user = state.get("specialist") != "annotatie"
         with llm.stream(
             model=model,
             max_tokens=4096,
@@ -157,10 +199,11 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
             # een tool-only beurt (geen tekst) geen loshangende of dubbele witregel geeft.
             first_delta = True
             for delta in stream.text_deltas:
-                if first_delta and state.get("turns", 0) > 0:
-                    writer({"type": "token", "content": "\n\n"})
+                if stream_to_user:
+                    if first_delta and state.get("turns", 0) > 0:
+                        writer({"type": "token", "content": "\n\n"})
+                    writer({"type": "token", "content": delta})
                 first_delta = False
-                writer({"type": "token", "content": delta})
             final = stream.final_message()
 
         tool_uses, text_parts = _parse_final(final)
@@ -183,7 +226,27 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
     def route_after_agent(state: State) -> str:
         if state.get("pending_tools") and state.get("turns", 0) < settings.max_turns:
             return "tools"
+        if state.get("specialist") == "annotatie":
+            return "annoteer_finalize"
         return "verify"
+
+    def annoteer_finalize_node(state: State) -> dict[str, Any]:
+        """De annotatie-agent gaf JSON ({doel, elementen}); grond elk element tegen de opgehaalde
+        tekst en emit de doel-/element-events. Geen QA-grounding — dit is geen tekstantwoord."""
+        writer = get_stream_writer()
+        antwoord = state.get("answer", "")
+        doel = _doel_uit_json(antwoord)
+        corpus = _corpus_uit_trace(state.get("source_trace", []))
+        voorstellen, verworpen = _verwerk(
+            antwoord, corpus, doel.get("bwbId", ""), doel.get("artikel", ""), doel.get("lid", "")
+        )
+        writer({"type": "doel", "doel": doel})
+        for v in voorstellen:
+            writer({"type": "element", "element": v.model_dump()})
+        plek = f"artikel {doel.get('artikel','')}" + (f" lid {doel['lid']}" if doel.get("lid") else "")
+        samenvatting = f"Ik heb {len(voorstellen)} JAS-elementen voorgesteld voor {plek}."
+        writer({"type": "token", "content": samenvatting})
+        return {"answer": samenvatting}
 
     def tools_node(state: State) -> dict[str, Any]:
         writer = get_stream_writer()
@@ -378,39 +441,64 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
     g.add_node("finalize", finalize_node)
 
     if settings.enable_decomposition:
-        # Multi-hop: router → decompose → solve (retrieval per deelvraag) → synthesize → verify →
-        # (resynth → synthesize | finalize). De per-deelvraag agent⇄tools-loop draait lokaal in solve.
-        g.add_node("router", router_node)
+        # Supervisor → (annotatie: agent⇄tools→annoteer_finalize | antwoord: decompose→solve→…→
+        # finalize) → advance → (volgende worker | einde).
+        g.add_node("supervisor", supervisor_node)
         g.add_node("decompose", decompose_node)
         g.add_node("solve", solve_node)
         g.add_node("synthesize", synthesize_node)
         g.add_node("resynth", resynth_node)
-        g.add_edge(START, "router")
-        g.add_edge("router", "decompose")
+        g.add_node("agent", agent_node)
+        g.add_node("tools", tools_node)
+        g.add_node("annoteer_finalize", annoteer_finalize_node)
+        g.add_node("advance", advance_node)
+        entrymap = {"agent": "agent", "decompose": "decompose"}
+        g.add_edge(START, "supervisor")
+        g.add_conditional_edges("supervisor", _entry_node, entrymap)
         g.add_edge("decompose", "solve")
         g.add_conditional_edges("solve", route_after_solve, {"verify": "verify", "synthesize": "synthesize"})
         g.add_edge("synthesize", "verify")
         g.add_conditional_edges("verify", route_after_verify, {"correct": "resynth", "finalize": "finalize"})
         g.add_edge("resynth", "synthesize")
-        g.add_edge("finalize", END)
+        g.add_conditional_edges(
+            "agent", route_after_agent,
+            {"tools": "tools", "verify": "verify", "annoteer_finalize": "annoteer_finalize"},
+        )
+        g.add_edge("tools", "agent")
+        g.add_edge("finalize", "advance")
+        g.add_edge("annoteer_finalize", "advance")
+        g.add_conditional_edges("advance", route_after_advance, {**entrymap, "einde": END})
         return g
 
-    # Één-loop-stroom (ongewijzigd).
+    # Één-loop-stroom.
     g.add_node("agent", agent_node)
     g.add_node("tools", tools_node)
     g.add_node("correct", correct_node)
 
     if settings.enable_planning:
-        g.add_node("router", router_node)
-        g.add_edge(START, "router")
-        g.add_edge("router", "agent")
-    else:
-        g.add_edge(START, "agent")
+        # Supervisor → agent⇄tools → (verify→finalize | annoteer_finalize) → advance → (volgende | einde).
+        g.add_node("supervisor", supervisor_node)
+        g.add_node("annoteer_finalize", annoteer_finalize_node)
+        g.add_node("advance", advance_node)
+        g.add_edge(START, "supervisor")
+        g.add_conditional_edges("supervisor", _entry_node, {"agent": "agent"})
+        g.add_conditional_edges(
+            "agent", route_after_agent,
+            {"tools": "tools", "verify": "verify", "annoteer_finalize": "annoteer_finalize"},
+        )
+        g.add_edge("tools", "agent")
+        g.add_conditional_edges("verify", route_after_verify, {"correct": "correct", "finalize": "finalize"})
+        g.add_edge("correct", "agent")
+        g.add_edge("finalize", "advance")
+        g.add_edge("annoteer_finalize", "advance")
+        g.add_conditional_edges("advance", route_after_advance, {"agent": "agent", "einde": END})
+        return g
 
+    # Geen classificatie (planning off, decomp off): pure QA-agent, ongewijzigd (geen annotatie-route).
+    g.add_edge(START, "agent")
     g.add_conditional_edges("agent", route_after_agent, {"tools": "tools", "verify": "verify"})
     g.add_edge("tools", "agent")
     g.add_conditional_edges("verify", route_after_verify, {"correct": "correct", "finalize": "finalize"})
     g.add_edge("correct", "agent")
     g.add_edge("finalize", END)
-
     return g

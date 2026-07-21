@@ -39,13 +39,13 @@ import type {
   WetStructuur,
 } from "./types";
 import type {
+  AgentDoel,
   AnnotatieDocument,
   AuditRecord,
   BeslissingInvoer,
   DocumentCreate,
   DocumentSamenvatting,
   GraafArtikel,
-  IntentResultaat,
   VoorstelElement,
 } from "./types";
 import { pathSegment } from "./url";
@@ -519,18 +519,60 @@ export async function haalAudit(slug: string): Promise<AuditRecord[]> {
   );
 }
 
-/** Parseer een vrije vraag ("annoteer art. 9 lid 1 IW") naar een doel + bevestiging (BFF → graph-qa).
- *  De wet-catalogus grondt de naam→bwbId-resolutie; bij twijfel komt er een `vraag` terug. */
-export async function annoteerIntent(prompt: string, catalogus: WetChoice[]): Promise<IntentResultaat> {
-  const res = await fetch("/api/annotatie/intent", {
+/** Stuur een vrije prompt naar de unified agent (BFF → graph-qa /v1/chat, SSE). De supervisor kiest
+ *  de annotatie-worker, haalt de tekst via de tools op en streamt `doel` + `element`-events. Roept
+ *  `onDoel` (opgehaald doel), `onElement` (per JAS-element) en `onStatus` (voortgang/samenvatting). */
+export async function annoteerAgentStream(
+  prompt: string,
+  handlers: {
+    onStatus?: (m: string) => void;
+    onDoel?: (doel: AgentDoel) => void;
+    onElement: (el: VoorstelElement) => void;
+  },
+  signal?: AbortSignal,
+): Promise<void> {
+  const res = await fetch("/api/annotatie/agent", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      prompt,
-      catalogus: catalogus.map((w) => ({ bwbId: w.bwbId, naam: w.naam })),
-    }),
+    body: JSON.stringify({ question: prompt }),
+    signal,
   });
-  return json<IntentResultaat>(res);
+  if (!res.ok) throw await parseError(res);
+  if (!res.body) throw { status: 0, detail: "Geen agentstroom." } as ApiError;
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      // sse-starlette scheidt met \r\n; strip de CR zodat indexOf("\n\n") de frame-grens vindt.
+      buffer += decoder.decode(value, { stream: true }).replace(/\r/g, "");
+      let scheiding: number;
+      while ((scheiding = buffer.indexOf("\n\n")) !== -1) {
+        const frame = buffer.slice(0, scheiding);
+        buffer = buffer.slice(scheiding + 2);
+        let data = "";
+        for (const regel of frame.split("\n")) {
+          if (regel.startsWith(":")) continue; // heartbeat
+          if (regel.startsWith("data:")) data += regel.slice(5).trim();
+        }
+        if (!data) continue;
+        const ev = veiligJson(data) as
+          | { type: string; message?: string; content?: string; doel?: AgentDoel; element?: VoorstelElement }
+          | null;
+        if (!ev) continue;
+        if (ev.type === "status") handlers.onStatus?.(ev.message ?? "");
+        else if (ev.type === "token") handlers.onStatus?.(ev.content ?? "");
+        else if (ev.type === "doel" && ev.doel) handlers.onDoel?.(ev.doel);
+        else if (ev.type === "element" && ev.element) handlers.onElement(ev.element);
+        else if (ev.type === "error") throw { status: 502, detail: ev.message ?? "Agent mislukt." } as ApiError;
+      }
+    }
+  } finally {
+    reader.cancel().catch(() => {});
+  }
 }
 
 /** Artikeltekst uit de graaf (voedt het workbench-documentpaneel; één bron met de annotatie-corpus).

@@ -86,34 +86,7 @@ class AnnotatieVoorstel(BaseModel):
     vindplaats: str = ""               # bwbId/artikel/lid/jci-notatie
 
 
-# --- Agent-ingang: intent-parse + artikeltekst uit de graaf -------------------
-
-class WetKeuze(BaseModel):
-    """Eén regel uit de wet-catalogus (voor naam→bwbId-resolutie in de intent-parse)."""
-
-    bwbId: str
-    naam: str = ""
-
-
-class IntentRequest(BaseModel):
-    prompt: str
-    catalogus: list[WetKeuze] = []
-
-
-class IntentBegrepen(BaseModel):
-    bwbId: str
-    artikel: str
-    lid: str = ""
-    wetnaam: str = ""
-
-
-class IntentResult(BaseModel):
-    """Het geparste doel + een leesbare bevestiging; bij twijfel `vraag` (dan is `begrepen` None)."""
-
-    begrepen: IntentBegrepen | None = None
-    bevestiging: str = ""
-    vraag: str = ""
-
+# --- Artikeltekst uit de graaf (workbench-documentpaneel) ---------------------
 
 class LidTekst(BaseModel):
     lid: str = ""

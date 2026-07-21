@@ -4,78 +4,55 @@ import { useState } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { Melding } from "@/components/ui/Melding";
-import { annoteerIntent, haalArtikelGraaf, isApiError } from "@/lib/api";
-import type { GraafArtikel, IntentBegrepen, IntentResultaat, WetChoice } from "@/lib/types";
+import { annoteerAgentStream, isApiError } from "@/lib/api";
+import type { AgentDoel, VoorstelElement } from "@/lib/types";
 
 function foutTekst(e: unknown): string {
   if (isApiError(e)) return e.detail;
   return (e as Error)?.message ?? "Er ging iets mis.";
 }
 
-function preview(graaf: GraafArtikel): string {
-  const tekst = graaf.leden_teksten
-    .map((l) => (l.lid ? `${l.lid}. ${l.tekst}` : l.tekst))
-    .join(" ");
-  return tekst.length > 260 ? `${tekst.slice(0, 260)}…` : tekst;
-}
-
-/** Conversationele ingang: vraag de agent een artikel te annoteren; hij haalt de tekst uit de graaf
- *  en toont een bevestiging. Pas na "Start" (approve) draait de annotatie. */
+/** Vraag de unified agent een artikel te annoteren. De supervisor kiest de annotatie-worker, haalt de
+ *  tekst via de tools op en streamt het doel + de JAS-elementen; die geven we door aan de workbench. */
 export function AgentIngang({
-  wetten,
-  onStart,
+  onResultaat,
   disabled,
 }: {
-  wetten: WetChoice[];
-  onStart: (doel: IntentBegrepen, graaf: GraafArtikel) => void;
+  onResultaat: (doel: AgentDoel, elementen: VoorstelElement[]) => void;
   disabled?: boolean;
 }) {
   const [prompt, setPrompt] = useState("");
   const [bezig, setBezig] = useState(false);
-  const [intent, setIntent] = useState<IntentResultaat | null>(null);
-  const [graaf, setGraaf] = useState<GraafArtikel | null>(null);
+  const [status, setStatus] = useState("");
   const [fout, setFout] = useState<string | null>(null);
 
-  function reset() {
-    setIntent(null);
-    setGraaf(null);
-  }
-
-  async function vraag() {
+  async function verstuur() {
     if (!prompt.trim()) return;
     setFout(null);
     setBezig(true);
-    reset();
+    setStatus("Agent denkt na…");
+    const holder: { doel: AgentDoel | null } = { doel: null };
+    const elementen: VoorstelElement[] = [];
     try {
-      const res = await annoteerIntent(prompt.trim(), wetten);
-      if (res.begrepen) {
-        const a = await haalArtikelGraaf(res.begrepen.bwbId, res.begrepen.artikel, res.begrepen.lid);
-        if (!a.leden_teksten.length) {
-          const plek = `artikel ${res.begrepen.artikel}${res.begrepen.lid ? ` lid ${res.begrepen.lid}` : ""}`;
-          setIntent({
-            begrepen: null,
-            bevestiging: "",
-            vraag: `Dit staat (nog) niet in de graaf: ${res.begrepen.wetnaam || res.begrepen.bwbId} ${plek}.`,
-          });
-        } else {
-          setIntent(res);
-          setGraaf(a);
-        }
-      } else {
-        setIntent(res);
+      await annoteerAgentStream(prompt.trim(), {
+        onStatus: setStatus,
+        onDoel: (d) => (holder.doel = d),
+        onElement: (el) => elementen.push(el),
+      });
+      const doel = holder.doel;
+      if (!doel || !doel.bwbId) {
+        setFout(
+          "De agent kon geen artikel bepalen om te annoteren. Formuleer bijv. “annoteer artikel 9 lid 1 van de Invorderingswet 1990”.",
+        );
+        return;
       }
+      onResultaat(doel, elementen);
+      setPrompt("");
     } catch (e) {
       setFout(foutTekst(e));
     } finally {
       setBezig(false);
-    }
-  }
-
-  function start() {
-    if (intent?.begrepen && graaf) {
-      onStart(intent.begrepen, graaf);
-      setPrompt("");
-      reset();
+      setStatus("");
     }
   }
 
@@ -88,42 +65,20 @@ export function AgentIngang({
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === "Enter" && !bezig) vraag();
+              if (e.key === "Enter" && !bezig) verstuur();
             }}
             placeholder="bijv. annoteer artikel 9 lid 1 van de Invorderingswet 1990"
             className="w-full rounded-lg border border-line px-3 py-2 text-sm"
             disabled={disabled || bezig}
           />
-          <Button onClick={vraag} disabled={disabled || bezig || !prompt.trim()} className="w-full sm:w-auto">
-            {bezig ? "Bezig…" : "Vraag"}
+          <Button onClick={verstuur} disabled={disabled || bezig || !prompt.trim()} className="w-full sm:w-auto">
+            {bezig ? "Bezig…" : "Annoteer"}
           </Button>
         </div>
       </label>
 
+      {status && <p className="mt-2 text-xs text-muted">{status}</p>}
       {fout && <div className="mt-3"><Melding type="fout">{fout}</Melding></div>}
-
-      {/* Verduidelijkingsvraag van de agent */}
-      {intent && !intent.begrepen && intent.vraag && (
-        <div className="mt-3">
-          <Melding type="uitleg">{intent.vraag}</Melding>
-        </div>
-      )}
-
-      {/* Bevestigingskaart: approve/reject vóór het annoteren */}
-      {intent?.begrepen && graaf && (
-        <div className="mt-3 rounded-xl border border-lint/40 bg-surface p-3">
-          <p className="text-sm font-medium text-ink">{intent.bevestiging}</p>
-          <p className="mt-1 text-xs text-muted">{preview(graaf)}</p>
-          <div className="mt-3 flex gap-2">
-            <Button size="sm" onClick={start} disabled={disabled}>
-              Start
-            </Button>
-            <Button size="sm" variant="secondary" onClick={reset} disabled={disabled}>
-              Nee
-            </Button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
