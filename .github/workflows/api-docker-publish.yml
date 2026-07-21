@@ -139,24 +139,6 @@ jobs:
     needs: build-and-push
     runs-on: ubuntu-latest
 
-    if: ${{ github.ref == 'refs/heads/master'
-        && secrets.AZURE_CLIENT_ID != ''
-        && secrets.AZURE_CLIENT_SECRET != ''
-        && secrets.AZURE_TENANT_ID != ''
-        && secrets.AZURE_SUBSCRIPTION_ID != ''
-        && secrets.AZURE_AI_KEY != ''
-        && vars.LLM_API_BASE != '' }}
-
-    permissions:
-      contents: read
-
-    steps:
-
-    
-  deploy-azure:
-    needs: build-and-push
-    runs-on: ubuntu-latest
-
     permissions:
       contents: read
 
