@@ -1,0 +1,150 @@
+# Wetsanalyse — docker-compose.yml (4 containers)
+#
+# Containers:
+#   postgres       — PostgreSQL 17 database
+#   wettenbank-mcp — Wetteksten MCP-server (overheid.nl)
+#   api            — FastAPI backend
+#   frontend       — Next.js BFF
+#
+# Gebruik:
+#   1. Kopieer .env.example naar .env en vul LLM_API_KEY, LLM_API_BASE en AUTH_URL in.
+#   2. python3 gen-secrets.py
+#   3. docker compose up -d   of:   podman-compose up -d
+#
+# Eerste keer: ga naar <AUTH_URL>/setup voor het eerste beheerdersaccount.
+
+services:
+
+  postgres:
+    image: postgres:17
+    container_name: wetsanalyse-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER:          wetsanalyse
+      POSTGRES_DB:            wetsanalyse
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+    secrets:
+      - postgres_password
+    volumes:
+      - wetsanalyse_pgdata:/var/lib/postgresql/data
+    networks:
+      - intern
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wetsanalyse"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  wettenbank-mcp:
+    image: ghcr.io/palmw01/wettenbank-mcp:latest
+    container_name: wetsanalyse-mcp
+    restart: unless-stopped
+    environment:
+      MCP_TRANSPORT:     http
+      PORT:              "3000"
+      MCP_ALLOW_NO_AUTH: "1"   # intern netwerk — niet extern bereikbaar
+    networks:
+      - intern
+    expose:
+      - "3000"
+    healthcheck:
+      test: ["CMD-SHELL", "node -e 'fetch(\"http://127.0.0.1:3000/health\").then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))'"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  api:
+    image: ghcr.io/palmw01/wetsanalyse-api:latest
+    container_name: wetsanalyse-api
+    restart: unless-stopped
+    environment:
+      LLM_PROVIDER:                  azure_ai
+      LLM_MODEL:                     ${LLM_MODEL:-claude-sonnet-4-6}
+      LLM_API_BASE:                  ${LLM_API_BASE}
+      LLM_API_KEY_FILE:              /run/secrets/llm_api_key
+      WETTENBANK_MCP_URL:            http://wettenbank-mcp:3000/mcp
+      WETSANALYSE_AUTH_REQUIRED:     "1"
+      WETSANALYSE_API_TOKENS_FILE:   /run/secrets/api_tokens
+      WETSANALYSE_ADMIN_TOKENS_FILE: /run/secrets/admin_tokens
+      LLM_CONFIG_SECRET_FILE:        /run/secrets/llm_config_secret
+      DATABASE_URL_FILE:             /run/secrets/database_url
+    secrets:
+      - llm_api_key
+      - api_tokens
+      - admin_tokens
+      - llm_config_secret
+      - database_url
+    networks:
+      - intern
+    expose:
+      - "3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      wettenbank-mcp:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c 'import urllib.request,sys; sys.exit(0 if urllib.request.urlopen(\"http://127.0.0.1:3000/health\").status==200 else 1)'"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  frontend:
+    image: ghcr.io/palmw01/wetsanalyse-frontend:latest
+    container_name: wetsanalyse-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV:              production
+      API_BASE_URL:          http://api:3000
+      AUTH_URL:              ${AUTH_URL}
+      AUTH_TRUST_HOST:       "true"
+      API_TOKEN_FILE:        /run/secrets/frontend_api_token
+      ADMIN_API_TOKEN_FILE:  /run/secrets/frontend_admin_token
+      AUTH_SECRET_FILE:      /run/secrets/frontend_auth_secret
+    secrets:
+      - frontend_api_token
+      - frontend_admin_token
+      - frontend_auth_secret
+    networks:
+      - intern
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "node -e 'fetch(\"http://127.0.0.1:3000/api/health\").then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))'"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+volumes:
+  wetsanalyse_pgdata:
+
+networks:
+  intern:
+    driver: bridge
+
+secrets:
+  postgres_password:
+    file: ./secrets/postgres_password
+  database_url:
+    file: ./secrets/database_url
+  llm_api_key:
+    file: ./secrets/llm_api_key
+  api_tokens:
+    file: ./secrets/api_tokens
+  admin_tokens:
+    file: ./secrets/admin_tokens
+  llm_config_secret:
+    file: ./secrets/llm_config_secret
+  frontend_api_token:
+    file: ./secrets/frontend_api_token
+  frontend_admin_token:
+    file: ./secrets/frontend_admin_token
+  frontend_auth_secret:
+    file: ./secrets/frontend_auth_secret
