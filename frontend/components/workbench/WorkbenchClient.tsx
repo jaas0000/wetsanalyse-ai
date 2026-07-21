@@ -4,13 +4,14 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { Melding } from "@/components/ui/Melding";
+import { AgentIngang } from "@/components/workbench/AgentIngang";
 import { DocumentLijst } from "@/components/workbench/DocumentLijst";
 import { DocumentPaneel, type Markeerbaar } from "@/components/workbench/DocumentPaneel";
 import { ReviewQueue } from "@/components/workbench/ReviewQueue";
 import {
   annoteerStream,
   beslis,
-  getArtikelInfo,
+  haalArtikelGraaf,
   haalDocument,
   isApiError,
   lijstDocumenten,
@@ -21,9 +22,10 @@ import {
 } from "@/lib/api";
 import type {
   AnnotatieDocument,
-  ArtikelInfo,
   BeslissingInvoer,
   DocumentSamenvatting,
+  GraafArtikel,
+  IntentBegrepen,
   VoorstelElement,
   WetChoice,
 } from "@/lib/types";
@@ -37,10 +39,11 @@ export function WorkbenchClient() {
   const [wetten, setWetten] = useState<WetChoice[]>([]);
   const [documenten, setDocumenten] = useState<DocumentSamenvatting[]>([]);
   const [modus, setModus] = useState<"nieuw" | "open">("nieuw");
+  const [handmatig, setHandmatig] = useState(false);
   const [bwbId, setBwbId] = useState("");
   const [artikel, setArtikel] = useState("");
   const [doc, setDoc] = useState<AnnotatieDocument | null>(null);
-  const [info, setInfo] = useState<ArtikelInfo | null>(null);
+  const [info, setInfo] = useState<GraafArtikel | null>(null);
   const [voorstellen, setVoorstellen] = useState<VoorstelElement[]>([]);
   const [status, setStatus] = useState("");
   const [bezig, setBezig] = useState(false);
@@ -69,63 +72,33 @@ export function WorkbenchClient() {
     setArtikel("");
   }
 
-  async function openDocument(slug: string) {
+  /** Kern: maak document + haal graaf-tekst + stream annotatie + persist. `voorafGraaf` hergebruikt de
+   *  al opgehaalde tekst uit de agent-ingang (geen dubbele fetch). */
+  async function annoteerDoel(doelBwb: string, doelArt: string, voorafGraaf?: GraafArtikel) {
     setFout(null);
-    setStatus("");
-    setBezig(true);
-    setVoorstellen([]);
-    try {
-      const document = await haalDocument(slug);
-      setDoc(document);
-      setBwbId(document.bwbId);
-      setArtikel(document.artikel);
-      setModus("open");
-      const artikelInfo = await getArtikelInfo(document.bwbId, document.artikel);
-      setInfo(artikelInfo);
-    } catch (e) {
-      setFout(foutTekst(e));
-    } finally {
-      setBezig(false);
-    }
-  }
-
-  async function verwijder(slug: string) {
-    if (!window.confirm("Dit annotatie-document verwijderen? Dit kan niet ongedaan worden gemaakt.")) {
-      return;
-    }
-    try {
-      await verwijderDocument(slug);
-      if (doc?.slug === slug) nieuweAnnotatie();
-      verversLijst();
-    } catch (e) {
-      setFout(foutTekst(e));
-    }
-  }
-
-  async function start() {
-    setFout(null);
-    if (!bwbId || !artikel.trim()) {
-      setFout("Kies een wet en vul een artikelnummer in.");
-      return;
-    }
     setBezig(true);
     setVoorstellen([]);
     setStatus("Artikel ophalen…");
     try {
-      const [document, artikelInfo] = await Promise.all([
-        maakDocument({ bwbId, artikel: artikel.trim() }),
-        getArtikelInfo(bwbId, artikel.trim()),
-      ]);
+      const graaf = voorafGraaf ?? (await haalArtikelGraaf(doelBwb, doelArt));
+      if (!graaf.leden_teksten.length) {
+        setStatus("");
+        setFout("Dit artikel staat (nog) niet in de graaf.");
+        return;
+      }
+      const document = await maakDocument({ bwbId: doelBwb, artikel: doelArt });
+      setBwbId(doelBwb);
+      setArtikel(doelArt);
       setDoc(document);
-      setInfo(artikelInfo);
+      setInfo(graaf);
       setModus("open");
 
       const controller = new AbortController();
       abortRef.current = controller;
       const verzameld: VoorstelElement[] = [];
       await annoteerStream(
-        bwbId,
-        artikel.trim(),
+        doelBwb,
+        doelArt,
         {
           onStatus: setStatus,
           onElement: (el) => {
@@ -149,6 +122,50 @@ export function WorkbenchClient() {
     }
   }
 
+  function startVanuitAgent(doel: IntentBegrepen, graaf: GraafArtikel) {
+    annoteerDoel(doel.bwbId, doel.artikel, graaf);
+  }
+
+  function startHandmatig() {
+    if (!bwbId || !artikel.trim()) {
+      setFout("Kies een wet en vul een artikelnummer in.");
+      return;
+    }
+    annoteerDoel(bwbId, artikel.trim());
+  }
+
+  async function openDocument(slug: string) {
+    setFout(null);
+    setStatus("");
+    setBezig(true);
+    setVoorstellen([]);
+    try {
+      const document = await haalDocument(slug);
+      setDoc(document);
+      setBwbId(document.bwbId);
+      setArtikel(document.artikel);
+      setModus("open");
+      setInfo(await haalArtikelGraaf(document.bwbId, document.artikel));
+    } catch (e) {
+      setFout(foutTekst(e));
+    } finally {
+      setBezig(false);
+    }
+  }
+
+  async function verwijder(slug: string) {
+    if (!window.confirm("Dit annotatie-document verwijderen? Dit kan niet ongedaan worden gemaakt.")) {
+      return;
+    }
+    try {
+      await verwijderDocument(slug);
+      if (doc?.slug === slug) nieuweAnnotatie();
+      verversLijst();
+    } catch (e) {
+      setFout(foutTekst(e));
+    }
+  }
+
   async function beslissing(elementId: string, req: BeslissingInvoer) {
     if (!doc) return;
     try {
@@ -166,11 +183,11 @@ export function WorkbenchClient() {
     return voorstellen.map((v, i) => ({ id: `v${i}`, klasse: v.klasse, tekst: v.tekst }));
   }, [doc, voorstellen]);
 
-  // De volledige lid-teksten (leden_teksten) voor het documentpaneel; val terug op de lid-nummers.
+  // Documenttekst uit de graaf: "N. tekst" per lid (of de kale tekst bij een ongenummerd lid).
   const leden = useMemo(() => {
     const lt = info?.leden_teksten;
-    if (lt && lt.length) return lt.map((l) => (l.tekst ? `${l.lid}. ${l.tekst}` : "")).filter(Boolean);
-    return info?.leden ?? [];
+    if (!lt) return [];
+    return lt.map((l) => (l.lid ? `${l.lid}. ${l.tekst}` : l.tekst)).filter(Boolean);
   }, [info]);
   const persistent = (doc?.elementen.length ?? 0) > 0;
 
@@ -186,37 +203,53 @@ export function WorkbenchClient() {
       />
 
       <div className="space-y-4">
-        {/* artikel kiezen (alleen bij een nieuwe annotatie) */}
+        {/* Agent-ingang (primair) — alleen bij een nieuwe annotatie */}
         {modus === "nieuw" && (
-          <div className="flex flex-col gap-2 rounded-xl border border-line bg-white p-4 sm:flex-row sm:items-end">
-            <label className="flex-1 text-sm">
-              <span className="mb-1 block font-medium text-ink">Wet</span>
-              <select
-                value={bwbId}
-                onChange={(e) => setBwbId(e.target.value)}
-                className="w-full rounded-lg border border-line px-3 py-2 text-sm"
+          <>
+            <AgentIngang wetten={wetten} onStart={startVanuitAgent} disabled={bezig} />
+
+            <div className="text-right">
+              <button
+                type="button"
+                onClick={() => setHandmatig((v) => !v)}
+                className="text-xs text-muted underline-offset-2 hover:text-lint hover:underline"
               >
-                <option value="">— kies een wet —</option>
-                {wetten.map((w) => (
-                  <option key={w.bwbId} value={w.bwbId}>
-                    {w.naam || w.bwbId}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="w-full text-sm sm:w-40">
-              <span className="mb-1 block font-medium text-ink">Artikel</span>
-              <input
-                value={artikel}
-                onChange={(e) => setArtikel(e.target.value)}
-                placeholder="bijv. 9"
-                className="w-full rounded-lg border border-line px-3 py-2 text-sm"
-              />
-            </label>
-            <Button onClick={start} disabled={bezig} className="w-full sm:w-auto">
-              {bezig ? "Bezig…" : "Annoteer"}
-            </Button>
-          </div>
+                {handmatig ? "handmatig verbergen" : "handmatig invoeren"}
+              </button>
+            </div>
+
+            {handmatig && (
+              <div className="flex flex-col gap-2 rounded-xl border border-line bg-white p-4 sm:flex-row sm:items-end">
+                <label className="flex-1 text-sm">
+                  <span className="mb-1 block font-medium text-ink">Wet</span>
+                  <select
+                    value={bwbId}
+                    onChange={(e) => setBwbId(e.target.value)}
+                    className="w-full rounded-lg border border-line px-3 py-2 text-sm"
+                  >
+                    <option value="">— kies een wet —</option>
+                    {wetten.map((w) => (
+                      <option key={w.bwbId} value={w.bwbId}>
+                        {w.naam || w.bwbId}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="w-full text-sm sm:w-40">
+                  <span className="mb-1 block font-medium text-ink">Artikel</span>
+                  <input
+                    value={artikel}
+                    onChange={(e) => setArtikel(e.target.value)}
+                    placeholder="bijv. 9"
+                    className="w-full rounded-lg border border-line px-3 py-2 text-sm"
+                  />
+                </label>
+                <Button onClick={startHandmatig} disabled={bezig} className="w-full sm:w-auto">
+                  {bezig ? "Bezig…" : "Annoteer"}
+                </Button>
+              </div>
+            )}
+          </>
         )}
 
         {fout && <Melding type="fout">{fout}</Melding>}
@@ -242,7 +275,7 @@ export function WorkbenchClient() {
               ) : (
                 <div className="space-y-2">
                   {voorstellen.length === 0 && !bezig && (
-                    <p className="text-sm text-muted">Nog geen voorstellen. Klik “Annoteer”.</p>
+                    <p className="text-sm text-muted">Nog geen voorstellen.</p>
                   )}
                   {voorstellen.map((v, i) => (
                     <div key={i} className="rounded-xl border border-line bg-white p-3">

@@ -787,6 +787,31 @@ export interface BeslissingInvoer {
   wijziging?: Wijziging | null;
 }
 
+// --- Agent-ingang: intent-parse + artikeltekst uit de graaf (graph-qa) ------
+
+export interface IntentBegrepen {
+  bwbId: string;
+  artikel: string;
+  lid: string;
+  wetnaam: string;
+}
+
+/** Resultaat van de intent-parse: het begrepen doel + bevestiging, of een verduidelijkingsvraag. */
+export interface IntentResultaat {
+  begrepen: IntentBegrepen | null;
+  bevestiging: string;
+  vraag: string;
+}
+
+/** Artikeltekst uit de graaf (weergave == annotatie-corpus). */
+export interface GraafArtikel {
+  bwbId: string;
+  artikel: string;
+  citeertitel: string;
+  opschrift: string;
+  leden_teksten: { lid: string; tekst: string }[];
+}
+
 /** Eén voorgesteld element uit de graph-qa `/v1/annoteer`-SSE (nog niet gepersisteerd). */
 export interface VoorstelElement {
   klasse: string;
