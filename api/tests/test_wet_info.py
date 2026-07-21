@@ -138,6 +138,12 @@ async def test_artikel_info_route(client):
     assert body["leden"] == ["1", "2"]  # ongenummerd lid weggefilterd
     assert body["opschrift"] == "Artikel 3. Begripsbepalingen"
     assert body["snippet"].startswith("In deze wet wordt verstaan")
+    # leden_teksten draagt de VOLLEDIGE tekst (voor de annotatie-workbench), incl. het ongenummerde lid.
+    assert len(body["leden_teksten"]) == 3
+    assert body["leden_teksten"][0] == {
+        "lid": "1",
+        "tekst": "In deze wet wordt verstaan onder aangifte: de opgave van gegevens.",
+    }
 
 
 async def test_client_fout_wordt_404(client):

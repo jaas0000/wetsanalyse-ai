@@ -126,6 +126,10 @@ async def artikel_info(client: WettenbankClient, bwb_id: str, artikel: str) -> d
         "opschrift": data.get("sectie") or "",
         "pad": data.get("pad") or "",
         "leden": leden,
+        "leden_teksten": [
+            {"lid": str(lid.get("lid") or ""), "tekst": lid.get("tekst") or ""}
+            for lid in data.get("leden") or []
+        ],
         "snippet": _snippet(eerste_tekst),
     }
     _in_cache(_artikel_cache, key, info, _ARTIKEL_CAP)

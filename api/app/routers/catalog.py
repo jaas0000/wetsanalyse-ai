@@ -47,13 +47,19 @@ class WetStructuurOut(BaseModel):
     artikelen: list[ArtikelChoice]
 
 
+class LidTekst(BaseModel):
+    lid: str = ""
+    tekst: str = ""
+
+
 class ArtikelInfoOut(BaseModel):
     bwbId: str
     artikel: str
     citeertitel: str = ""
     opschrift: str = ""
     pad: str = ""
-    leden: list[str]
+    leden: list[str]                       # lid-nummers (voor de lid-keuzelijst)
+    leden_teksten: list[LidTekst] = []     # lid + volledige tekst (voor de annotatie-workbench)
     snippet: str = ""
 
 
