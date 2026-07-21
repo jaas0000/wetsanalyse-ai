@@ -482,6 +482,7 @@ export interface ArtikelInfo {
   opschrift: string;
   pad: string;
   leden: string[];
+  leden_teksten?: { lid: string; tekst: string }[];
   snippet: string;
 }
 

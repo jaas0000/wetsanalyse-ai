@@ -106,7 +106,12 @@ export function WorkbenchClient() {
     return voorstellen.map((v, i) => ({ id: `v${i}`, klasse: v.klasse, tekst: v.tekst }));
   }, [doc, voorstellen]);
 
-  const leden = info?.leden ?? [];
+  // De volledige lid-teksten (leden_teksten) voor het documentpaneel; val terug op de lid-nummers.
+  const leden = useMemo(() => {
+    const lt = info?.leden_teksten;
+    if (lt && lt.length) return lt.map((l) => (l.tekst ? `${l.lid}. ${l.tekst}` : "")).filter(Boolean);
+    return info?.leden ?? [];
+  }, [info]);
   const persistent = (doc?.elementen.length ?? 0) > 0;
 
   return (
