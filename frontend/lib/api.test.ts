@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { annoteerStream, isApiError, parseError } from "./api";
+import { annoteerAgentStream, annoteerStream, isApiError, parseError } from "./api";
 
 describe("parseError", () => {
   it("haalt een string-detail uit de JSON-body", async () => {
@@ -74,6 +74,39 @@ describe("annoteerStream", () => {
     expect(elementen).toEqual([element]);
     expect(status).toEqual(["bezig"]);
     expect(res).toEqual({ aantal: 1, verworpen: 0 });
+  });
+});
+
+describe("annoteerAgentStream", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("splitst token/sources/doel/element-frames (incl. \\r\\n) naar de juiste handlers", async () => {
+    const element = { klasse: "Rechtssubject", tekst: "de ontvanger" };
+    const frames = [
+      `data: ${JSON.stringify({ type: "token", content: "Antwoord " })}\r\n\r\n`,
+      `data: ${JSON.stringify({ type: "token", content: "hier." })}\r\n\r\n`,
+      `data: ${JSON.stringify({ type: "sources", sources: [{ label: "IW art. 9", uri: "x" }] })}\r\n\r\n`,
+      `data: ${JSON.stringify({ type: "doel", doel: { bwbId: "BWBR0004770", artikel: "9", lid: "1" } })}\r\n\r\n`,
+      `data: ${JSON.stringify({ type: "element", element })}\r\n\r\n`,
+      `data: ${JSON.stringify({ type: "done" })}\r\n\r\n`,
+    ];
+    vi.stubGlobal("fetch", vi.fn(async () => sseResponse(frames)));
+
+    let tekst = "";
+    let doel: unknown = null;
+    const elementen: unknown[] = [];
+    let bronnen: unknown[] = [];
+    await annoteerAgentStream("annoteer artikel 9 lid 1 IW", {
+      onToken: (t) => (tekst += t),
+      onSources: (b) => (bronnen = b),
+      onDoel: (d) => (doel = d),
+      onElement: (e) => elementen.push(e),
+    });
+
+    expect(tekst).toBe("Antwoord hier.");
+    expect(bronnen).toEqual([{ label: "IW art. 9", uri: "x" }]);
+    expect(doel).toEqual({ bwbId: "BWBR0004770", artikel: "9", lid: "1" });
+    expect(elementen).toEqual([element]);
   });
 });
 

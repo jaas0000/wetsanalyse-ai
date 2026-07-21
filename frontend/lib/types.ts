@@ -796,6 +796,12 @@ export interface AgentDoel {
   lid: string;
 }
 
+/** Een bron onder een agent-antwoord (uit het `sources`-SSE-event). */
+export interface Bron {
+  label: string;
+  uri: string;
+}
+
 /** Artikeltekst uit de graaf (weergave == annotatie-corpus). */
 export interface GraafArtikel {
   bwbId: string;

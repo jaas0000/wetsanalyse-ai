@@ -43,6 +43,7 @@ import type {
   AnnotatieDocument,
   AuditRecord,
   BeslissingInvoer,
+  Bron,
   DocumentCreate,
   DocumentSamenvatting,
   GraafArtikel,
@@ -520,21 +521,24 @@ export async function haalAudit(slug: string): Promise<AuditRecord[]> {
 }
 
 /** Stuur een vrije prompt naar de unified agent (BFF → graph-qa /v1/chat, SSE). De supervisor kiest
- *  de annotatie-worker, haalt de tekst via de tools op en streamt `doel` + `element`-events. Roept
- *  `onDoel` (opgehaald doel), `onElement` (per JAS-element) en `onStatus` (voortgang/samenvatting). */
+ *  per beurt `antwoord` (streamt tekst-`token`s + `sources`) of `annotatie` (`doel` + `element`).
+ *  `conversationId` houdt het gespreksgeheugen vast (thread_id). */
 export async function annoteerAgentStream(
   prompt: string,
   handlers: {
     onStatus?: (m: string) => void;
+    onToken?: (t: string) => void;
+    onSources?: (bronnen: Bron[]) => void;
     onDoel?: (doel: AgentDoel) => void;
-    onElement: (el: VoorstelElement) => void;
+    onElement?: (el: VoorstelElement) => void;
   },
+  conversationId?: string,
   signal?: AbortSignal,
 ): Promise<void> {
   const res = await fetch("/api/annotatie/agent", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ question: prompt }),
+    body: JSON.stringify({ question: prompt, conversation_id: conversationId }),
     signal,
   });
   if (!res.ok) throw await parseError(res);
@@ -560,13 +564,21 @@ export async function annoteerAgentStream(
         }
         if (!data) continue;
         const ev = veiligJson(data) as
-          | { type: string; message?: string; content?: string; doel?: AgentDoel; element?: VoorstelElement }
+          | {
+              type: string;
+              message?: string;
+              content?: string;
+              doel?: AgentDoel;
+              element?: VoorstelElement;
+              sources?: Bron[];
+            }
           | null;
         if (!ev) continue;
         if (ev.type === "status") handlers.onStatus?.(ev.message ?? "");
-        else if (ev.type === "token") handlers.onStatus?.(ev.content ?? "");
+        else if (ev.type === "token") handlers.onToken?.(ev.content ?? "");
+        else if (ev.type === "sources" && ev.sources) handlers.onSources?.(ev.sources);
         else if (ev.type === "doel" && ev.doel) handlers.onDoel?.(ev.doel);
-        else if (ev.type === "element" && ev.element) handlers.onElement(ev.element);
+        else if (ev.type === "element" && ev.element) handlers.onElement?.(ev.element);
         else if (ev.type === "error") throw { status: 502, detail: ev.message ?? "Agent mislukt." } as ApiError;
       }
     }
