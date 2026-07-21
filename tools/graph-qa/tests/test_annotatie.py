@@ -4,7 +4,7 @@ from __future__ import annotations
 import asyncio
 import json
 
-from agent.annotatie import annoteer_stream
+from agent.annotatie import _parse_elementen, annoteer_stream
 from fakes import FakeGraph, FakeLLM, make_settings, response, text_block
 
 CORPUS = "1. De ontvanger kan uitstel van betaling verlenen aan de belastingschuldige."
@@ -64,3 +64,37 @@ def test_onparsebare_json_levert_geen_elementen():
     events = _run(annoteer_stream("BWBR0004770", "9", settings=make_settings(), llm=llm, graph=graph))
     assert not any(e["type"] == "element" for e in events)
     assert next(e for e in events if e["type"] == "done")["aantal"] == 0
+
+
+# --- robuuste parser (_parse_elementen) ---
+
+def test_parse_fenced_json():
+    txt = '```json\n{"elementen": [{"klasse": "Rechtssubject", "tekst": "de ontvanger"}]}\n```'
+    els = _parse_elementen(txt)
+    assert len(els) == 1 and els[0]["klasse"] == "Rechtssubject"
+
+
+def test_parse_proza_rondom_json():
+    txt = 'Hier is mijn analyse:\n{"elementen": [{"klasse": "Voorwaarde", "tekst": "indien"}]}\nEinde.'
+    els = _parse_elementen(txt)
+    assert len(els) == 1 and els[0]["tekst"] == "indien"
+
+
+def test_parse_afgekapt_salvaget_complete_elementen():
+    # geldig element 1 (compleet), element 2 afgekapt op max_tokens (geen sluit-}) → salvage houdt 1.
+    txt = (
+        '{"elementen": [{"klasse": "Rechtssubject", "tekst": "de ontvanger", "toelichting": "wie"}, '
+        '{"klasse": "Rechtsbetrekking", "tekst": "kan uitstel'
+    )
+    els = _parse_elementen(txt)
+    assert len(els) == 1 and els[0]["klasse"] == "Rechtssubject"
+
+
+def test_parse_alternatieven_niet_als_element():
+    # een genest Alternatief-object (klasse+motivatie, geen tekst) telt niet als element.
+    txt = (
+        '{"elementen": [{"klasse": "Rechtsfeit", "tekst": "indienen", '
+        '"alternatieven": [{"klasse": "Rechtsbetrekking", "motivatie": "twijfel"}]}]}'
+    )
+    els = _parse_elementen(txt)
+    assert len(els) == 1 and els[0]["klasse"] == "Rechtsfeit"
