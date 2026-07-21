@@ -38,6 +38,14 @@ import type {
   WetResolveResult,
   WetStructuur,
 } from "./types";
+import type {
+  AnnotatieDocument,
+  AuditRecord,
+  BeslissingInvoer,
+  DocumentCreate,
+  DocumentSamenvatting,
+  VoorstelElement,
+} from "./types";
 import { pathSegment } from "./url";
 
 export async function parseError(res: Response): Promise<ApiError> {
@@ -452,4 +460,109 @@ export async function getLlmCalls(projectId: string): Promise<LlmCall[]> {
     cache: "no-store",
   });
   return json<LlmCall[]>(res);
+}
+
+// --- Annotatie-workbench -----------------------------------------------------
+
+export async function maakDocument(req: DocumentCreate): Promise<AnnotatieDocument> {
+  const res = await fetch("/api/annotatie/documenten", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(req),
+  });
+  return json<AnnotatieDocument>(res);
+}
+
+export async function lijstDocumenten(): Promise<DocumentSamenvatting[]> {
+  return json<DocumentSamenvatting[]>(await fetch("/api/annotatie/documenten", { cache: "no-store" }));
+}
+
+export async function haalDocument(slug: string): Promise<AnnotatieDocument> {
+  return json<AnnotatieDocument>(
+    await fetch(`/api/annotatie/documenten/${pathSegment(slug)}`, { cache: "no-store" }),
+  );
+}
+
+export async function verwijderDocument(slug: string): Promise<void> {
+  const res = await fetch(`/api/annotatie/documenten/${pathSegment(slug)}`, { method: "DELETE" });
+  if (!res.ok) throw await parseError(res);
+}
+
+export async function zetElementen(slug: string, elementen: VoorstelElement[]): Promise<AnnotatieDocument> {
+  const res = await fetch(`/api/annotatie/documenten/${pathSegment(slug)}/elementen`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ elementen }),
+  });
+  return json<AnnotatieDocument>(res);
+}
+
+export async function beslis(
+  slug: string,
+  elementId: string,
+  req: BeslissingInvoer,
+): Promise<AnnotatieDocument> {
+  const res = await fetch(
+    `/api/annotatie/documenten/${pathSegment(slug)}/elementen/${pathSegment(elementId)}/beslissing`,
+    { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(req) },
+  );
+  return json<AnnotatieDocument>(res);
+}
+
+export async function haalAudit(slug: string): Promise<AuditRecord[]> {
+  return json<AuditRecord[]>(
+    await fetch(`/api/annotatie/documenten/${pathSegment(slug)}/audit`, { cache: "no-store" }),
+  );
+}
+
+/** Stream de door de agent voorgestelde JAS-elementen (BFF → graph-qa, SSE). Roept `onElement` per
+ *  voorstel; geeft de tellingen terug op `done`. `onStatus` is optioneel (voortgangsregels). */
+export async function annoteerStream(
+  bwbId: string,
+  artikel: string,
+  handlers: { onStatus?: (m: string) => void; onElement: (el: VoorstelElement) => void },
+  signal?: AbortSignal,
+): Promise<{ aantal: number; verworpen: number }> {
+  const res = await fetch("/api/annotatie/annoteer", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ bwb_id: bwbId, artikel }),
+    signal,
+  });
+  if (!res.ok) throw await parseError(res);
+  if (!res.body) throw { status: 0, detail: "Geen annotatiestroom." } as ApiError;
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let resultaat = { aantal: 0, verworpen: 0 };
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let scheiding: number;
+      while ((scheiding = buffer.indexOf("\n\n")) !== -1) {
+        const frame = buffer.slice(0, scheiding);
+        buffer = buffer.slice(scheiding + 2);
+        let data = "";
+        for (const regel of frame.split("\n")) {
+          if (regel.startsWith(":")) continue; // heartbeat
+          if (regel.startsWith("data:")) data += regel.slice(5).trim();
+        }
+        if (!data) continue;
+        const ev = veiligJson(data) as
+          | { type: string; message?: string; element?: VoorstelElement; aantal?: number; verworpen?: number }
+          | null;
+        if (!ev) continue;
+        if (ev.type === "status") handlers.onStatus?.(ev.message ?? "");
+        else if (ev.type === "element" && ev.element) handlers.onElement(ev.element);
+        else if (ev.type === "done") resultaat = { aantal: ev.aantal ?? 0, verworpen: ev.verworpen ?? 0 };
+        else if (ev.type === "error") throw { status: 502, detail: ev.message ?? "Annotatie mislukt." } as ApiError;
+      }
+    }
+  } finally {
+    reader.cancel().catch(() => {});
+  }
+  return resultaat;
 }
