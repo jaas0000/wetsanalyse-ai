@@ -151,27 +151,45 @@ jobs:
       contents: read
 
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
+    
+deploy-azure:
+  needs: build-and-push
+  runs-on: ubuntu-latest
 
-      - name: Azure Login
-        uses: azure/login@v2
-        with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+  if: github.ref == 'refs/heads/master'
 
-      - name: Deploy Azure
-        run: |
-          python3 deploy/azure/gen-deploy.py \
-            "${{ secrets.AZURE_AI_KEY }}" \
-            --llm-api-base "${{ vars.LLM_API_BASE }}" \
-            --resource-group rg-wetsanalyse \
-            --run
+  permissions:
+    contents: read
+
+  steps:
+    - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+
+    - name: Check Azure configuration
+      if: ${{ secrets.AZURE_CLIENT_ID == '' }}
+      run: |
+        echo "Azure secrets ontbreken, deployment wordt overgeslagen."
+        exit 0
+
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+
+    - name: Azure Login
+      uses: azure/login@v2
+      with:
+        client-id: ${{ secrets.AZURE_CLIENT_ID }}
+        client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+        tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+        subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+    - name: Deploy Azure
+      run: |
+        python3 deploy/azure/gen-deploy.py \
+          "${{ secrets.AZURE_AI_KEY }}" \
+          --llm-api-base "${{ vars.LLM_API_BASE }}" \
+          --resource-group rg-wetsanalyse \
+          --run
 
   deploy-portainer:
     needs: build-and-push
