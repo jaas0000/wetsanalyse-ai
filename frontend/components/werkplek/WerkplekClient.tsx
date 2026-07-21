@@ -236,7 +236,7 @@ export function WerkplekClient() {
         />
       </div>
 
-      <div className="flex min-h-0 flex-col">
+      <div className="flex min-h-0 min-w-0 flex-col">
         {/* Thread — enige scrollende gebied; berichten in een gecentreerde leeskolom */}
         <div ref={lijstRef} className="min-h-0 flex-1 overflow-y-auto" aria-live="polite">
           <div className="mx-auto max-w-3xl space-y-6 px-1 py-6">
@@ -264,7 +264,7 @@ export function WerkplekClient() {
             {items.map((item) =>
               item.type === "user" ? (
                 <div key={item.id} className="flex justify-end">
-                  <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl bg-accent px-4 py-2.5 text-sm text-paper">
+                  <div className="max-w-[85%] whitespace-pre-wrap break-words rounded-2xl bg-accent px-4 py-2.5 text-sm text-paper">
                     {item.tekst}
                   </div>
                 </div>
@@ -272,7 +272,7 @@ export function WerkplekClient() {
                 <div key={item.id} className="text-sm text-ink">
                   {item.tekst ? <Markdown tekst={item.tekst} /> : <Punten />}
                   {item.bronnen && item.bronnen.length > 0 && (
-                    <div className="mt-2 text-xs text-muted">
+                    <div className="mt-2 break-words text-xs text-muted [overflow-wrap:anywhere]">
                       <span className="font-medium">Bronnen:</span>{" "}
                       {item.bronnen.map((b, i) => {
                         const href = wettenOverheidHref(b.uri);
@@ -280,7 +280,12 @@ export function WerkplekClient() {
                           <span key={i}>
                             {i > 0 && ", "}
                             {href ? (
-                              <a href={href} target="_blank" rel="noopener noreferrer" className="text-lint underline underline-offset-2">
+                              <a
+                                href={href}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-lint underline underline-offset-2 [overflow-wrap:anywhere]"
+                              >
                                 {b.label}
                               </a>
                             ) : (
