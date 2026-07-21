@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 import logging
 import re
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterator
 from typing import Any
 
 from .agent_common import run_sync
@@ -34,18 +34,64 @@ def _normaliseer(s: str) -> str:
     return _WS.sub(" ", s or "").strip()
 
 
+def _balanced_objecten(text: str) -> Iterator[str]:
+    """Yield elke gebalanceerde {…}-substring op élk niveau (string-/escape-bewust).
+
+    Elementen zitten genest in de wrapper `{"elementen": [ {…}, {…} ]}`, dus we moeten ook geneste
+    objecten opleveren. Een afgekapt (nooit-gesloten) object levert niets op — precies wat we willen.
+    """
+    stack: list[int] = []
+    in_str = False
+    escape = False
+    for i, ch in enumerate(text):
+        if in_str:
+            if escape:
+                escape = False
+            elif ch == "\\":
+                escape = True
+            elif ch == '"':
+                in_str = False
+            continue
+        if ch == '"':
+            in_str = True
+        elif ch == "{":
+            stack.append(i)
+        elif ch == "}":
+            if stack:
+                yield text[stack.pop() : i + 1]
+
+
 def _parse_elementen(text: str) -> list[dict[str, Any]]:
-    """Haal de `elementen`-lijst uit de (mogelijk in code-fences verpakte) LLM-JSON."""
+    """Haal de element-objecten uit de LLM-respons.
+
+    Fast-path: de hele respons als één JSON-object met `elementen`. Faalt dat (proza eromheen,
+    afgekapt op max_tokens, code-fences), dan **salvagen** we de losse gebalanceerde {…}-objecten die
+    op een element lijken (met `klasse` én `tekst`) — zo overleeft een afgekapt of omlijst antwoord
+    (het onvolledige laatste object valt weg, de complete blijven) i.p.v. dat álles wegvalt.
+    """
     raw = (text or "").strip()
-    if raw.startswith("```"):
-        raw = raw.split("```", 2)[1] if raw.count("```") >= 2 else raw.strip("`")
-        raw = raw[4:] if raw.lower().startswith("json") else raw
-    start, eind = raw.find("{"), raw.rfind("}")
-    if start != -1 and eind != -1:
-        raw = raw[start : eind + 1]
-    data = json.loads(raw)
-    elementen = data.get("elementen", []) if isinstance(data, dict) else []
-    return [e for e in elementen if isinstance(e, dict)]
+    kandidaat = raw
+    if kandidaat.startswith("```"):
+        kandidaat = kandidaat.strip("`")
+        if kandidaat.lower().startswith("json"):
+            kandidaat = kandidaat[4:]
+    s, e = kandidaat.find("{"), kandidaat.rfind("}")
+    if s != -1 and e > s:
+        try:
+            data = json.loads(kandidaat[s : e + 1])
+            if isinstance(data, dict) and isinstance(data.get("elementen"), list):
+                return [x for x in data["elementen"] if isinstance(x, dict)]
+        except json.JSONDecodeError:
+            pass
+    gered: list[dict[str, Any]] = []
+    for obj in _balanced_objecten(raw):
+        try:
+            d = json.loads(obj)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(d, dict) and "klasse" in d and "tekst" in d:
+            gered.append(d)
+    return gered
 
 
 def _verwerk(
@@ -55,11 +101,9 @@ def _verwerk(
     norm_corpus = _normaliseer(corpus)
     voorstellen: list[AnnotatieVoorstel] = []
     verworpen = 0
-    try:
-        rauw = _parse_elementen(llm_text)
-    except (json.JSONDecodeError, ValueError):
-        logger.warning("annotatie-JSON onparsebaar")
-        return [], 0
+    rauw = _parse_elementen(llm_text)
+    if not rauw and llm_text.strip():
+        logger.warning("annotatie: geen element-objecten uit de respons gehaald")
 
     for e in rauw:
         klasse = str(e.get("klasse", "")).strip()
@@ -142,7 +186,7 @@ async def annoteer_stream(
             resp = await run_sync(
                 lambda: llm.create(
                     model=settings.llm_model,
-                    max_tokens=4096,
+                    max_tokens=8192,
                     system=annotatie_systeemprompt(),
                     tools=[],
                     messages=[{"role": "user", "content": annotatie_userprompt(bwb_id, artikel, corpus)}],
@@ -158,7 +202,8 @@ async def annoteer_stream(
             logger.info(
                 "annotatie klaar",
                 extra={"categorie": "functioneel", "annotatie_bwb_id": bwb_id, "annotatie_artikel": artikel,
-                       "annotatie_elementen": len(voorstellen), "annotatie_verworpen": verworpen},
+                       "annotatie_elementen": len(voorstellen), "annotatie_verworpen": verworpen,
+                       "stop_reason": getattr(resp, "stop_reason", None), "respons_lengte": len(llm_text)},
             )
             yield {"type": "done", "aantal": len(voorstellen), "verworpen": verworpen}
     except Exception as exc:
