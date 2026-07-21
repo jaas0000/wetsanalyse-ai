@@ -58,6 +58,28 @@ def test_grounded_elementen_en_verwerpt_hallucinatie_en_ongeldige_klasse():
     assert graph.closed
 
 
+MULTI_CORPUS = (
+    "?tekst\t?jci\t?lid\t?lidnummer\t?lidtekst\n"
+    '\t"jci"\t<https://ipalm.nl/bwb/BWBR0004770/artikel/9/lid/1>\t"1"\t"De ontvanger verleent uitstel."@nl\n'
+    '\t"jci"\t<https://ipalm.nl/bwb/BWBR0004770/artikel/9/lid/2>\t"2"\t"Bij ministeriele regeling."@nl'
+)
+
+
+def test_lid_scoping_beperkt_corpus_en_vindplaats():
+    # De agent stelt fragmenten uit béide leden voor; met lid="1" is alleen lid 1 in de corpus →
+    # het lid-2-fragment is niet grounded (verworpen) en de vindplaats eindigt op "lid 1".
+    llm = _llm_met([
+        {"klasse": "Rechtssubject", "tekst": "De ontvanger", "toelichting": "", "alternatieven": []},
+        {"klasse": "Rechtsfeit", "tekst": "ministeriele regeling", "toelichting": "", "alternatieven": []},
+    ])
+    graph = FakeGraph(result=MULTI_CORPUS)
+    events = _run(annoteer_stream("BWBR0004770", "9", "1", settings=make_settings(), llm=llm, graph=graph))
+    elementen = [e["element"] for e in events if e["type"] == "element"]
+    assert len(elementen) == 1  # alleen het lid-1-fragment is grounded
+    assert elementen[0]["klasse"] == "Rechtssubject"
+    assert elementen[0]["vindplaats"] == "BWBR0004770 art. 9 lid 1"
+
+
 def test_leeg_artikel_geeft_error():
     graph = FakeGraph(result="")
     events = _run(annoteer_stream("BWBR0004770", "999", settings=make_settings(), llm=_llm_met([]), graph=graph))

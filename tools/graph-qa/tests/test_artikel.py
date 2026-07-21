@@ -26,6 +26,17 @@ def test_haal_artikel_sorteert_numeriek_en_leest_citeertitel():
     assert "10. Tiende lid." in data["corpus"]
 
 
+def test_haal_artikel_lid_scoping():
+    data = haal_artikel_sync("BWBR0004770", "9", FakeGraph(results=_results), lid="2")
+    assert [ld["lid"] for ld in data["leden_teksten"]] == ["2"]
+    assert data["corpus"] == "2. Tweede lid."
+
+
+def test_corpus_lid_scoping_1_niet_10():
+    # '1' mag niet ook lid '10' matchen (numerieke vergelijking, geen prefix).
+    assert artikel_corpus("BWBR0004770", "9", FakeGraph(results=_results), lid="1") == "1. Eerste lid."
+
+
 def test_corpus_zonder_leden_valt_terug_op_artikeltekst():
     tsv = '?tekst\t?jci\t?lid\t?lidnummer\t?lidtekst\n"De hele artikeltekst."@nl\t"jci"\t\t\t'
     assert artikel_corpus("BWBR0000001", "1", FakeGraph(result=tsv)) == "De hele artikeltekst."

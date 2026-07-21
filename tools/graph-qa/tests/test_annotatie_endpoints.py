@@ -39,7 +39,7 @@ def test_artikel_endpoint(monkeypatch):
     monkeypatch.setattr("agent.adapters.graphdb_graph.make_graph", lambda _s: _Graph())
     monkeypatch.setattr(
         "agent.artikel.haal_artikel_sync",
-        lambda bwb, art, graph: {
+        lambda bwb, art, graph, lid=None: {
             "bwbId": bwb, "artikel": art, "citeertitel": "Invorderingswet 1990",
             "opschrift": "", "leden_teksten": [{"lid": "1", "tekst": "Eerste lid."}],
         },

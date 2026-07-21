@@ -73,20 +73,20 @@ export function WorkbenchClient() {
   }
 
   /** Kern: maak document + haal graaf-tekst + stream annotatie + persist. `voorafGraaf` hergebruikt de
-   *  al opgehaalde tekst uit de agent-ingang (geen dubbele fetch). */
-  async function annoteerDoel(doelBwb: string, doelArt: string, voorafGraaf?: GraafArtikel) {
+   *  al opgehaalde tekst uit de agent-ingang (geen dubbele fetch). Met `doelLid` blijft alles bij één lid. */
+  async function annoteerDoel(doelBwb: string, doelArt: string, doelLid: string, voorafGraaf?: GraafArtikel) {
     setFout(null);
     setBezig(true);
     setVoorstellen([]);
     setStatus("Artikel ophalen…");
     try {
-      const graaf = voorafGraaf ?? (await haalArtikelGraaf(doelBwb, doelArt));
+      const graaf = voorafGraaf ?? (await haalArtikelGraaf(doelBwb, doelArt, doelLid));
       if (!graaf.leden_teksten.length) {
         setStatus("");
-        setFout("Dit artikel staat (nog) niet in de graaf.");
+        setFout(`Dit staat (nog) niet in de graaf: artikel ${doelArt}${doelLid ? ` lid ${doelLid}` : ""}.`);
         return;
       }
-      const document = await maakDocument({ bwbId: doelBwb, artikel: doelArt });
+      const document = await maakDocument({ bwbId: doelBwb, artikel: doelArt, lid: doelLid || null });
       setBwbId(doelBwb);
       setArtikel(doelArt);
       setDoc(document);
@@ -99,6 +99,7 @@ export function WorkbenchClient() {
       await annoteerStream(
         doelBwb,
         doelArt,
+        doelLid,
         {
           onStatus: setStatus,
           onElement: (el) => {
@@ -123,7 +124,7 @@ export function WorkbenchClient() {
   }
 
   function startVanuitAgent(doel: IntentBegrepen, graaf: GraafArtikel) {
-    annoteerDoel(doel.bwbId, doel.artikel, graaf);
+    annoteerDoel(doel.bwbId, doel.artikel, doel.lid, graaf);
   }
 
   function startHandmatig() {
@@ -131,7 +132,7 @@ export function WorkbenchClient() {
       setFout("Kies een wet en vul een artikelnummer in.");
       return;
     }
-    annoteerDoel(bwbId, artikel.trim());
+    annoteerDoel(bwbId, artikel.trim(), "");
   }
 
   async function openDocument(slug: string) {
@@ -145,7 +146,7 @@ export function WorkbenchClient() {
       setBwbId(document.bwbId);
       setArtikel(document.artikel);
       setModus("open");
-      setInfo(await haalArtikelGraaf(document.bwbId, document.artikel));
+      setInfo(await haalArtikelGraaf(document.bwbId, document.artikel, document.lid));
     } catch (e) {
       setFout(foutTekst(e));
     } finally {
@@ -258,7 +259,7 @@ export function WorkbenchClient() {
         {info && (
           <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
             <DocumentPaneel
-              opschrift={`${info.citeertitel || bwbId} — artikel ${info.artikel}`}
+              opschrift={`${info.citeertitel || bwbId} — artikel ${info.artikel}${doc?.lid ? ` lid ${doc.lid}` : ""}`}
               leden={leden}
               elementen={markeerbaar}
               actiefId={actiefId}

@@ -191,17 +191,19 @@ async def annoteer_intent(
 async def artikel(
     bwb_id: str,
     artikel: str,
+    lid: str | None = None,
     _rl: None = Depends(_rate_limit),
     _auth: None = Depends(_check_auth),
 ) -> ArtikelResult:
-    """Artikeltekst uit de graaf voor het workbench-documentpaneel (weergave == annotatie-corpus)."""
+    """Artikeltekst uit de graaf voor het workbench-documentpaneel (weergave == annotatie-corpus).
+    Met `lid` beperk je de tekst tot dat ene lid."""
     from agent.adapters.graphdb_graph import make_graph
     from agent.artikel import haal_artikel_sync
 
     graph = make_graph(settings)
     try:
         await run_sync(graph.initialize)
-        data = await run_sync(haal_artikel_sync, bwb_id, artikel, graph)
+        data = await run_sync(haal_artikel_sync, bwb_id, artikel, graph, lid)
     finally:
         graph.close()
     return ArtikelResult.model_validate(data)

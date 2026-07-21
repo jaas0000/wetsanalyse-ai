@@ -43,8 +43,10 @@ UITVOER — geef UITSLUITEND geldige JSON terug, zonder omliggende tekst of code
 `alternatieven` mag een lege lijst zijn. Neem geen enkel element op waarvan `tekst` niet letterlijk in de aangeleverde artikeltekst voorkomt."""
 
 
-def annotatie_userprompt(bwb_id: str, artikel: str, artikeltekst: str) -> str:
+def annotatie_userprompt(bwb_id: str, artikel: str, artikeltekst: str, lid: str | None = None) -> str:
+    plek = f"artikel {artikel}" + (f" lid {lid}" if lid else "")
+    scope = f" Blijf binnen lid {lid}." if lid else ""
     return (
-        f"Regeling {bwb_id}, artikel {artikel}. Markeer en classificeer de JAS-elementen in "
-        f"onderstaande artikeltekst.\n\n--- ARTIKELTEKST ---\n{artikeltekst}\n--- EINDE ARTIKELTEKST ---"
+        f"Regeling {bwb_id}, {plek}. Markeer en classificeer de JAS-elementen in onderstaande "
+        f"tekst.{scope}\n\n--- ARTIKELTEKST ---\n{artikeltekst}\n--- EINDE ARTIKELTEKST ---"
     )

@@ -95,9 +95,13 @@ def _parse_elementen(text: str) -> list[dict[str, Any]]:
 
 
 def _verwerk(
-    llm_text: str, corpus: str, bwb_id: str, artikel: str
+    llm_text: str, corpus: str, bwb_id: str, artikel: str, scope_lid: str | None = None
 ) -> tuple[list[AnnotatieVoorstel], int]:
-    """Parse de LLM-JSON, valideer klasse + brongetrouwheid, bereken span/vindplaats."""
+    """Parse de LLM-JSON, valideer klasse + brongetrouwheid, bereken span/vindplaats.
+
+    Is een `scope_lid` gezet (annotatie tot één lid), dan wint dat voor de vindplaats — elke markering
+    verwijst dan naar dat lid, ook als het model het lid-veld leeg laat.
+    """
     norm_corpus = _normaliseer(corpus)
     voorstellen: list[AnnotatieVoorstel] = []
     verworpen = 0
@@ -114,7 +118,7 @@ def _verwerk(
         if klasse not in GELDIGE_JAS_KLASSEN or idx < 0:
             verworpen += 1
             continue
-        lid = str(e.get("lid", "")).strip()
+        lid = str(scope_lid).strip() if scope_lid and str(scope_lid).strip() else str(e.get("lid", "")).strip()
         alts = [
             AnnotatieAlternatief(klasse=str(a.get("klasse", "")).strip(), motivatie=str(a.get("motivatie", "")).strip())
             for a in e.get("alternatieven", [])
@@ -179,9 +183,10 @@ async def annoteer_stream(
             yield {"type": "status", "message": f"Artikel {artikel} ophalen..."}
             # Eén bron: dezelfde (gecleande) tekst die het documentpaneel toont, is ook de corpus
             # waartegen de brongetrouwheid wordt gecheckt.
-            corpus = await run_sync(artikel_corpus, bwb_id, artikel, graph)
+            corpus = await run_sync(artikel_corpus, bwb_id, artikel, graph, lid)
             if not (corpus or "").strip():
-                yield {"type": "error", "message": f"Geen tekst gevonden voor {bwb_id} artikel {artikel}."}
+                plek = f"artikel {artikel}" + (f" lid {lid}" if lid else "")
+                yield {"type": "error", "message": f"Geen tekst gevonden voor {bwb_id} {plek}."}
                 return
 
             yield {"type": "status", "message": "Agent annoteert volgens het JAS..."}
@@ -191,11 +196,11 @@ async def annoteer_stream(
                     max_tokens=8192,
                     system=annotatie_systeemprompt(),
                     tools=[],
-                    messages=[{"role": "user", "content": annotatie_userprompt(bwb_id, artikel, corpus)}],
+                    messages=[{"role": "user", "content": annotatie_userprompt(bwb_id, artikel, corpus, lid)}],
                 )
             )
             llm_text = "".join(b.text for b in resp.content if b.type == "text")
-            voorstellen, verworpen = _verwerk(llm_text, corpus, bwb_id, artikel)
+            voorstellen, verworpen = _verwerk(llm_text, corpus, bwb_id, artikel, lid)
 
             for v in voorstellen:
                 yield {"type": "element", "element": v.model_dump()}
