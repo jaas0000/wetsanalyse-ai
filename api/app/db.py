@@ -195,6 +195,41 @@ llm_calls = Table(
     Index("ix_llm_calls_project_slug_id", "project_slug", "id"),
 )
 
+# --- Annotatie-domein (wetsanalyse-workbench) ---------------------------------
+# Vers domein, los van de analyse-tabellen. Eén rij per bron-document; de elementen (met hun
+# review-levenscyclus + beslissingen) staan als JSON — het document draagt de HUIDIGE staat.
+annotatie_documenten = Table(
+    "annotatie_documenten",
+    metadata,
+    Column("slug", String(255), primary_key=True),
+    Column("client_id", String(128), nullable=False, default=""),
+    Column("werkgebied", Text, nullable=False, default=""),
+    Column("bwbId", String(64), nullable=False, default=""),
+    Column("artikel", String(32), nullable=False, default=""),
+    Column("lid", String(32), nullable=False, default=""),
+    Column("status", String(24), nullable=False, default="in_review"),
+    Column("elementen", _JSON, nullable=False, default=list),
+    Column("created", _DT, nullable=False),
+    Column("updated", _DT, nullable=False),
+    Index("ix_annotatie_docs_client_updated", "client_id", "updated"),
+)
+
+# Append-only audit trail: de onwijzigbare geschiedenis (event-log) náást de huidige documentstaat.
+# Alleen inserts; nooit update/delete. De tijdlijn = ORDER BY id.
+annotatie_audit = Table(
+    "annotatie_audit",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("document_slug", String(255), nullable=False),
+    Column("client_id", String(128), nullable=False, default=""),
+    Column("actor", String(128), nullable=False, default=""),
+    Column("actie", String(64), nullable=False, default=""),
+    Column("element_id", String(64), nullable=True),
+    Column("detail", _JSON, nullable=True),
+    Column("tijdstip", _DT, nullable=False),
+    Index("ix_annotatie_audit_doc_id", "document_slug", "id"),
+)
+
 
 # --- engine-beheer -------------------------------------------------------------
 
