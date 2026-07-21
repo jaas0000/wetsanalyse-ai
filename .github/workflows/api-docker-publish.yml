@@ -135,6 +135,62 @@ jobs:
           severity: CRITICAL
           exit-code: "1"
 
+  deploy-azure:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    if: github.ref == 'refs/heads/master'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy Azure
+        run: |
+          python3 deploy/azure/gen-deploy.py \
+            "${{ secrets.AZURE_AI_KEY }}" \
+            --llm-api-base "${{ vars.LLM_API_BASE }}" \
+            --resource-group rg-wetsanalyse \
+            --run
+
+  deploy-portainer:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    env:
+      PORTAINER_URL: ${{ secrets.PORTAINER_URL }}
+      PORTAINER_API_KEY: ${{ secrets.PORTAINER_API_KEY }}
+      PORTAINER_STACK_ID: ${{ vars.PORTAINER_API_STACK_ID }}
+      PORTAINER_ENDPOINT_ID: "1"
+      PROXY_NETWORK: "homeinfra_internal"
+
+      LLM_PROVIDER: ${{ vars.LLM_PROVIDER }}
+      LLM_MODEL: ${{ vars.LLM_MODEL }}
+      LLM_API_BASE: ${{ vars.LLM_API_BASE }}
+      LLM_API_VERSION: ${{ vars.LLM_API_VERSION }}
+      SECRETS_DIR: ${{ vars.SECRETS_DIR }}
+
+    if: github.ref == 'refs/heads/master'
+
+    steps:
+      - uses: actions/checkout@v4
       - name: Portainer redeploy via stack-update (pull :latest)
         if: ${{ github.ref == 'refs/heads/master' && env.PORTAINER_API_KEY != '' && env.PORTAINER_STACK_ID != '' }}
         env:
@@ -206,3 +262,5 @@ jobs:
           done
           echo "::error::Service niet gezond na redeploy. Controleer de containerlogs in Portainer."
           exit 1
+
+
