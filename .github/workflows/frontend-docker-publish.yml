@@ -58,6 +58,11 @@ jobs:
       PORTAINER_ENDPOINT_ID: "1"
       PROXY_NETWORK: "homeinfra_internal"
       SECRETS_DIR: ${{ vars.SECRETS_DIR }}
+      # Azure — alleen voor containerapp update (infra via azure-infra.yml).
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
@@ -153,3 +158,18 @@ jobs:
           # PUT (idempotente retry) + convergentie: orphan-'Created'-containers opruimen en bevestigen
           # dat er precies één verse, gezonde container op de nieuwe digest draait. Zie het script.
           bash .github/scripts/portainer-deploy.sh /tmp/payload.json wetsanalyse-frontend "$IMAGE_DIGEST_REF" "$HEALTH_URL"
+
+      - name: Azure Container App update (frontend)
+        if: ${{ github.ref == 'refs/heads/master' && env.AZURE_CLIENT_ID != '' && env.AZURE_CLIENT_SECRET != '' }}
+        env:
+          IMAGE_DIGEST_REF: ${{ env.IMAGE }}@${{ steps.build.outputs.digest }}
+        run: |
+          az login --service-principal \
+            --username "$AZURE_CLIENT_ID" \
+            --password "$AZURE_CLIENT_SECRET" \
+            --tenant "$AZURE_TENANT_ID"
+          az account set --subscription "$AZURE_SUBSCRIPTION_ID"
+          az containerapp update \
+            --name wetsanalyse-frontend \
+            --resource-group rg-wetsanalyse \
+            --image "$IMAGE_DIGEST_REF"

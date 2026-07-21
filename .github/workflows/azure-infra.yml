@@ -1,0 +1,55 @@
+# Voorziet de volledige Azure-infrastructuur via Bicep (idempotent).
+# Draait alleen bij wijzigingen in deploy/azure/** (Bicep-template, gen-deploy.py, etc.)
+# of handmatig via workflow_dispatch.
+# Per-component image-updates gaan via az containerapp update in de eigen docker-publish workflows.
+
+name: azure-infra
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - "deploy/azure/**"
+      - ".github/workflows/azure-infra.yml"
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    env:
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+      AZURE_AI_KEY: ${{ secrets.AZURE_AI_KEY }}
+      LLM_API_BASE: ${{ vars.LLM_API_BASE }}
+      AZURE_LOCATION: ${{ vars.AZURE_LOCATION }}
+
+    if: github.ref == 'refs/heads/master'
+
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+
+      - name: Azure infra-deployment (Bicep)
+        if: ${{ env.AZURE_CLIENT_ID != ''
+            && env.AZURE_CLIENT_SECRET != ''
+            && env.AZURE_AI_KEY != ''
+            && env.LLM_API_BASE != '' }}
+        run: |
+          az login --service-principal \
+            --username "$AZURE_CLIENT_ID" \
+            --password "$AZURE_CLIENT_SECRET" \
+            --tenant "$AZURE_TENANT_ID"
+          az account set --subscription "$AZURE_SUBSCRIPTION_ID"
+          python3 deploy/azure/gen-deploy.py \
+            --llm-api-base "$LLM_API_BASE" \
+            --resource-group rg-wetsanalyse \
+            --location "${AZURE_LOCATION:-northeurope}" \
+            --run
