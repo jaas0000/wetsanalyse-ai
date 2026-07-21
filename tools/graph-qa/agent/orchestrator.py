@@ -53,6 +53,39 @@ def _doel_uit_json(text: str) -> dict[str, str]:
     return {"bwbId": "", "artikel": "", "lid": ""}
 
 
+def _doel_uit_toolcalls(messages: list[dict[str, Any]]) -> dict[str, str]:
+    """Gezaghebbend doel = de LAATSTE get_lid/get_artikel-tool-call die de agent deed (wat hij écht
+    ophaalde), i.p.v. de zelf-gerapporteerde JSON — die het lid soms leeglaat. get_artikel heeft geen
+    lid → lid="" (heel-artikel-annotatie blijft heel artikel). Leeg als er geen fetch-call was."""
+    doel = {"bwbId": "", "artikel": "", "lid": ""}
+    for msg in messages:
+        if msg.get("role") != "assistant":
+            continue
+        content = msg.get("content")
+        if not isinstance(content, list):
+            continue
+        for blok in content:
+            if (
+                isinstance(blok, dict)
+                and blok.get("type") == "tool_use"
+                and blok.get("name") in ("get_lid", "get_artikel")
+            ):
+                inp = blok.get("input") or {}
+                doel = {
+                    "bwbId": str(inp.get("bwb_id", "")).strip(),
+                    "artikel": str(inp.get("artikel", "")).strip(),
+                    "lid": str(inp.get("lid", "")).strip(),
+                }
+    return doel
+
+
+def _bepaal_doel(state: State) -> dict[str, str]:
+    """Combineer: neem de tool-call als bron (gezaghebbend) en vul lege velden aan uit de JSON."""
+    uit_tool = _doel_uit_toolcalls(state.get("messages", []))
+    uit_json = _doel_uit_json(state.get("answer", ""))
+    return {k: uit_tool[k] or uit_json[k] for k in ("bwbId", "artikel", "lid")}
+
+
 def _corpus_uit_trace(source_trace: list[tuple[str, str]]) -> str:
     """Reconstrueer de opgehaalde artikeltekst uit de get_lid/get_artikel-resultaten in de trace,
     zodat de brongetrouwheid-check dezelfde tekst gebruikt die de agent zag."""
@@ -235,7 +268,7 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
         tekst en emit de doel-/element-events. Geen QA-grounding — dit is geen tekstantwoord."""
         writer = get_stream_writer()
         antwoord = state.get("answer", "")
-        doel = _doel_uit_json(antwoord)
+        doel = _bepaal_doel(state)
         corpus = _corpus_uit_trace(state.get("source_trace", []))
         voorstellen, verworpen = _verwerk(
             antwoord, corpus, doel.get("bwbId", ""), doel.get("artikel", ""), doel.get("lid", "")

@@ -58,6 +58,26 @@ def test_supervisor_routeert_naar_annotatie_en_grondt_lid():
     assert graph.closed
 
 
+def test_doel_lid_komt_uit_toolcall_ook_als_json_leeg():
+    # Het model laat doel.lid leeg, maar riep get_lid(lid="1") aan → doel.lid moet toch "1" zijn
+    # (anders haalt de viewer het hele artikel op).
+    json_zonder_lid = json.dumps({
+        "doel": {"bwbId": "BWBR0004770", "artikel": "9", "lid": ""},
+        "elementen": [{"klasse": "Rechtssubject", "tekst": "De ontvanger", "lid": "1", "toelichting": "", "alternatieven": []}],
+    })
+    llm = FakeLLM([
+        response([text_block("WORKERS: annotatie\nPLAN: annoteer art 9 lid 1")], "end_turn"),
+        response([tool_block("t1", "get_lid", {"bwb_id": "BWBR0004770", "artikel": "9", "lid": "1"})], "tool_use"),
+        response([text_block(json_zonder_lid)], "end_turn"),
+    ])
+    events = _run(answer_stream(
+        "annoteer artikel 9 lid 1 IW", settings=make_settings(enable_decomposition=True),
+        llm=llm, graph=FakeGraph(result=LID_TSV),
+    ))
+    assert next(e for e in events if e["type"] == "doel")["doel"]["lid"] == "1"
+    assert [e["element"] for e in events if e["type"] == "element"][0]["vindplaats"] == "BWBR0004770 art. 9 lid 1"
+
+
 def test_gewone_vraag_blijft_antwoord_geen_annotatie():
     # Een QA-vraag (geen WORKERS-regel → backward-compat antwoord) routeert niet naar annotatie.
     llm = FakeLLM([
