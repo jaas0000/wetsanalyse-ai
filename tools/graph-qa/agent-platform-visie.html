@@ -1,0 +1,860 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>De Agent als Centraal Platform — Belastingdienst</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bd-blue:    #0072CE;
+  --bd-blue2:   #005AA0;
+  --neon:       #00D4FF;
+  --neon2:      #0099FF;
+  --neon-glow:  rgba(0,212,255,0.35);
+  --accent:     #7B2FFF;
+  --accent2:    #5C1FCC;
+  --green:      #00E5A0;
+  --orange:     #FF8C00;
+  --red:        #FF3A5C;
+  --bg:         #020B18;
+  --bg2:        #040F20;
+  --glass:      rgba(0,30,60,0.55);
+  --glass2:     rgba(0,114,206,0.08);
+  --border:     rgba(0,212,255,0.18);
+  --border2:    rgba(0,114,206,0.25);
+  --text:       #E8F4FF;
+  --text-dim:   #7FA8C8;
+  --text-muted: #3D6280;
+  --white:      #FFFFFF;
+}
+
+html, body { width:100%; height:100%; overflow:hidden; background:var(--bg); color:var(--text); font-family:'Segoe UI',system-ui,-apple-system,sans-serif; }
+
+.app { display:grid; grid-template-rows:54px 1fr 52px; height:100vh; }
+
+.bg-layer { position:fixed; inset:0; z-index:0; overflow:hidden; }
+.bg-grid { position:absolute; inset:0; background-image: linear-gradient(rgba(0,114,206,0.06) 1px,transparent 1px), linear-gradient(90deg,rgba(0,114,206,0.06) 1px,transparent 1px); background-size:48px 48px; }
+.bg-glow1 { position:absolute; width:800px; height:800px; border-radius:50%; background:radial-gradient(circle,rgba(0,114,206,0.12) 0%,transparent 70%); top:-200px; left:-200px; }
+.bg-glow2 { position:absolute; width:600px; height:600px; border-radius:50%; background:radial-gradient(circle,rgba(123,47,255,0.10) 0%,transparent 70%); bottom:-100px; right:-100px; }
+.bg-glow3 { position:absolute; width:400px; height:400px; border-radius:50%; background:radial-gradient(circle,rgba(0,212,255,0.07) 0%,transparent 70%); top:40%; left:55%; }
+.particles { position:absolute; inset:0; }
+.particle { position:absolute; border-radius:50%; background:var(--neon); opacity:0; animation:float linear infinite; }
+@keyframes float { 0%{opacity:0;transform:translateY(0) scale(1);} 10%{opacity:0.6;} 90%{opacity:0.3;} 100%{opacity:0;transform:translateY(-120vh) scale(0.3);} }
+
+.topbar { position:relative; z-index:10; display:flex; align-items:center; justify-content:space-between; padding:0 28px; background:rgba(2,11,24,0.85); backdrop-filter:blur(12px); border-bottom:1px solid var(--border); }
+.logo-block { display:flex; align-items:center; gap:12px; }
+.logo-mark { width:32px; height:32px; background:linear-gradient(135deg,var(--bd-blue),var(--neon)); border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:0.7rem; font-weight:900; color:white; letter-spacing:-0.02em; box-shadow:0 0 16px rgba(0,212,255,0.4); }
+.logo-text { display:flex; flex-direction:column; gap:1px; }
+.logo-text .org { font-size:0.62rem; font-weight:700; color:var(--neon); letter-spacing:0.12em; text-transform:uppercase; }
+.logo-text .app { font-size:0.72rem; font-weight:600; color:var(--text-dim); }
+.nav-dots { display:flex; gap:6px; align-items:center; }
+.ndot { width:7px; height:7px; border-radius:50%; background:var(--text-muted); cursor:pointer; transition:all 0.3s; border:1px solid transparent; }
+.ndot.active { background:var(--neon); box-shadow:0 0 8px var(--neon-glow); border-color:rgba(0,212,255,0.5); }
+.ndot:hover { background:var(--neon2); }
+.slide-id { font-size:0.68rem; color:var(--text-muted); font-variant-numeric:tabular-nums; min-width:48px; text-align:right; }
+
+.slides-wrap { position:relative; z-index:5; overflow:hidden; perspective:1200px; }
+.slide { position:absolute; inset:0; padding:28px 48px 24px; display:none; flex-direction:column; gap:16px; overflow-y:auto; opacity:0; transform:translateZ(40px) rotateX(2deg); transition:opacity 0.4s ease,transform 0.4s ease; }
+.slide.active { display:flex; animation:slideIn 0.4s ease forwards; }
+@keyframes slideIn { from{opacity:0;transform:translateZ(40px) rotateX(2deg);} to{opacity:1;transform:translateZ(0) rotateX(0);} }
+
+.bottombar { position:relative; z-index:10; display:flex; align-items:center; justify-content:space-between; padding:0 28px; background:rgba(2,11,24,0.85); backdrop-filter:blur(12px); border-top:1px solid var(--border); }
+.nav-btn { display:flex; align-items:center; gap:6px; background:var(--glass); border:1px solid var(--border); border-radius:8px; color:var(--text-dim); font-size:0.74rem; font-weight:600; padding:6px 16px; cursor:pointer; transition:all 0.25s; backdrop-filter:blur(8px); }
+.nav-btn:hover:not(:disabled) { background:rgba(0,114,206,0.15); border-color:var(--neon); color:var(--neon); box-shadow:0 0 12px rgba(0,212,255,0.15); }
+.nav-btn:disabled { opacity:0.25; cursor:default; }
+.progress-bar { flex:1; height:2px; background:rgba(0,212,255,0.1); border-radius:2px; margin:0 20px; overflow:hidden; }
+.progress-fill { height:100%; background:linear-gradient(90deg,var(--bd-blue),var(--neon)); border-radius:2px; transition:width 0.4s ease; box-shadow:0 0 8px var(--neon-glow); }
+
+.slide-label { display:inline-flex; align-items:center; gap:6px; font-size:0.6rem; font-weight:700; letter-spacing:0.14em; text-transform:uppercase; color:var(--neon); padding:3px 10px; border-radius:20px; background:rgba(0,212,255,0.07); border:1px solid rgba(0,212,255,0.2); width:fit-content; }
+.slide-label .dot { width:5px; height:5px; border-radius:50%; background:var(--neon); animation:pulse 2s infinite; }
+@keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:0.3;} }
+
+h1 { font-size:clamp(1.8rem,3vw,2.6rem); font-weight:800; line-height:1.15; letter-spacing:-0.02em; background:linear-gradient(135deg,#fff 30%,var(--neon) 100%); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
+h2 { font-size:clamp(1.1rem,2vw,1.4rem); font-weight:700; line-height:1.3; background:linear-gradient(120deg,var(--text) 40%,var(--neon) 100%); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; margin-bottom:6px; }
+h3 { font-size:0.78rem; font-weight:700; color:var(--neon); letter-spacing:0.05em; margin-bottom:8px; text-transform:uppercase; }
+p { font-size:0.79rem; line-height:1.7; color:var(--text-dim); }
+ul { list-style:none; }
+ul li { font-size:0.77rem; line-height:1.6; color:var(--text-dim); padding-left:16px; position:relative; margin-bottom:3px; }
+ul li::before { content:''; position:absolute; left:0; top:0.55em; width:5px; height:5px; border-radius:50%; background:var(--neon); box-shadow:0 0 6px var(--neon-glow); }
+strong { color:var(--text); font-weight:600; }
+code { font-family:'Cascadia Code','Fira Code','Consolas',monospace; font-size:0.75rem; color:var(--neon); background:rgba(0,212,255,0.07); border:1px solid rgba(0,212,255,0.15); padding:1px 6px; border-radius:4px; }
+
+.card { background:var(--glass); backdrop-filter:blur(16px); border:1px solid var(--border); border-radius:14px; padding:18px 20px; position:relative; overflow:hidden; transition:transform 0.3s ease,box-shadow 0.3s ease; }
+.card::before { content:''; position:absolute; inset:0; background:linear-gradient(135deg,rgba(0,212,255,0.04) 0%,transparent 60%); pointer-events:none; }
+.card:hover { transform:translateY(-2px) translateZ(4px); box-shadow:0 8px 32px rgba(0,114,206,0.2),0 0 0 1px rgba(0,212,255,0.12); }
+.card.c-blue   { border-color:rgba(0,114,206,0.4); }
+.card.c-neon   { border-color:rgba(0,212,255,0.3); }
+.card.c-purple { border-color:rgba(123,47,255,0.35); }
+.card.c-green  { border-color:rgba(0,229,160,0.3); }
+.card.c-orange { border-color:rgba(255,140,0,0.3); }
+.card.c-red    { border-color:rgba(255,58,92,0.3); }
+.card.glow-neon   { box-shadow:0 0 20px rgba(0,212,255,0.12),inset 0 0 40px rgba(0,212,255,0.03); }
+.card.glow-blue   { box-shadow:0 0 20px rgba(0,114,206,0.18),inset 0 0 40px rgba(0,114,206,0.04); }
+.card.glow-purple { box-shadow:0 0 20px rgba(123,47,255,0.18),inset 0 0 40px rgba(123,47,255,0.04); }
+.card.glow-green  { box-shadow:0 0 20px rgba(0,229,160,0.15),inset 0 0 40px rgba(0,229,160,0.03); }
+
+.g2 { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+.g3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:14px; }
+.g4 { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; }
+
+.node-row { display:flex; gap:10px; align-items:stretch; flex-wrap:wrap; }
+.node-card { flex:1; min-width:110px; padding:14px; border-radius:12px; position:relative; overflow:hidden; transform-style:preserve-3d; transition:transform 0.3s,box-shadow 0.3s; cursor:default; }
+.node-card::after { content:''; position:absolute; bottom:0; left:0; right:0; height:2px; border-radius:0 0 12px 12px; }
+.node-card:hover { transform:translateY(-3px) rotateX(3deg); }
+.nc-name { font-size:0.72rem; font-weight:800; letter-spacing:0.1em; text-transform:uppercase; margin-bottom:6px; }
+.nc-body { font-size:0.68rem; line-height:1.55; }
+.nc-blue   { background:linear-gradient(135deg,rgba(0,114,206,0.22),rgba(0,114,206,0.06)); border:1px solid rgba(0,114,206,0.5); }
+.nc-blue::after   { background:linear-gradient(90deg,var(--bd-blue),transparent); }
+.nc-blue   .nc-name { color:#7BC4FF; } .nc-blue   .nc-body { color:#5A92BB; }
+.nc-neon   { background:linear-gradient(135deg,rgba(0,212,255,0.14),rgba(0,212,255,0.04)); border:1px solid rgba(0,212,255,0.3); }
+.nc-neon::after   { background:linear-gradient(90deg,var(--neon),transparent); }
+.nc-neon   .nc-name { color:var(--neon); } .nc-neon   .nc-body { color:#5BBFCC; }
+.nc-purple { background:linear-gradient(135deg,rgba(123,47,255,0.18),rgba(123,47,255,0.06)); border:1px solid rgba(123,47,255,0.4); }
+.nc-purple::after { background:linear-gradient(90deg,var(--accent),transparent); }
+.nc-purple .nc-name { color:#B794FF; } .nc-purple .nc-body { color:#9E7FCC; }
+.nc-green  { background:linear-gradient(135deg,rgba(0,229,160,0.14),rgba(0,229,160,0.04)); border:1px solid rgba(0,229,160,0.3); }
+.nc-green::after  { background:linear-gradient(90deg,var(--green),transparent); }
+.nc-green  .nc-name { color:var(--green); } .nc-green  .nc-body { color:#4ABFA0; }
+.nc-orange { background:linear-gradient(135deg,rgba(255,140,0,0.16),rgba(255,140,0,0.04)); border:1px solid rgba(255,140,0,0.35); }
+.nc-orange::after { background:linear-gradient(90deg,var(--orange),transparent); }
+.nc-orange .nc-name { color:#FFA940; } .nc-orange .nc-body { color:#996620; }
+.nc-red    { background:linear-gradient(135deg,rgba(255,58,92,0.16),rgba(255,58,92,0.04)); border:1px solid rgba(255,58,92,0.35); }
+.nc-red::after    { background:linear-gradient(90deg,var(--red),transparent); }
+.nc-red    .nc-name { color:#FF6B80; } .nc-red    .nc-body { color:#993348; }
+
+.stat-row { display:flex; gap:14px; }
+.stat-box { flex:1; padding:14px 16px; border-radius:12px; background:var(--glass); border:1px solid var(--border); text-align:center; }
+.stat-box .sv { font-size:1.5rem; font-weight:800; background:linear-gradient(135deg,var(--neon),var(--bd-blue)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
+.stat-box .sl { font-size:0.62rem; font-weight:600; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.1em; margin-top:2px; }
+
+.fase-balk { display:flex; gap:0; border-radius:12px; overflow:hidden; border:1px solid var(--border); }
+.fase-item { flex:1; padding:10px 12px; border-right:1px solid var(--border); background:var(--glass); }
+.fase-item:last-child { border-right:none; }
+.fase-nr { font-size:0.55rem; font-weight:700; color:var(--text-muted); letter-spacing:0.1em; text-transform:uppercase; margin-bottom:3px; }
+.fase-title { font-size:0.7rem; font-weight:700; color:var(--text); margin-bottom:2px; }
+.fase-sub { font-size:0.6rem; color:var(--text-muted); line-height:1.4; }
+.fase-item.f-blue   { border-top:2px solid var(--bd-blue); }
+.fase-item.f-neon   { border-top:2px solid var(--neon); }
+.fase-item.f-purple { border-top:2px solid var(--accent); }
+.fase-item.f-green  { border-top:2px solid var(--green); }
+.fase-item.f-orange { border-top:2px solid var(--orange); }
+.fase-item.f-red    { border-top:2px solid var(--red); }
+
+.pipe-row { display:flex; align-items:stretch; gap:0; }
+.pipe-item { flex:1; padding:12px 14px; position:relative; background:var(--glass); border:1px solid var(--border); border-right:none; }
+.pipe-item:first-child { border-radius:10px 0 0 10px; }
+.pipe-item:last-child  { border-radius:0 10px 10px 0; border-right:1px solid var(--border); }
+.pipe-item::after { content:'▶'; position:absolute; right:-10px; top:50%; transform:translateY(-50%); font-size:0.65rem; color:var(--text-muted); z-index:2; }
+.pipe-item:last-child::after { display:none; }
+.pipe-title { font-size:0.68rem; font-weight:700; color:var(--text); margin-bottom:3px; }
+.pipe-sub   { font-size:0.6rem; color:var(--text-muted); line-height:1.4; }
+
+/* ═══ CENTRAAL SCHEMA ═══ */
+.hub-wrap {
+  display: flex; align-items: center; justify-content: center;
+  gap: 0; position: relative; min-height: 160px;
+}
+.hub-center {
+  width: 130px; height: 130px; border-radius: 50%;
+  background: linear-gradient(135deg, rgba(0,114,206,0.3), rgba(0,212,255,0.15));
+  border: 2px solid var(--neon);
+  box-shadow: 0 0 40px rgba(0,212,255,0.25), inset 0 0 30px rgba(0,212,255,0.08);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  text-align: center; flex-shrink: 0; position: relative; z-index: 2;
+}
+.hub-center .hc-label { font-size: 0.62rem; font-weight: 800; color: var(--neon); letter-spacing: 0.1em; text-transform: uppercase; }
+.hub-center .hc-sub   { font-size: 0.56rem; color: var(--text-muted); margin-top: 3px; }
+.hub-spokes { display: flex; flex-direction: column; gap: 10px; }
+.hub-spokes.left  { margin-right: -1px; }
+.hub-spokes.right { margin-left: -1px; }
+.spoke {
+  padding: 8px 14px; border-radius: 8px; min-width: 140px;
+  background: var(--glass); font-size: 0.66rem; font-weight: 600;
+  white-space: nowrap;
+}
+.spoke.sp-neon   { border: 1px solid rgba(0,212,255,0.35); color: var(--neon); }
+.spoke.sp-blue   { border: 1px solid rgba(0,114,206,0.45); color: #7BC4FF; }
+.spoke.sp-purple { border: 1px solid rgba(123,47,255,0.4); color: #B794FF; }
+.spoke.sp-green  { border: 1px solid rgba(0,229,160,0.35); color: var(--green); }
+.spoke.sp-orange { border: 1px solid rgba(255,140,0,0.35); color: #FFA940; }
+.spoke.sp-red    { border: 1px solid rgba(255,58,92,0.35); color: #FF6B80; }
+.spoke-line {
+  height: 1px; flex: 1; min-width: 20px;
+  background: linear-gradient(90deg, rgba(0,212,255,0.1), rgba(0,212,255,0.4), rgba(0,212,255,0.1));
+}
+
+/* before/after layout */
+.ba-row { display: grid; grid-template-columns: 1fr 48px 1fr; gap: 0; align-items: stretch; }
+.ba-arrow { display: flex; align-items: center; justify-content: center; font-size: 1.4rem; color: var(--neon); opacity: 0.6; }
+
+/* timeline */
+.timeline { display: flex; flex-direction: column; gap: 10px; }
+.tl-item { display: flex; gap: 14px; align-items: flex-start; }
+.tl-dot-wrap { display: flex; flex-direction: column; align-items: center; gap: 0; }
+.tl-dot { width: 28px; height: 28px; border-radius: 50%; border: 2px solid var(--border); background: var(--glass); display: flex; align-items: center; justify-content: center; font-size: 0.62rem; font-weight: 800; color: var(--text-muted); flex-shrink: 0; }
+.tl-dot.done   { border-color: var(--green); color: var(--green); background: rgba(0,229,160,0.08); }
+.tl-dot.active { border-color: var(--neon); color: var(--neon); background: rgba(0,212,255,0.08); box-shadow: 0 0 12px rgba(0,212,255,0.25); }
+.tl-dot.next   { border-color: var(--accent); color: #B794FF; background: rgba(123,47,255,0.08); }
+.tl-line { width: 1px; flex: 1; min-height: 12px; background: linear-gradient(180deg, var(--border), transparent); margin-top: 3px; }
+.tl-content { padding-bottom: 6px; }
+.tl-title { font-size: 0.74rem; font-weight: 700; color: var(--text); margin-bottom: 2px; }
+.tl-sub   { font-size: 0.65rem; color: var(--text-muted); line-height: 1.5; }
+
+.slide::-webkit-scrollbar { width: 4px; }
+.slide::-webkit-scrollbar-track { background: transparent; }
+.slide::-webkit-scrollbar-thumb { background: rgba(0,212,255,0.2); border-radius: 4px; }
+</style>
+</head>
+<body>
+<div class="bg-layer">
+  <div class="bg-grid"></div>
+  <div class="bg-glow1"></div>
+  <div class="bg-glow2"></div>
+  <div class="bg-glow3"></div>
+  <div class="particles" id="particles"></div>
+</div>
+
+<div class="app">
+  <header class="topbar">
+    <div class="logo-block">
+      <div class="logo-mark">BD</div>
+      <div class="logo-text">
+        <span class="org">Belastingdienst</span>
+        <span class="app">Kennisgraaf Platform — Visie 2026</span>
+      </div>
+    </div>
+    <div class="nav-dots" id="navDots"></div>
+    <div class="slide-id" id="slideId">01 / 12</div>
+  </header>
+
+  <main class="slides-wrap" id="slidesWrap">
+
+    <!-- ══ SLIDE 01 — VISIE ══ -->
+    <section class="slide active" data-slide="1">
+      <div class="slide-label"><span class="dot"></span>Visie</div>
+      <h1>De agent als centraal platform</h1>
+      <p style="font-size:0.9rem; color:var(--text-dim); max-width:700px; line-height:1.6;">
+        De huidige situatie bestaat uit losse onderdelen: een webapp voor analyses, een chatbot voor vragen,
+        een kennisgraaf als databron. De volgende stap is één centrale agent die al deze functies
+        <strong>integreert, orkestreert en de kennisgraaf actief verrijkt</strong>.
+      </p>
+      <div class="stat-row">
+        <div class="stat-box"><div class="sv">Nu</div><div class="sl">Losse componenten</div></div>
+        <div class="stat-box"><div class="sv">→</div><div class="sl">Transitie</div></div>
+        <div class="stat-box"><div class="sv">1</div><div class="sl">Centrale agent</div></div>
+        <div class="stat-box"><div class="sv">∞</div><div class="sl">Groeiende graaf</div></div>
+        <div class="stat-box"><div class="sv">100%</div><div class="sl">Herleidbaar</div></div>
+      </div>
+      <div class="g3">
+        <div class="card c-red">
+          <h3>Huidige situatie</h3>
+          <p>Analyses via webapp/skill, chatbot als bijzaak, kennisgraaf alleen voor lezen. Geen terugkoppeling.</p>
+        </div>
+        <div class="card c-orange">
+          <h3>Transitie</h3>
+          <p>Agent krijgt een wetsanalyse-specialist. Analyses worden geannoteerd teruggeschreven naar de graaf.</p>
+        </div>
+        <div class="card c-green glow-green">
+          <h3>Eindsituatie</h3>
+          <p>Agent is het platform: analyseert, annoteert, formaliseert en beantwoordt vragen vanuit een rijke, levende kennisgraaf.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══ SLIDE 02 — HUIDIGE SITUATIE ══ -->
+    <section class="slide" data-slide="2">
+      <div class="slide-label"><span class="dot"></span>Huidige situatie</div>
+      <h2>Wat er nu is — en wat ontbreekt</h2>
+      <div class="ba-row">
+        <div class="card c-red" style="border-radius:14px 0 0 14px; border-right:none;">
+          <h3>Losse onderdelen</h3>
+          <ul>
+            <li><strong>Wetsanalyse-skill</strong> (Claude Code) — interactief, voor analisten</li>
+            <li><strong>Webapp + API</strong> — zelfstandige dienst voor niet-technische gebruikers</li>
+            <li><strong>Kennisgraaf</strong> (GraphDB) — wettekst als RDF, <em>read-only</em></li>
+            <li><strong>Chatbot Lex</strong> — beantwoordt vragen, als bijzaak in de webapp</li>
+            <li><strong>RegelSpraak-export</strong> — vervolgstap na analyse</li>
+          </ul>
+          <br/>
+          <h3 style="color:var(--red);">Wat ontbreekt</h3>
+          <ul>
+            <li>Analyses schrijven niets terug naar de kennisgraaf</li>
+            <li>De graaf wordt niet rijker van elke uitgevoerde analyse</li>
+            <li>De chatbot kan niet redeneren over JAS-annotaties</li>
+            <li>Geen gedeelde intelligentie tussen de onderdelen</li>
+          </ul>
+        </div>
+        <div class="ba-arrow">→</div>
+        <div class="card c-green glow-green" style="border-radius:0 14px 14px 0; border-left:none;">
+          <h3>Met de agent centraal</h3>
+          <ul>
+            <li><strong>Agent</strong> voert wetsanalyses uit (nieuwe specialist)</li>
+            <li>Goedgekeurde annotaties worden <em>teruggeschreven</em> naar de graaf</li>
+            <li>De graaf groeit na elke analyse — rijkere retrieval</li>
+            <li>Chatbot Lex profiteert direct van elke nieuwe annotatie</li>
+            <li>Decompositie × annotaties = preciezere, betrouwbaardere antwoorden</li>
+            <li>Batch-worker: agent verwerkt de hele wet automatisch</li>
+          </ul>
+          <br/>
+          <h3 style="color:var(--green);">De vliegwielwerking</h3>
+          <p style="font-size:0.72rem;">Meer analyses → rijkere graaf → betere antwoorden → vertrouwen in het systeem → meer gebruik → meer analyses.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══ SLIDE 03 — DE AGENT VANDAAG ══ -->
+    <section class="slide" data-slide="3">
+      <div class="slide-label"><span class="dot"></span>Startpunt</div>
+      <h2>De agent vandaag — wat er al staat</h2>
+      <div class="card c-neon glow-neon" style="margin-bottom:4px;">
+        <p>De <code>graph-qa</code> agent is operationeel op <code>https://graph-qa.ipalm.nl</code>.
+        Hij heeft een volledig LangGraph-orkestrator, drie specialisten, een getypeerde toollaag
+        en SSE-streaming. Dit is het fundament waarop de uitbreiding wordt gebouwd.</p>
+      </div>
+      <div class="node-row">
+        <div class="node-card nc-purple">
+          <div class="nc-name">Router</div>
+          <div class="nc-body">Kiest specialist op basis van vraagtype. Overgeslagen in batch-mode.</div>
+        </div>
+        <div class="node-card nc-blue">
+          <div class="nc-name">Definitie</div>
+          <div class="nc-body">Beantwoordt definitievragen via SPARQL op de kennisgraaf.</div>
+        </div>
+        <div class="node-card nc-neon">
+          <div class="nc-name">Duiding</div>
+          <div class="nc-body">Interpreteert wetsbepalingen en rechtsgevolgen brongetrouw.</div>
+        </div>
+        <div class="node-card nc-green">
+          <div class="nc-name">Algemeen</div>
+          <div class="nc-body">Brede vragen over wetgeving en juridische context.</div>
+        </div>
+        <div class="node-card nc-orange">
+          <div class="nc-name">Verify</div>
+          <div class="nc-body">Controleert elk antwoord op brongetrouwheid voor verzending.</div>
+        </div>
+      </div>
+      <div class="g3">
+        <div class="card c-blue">
+          <h3>Toollaag</h3>
+          <ul>
+            <li>SPARQL-queries op GraphDB (MCP, read-only)</li>
+            <li>Full-text search in de kennisgraaf</li>
+            <li>Wettekst ophalen via Wettenbank-MCP</li>
+            <li>Similarity search voor semantisch zoeken</li>
+          </ul>
+        </div>
+        <div class="card c-purple">
+          <h3>Infrastructuur</h3>
+          <ul>
+            <li>Docker container op Portainer/Synology</li>
+            <li>Extern bereikbaar via NPM (HTTPS)</li>
+            <li>Bearer-token authenticatie</li>
+            <li>SSE-streaming naar de webapp</li>
+          </ul>
+        </div>
+        <div class="card c-green">
+          <h3>Geheugen</h3>
+          <ul>
+            <li>Durable gespreksgeheugen per gebruiker</li>
+            <li>Conversation-id per sessie of batch-job</li>
+            <li>Geïsoleerd per context (chat vs. batch)</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══ SLIDE 04 — WETSANALYSE SPECIALIST ══ -->
+    <section class="slide" data-slide="4">
+      <div class="slide-label"><span class="dot"></span>Uitbreiding stap 1</div>
+      <h2>Vierde specialist — Wetsanalyse</h2>
+      <div class="card c-neon glow-neon" style="margin-bottom:8px;">
+        <p>De agent krijgt een vierde specialist: <strong>Wetsanalyse</strong>. Die voert activiteit 2
+        en 3 uit conform de JAS-methode — dezelfde logica als de bestaande skill/API, maar nu
+        ingebakken in de agent. De analist vraagt: <em>"annoteer artikel 9 lid 1 Invorderingswet"</em>
+        — de agent doet de rest.</p>
+      </div>
+      <div class="g2">
+        <div class="card c-blue">
+          <h3>Wat de specialist doet</h3>
+          <ul>
+            <li>Wettekst ophalen via Wettenbank-MCP</li>
+            <li>Verwijzingen inventariseren en volgen (diepte 1)</li>
+            <li>Activiteit 2 — markeren in 13 JAS-klassen</li>
+            <li>Activiteit 3a — begrippen opstellen</li>
+            <li>Activiteit 3b — afleidingsregels annoteren</li>
+            <li><code>save_annotatie</code> aanroepen na akkoord</li>
+          </ul>
+        </div>
+        <div class="card c-purple">
+          <h3>Minimale codewijzigingen</h3>
+          <ul>
+            <li>Één nieuw specialist-bestand in <code>agent/specialists.py</code></li>
+            <li><code>annotatie_graph</code>-config in <code>agent/config.py</code></li>
+            <li><code>batch_mode</code>-vlag in de LangGraph-<code>State</code></li>
+            <li><code>save_result</code>-event voor worker-signalering</li>
+            <li>JAS-klassen als constante in <code>prompts.py</code></li>
+            <li>Router overgeslagen bij bekende specialist</li>
+          </ul>
+        </div>
+      </div>
+      <div class="card c-orange">
+        <h3>Akkoord-stap blijft verplicht</h3>
+        <p>In interactieve modus vraagt de specialist bevestiging van de analist vóór opslaan.
+        In <code>batch_mode</code> slaat hij op naar de <strong>staging-named-graph</strong>
+        — een menselijke reviewer accordeert daarna via de CLI-reviewer vóór promotie naar productie.</p>
+      </div>
+    </section>
+
+    <!-- ══ SLIDE 05 — DE SCHRIJFLAAG ══ -->
+    <section class="slide" data-slide="5">
+      <div class="slide-label"><span class="dot"></span>Schrijflaag</div>
+      <h2>Annotaties terugschrijven naar de kennisgraaf</h2>
+      <div class="g2">
+        <div>
+          <div class="card c-neon" style="margin-bottom:12px;">
+            <h3>Twee named graphs</h3>
+            <ul>
+              <li><strong>Staging</strong> — <code>https://ipalm.nl/analyse/staging/</code></li>
+              <li>Ruwe LLM-annotaties, onzichtbaar voor de chat-agent</li>
+              <li><strong>Productie</strong> — <code>https://ipalm.nl/analyse/</code></li>
+              <li>Alleen goedgekeurde annotaties, zichtbaar voor chat</li>
+              <li>Promotie via <code>review_staged.py</code> (CLI-reviewer)</li>
+            </ul>
+          </div>
+          <div class="card c-blue">
+            <h3>GraphWriter — veiligheidslaag</h3>
+            <ul>
+              <li>Accepteert alleen <code>insert_annotatie</code>-patronen</li>
+              <li>Geen vrije SPARQL-updates mogelijk</li>
+              <li>Schrijft via GraphDB SPARQL Update HTTP-endpoint</li>
+              <li>MCP-client blijft read-only (<code>_reject_updates</code>)</li>
+            </ul>
+          </div>
+        </div>
+        <div class="card c-purple glow-purple">
+          <h3>JAS-annotatie in de graaf</h3>
+          <p style="margin-bottom:10px;">Elke annotatie volgt een vast IRI-patroon en koppelt aan de bestaande wettekst-nodes:</p>
+          <ul>
+            <li><code>jas:Markering</code> — klasse, citaat, vindplaats</li>
+            <li><code>jas:Begrip</code> — definitie, relaties, herkomst</li>
+            <li><code>jas:Afleidingsregel</code> — type, begrip-koppelingen</li>
+            <li><code>jas:bronBepaling</code> → koppeling naar <code>bwb:Lid</code></li>
+            <li><code>jas:bronReferentie</code> — jci-uri (exact artikel + lid)</li>
+            <li><code>jas:goedgekeurdDoor</code> / <code>jas:tijdstip</code> — auditspoor</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══ SLIDE 06 — BATCH WORKER ══ -->
+    <section class="slide" data-slide="6">
+      <div class="slide-label"><span class="dot"></span>Batch-annotatie</div>
+      <h2>De agent als batch-processor</h2>
+      <div class="card c-neon glow-neon" style="margin-bottom:8px;">
+        <p>De queue-worker is een <strong>dunne schil</strong> bovenop de bestaande <code>answer_stream()</code>.
+        Hij roept de agent aan met een vaste wetsanalyse-prompt per queue-item — geen eigen LLM-logica,
+        geen eigen MCP-client. De agent-laag wordt 100% hergebruikt.</p>
+      </div>
+      <div class="fase-balk">
+        <div class="fase-item f-blue">
+          <div class="fase-nr">Seed</div>
+          <div class="fase-title">seed_queue.py</div>
+          <div class="fase-sub">Vult queue vanuit SPARQL op de graaf</div>
+        </div>
+        <div class="fase-item f-neon">
+          <div class="fase-nr">Worker</div>
+          <div class="fase-title">worker.py</div>
+          <div class="fase-sub">Roept answer_stream() aan (3 parallel)</div>
+        </div>
+        <div class="fase-item f-purple">
+          <div class="fase-nr">Staging</div>
+          <div class="fase-title">Named graph</div>
+          <div class="fase-sub">Annotaties wachten op review</div>
+        </div>
+        <div class="fase-item f-orange">
+          <div class="fase-nr">Review</div>
+          <div class="fase-title">review_staged.py</div>
+          <div class="fase-sub">Menselijke kwaliteitspoort (CLI)</div>
+        </div>
+        <div class="fase-item f-green">
+          <div class="fase-nr">Productie</div>
+          <div class="fase-title">Named graph</div>
+          <div class="fase-sub">Goedgekeurde annotaties zichtbaar voor chat</div>
+        </div>
+      </div>
+      <div class="g3">
+        <div class="card c-blue">
+          <h3>Queue-item</h3>
+          <ul>
+            <li><code>bwb_id</code>, <code>artikel</code>, <code>lid</code></li>
+            <li>Status: <code>pending → running → staged → akkoord</code></li>
+            <li><code>SELECT FOR UPDATE SKIP LOCKED</code> — geen dubbel werk</li>
+          </ul>
+        </div>
+        <div class="card c-purple">
+          <h3>Batch-mode</h3>
+          <ul>
+            <li><code>batch_mode: True</code> in LangGraph State</li>
+            <li>Router overgeslagen, direct naar wetsanalyse-specialist</li>
+            <li>Staging-IRI via <code>Settings.annotatie_graph</code></li>
+            <li>Unieke <code>conversation_id</code> per queue-item</li>
+          </ul>
+        </div>
+        <div class="card c-green">
+          <h3>Doorput</h3>
+          <ul>
+            <li>3 gelijktijdige workers (Synology-safe)</li>
+            <li>~10–15 artikelen per uur (LLM-afhankelijk)</li>
+            <li>Invorderingswet (~140 art.) ≈ 10–15 uur</li>
+            <li>Gefaalde items → status <code>fout</code>, handmatig retry</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══ SLIDE 07 — DECOMPOSITIE × ANNOTATIES ══ -->
+    <section class="slide" data-slide="7">
+      <div class="slide-label"><span class="dot"></span>Synergie</div>
+      <h2>Decompositie × annotaties — hoe ze elkaar versterken</h2>
+      <div class="g2">
+        <div class="card c-blue">
+          <h3>Zonder annotaties</h3>
+          <p style="margin-bottom:8px;">De decompose-node splitst een complexe vraag in deelvragen. Elke deelvraag leidt tot full-text retrieval — de LLM <em>leest</em> en <em>interpreteert</em> wettekst.</p>
+          <ul>
+            <li>Deelvraag → full-text search → tekstfragment → LLM leest</li>
+            <li>Fout in één deelvraag contamineert het eindantwoord</li>
+            <li>Drie deelvragen nodig voor één multi-hop vraag</li>
+          </ul>
+        </div>
+        <div class="card c-green glow-green">
+          <h3>Met annotaties</h3>
+          <p style="margin-bottom:8px;">De decompose-node kan deelvragen formuleren die <em>direct op de annotatie-laag</em> landen — deterministisch, zonder LLM-interpretatie.</p>
+          <ul>
+            <li>Deelvraag → SPARQL op <code>jas:Klasse</code> → exacte treffer</li>
+            <li>Multi-hop in één SPARQL-query (rechtsbetrekking → verwijzing → doelregeling)</li>
+            <li>Synthesize-node combineert betrouwbare bouwstenen, geen gissingen</li>
+          </ul>
+        </div>
+      </div>
+      <div class="card c-purple" style="margin-top:0;">
+        <h3>Wat decompositie blijft oplossen</h3>
+        <p>Drie dingen blijven buiten de annotatie-laag: <strong>temporele redenering</strong> (vergelijken van wetsversies),
+        <strong>casuïstiek</strong> (subsumptie: past situatie X onder artikel Y?), en
+        <strong>onbekende scope</strong> (brede zoekslag vóór gerichte verdieping).
+        Decompositie structureert die stappen — de annotatie-laag maakt de verdiepingsstap scherper.</p>
+      </div>
+      <div class="card c-orange">
+        <h3>De echte synergie</h3>
+        <p>De decompose-node kiest <em>bewust</em> welke deelvragen via SPARQL op annotaties gaan
+        en welke via tekst-retrieval — en geeft die keuze mee in de subagent-prompt.
+        <strong>Niet minder decompositie — slimmere decompositie.</strong></p>
+      </div>
+    </section>
+
+    <!-- ══ SLIDE 08 — CENTRALE ARCHITECTUUR ══ -->
+    <section class="slide" data-slide="8">
+      <div class="slide-label"><span class="dot"></span>Architectuur</div>
+      <h2>De agent als centrale spil</h2>
+      <div class="hub-wrap">
+        <div class="hub-spokes left">
+          <div class="spoke sp-blue">Webapp — analyseaanvragen</div>
+          <div class="spoke sp-purple">Chatbot Lex — vragen juristen</div>
+          <div class="spoke sp-orange">Batch-worker — queue-items</div>
+        </div>
+        <div class="spoke-line"></div>
+        <div class="hub-center">
+          <div class="hc-label">Graph-QA<br/>Agent</div>
+          <div class="hc-sub">LangGraph<br/>Orkestrator</div>
+        </div>
+        <div class="spoke-line"></div>
+        <div class="hub-spokes right">
+          <div class="spoke sp-neon">Kennisgraaf — SPARQL lezen</div>
+          <div class="spoke sp-green">Kennisgraaf — annotaties schrijven</div>
+          <div class="spoke sp-purple">Wettenbank-MCP — wettekst ophalen</div>
+        </div>
+      </div>
+      <div class="g4" style="margin-top:4px;">
+        <div class="card c-purple">
+          <h3>Specialisten</h3>
+          <ul>
+            <li>Definitie</li>
+            <li>Duiding</li>
+            <li>Algemeen</li>
+            <li><strong>Wetsanalyse</strong> (nieuw)</li>
+          </ul>
+        </div>
+        <div class="card c-neon">
+          <h3>Tools</h3>
+          <ul>
+            <li>SPARQL read</li>
+            <li>FTS / similarity</li>
+            <li>Wettenbank fetch</li>
+            <li><strong>save_annotatie</strong> (nieuw)</li>
+          </ul>
+        </div>
+        <div class="card c-blue">
+          <h3>Modi</h3>
+          <ul>
+            <li>Interactief (SSE)</li>
+            <li>Batch (worker)</li>
+            <li>Staging vs. productie</li>
+            <li>Review-bypass (eval)</li>
+          </ul>
+        </div>
+        <div class="card c-green">
+          <h3>Output</h3>
+          <ul>
+            <li>Antwoord + bronnen</li>
+            <li>JAS-annotaties in graaf</li>
+            <li>save_result event</li>
+            <li>RegelSpraak (roadmap)</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══ SLIDE 09 — DE RIJKERE GRAAF ══ -->
+    <section class="slide" data-slide="9">
+      <div class="slide-label"><span class="dot"></span>Groeiende kennisgraaf</div>
+      <h2>Wat er mogelijk is als de graaf geannoteerd is</h2>
+      <div class="g2">
+        <div class="card c-neon glow-neon">
+          <h3>Rijkere retrieval nu</h3>
+          <ul>
+            <li>SPARQL op JAS-klasse i.p.v. full-text zoeken</li>
+            <li><em>"Geef alle Rechtssubjecten in de Invorderingswet"</em> — één query</li>
+            <li>Multi-hop: rechtsbetrekking → verwijzing → definitieartikel</li>
+            <li>Deelvragen van decompose-node landen direct op annotaties</li>
+          </ul>
+        </div>
+        <div class="card c-purple glow-purple">
+          <h3>Consistentiecontrole</h3>
+          <ul>
+            <li>Detecteer conflicterende definities van hetzelfde begrip</li>
+            <li>Vind artikelen met overlappende Rechtssubjecten</li>
+            <li>Signaleer ontbrekende Brondefinities voor gebruikte termen</li>
+            <li>Audit: welke afleidingsregels missen een Voorwaarde?</li>
+          </ul>
+        </div>
+        <div class="card c-orange">
+          <h3>Impact-analyse</h3>
+          <ul>
+            <li>Welke begrippen worden geraakt door wetswijziging X?</li>
+            <li>Welke afleidingsregels bouwen op parameter Y?</li>
+            <li>Transitieve impact-graaf over de hele wet</li>
+          </ul>
+        </div>
+        <div class="card c-green glow-green">
+          <h3>RegelSpraak zonder ruis</h3>
+          <ul>
+            <li>SPARQL CONSTRUCT genereert RegelSpraak-skelet direct</li>
+            <li>LLM vult alleen de taalkundige formulering in</li>
+            <li>Minder hallucinaties — structuur staat al vast in de graaf</li>
+          </ul>
+        </div>
+      </div>
+      <div class="card c-blue" style="margin-top:0;">
+        <h3>De redenerende kennisgraaf</h3>
+        <p>Als de hele Invorderingswet geannoteerd is, is het systeem geen zoekmachine meer maar een
+        <strong>redenerende kennisgraaf</strong>: regeldetectie zonder LLM-redeneerslag,
+        volledige impact-analyse, automatische consistentiecontrole. De agent beantwoordt vragen
+        die vandaag onmogelijk zijn.</p>
+      </div>
+    </section>
+
+    <!-- ══ SLIDE 10 — KWALITEITSBEWAKING ══ -->
+    <section class="slide" data-slide="10">
+      <div class="slide-label"><span class="dot"></span>Kwaliteit</div>
+      <h2>Drie lagen van kwaliteitsbewaking</h2>
+      <div class="node-row" style="margin-bottom:12px;">
+        <div class="node-card nc-blue">
+          <div class="nc-name">Mechanische validatie</div>
+          <div class="nc-body">validate_annotatie.py — geldige JAS-klassen, aanwezige bronreferentie, letterlijk citaat. Blokkeert bij fouten.</div>
+        </div>
+        <div class="node-card nc-orange">
+          <div class="nc-name">Staging-isolatie</div>
+          <div class="nc-body">Batch-output gaat altijd naar staging-named-graph. Chat-agent ziet staging niet. Geen contaminatie.</div>
+        </div>
+        <div class="node-card nc-green">
+          <div class="nc-name">Menselijke review</div>
+          <div class="nc-body">review_staged.py toont per artikel de annotaties. Analist: akkoord → promotie naar productie, of afwijzen → retry.</div>
+        </div>
+      </div>
+      <div class="g2">
+        <div class="card c-neon">
+          <h3>CLI-reviewer (review_staged.py)</h3>
+          <ul>
+            <li>Toont per queue-item: artikel, markeringen, begrippen, regels</li>
+            <li>Vorige versie ernaast (als het een herwerking is)</li>
+            <li>Keuze: <strong>akkoord</strong> → productie / <strong>afwijzen</strong> → terug naar <code>pending</code></li>
+            <li>Reviewhistorie vastgelegd in queue-tabel (<code>akkoord</code>-tabel)</li>
+          </ul>
+        </div>
+        <div class="card c-purple">
+          <h3>Promotie-query</h3>
+          <ul>
+            <li>Kopieert van staging naar productie via SPARQL UPDATE</li>
+            <li>Verwijdert de staging-triples na promotie</li>
+            <li>Voegt <code>jas:goedgekeurdDoor</code> en tijdstip toe</li>
+            <li>Atomair — geen gedeeltelijke promoties mogelijk</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══ SLIDE 11 — IMPLEMENTATIEFASES ══ -->
+    <section class="slide" data-slide="11">
+      <div class="slide-label"><span class="dot"></span>Implementatie</div>
+      <h2>Vijf fases — van nu naar het platform</h2>
+      <div class="timeline">
+        <div class="tl-item">
+          <div class="tl-dot-wrap">
+            <div class="tl-dot done">✓</div>
+            <div class="tl-line"></div>
+          </div>
+          <div class="tl-content">
+            <div class="tl-title">Fase 0 — Fundament (gereed)</div>
+            <div class="tl-sub">Agent operationeel op graph-qa.ipalm.nl · GraphDB bereikbaar · LangGraph-orkestrator met 3 specialisten · SSE-streaming · Bearer-auth</div>
+          </div>
+        </div>
+        <div class="tl-item">
+          <div class="tl-dot-wrap">
+            <div class="tl-dot active">1</div>
+            <div class="tl-line"></div>
+          </div>
+          <div class="tl-content">
+            <div class="tl-title">Fase 1 — Wetsanalyse-specialist + schrijflaag</div>
+            <div class="tl-sub">Vierde specialist · JAS-klassen als constante · save_annotatie-tool · GraphWriter-veiligheidslaag · Twee named graphs (staging/productie) · save_result-event</div>
+          </div>
+        </div>
+        <div class="tl-item">
+          <div class="tl-dot-wrap">
+            <div class="tl-dot next">2</div>
+            <div class="tl-line"></div>
+          </div>
+          <div class="tl-content">
+            <div class="tl-title">Fase 2 — Batch-worker en queue</div>
+            <div class="tl-sub">Queue-tabel · seed_queue.py · worker.py (asyncio, 3 parallel) · batch_mode-vlag in State · review_staged.py CLI-reviewer · Promotie-query</div>
+          </div>
+        </div>
+        <div class="tl-item">
+          <div class="tl-dot-wrap">
+            <div class="tl-dot next">3</div>
+            <div class="tl-line"></div>
+          </div>
+          <div class="tl-content">
+            <div class="tl-title">Fase 3 — Annotatie-tools voor de chat-agent</div>
+            <div class="tl-sub">get_annotaties-tool · get_context uitgebreid met annotatie-laag · Decompositie kiest bewust SPARQL vs. tekst per deelvraag · Nieuwe SPARQL-querypatronen op JAS-ontologie</div>
+          </div>
+        </div>
+        <div class="tl-item">
+          <div class="tl-dot-wrap">
+            <div class="tl-dot next">4</div>
+          </div>
+          <div class="tl-content">
+            <div class="tl-title">Fase 4 — Consistentiecontrole &amp; RegelSpraak-koppeling</div>
+            <div class="tl-sub">Consistentie-queries · Impact-analyse als agent-tool · RegelSpraak-generatie via SPARQL CONSTRUCT + LLM-taallaag · Koppeling met bestaande RegelSpraak-fase in de webapp</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══ SLIDE 12 — CONCLUSIE ══ -->
+    <section class="slide" data-slide="12">
+      <div class="slide-label"><span class="dot"></span>Conclusie</div>
+      <h2>Van losse onderdelen naar één platform</h2>
+      <div class="g2">
+        <div class="card c-neon glow-neon">
+          <h3>De agent hergebruikt alles</h3>
+          <p>De wetsanalyse-specialist, de batch-worker en de verbeterde chatbot bouwen op
+          <code>answer_stream()</code>. Geen duplicatie van LLM-logica, geen aparte pipelines.
+          De agent-laag is het gedeelde fundament.</p>
+        </div>
+        <div class="card c-purple glow-purple">
+          <h3>De graaf wordt slimmer</h3>
+          <p>Elke goedgekeurde analyse voegt JAS-annotaties toe aan de kennisgraaf.
+          De chatbot profiteert direct. Het systeem leert cumulatief — niet door
+          fine-tuning maar door groeiende, gevalideerde kennis.</p>
+        </div>
+        <div class="card c-green glow-green">
+          <h3>De analist blijft centraal</h3>
+          <p>De kwaliteitspoort is menselijk. Staging-isolatie, mechanische validatie
+          en de CLI-reviewer garanderen dat alleen gevalideerde kennis de productie-graaf bereikt.
+          De agent is het gereedschap, de analist de autoriteit.</p>
+        </div>
+        <div class="card c-orange">
+          <h3>Schaalbaar zonder herschrijven</h3>
+          <p>Fase 1 en 2 vereisen minimale codewijzigingen in de bestaande agent.
+          Elke fase levert direct waarde. Het platform groeit incrementeel
+          terwijl het vandaag al operationeel is.</p>
+        </div>
+      </div>
+      <div class="stat-row" style="margin-top:4px;">
+        <div class="stat-box"><div class="sv">4</div><div class="sl">Specialisten</div></div>
+        <div class="stat-box"><div class="sv">3</div><div class="sl">Parallele workers</div></div>
+        <div class="stat-box"><div class="sv">2</div><div class="sl">Named graphs</div></div>
+        <div class="stat-box"><div class="sv">0</div><div class="sl">Dubbele code</div></div>
+        <div class="stat-box"><div class="sv">∞</div><div class="sl">Groeiende graaf</div></div>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="bottombar">
+    <button class="nav-btn" id="btnPrev">&#8592; Vorige</button>
+    <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+    <button class="nav-btn" id="btnNext">Volgende &#8594;</button>
+  </footer>
+</div>
+
+<script>
+const slides = document.querySelectorAll('.slide');
+const navDots = document.getElementById('navDots');
+const slideId = document.getElementById('slideId');
+const progressFill = document.getElementById('progressFill');
+const btnPrev = document.getElementById('btnPrev');
+const btnNext = document.getElementById('btnNext');
+const N = slides.length;
+let current = 0;
+
+slides.forEach((_, i) => {
+  const d = document.createElement('div');
+  d.className = 'ndot' + (i === 0 ? ' active' : '');
+  d.addEventListener('click', () => goTo(i));
+  navDots.appendChild(d);
+});
+
+function goTo(n) {
+  slides[current].classList.remove('active');
+  navDots.querySelectorAll('.ndot')[current].classList.remove('active');
+  current = Math.max(0, Math.min(N - 1, n));
+  slides[current].classList.add('active');
+  navDots.querySelectorAll('.ndot')[current].classList.add('active');
+  slideId.textContent = String(current + 1).padStart(2, '0') + ' / ' + String(N).padStart(2, '0');
+  progressFill.style.width = ((current + 1) / N * 100) + '%';
+  btnPrev.disabled = current === 0;
+  btnNext.disabled = current === N - 1;
+}
+
+btnPrev.addEventListener('click', () => goTo(current - 1));
+btnNext.addEventListener('click', () => goTo(current + 1));
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowRight' || e.key === 'ArrowDown') goTo(current + 1);
+  if (e.key === 'ArrowLeft'  || e.key === 'ArrowUp')   goTo(current - 1);
+});
+
+goTo(0);
+
+const pc = document.getElementById('particles');
+for (let i = 0; i < 18; i++) {
+  const p = document.createElement('div');
+  p.className = 'particle';
+  const sz = Math.random() * 3 + 1;
+  p.style.cssText = `width:${sz}px;height:${sz}px;left:${Math.random()*100}%;bottom:${Math.random()*20-10}%;animation-duration:${Math.random()*20+12}s;animation-delay:${Math.random()*15}s;opacity:0;`;
+  pc.appendChild(p);
+}
+</script>
+</body>
+</html>

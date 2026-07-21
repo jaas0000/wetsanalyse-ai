@@ -17,8 +17,8 @@ from typing import Any
 
 from .agent_common import run_sync
 from .annotatie_prompt import annotatie_systeemprompt, annotatie_userprompt
+from .artikel import artikel_corpus
 from .config import Settings
-from .graph import queries
 from .jas_klassen import GELDIGE_JAS_KLASSEN
 from .models import AnnotatieAlternatief, AnnotatieVoorstel
 from .observability import get_tracer
@@ -177,7 +177,9 @@ async def annoteer_stream(
             span.set_attribute("annotatie.bwb_id", bwb_id)
             span.set_attribute("annotatie.artikel", artikel)
             yield {"type": "status", "message": f"Artikel {artikel} ophalen..."}
-            corpus = await run_sync(graph.sparql, queries.get_artikel(bwb_id, artikel))
+            # Eén bron: dezelfde (gecleande) tekst die het documentpaneel toont, is ook de corpus
+            # waartegen de brongetrouwheid wordt gecheckt.
+            corpus = await run_sync(artikel_corpus, bwb_id, artikel, graph)
             if not (corpus or "").strip():
                 yield {"type": "error", "message": f"Geen tekst gevonden voor {bwb_id} artikel {artikel}."}
                 return
