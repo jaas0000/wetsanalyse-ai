@@ -111,7 +111,6 @@ resource cae 'Microsoft.App/managedEnvironments@2024-03-01' = {
 resource mcpApp 'Microsoft.App/containerApps@2024-03-01' = {
   name: '${appName}-mcp'
   location: location
-  dependsOn: [cae]
   properties: {
     managedEnvironmentId: cae.id
     configuration: {
@@ -166,7 +165,7 @@ var mcpInternalUrl = 'https://${mcpApp.properties.configuration.ingress.fqdn}/mc
 resource apiApp 'Microsoft.App/containerApps@2024-03-01' = {
   name: '${appName}-api'
   location: location
-  dependsOn: [pgDatabase, mcpApp]
+  dependsOn: [pgDatabase]
   properties: {
     managedEnvironmentId: cae.id
     configuration: {
@@ -264,7 +263,6 @@ var frontendPublicUrl = 'https://${appName}-frontend.${cae.properties.defaultDom
 resource frontendApp 'Microsoft.App/containerApps@2024-03-01' = {
   name: '${appName}-frontend'
   location: location
-  dependsOn: [apiApp]
   properties: {
     managedEnvironmentId: cae.id
     configuration: {

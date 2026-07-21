@@ -192,6 +192,7 @@ jobs:
       AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
       AZURE_AI_KEY: ${{ secrets.AZURE_AI_KEY }}
       LLM_API_BASE: ${{ vars.LLM_API_BASE }}
+      AZURE_LOCATION: ${{ vars.AZURE_LOCATION }}
 
     if: github.ref == 'refs/heads/master'
 
@@ -219,4 +220,5 @@ jobs:
           python3 deploy/azure/gen-deploy.py \
             --llm-api-base "$LLM_API_BASE" \
             --resource-group rg-wetsanalyse \
+            --location "${AZURE_LOCATION:-northeurope}" \
             --run
