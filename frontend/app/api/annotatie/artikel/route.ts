@@ -14,7 +14,10 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const bwbId = searchParams.get("bwb_id") ?? "";
   const artikel = searchParams.get("artikel") ?? "";
-  const url = `${graphQaBaseUrl()}/v1/artikel?bwb_id=${encodeURIComponent(bwbId)}&artikel=${encodeURIComponent(artikel)}`;
+  const lid = searchParams.get("lid") ?? "";
+  const url =
+    `${graphQaBaseUrl()}/v1/artikel?bwb_id=${encodeURIComponent(bwbId)}&artikel=${encodeURIComponent(artikel)}` +
+    (lid ? `&lid=${encodeURIComponent(lid)}` : "");
   try {
     const upstream = await fetch(url, { headers: { ...graphQaAuthHeader() }, cache: "no-store" });
     const text = await upstream.text();
