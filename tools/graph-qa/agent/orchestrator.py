@@ -26,6 +26,7 @@ from langgraph.graph import END, START, StateGraph
 
 from .agent_common import truncate
 from .annotatie import _parse_elementen, _verwerk
+from .annotatie_prompt import annotatie_systeemprompt, annotatie_userprompt
 from .config import Settings
 from .graph.results import parse_select
 from .grounding import check_grounding, curate_sources
@@ -38,26 +39,27 @@ from .tools import anthropic_schemas, dispatch
 
 
 def _doel_uit_json(text: str) -> dict[str, str]:
-    """Haal het `doel`-object ({bwbId,artikel,lid}) uit de JSON-respons van de annotatie-agent."""
+    """Haal het doel ({bwbId,artikel,lid,nummer}) uit de JSON van de ophaal-agent — plat of onder een
+    `doel`-sleutel."""
     import json
 
     s, e = text.find("{"), text.rfind("}")
     if s != -1 and e > s:
         try:
             data = json.loads(text[s : e + 1])
-            d = data.get("doel") if isinstance(data, dict) else None
-            if isinstance(d, dict):
-                return {k: str(d.get(k, "")).strip() for k in ("bwbId", "artikel", "lid")}
+            if isinstance(data, dict):
+                d = data.get("doel") if isinstance(data.get("doel"), dict) else data
+                return {k: str(d.get(k, "")).strip() for k in ("bwbId", "artikel", "lid", "nummer", "citeertitel")}
         except json.JSONDecodeError:
             pass
-    return {"bwbId": "", "artikel": "", "lid": ""}
+    return {"bwbId": "", "artikel": "", "lid": "", "nummer": "", "citeertitel": ""}
 
 
 def _doel_uit_toolcalls(messages: list[dict[str, Any]]) -> dict[str, str]:
-    """Gezaghebbend doel = de LAATSTE get_lid/get_artikel-tool-call die de agent deed (wat hij écht
-    ophaalde), i.p.v. de zelf-gerapporteerde JSON — die het lid soms leeglaat. get_artikel heeft geen
-    lid → lid="" (heel-artikel-annotatie blijft heel artikel). Leeg als er geen fetch-call was."""
-    doel = {"bwbId": "", "artikel": "", "lid": ""}
+    """Gezaghebbend doel = de LAATSTE fetch-tool-call (get_lid/get_artikel/get_bepaling) die de agent
+    deed — wat hij écht ophaalde. get_bepaling levert een `nummer` (bv. '9.1' voor een divisie); dat
+    zetten we óók als `artikel`, zodat de weergave het aankan. Leeg als er geen fetch-call was."""
+    doel = {"bwbId": "", "artikel": "", "lid": "", "nummer": ""}
     for msg in messages:
         if msg.get("role") != "assistant":
             continue
@@ -65,17 +67,20 @@ def _doel_uit_toolcalls(messages: list[dict[str, Any]]) -> dict[str, str]:
         if not isinstance(content, list):
             continue
         for blok in content:
-            if (
-                isinstance(blok, dict)
-                and blok.get("type") == "tool_use"
-                and blok.get("name") in ("get_lid", "get_artikel")
-            ):
-                inp = blok.get("input") or {}
+            if not (isinstance(blok, dict) and blok.get("type") == "tool_use"):
+                continue
+            naam = blok.get("name")
+            inp = blok.get("input") or {}
+            if naam in ("get_lid", "get_artikel"):
                 doel = {
                     "bwbId": str(inp.get("bwb_id", "")).strip(),
                     "artikel": str(inp.get("artikel", "")).strip(),
                     "lid": str(inp.get("lid", "")).strip(),
+                    "nummer": "",
                 }
+            elif naam == "get_bepaling":
+                nummer = str(inp.get("nummer", "")).strip()
+                doel = {"bwbId": str(inp.get("bwb_id", "")).strip(), "artikel": nummer, "lid": "", "nummer": nummer}
     return doel
 
 
@@ -83,7 +88,7 @@ def _bepaal_doel(state: State) -> dict[str, str]:
     """Combineer: neem de tool-call als bron (gezaghebbend) en vul lege velden aan uit de JSON."""
     uit_tool = _doel_uit_toolcalls(state.get("messages", []))
     uit_json = _doel_uit_json(state.get("answer", ""))
-    return {k: uit_tool[k] or uit_json[k] for k in ("bwbId", "artikel", "lid")}
+    return {k: uit_tool.get(k, "") or uit_json.get(k, "") for k in ("bwbId", "artikel", "lid", "nummer", "citeertitel")}
 
 
 def _corpus_uit_trace(source_trace: list[tuple[str, str]]) -> str:
@@ -91,7 +96,7 @@ def _corpus_uit_trace(source_trace: list[tuple[str, str]]) -> str:
     zodat de brongetrouwheid-check dezelfde tekst gebruikt die de agent zag."""
     delen: list[str] = []
     for naam, resultaat in source_trace:
-        if naam not in ("get_lid", "get_artikel"):
+        if naam not in ("get_lid", "get_artikel", "get_bepaling"):
             continue
         for r in parse_select(resultaat):
             tekst = (r.get("lidtekst") or r.get("tekst") or "").strip()
@@ -208,7 +213,10 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
 
     def agent_node(state: State) -> dict[str, Any]:
         writer = get_stream_writer()
-        spec = get_specialist(state.get("specialist"))
+        # De annotatie-route draait de agent⇄tools-lus als OPHAAL-agent (retrieval-specialist): hij
+        # vindt de exacte bepaling. De JAS-annotatie gebeurt daarna in annoteer_node (pure LLM-call).
+        spec_naam = "retrieval" if state.get("specialist") == "annotatie" else state.get("specialist")
+        spec = get_specialist(spec_naam)
         system = SYSTEM_PROMPT
         if spec.system:
             system = f"{system}\n\n{spec.system}"
@@ -260,23 +268,42 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
         if state.get("pending_tools") and state.get("turns", 0) < settings.max_turns:
             return "tools"
         if state.get("specialist") == "annotatie":
-            return "annoteer_finalize"
+            return "annoteer"  # ophaal-agent klaar → de aparte annoteer-stap
         return "verify"
 
-    def annoteer_finalize_node(state: State) -> dict[str, Any]:
-        """De annotatie-agent gaf JSON ({doel, elementen}); grond elk element tegen de opgehaalde
-        tekst en emit de doel-/element-events. Geen QA-grounding — dit is geen tekstantwoord."""
+    def annoteer_node(state: State) -> dict[str, Any]:
+        """Aparte annoteer-stap: de ophaal-agent heeft de bepaling opgehaald (in de source_trace).
+        Hier doet een PURE LLM-call (geen tools) de JAS-analyse op ALLEEN die tekst, we gronden elk
+        element ertegen en emitten doel (mét de tekst) + elementen."""
         writer = get_stream_writer()
-        antwoord = state.get("answer", "")
         doel = _bepaal_doel(state)
         corpus = _corpus_uit_trace(state.get("source_trace", []))
-        voorstellen, verworpen = _verwerk(
-            antwoord, corpus, doel.get("bwbId", ""), doel.get("artikel", ""), doel.get("lid", "")
+        aanduiding = doel.get("artikel") or doel.get("nummer") or ""
+
+        if not corpus.strip():
+            melding = (
+                "Ik kon de gevraagde bepaling niet ophalen om te annoteren — controleer de wet en het "
+                "artikel/lid (bij een beleidsregel bv. '9.1')."
+            )
+            writer({"type": "token", "content": melding})
+            return {"answer": melding}
+
+        resp = llm.create(
+            model=model,
+            max_tokens=8192,
+            system=annotatie_systeemprompt(),
+            tools=[],
+            messages=[{"role": "user", "content": annotatie_userprompt(doel.get("bwbId", ""), aanduiding, corpus, doel.get("lid", ""))}],
         )
-        writer({"type": "doel", "doel": doel})
+        llm_text = "".join(b.text for b in resp.content if b.type == "text")
+        voorstellen, verworpen = _verwerk(llm_text, corpus, doel.get("bwbId", ""), aanduiding, doel.get("lid", ""))
+
+        # Stuur de opgehaalde tekst mee zodat de frontend precies dít toont (één bron, ook voor divisies).
+        doel_uit = {**doel, "leden_teksten": [{"lid": doel.get("lid", ""), "tekst": corpus}]}
+        writer({"type": "doel", "doel": doel_uit})
         for v in voorstellen:
             writer({"type": "element", "element": v.model_dump()})
-        plek = f"artikel {doel.get('artikel','')}" + (f" lid {doel['lid']}" if doel.get("lid") else "")
+        plek = f"artikel {aanduiding}" + (f" lid {doel['lid']}" if doel.get("lid") else "")
         samenvatting = f"Ik heb {len(voorstellen)} JAS-elementen voorgesteld voor {plek}."
         writer({"type": "token", "content": samenvatting})
         return {"answer": samenvatting}
@@ -483,7 +510,7 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
         g.add_node("resynth", resynth_node)
         g.add_node("agent", agent_node)
         g.add_node("tools", tools_node)
-        g.add_node("annoteer_finalize", annoteer_finalize_node)
+        g.add_node("annoteer", annoteer_node)
         g.add_node("advance", advance_node)
         entrymap = {"agent": "agent", "decompose": "decompose"}
         g.add_edge(START, "supervisor")
@@ -495,11 +522,11 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
         g.add_edge("resynth", "synthesize")
         g.add_conditional_edges(
             "agent", route_after_agent,
-            {"tools": "tools", "verify": "verify", "annoteer_finalize": "annoteer_finalize"},
+            {"tools": "tools", "verify": "verify", "annoteer": "annoteer"},
         )
         g.add_edge("tools", "agent")
         g.add_edge("finalize", "advance")
-        g.add_edge("annoteer_finalize", "advance")
+        g.add_edge("annoteer", "advance")
         g.add_conditional_edges("advance", route_after_advance, {**entrymap, "einde": END})
         return g
 
@@ -511,19 +538,19 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
     if settings.enable_planning:
         # Supervisor → agent⇄tools → (verify→finalize | annoteer_finalize) → advance → (volgende | einde).
         g.add_node("supervisor", supervisor_node)
-        g.add_node("annoteer_finalize", annoteer_finalize_node)
+        g.add_node("annoteer", annoteer_node)
         g.add_node("advance", advance_node)
         g.add_edge(START, "supervisor")
         g.add_conditional_edges("supervisor", _entry_node, {"agent": "agent"})
         g.add_conditional_edges(
             "agent", route_after_agent,
-            {"tools": "tools", "verify": "verify", "annoteer_finalize": "annoteer_finalize"},
+            {"tools": "tools", "verify": "verify", "annoteer": "annoteer"},
         )
         g.add_edge("tools", "agent")
         g.add_conditional_edges("verify", route_after_verify, {"correct": "correct", "finalize": "finalize"})
         g.add_edge("correct", "agent")
         g.add_edge("finalize", "advance")
-        g.add_edge("annoteer_finalize", "advance")
+        g.add_edge("annoteer", "advance")
         g.add_conditional_edges("advance", route_after_advance, {"agent": "agent", "einde": END})
         return g
 

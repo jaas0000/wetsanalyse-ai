@@ -789,11 +789,15 @@ export interface BeslissingInvoer {
 
 // --- Unified agent + artikeltekst uit de graaf (graph-qa) --------------------
 
-/** Het doel dat de annotatie-worker heeft opgehaald (uit het `doel`-SSE-event). */
+/** Het doel dat de ophaal-agent heeft opgehaald (uit het `doel`-SSE-event), incl. de opgehaalde tekst
+ *  zodat het documentpaneel precies dát toont (ook beleidsregels/divisies zoals '9.1'). */
 export interface AgentDoel {
   bwbId: string;
   artikel: string;
   lid: string;
+  nummer?: string;
+  citeertitel?: string;
+  leden_teksten?: { lid: string; tekst: string }[];
 }
 
 /** Een bron onder een agent-antwoord (uit het `sources`-SSE-event). */

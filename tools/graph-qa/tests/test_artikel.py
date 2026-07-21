@@ -1,8 +1,28 @@
 """Artikeltekst uit de graaf: numerieke lid-sortering, citeertitel, artikeltekst-fallback."""
 from __future__ import annotations
 
+import json
+
 from agent.artikel import artikel_corpus, haal_artikel_sync
 from fakes import FakeGraph
+
+
+def test_decimaal_nummer_valt_terug_op_get_bepaling():
+    # get_artikel weigert "9.1" (ValueError) → fallback op get_bepaling (bwb:nummer).
+    bep = json.dumps('?nummer\t?tekst\t?label\n"9.1"\t"Afwijking van de betalingstermijnen."@nl\t"Afwijking"')
+
+    class G:
+        def sparql(self, q):
+            return bep if "bwb:nummer" in q else ""  # get_bepaling ⇄ (get_regeling_info → leeg)
+
+        def initialize(self):
+            return {}
+
+        def close(self):
+            pass
+
+    data = haal_artikel_sync("BWBR0024096", "9.1", G())
+    assert data["leden_teksten"] == [{"lid": "", "tekst": "Afwijking van de betalingstermijnen."}]
 
 ARTIKEL_TSV = (
     "?tekst\t?jci\t?lid\t?lidnummer\t?lidtekst\n"

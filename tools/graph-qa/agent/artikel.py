@@ -32,10 +32,25 @@ def _match_lid(lidnummer: str, lid: str) -> bool:
     return (lidnummer or "").strip() == (lid or "").strip()
 
 
+def _bepaling_fallback(bwb_id: str, artikel: str, graph: GraphPort) -> list[dict]:
+    """Beleidsregels/circulaires (decimale nummers zoals '9.1') gaan niet via het artikel/lid-IRI-
+    patroon; haal ze dan op via `bwb:nummer` (get_bepaling)."""
+    try:
+        rows = parse_select(graph.sparql(queries.get_bepaling(bwb_id, artikel)))
+    except ValueError:
+        return []
+    tekst = next((r.get("tekst") for r in rows if (r.get("tekst") or "").strip()), "")
+    return [{"lid": "", "tekst": tekst.strip()}] if tekst.strip() else []
+
+
 def _leden_en_corpus(bwb_id: str, artikel: str, graph: GraphPort, lid: str | None = None) -> tuple[list[dict], str]:
     """(leden_teksten, corpus) uit de graaf. Corpus = de leden samengevoegd ('N. tekst'),
-    of de artikeltekst zelf als er geen genummerde leden zijn. Met `lid` scope je tot dat ene lid."""
-    rows = parse_select(graph.sparql(queries.get_artikel(bwb_id, artikel)))
+    of de artikeltekst zelf als er geen genummerde leden zijn. Met `lid` scope je tot dat ene lid.
+    Voor decimale/divisie-nummers valt het terug op get_bepaling (bv. Leidraad '9.1')."""
+    try:
+        rows = parse_select(graph.sparql(queries.get_artikel(bwb_id, artikel)))
+    except ValueError:
+        rows = []  # bv. artikel "9.1" wordt door get_artikel geweigerd → straks de bepaling-fallback
     art_tekst = next((r["tekst"] for r in rows if r.get("tekst")), "")
     leden: list[dict] = []
     for r in rows:
@@ -47,6 +62,8 @@ def _leden_en_corpus(bwb_id: str, artikel: str, graph: GraphPort, lid: str | Non
         leden = [ld for ld in leden if _match_lid(ld["lid"], str(lid))]
     elif not leden and art_tekst.strip():
         leden = [{"lid": "", "tekst": art_tekst.strip()}]
+    if not leden:  # geen artikel/lid-tekst gevonden → probeer de bepaling op nummer
+        leden = _bepaling_fallback(bwb_id, artikel, graph)
     corpus = "\n\n".join((f'{ld["lid"]}. {ld["tekst"]}' if ld["lid"] else ld["tekst"]) for ld in leden)
     return leden, corpus
 

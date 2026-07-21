@@ -28,6 +28,8 @@ NS = "https://ipalm.nl/bwb/"
 _BWB_RE = re.compile(r"^BWBR\d+$")
 _ART_RE = re.compile(r"^[0-9]+[a-z]*$", re.IGNORECASE)
 _NUM_RE = re.compile(r"^[0-9]+[a-z]*$", re.IGNORECASE)
+# Vrij bepaling-nummer: staat decimale (divisie-)vormen en letters toe: "9", "9.1", "22a", "22bis".
+_NUMMER_VRIJ_RE = re.compile(r"^[0-9]+(\.[0-9]+)*[a-z]*$", re.IGNORECASE)
 
 
 def _bwb(value: str) -> str:
@@ -48,6 +50,13 @@ def _num(value: str) -> str:
     v = str(value).strip()
     if not _NUM_RE.match(v):
         raise ValueError(f"Ongeldig nummer: {value!r}.")
+    return v
+
+
+def _nummer_vrij(value: str) -> str:
+    v = str(value).strip()
+    if not _NUMMER_VRIJ_RE.match(v):
+        raise ValueError(f"Ongeldig bepaling-nummer: {value!r} (verwacht bv. '9', '9.1', '22a').")
     return v
 
 
@@ -118,6 +127,19 @@ def get_lid(bwb_id: str, artikel: str, lid: str) -> str:
   OPTIONAL {{ <{iri}> bwb:tekst ?tekst }}
   OPTIONAL {{ <{iri}> bwb:jci ?jci }}
 }}"""
+
+
+def get_bepaling(bwb_id: str, nummer: str) -> str:
+    """Haal een bepaling op via haar `bwb:nummer` binnen de regeling — werkt voor artikelen ("9",
+    "25", "22a") én divisies/decimale nummers ("9.1") van beleidsregels/circulaires (bv. de Leidraad
+    Invordering 2008), waar het artikel/lid-IRI-patroon niet opgaat."""
+    return PREFIXES + f"""SELECT ?nummer ?tekst ?label ?jci WHERE {{
+  ?node bwb:nummer {_lit(_nummer_vrij(nummer))} ; bwb:tekst ?tekst .
+  FILTER(STRSTARTS(STR(?node), "{NS}{_bwb(bwb_id)}"))
+  BIND({_lit(_nummer_vrij(nummer))} AS ?nummer)
+  OPTIONAL {{ ?node rdfs:label ?label }}
+  OPTIONAL {{ ?node bwb:jci ?jci }}
+}} LIMIT 5"""
 
 
 def get_regeling_info(bwb_id: str) -> str:
