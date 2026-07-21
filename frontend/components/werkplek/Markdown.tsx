@@ -7,7 +7,7 @@ import remarkGfm from "remark-gfm";
  *  veilig; links laten we alleen door voor http(s) en openen extern. (Verhuisd uit ChatAssistent.) */
 export function Markdown({ tekst }: { tekst: string }) {
   return (
-    <div className="space-y-2 break-words text-sm text-ink">
+    <div className="space-y-2 break-words text-sm text-ink [overflow-wrap:anywhere]">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
