@@ -66,7 +66,7 @@ describe("annoteerStream", () => {
 
     const elementen: unknown[] = [];
     const status: string[] = [];
-    const res = await annoteerStream("BWBR0004770", "9", {
+    const res = await annoteerStream("BWBR0004770", "9", "1", {
       onStatus: (m) => status.push(m),
       onElement: (el) => elementen.push(el),
     });

@@ -533,12 +533,13 @@ export async function annoteerIntent(prompt: string, catalogus: WetChoice[]): Pr
   return json<IntentResultaat>(res);
 }
 
-/** Artikeltekst uit de graaf (voedt het workbench-documentpaneel; één bron met de annotatie-corpus). */
-export async function haalArtikelGraaf(bwbId: string, artikel: string): Promise<GraafArtikel> {
-  const res = await fetch(
-    `/api/annotatie/artikel?bwb_id=${encodeURIComponent(bwbId)}&artikel=${encodeURIComponent(artikel)}`,
-    { cache: "no-store" },
-  );
+/** Artikeltekst uit de graaf (voedt het workbench-documentpaneel; één bron met de annotatie-corpus).
+ *  Met `lid` beperk je de tekst tot dat ene lid. */
+export async function haalArtikelGraaf(bwbId: string, artikel: string, lid?: string): Promise<GraafArtikel> {
+  const q = `bwb_id=${encodeURIComponent(bwbId)}&artikel=${encodeURIComponent(artikel)}${
+    lid ? `&lid=${encodeURIComponent(lid)}` : ""
+  }`;
+  const res = await fetch(`/api/annotatie/artikel?${q}`, { cache: "no-store" });
   return json<GraafArtikel>(res);
 }
 
@@ -547,13 +548,14 @@ export async function haalArtikelGraaf(bwbId: string, artikel: string): Promise<
 export async function annoteerStream(
   bwbId: string,
   artikel: string,
+  lid: string,
   handlers: { onStatus?: (m: string) => void; onElement: (el: VoorstelElement) => void },
   signal?: AbortSignal,
 ): Promise<{ aantal: number; verworpen: number }> {
   const res = await fetch("/api/annotatie/annoteer", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ bwb_id: bwbId, artikel }),
+    body: JSON.stringify({ bwb_id: bwbId, artikel, lid: lid || null }),
     signal,
   });
   if (!res.ok) throw await parseError(res);

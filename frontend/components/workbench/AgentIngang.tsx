@@ -49,12 +49,13 @@ export function AgentIngang({
     try {
       const res = await annoteerIntent(prompt.trim(), wetten);
       if (res.begrepen) {
-        const a = await haalArtikelGraaf(res.begrepen.bwbId, res.begrepen.artikel);
+        const a = await haalArtikelGraaf(res.begrepen.bwbId, res.begrepen.artikel, res.begrepen.lid);
         if (!a.leden_teksten.length) {
+          const plek = `artikel ${res.begrepen.artikel}${res.begrepen.lid ? ` lid ${res.begrepen.lid}` : ""}`;
           setIntent({
             begrepen: null,
             bevestiging: "",
-            vraag: `Dit artikel staat (nog) niet in de graaf: ${res.begrepen.wetnaam || res.begrepen.bwbId} artikel ${res.begrepen.artikel}.`,
+            vraag: `Dit staat (nog) niet in de graaf: ${res.begrepen.wetnaam || res.begrepen.bwbId} ${plek}.`,
           });
         } else {
           setIntent(res);
