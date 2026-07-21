@@ -44,6 +44,8 @@ import type {
   BeslissingInvoer,
   DocumentCreate,
   DocumentSamenvatting,
+  GraafArtikel,
+  IntentResultaat,
   VoorstelElement,
 } from "./types";
 import { pathSegment } from "./url";
@@ -515,6 +517,29 @@ export async function haalAudit(slug: string): Promise<AuditRecord[]> {
   return json<AuditRecord[]>(
     await fetch(`/api/annotatie/documenten/${pathSegment(slug)}/audit`, { cache: "no-store" }),
   );
+}
+
+/** Parseer een vrije vraag ("annoteer art. 9 lid 1 IW") naar een doel + bevestiging (BFF → graph-qa).
+ *  De wet-catalogus grondt de naam→bwbId-resolutie; bij twijfel komt er een `vraag` terug. */
+export async function annoteerIntent(prompt: string, catalogus: WetChoice[]): Promise<IntentResultaat> {
+  const res = await fetch("/api/annotatie/intent", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      prompt,
+      catalogus: catalogus.map((w) => ({ bwbId: w.bwbId, naam: w.naam })),
+    }),
+  });
+  return json<IntentResultaat>(res);
+}
+
+/** Artikeltekst uit de graaf (voedt het workbench-documentpaneel; één bron met de annotatie-corpus). */
+export async function haalArtikelGraaf(bwbId: string, artikel: string): Promise<GraafArtikel> {
+  const res = await fetch(
+    `/api/annotatie/artikel?bwb_id=${encodeURIComponent(bwbId)}&artikel=${encodeURIComponent(artikel)}`,
+    { cache: "no-store" },
+  );
+  return json<GraafArtikel>(res);
 }
 
 /** Stream de door de agent voorgestelde JAS-elementen (BFF → graph-qa, SSE). Roept `onElement` per

@@ -84,3 +84,47 @@ class AnnotatieVoorstel(BaseModel):
     span: list[int] | None = None      # [start, end] in de (genormaliseerde) artikeltekst
     grounded: bool = False
     vindplaats: str = ""               # bwbId/artikel/lid/jci-notatie
+
+
+# --- Agent-ingang: intent-parse + artikeltekst uit de graaf -------------------
+
+class WetKeuze(BaseModel):
+    """Eén regel uit de wet-catalogus (voor naam→bwbId-resolutie in de intent-parse)."""
+
+    bwbId: str
+    naam: str = ""
+
+
+class IntentRequest(BaseModel):
+    prompt: str
+    catalogus: list[WetKeuze] = []
+
+
+class IntentBegrepen(BaseModel):
+    bwbId: str
+    artikel: str
+    lid: str = ""
+    wetnaam: str = ""
+
+
+class IntentResult(BaseModel):
+    """Het geparste doel + een leesbare bevestiging; bij twijfel `vraag` (dan is `begrepen` None)."""
+
+    begrepen: IntentBegrepen | None = None
+    bevestiging: str = ""
+    vraag: str = ""
+
+
+class LidTekst(BaseModel):
+    lid: str = ""
+    tekst: str = ""
+
+
+class ArtikelResult(BaseModel):
+    """Artikeltekst uit de graaf voor het workbench-documentpaneel (weergave == annotatie-corpus)."""
+
+    bwbId: str
+    artikel: str
+    citeertitel: str = ""
+    opschrift: str = ""
+    leden_teksten: list[LidTekst] = []

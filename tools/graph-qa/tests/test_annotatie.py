@@ -7,7 +7,13 @@ import json
 from agent.annotatie import _parse_elementen, annoteer_stream
 from fakes import FakeGraph, FakeLLM, make_settings, response, text_block
 
-CORPUS = "1. De ontvanger kan uitstel van betaling verlenen aan de belastingschuldige."
+# De graaf levert SPARQL-TSV (zoals de GraphDB-MCP); artikel_corpus maakt daar
+# "1. De ontvanger kan uitstel van betaling verlenen aan de belastingschuldige." van.
+CORPUS = (
+    "?tekst\t?jci\t?lid\t?lidnummer\t?lidtekst\n"
+    '\t"jci1.3:c:BWBR0004770&artikel=9"\t<https://ipalm.nl/bwb/BWBR0004770/artikel/9/lid/1>'
+    '\t"1"\t"De ontvanger kan uitstel van betaling verlenen aan de belastingschuldige."@nl'
+)
 
 
 def _run(gen):
