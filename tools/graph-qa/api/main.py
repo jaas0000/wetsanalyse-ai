@@ -41,8 +41,9 @@ load_dotenv()  # laad .env als die naast de server staat
 
 from agent import observability  # noqa: E402
 from agent.agent import answer_stream  # noqa: E402
+from agent.annotatie import annoteer_stream  # noqa: E402
 from agent.config import Settings  # noqa: E402
-from agent.models import ChatRequest  # noqa: E402
+from agent.models import AnnoteerRequest, ChatRequest  # noqa: E402
 
 logger = logging.getLogger("graph_qa.chat")
 
@@ -131,6 +132,29 @@ async def chat(
 
     async def event_generator() -> AsyncIterator[dict]:
         async for event in answer_stream(request.question, request.conversation_id):
+            yield {"data": json.dumps(event, ensure_ascii=False)}
+
+    return EventSourceResponse(event_generator())
+
+
+@app.post("/v1/annoteer")
+async def annoteer(
+    request: AnnoteerRequest,
+    _rl: None = Depends(_rate_limit),
+    _auth: None = Depends(_check_auth),
+) -> EventSourceResponse:
+    """Stream de door de agent voorgestelde JAS-annotatie-elementen voor een artikel (SSE)."""
+    logger.info(
+        "annoteer ontvangen",
+        extra={
+            "categorie": "functioneel",
+            "annotatie_bwb_id": request.bwb_id,
+            "annotatie_artikel": request.artikel,
+        },
+    )
+
+    async def event_generator() -> AsyncIterator[dict]:
+        async for event in annoteer_stream(request.bwb_id, request.artikel, request.lid):
             yield {"data": json.dumps(event, ensure_ascii=False)}
 
     return EventSourceResponse(event_generator())
