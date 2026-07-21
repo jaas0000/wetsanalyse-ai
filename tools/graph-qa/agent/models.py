@@ -13,6 +13,12 @@ class ChatRequest(BaseModel):
     conversation_id: str | None = None  # stuur mee voor gespreksgeheugen
 
 
+class AnnoteerRequest(BaseModel):
+    bwb_id: str
+    artikel: str
+    lid: str | None = None
+
+
 class Source(BaseModel):
     label: str
     uri: str
@@ -52,3 +58,29 @@ class DoneEvent(BaseModel):
 class ErrorEvent(BaseModel):
     type: Literal["error"] = "error"
     message: str
+
+
+# --- Annotatie (JAS) ---------------------------------------------------------
+
+class AnnotatieAlternatief(BaseModel):
+    """Een kandidaat-klasse bij twijfel, met korte motivatie (disambiguatie)."""
+
+    klasse: str
+    motivatie: str = ""
+
+
+class AnnotatieVoorstel(BaseModel):
+    """Eén door de agent voorgesteld JAS-annotatie-element voor een artikel.
+
+    `tekst` is een letterlijk fragment uit de artikeltekst; `span`/`grounded`/`vindplaats` worden
+    server-side ingevuld door de brongetrouwheid-check (nooit door het model).
+    """
+
+    klasse: str
+    tekst: str
+    lid: str = ""
+    toelichting: str = ""
+    alternatieven: list[AnnotatieAlternatief] = []
+    span: list[int] | None = None      # [start, end] in de (genormaliseerde) artikeltekst
+    grounded: bool = False
+    vindplaats: str = ""               # bwbId/artikel/lid/jci-notatie

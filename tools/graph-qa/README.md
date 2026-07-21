@@ -89,6 +89,7 @@ altijd opnieuw via de tools geverifieerd.
 | `GET /health` | Liveness (geen auth). |
 | `POST /v1/chat` | **SSE-stream**: body `{question, conversation_id?}` → events `status` · `token` · `sources` · `grounding` · `done` · `error`. |
 | `POST /v1/chat-webhook` | **Niet-streamend** contract voor een chat-UI: body `{chatInput, sessionId, secret?}` (of header `X-Chat-Secret`) → `{"output": "<antwoord + bronnenlijst>"}`. In dit project belt de webapp-chatbel dit endpoint via de API-chatproxy. |
+| `POST /v1/annoteer` | **SSE-stream**: body `{bwb_id, artikel, lid?}` → de agent stelt JAS-annotatie-elementen voor. Events `status` · `element` (per brongetrouw element: klasse · fragment · span · vindplaats · alternatieven) · `done` · `error`. De basis van de wetsanalyse-workbench (agent produceert, mens reviewt). |
 
 Authenticatie is optioneel (`QA_API_TOKEN` / `X-Chat-Secret`, timing-safe vergeleken); bij een
 intern-only deployment staat het slot doorgaans uit. Verdere beveiliging: CORS met credentials
