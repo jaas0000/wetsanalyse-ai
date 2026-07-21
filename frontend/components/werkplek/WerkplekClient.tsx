@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { Markdown } from "@/components/werkplek/Markdown";
@@ -72,8 +72,11 @@ export function WerkplekClient() {
   const [invoer, setInvoer] = useState("");
   const [bezig, setBezig] = useState(false);
   const [actiefId, setActiefId] = useState<string | undefined>();
+  const [hoogte, setHoogte] = useState<string>("70dvh");
   const sessieRef = useRef<string>("");
   const lijstRef = useRef<HTMLDivElement>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const taRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     sessieRef.current = sessie();
@@ -81,9 +84,35 @@ export function WerkplekClient() {
     verversLijst();
   }, []);
 
+  // Vul exact tot de onderkant van de viewport (runtime gemeten; geen magische aftrek), zodat de
+  // invoerbalk op de échte onderrand staat en alleen de thread scrollt. Herberekenen bij resize/
+  // toetsenbord (visualViewport op mobiel).
+  useLayoutEffect(() => {
+    const meet = () => {
+      const top = rootRef.current?.getBoundingClientRect().top ?? 0;
+      const vh = window.visualViewport?.height ?? window.innerHeight;
+      setHoogte(`${Math.max(320, Math.round(vh - top - 8))}px`);
+    };
+    meet();
+    window.addEventListener("resize", meet);
+    window.visualViewport?.addEventListener("resize", meet);
+    return () => {
+      window.removeEventListener("resize", meet);
+      window.visualViewport?.removeEventListener("resize", meet);
+    };
+  }, []);
+
   useEffect(() => {
     lijstRef.current?.scrollTo({ top: lijstRef.current.scrollHeight, behavior: "smooth" });
   }, [items, bezig]);
+
+  // Auto-groeiende textarea (groeit met de inhoud tot een max; daarna intern scrollen).
+  useLayoutEffect(() => {
+    const ta = taRef.current;
+    if (!ta) return;
+    ta.style.height = "0px";
+    ta.style.height = `${Math.min(ta.scrollHeight, 200)}px`;
+  }, [invoer]);
 
   function verversLijst() {
     lijstDocumenten().then(setDocumenten).catch(() => {});
@@ -92,8 +121,8 @@ export function WerkplekClient() {
     setItems((xs) => xs.map((x) => (x.id === id ? ({ ...x, ...patch } as Item) : x)));
   }
 
-  async function verstuur() {
-    const prompt = invoer.trim();
+  async function verstuur(vast?: string) {
+    const prompt = (vast ?? invoer).trim();
     if (!prompt || bezig) return;
     setInvoer("");
     const antId = uid();
@@ -191,40 +220,59 @@ export function WerkplekClient() {
   }
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[minmax(220px,260px)_1fr]">
-      <DocumentLijst
-        documenten={documenten}
-        wetten={wetten}
-        onOpen={openDocument}
-        onNew={() => setItems([])}
-        onVerwijder={verwijder}
-      />
+    <div
+      ref={rootRef}
+      style={{ height: hoogte }}
+      className="grid gap-4 lg:grid-cols-[minmax(220px,260px)_1fr]"
+    >
+      {/* Zijpaneel met lopende annotaties (op mobiel verborgen — chat-first) */}
+      <div className="hidden min-h-0 overflow-y-auto lg:block">
+        <DocumentLijst
+          documenten={documenten}
+          wetten={wetten}
+          onOpen={openDocument}
+          onNew={() => setItems([])}
+          onVerwijder={verwijder}
+        />
+      </div>
 
-      <div className="flex h-[calc(100dvh-15rem)] min-h-[24rem] flex-col">
-        <div ref={lijstRef} className="min-h-0 flex-1 space-y-4 overflow-y-auto pb-4" aria-live="polite">
-          {items.length === 0 && (
-            <p className="text-sm text-muted">
-              Stel een vraag over de wet- en regelgeving, of vraag een annotatie — bijv.{" "}
-              <span className="font-medium text-ink">
-                “annoteer artikel 9 lid 1 van de Invorderingswet 1990”
-              </span>
-              .
-            </p>
-          )}
-
-          {items.map((item) =>
-            item.type === "user" ? (
-              <div key={item.id} className="flex justify-end">
-                <div className="max-w-[85%] whitespace-pre-wrap rounded-xl bg-accent px-3 py-2 text-sm text-paper">
-                  {item.tekst}
+      <div className="flex min-h-0 flex-col">
+        {/* Thread — enige scrollende gebied; berichten in een gecentreerde leeskolom */}
+        <div ref={lijstRef} className="min-h-0 flex-1 overflow-y-auto" aria-live="polite">
+          <div className="mx-auto max-w-3xl space-y-6 px-1 py-6">
+            {items.length === 0 && (
+              <div className="pt-6 text-center">
+                <p className="font-display text-lg font-semibold text-lint">Waarmee kan ik helpen?</p>
+                <p className="mt-1 text-sm text-muted">
+                  Stel een vraag over de wet- en regelgeving, of vraag een annotatie volgens het JAS.
+                </p>
+                <div className="mt-4 flex flex-wrap justify-center gap-2">
+                  {VOORBEELDEN.map((v) => (
+                    <button
+                      key={v}
+                      type="button"
+                      onClick={() => void verstuur(v)}
+                      className="rounded-full border border-line bg-paper px-3 py-1.5 text-left text-xs text-lint transition-colors hover:bg-surface"
+                    >
+                      {v}
+                    </button>
+                  ))}
                 </div>
               </div>
-            ) : item.type === "antwoord" ? (
-              <div key={item.id} className="flex justify-start">
-                <div className="max-w-[90%] rounded-xl border border-line bg-white px-3 py-2">
+            )}
+
+            {items.map((item) =>
+              item.type === "user" ? (
+                <div key={item.id} className="flex justify-end">
+                  <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl bg-accent px-4 py-2.5 text-sm text-paper">
+                    {item.tekst}
+                  </div>
+                </div>
+              ) : item.type === "antwoord" ? (
+                <div key={item.id} className="text-sm text-ink">
                   {item.tekst ? <Markdown tekst={item.tekst} /> : <Punten />}
                   {item.bronnen && item.bronnen.length > 0 && (
-                    <div className="mt-2 border-t border-line pt-2 text-xs text-muted">
+                    <div className="mt-2 text-xs text-muted">
                       <span className="font-medium">Bronnen:</span>{" "}
                       {item.bronnen.map((b, i) => {
                         const href = wettenOverheidHref(b.uri);
@@ -244,44 +292,52 @@ export function WerkplekClient() {
                     </div>
                   )}
                 </div>
-              </div>
-            ) : docs[item.slug] && infos[item.slug] ? (
-              <AnnotatieKaart
-                key={item.id}
-                doc={docs[item.slug]}
-                info={infos[item.slug]}
-                actiefId={actiefId}
-                onKies={setActiefId}
-                onBeslissing={(elementId, req) => beslissing(item.slug, elementId, req)}
-              />
-            ) : null,
-          )}
-
-          {bezig && <Punten />}
+              ) : docs[item.slug] && infos[item.slug] ? (
+                <AnnotatieKaart
+                  key={item.id}
+                  doc={docs[item.slug]}
+                  info={infos[item.slug]}
+                  actiefId={actiefId}
+                  onKies={setActiefId}
+                  onBeslissing={(elementId, req) => beslissing(item.slug, elementId, req)}
+                />
+              ) : null,
+            )}
+          </div>
         </div>
 
-        <div className="shrink-0 border-t border-line bg-paper pt-3">
-          <div className="flex items-end gap-2">
-            <textarea
-              value={invoer}
-              onChange={(e) => setInvoer(e.target.value)}
-              onKeyDown={opToets}
-              rows={1}
-              placeholder="Stel een vraag of vraag een annotatie…"
-              className="max-h-40 min-h-[48px] flex-1 resize-none rounded-lg border border-line bg-white px-3 py-3 text-sm text-ink placeholder:text-faint focus-visible:border-lint focus-visible:outline focus-visible:outline-2 focus-visible:outline-lint"
-            />
-            <Button onClick={verstuur} disabled={bezig || !invoer.trim()} className="w-auto">
-              {bezig ? "Bezig…" : "Stuur"}
-            </Button>
+        {/* Invoerbalk — gepind onderaan, gecentreerd, auto-groeiend */}
+        <div className="shrink-0 bg-paper">
+          <div className="mx-auto max-w-3xl px-1 pb-3 pt-2">
+            <div className="flex items-end gap-2 rounded-2xl border border-line bg-white px-2 py-1.5 focus-within:border-lint">
+              <textarea
+                ref={taRef}
+                value={invoer}
+                onChange={(e) => setInvoer(e.target.value)}
+                onKeyDown={opToets}
+                rows={1}
+                placeholder="Stel een vraag of vraag een annotatie…"
+                className="max-h-[200px] flex-1 resize-none bg-transparent px-2 py-2 text-sm text-ink placeholder:text-faint focus:outline-none"
+              />
+              <Button onClick={() => verstuur()} disabled={bezig || !invoer.trim()} size="sm" className="mb-0.5 w-auto shrink-0">
+                {bezig ? "…" : "Stuur"}
+              </Button>
+            </div>
+            <p className="mt-2 text-center text-xs text-faint">
+              De agent bevraagt de kennisgraaf — controleer altijd de bron.
+            </p>
           </div>
-          <p className="mt-2 text-center text-xs text-faint">
-            De agent bevraagt de kennisgraaf — controleer altijd de bron.
-          </p>
         </div>
       </div>
     </div>
   );
 }
+
+const VOORBEELDEN = [
+  "Wat betekent het begrip 'belastingschuldige'?",
+  "annoteer artikel 9 lid 1 van de Invorderingswet 1990",
+  "Welke artikelen gaan over invordering?",
+];
 
 function AnnotatieKaart({
   doc,
