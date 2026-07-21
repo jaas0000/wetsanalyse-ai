@@ -776,6 +776,20 @@ anders                               →  <span class="fn">verify</span>   <span
 <span class="kw">not</span> grounded <span class="kw">and</span> grounding_correct <span class="kw">and not</span> corrected  →  <span class="fn">correct</span>
 anders                                                 →  <span class="fn">finalize</span></div>
       </div>
+
+      <div class="card c-purple glow-purple">
+        <h3 style="color:#B794FF">Multi-hop decompositie <span style="font-size:0.7rem;color:var(--text-dim)">— <code>enable_decomposition</code>, live</span></h3>
+        <div class="nc-body" style="margin-bottom:8px"><code>build_graph</code> vertakt: bij ingeschakelde
+          decompositie draait een aparte graaf die een samengestelde vraag opsplitst en <strong>per
+          deelvraag</strong> ophaalt, en het eindantwoord synthetiseert.</div>
+        <div class="code">router → <span class="fn">decompose</span> → <span class="fn">solve</span> → <span class="fn">synthesize</span> → verify → (<span class="fn">resynth</span>) → finalize
+
+<span class="cm"># solve: per deelvraag een eigen agent⇄tools-lus (lokaal);</span>
+<span class="cm"># gedeelde source_trace → grounding/provenance ongewijzigd op de synthese.</span>
+<span class="cm"># 1 deelvraag → direct streamen, synthese overslaan (geen tax).</span></div>
+        <p style="margin-top:8px;font-size:0.72rem;color:var(--text-dim)">Staat de toggle uit (default),
+          dan is de bovenstaande één-loop-graaf byte-voor-byte ongewijzigd.</p>
+      </div>
     </div>
 
     <!-- ══════════════════════════════════ SLIDE 4: STATE -->
@@ -800,6 +814,8 @@ anders                                                 →  <span class="fn">fin
           <tr><td>grounded / cited / unsupported</td><td>bool/int/list</td><td>overschrijf</td><td>Grounding-rapport van verify_node.</td></tr>
           <tr><td>corrected</td><td>bool</td><td>per beurt False</td><td>Vlag die voorkomt dat correct_node meer dan eenmaal vuurt.</td></tr>
           <tr><td>sources</td><td>list[dict]</td><td>overschrijf</td><td>Definitieve bronnenlijst, geschreven door finalize_node.</td></tr>
+          <tr><td>sub_questions</td><td>list[str]</td><td>overschrijf</td><td><strong>Decompositie:</strong> de deelvragen (gezet door decompose_node). Leeg in de één-loop-stroom.</td></tr>
+          <tr><td>sub_findings</td><td>list[dict]</td><td>overschrijf</td><td><strong>Decompositie:</strong> per-deelvraag bevinding {vraag, antwoord} — bouwstof voor de synthese.</td></tr>
         </tbody>
       </table>
       <div class="card c-neon glow-pulse">
