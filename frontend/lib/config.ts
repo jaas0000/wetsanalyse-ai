@@ -51,3 +51,34 @@ export function adminAuthHeader(): Record<string, string> {
   const token = adminToken();
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
+
+// --- graph-qa (annotatie-agent) ---------------------------------------------
+// De workbench streamt annotatie-voorstellen rechtstreeks van graph-qa (SSE), náást de api voor
+// state. graph-qa draait intern (homeinfra_internal) en is token-gated (QA_API_TOKEN).
+
+let cachedGraphQaToken: string | null = null;
+
+export function graphQaBaseUrl(): string {
+  return (process.env.GRAPH_QA_URL || "http://graph-qa:8080").replace(/\/+$/, "");
+}
+
+/** graph-qa-token uit GRAPH_QA_TOKEN_FILE (voorrang) of GRAPH_QA_TOKEN. Gecached na eerste lees. */
+export function graphQaToken(): string {
+  if (cachedGraphQaToken !== null) return cachedGraphQaToken;
+  const file = process.env.GRAPH_QA_TOKEN_FILE;
+  if (file) {
+    try {
+      cachedGraphQaToken = readFileSync(file, "utf8").trim();
+      return cachedGraphQaToken;
+    } catch (err) {
+      throw new Error(`Kan GRAPH_QA_TOKEN_FILE niet lezen (${file}): ${(err as Error).message}`);
+    }
+  }
+  cachedGraphQaToken = (process.env.GRAPH_QA_TOKEN || "").trim();
+  return cachedGraphQaToken;
+}
+
+export function graphQaAuthHeader(): Record<string, string> {
+  const token = graphQaToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}

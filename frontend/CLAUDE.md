@@ -116,6 +116,21 @@ De **harde scheidingslijn**: alles met een token is server-only.
   scherm overlopen. De JAS-klassekleuren in `lib/jas.ts` zijn de **exacte labelkleuren uit
   `docs/wa-table.png`**; job-state-kleuren in `lib/states.ts`.
 
+## Annotatie-workbench (`/workbench`)
+
+De review-workbench voor de wetsanalyse (**de agent annoteert, de mens reviewt**; zie
+`docs/wetsanalyse-workbench/PLAN.md`). `app/workbench/page.tsx` → `components/workbench/WorkbenchClient.tsx`:
+kies wet+artikel → agent stelt JAS-elementen voor (live SSE) → per element approve/edit/reject/comment.
+- **`DocumentPaneel`** highlight de **letterlijke** fragmenten in de artikeltekst (`segmenteer` +
+  `lib/jas.ts:jasStyle`); robuust t.o.v. het span-corpus (substring-terugvinden). **`ReviewQueue`** =
+  decision-cards (edit/reject vragen een `review_reason`).
+- **Twee backends, frontend orkestreert:** state via de api (BFF `app/api/annotatie/*` → `/v1/annotatie/*`
+  via `proxy()`); het **voorstel via graph-qa** (BFF `app/api/annotatie/annoteer/route.ts` = SSE-passthrough
+  naar `GRAPH_QA_URL` + `GRAPH_QA_TOKEN`, gespiegeld op de chat-route). Client-helpers +
+  `annoteerStream` in `lib/api.ts`; types in `lib/types.ts` (afgeleid van `api/app/annotatie_contracts.py`).
+- **Config:** `GRAPH_QA_URL` (intern, default `http://graph-qa:8080`) + `GRAPH_QA_TOKEN(_FILE)` — de
+  frontend moet graph-qa op `homeinfra_internal` kunnen bereiken (`lib/config.ts`).
+
 ## Observability
 
 `instrumentation.ts` registreert OpenTelemetry via `@vercel/otel` (gated op

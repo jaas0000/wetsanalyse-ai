@@ -691,3 +691,109 @@ export interface ApiError {
   detail: string;
   retryAfter?: number;
 }
+
+// --- Annotatie-domein (wetsanalyse-workbench) — afgeleid van api/app/annotatie_contracts.py ---
+
+export type Lifecycle =
+  | "voorgesteld" | "critic_checked" | "human_approved" | "edited" | "rejected" | "published" | "reused";
+export type BeslissingType = "approve" | "edit" | "reject" | "comment";
+export type ReviewReason =
+  | "verkeerde_klasse" | "bron_gemist" | "tekst" | "interpretatie" | "onvoldoende_context" | "anders";
+export type Aandacht = "groen" | "geel" | "rood";
+export type DocumentStatus = "in_review" | "geaccordeerd" | "gepromoveerd";
+
+export interface Alternatief {
+  klasse: string;
+  motivatie: string;
+}
+
+export interface Beslissing {
+  type: BeslissingType;
+  actor: string;
+  tijd: string;
+  review_reason?: ReviewReason | null;
+  comment: string;
+  wijziging: Record<string, unknown>;
+}
+
+export interface AnnotatieElement {
+  id: string;
+  klasse: string;
+  tekst: string;
+  lid: string;
+  toelichting: string;
+  vindplaats: string;
+  span?: number[] | null;
+  herkomst: string;
+  lifecycle: Lifecycle;
+  alternatieven: Alternatief[];
+  aandacht?: Aandacht | null;
+  diff: Record<string, { voor: unknown; na: unknown }>;
+  beslissingen: Beslissing[];
+}
+
+export interface AnnotatieDocument {
+  slug: string;
+  client_id: string;
+  werkgebied: string;
+  bwbId: string;
+  artikel: string;
+  lid: string;
+  status: DocumentStatus;
+  elementen: AnnotatieElement[];
+  created?: string | null;
+  updated?: string | null;
+}
+
+export interface AuditRecord {
+  id: number;
+  actor: string;
+  actie: string;
+  element_id?: string | null;
+  detail: Record<string, unknown>;
+  tijdstip?: string | null;
+}
+
+export interface DocumentSamenvatting {
+  slug: string;
+  bwbId: string;
+  artikel: string;
+  lid: string;
+  werkgebied: string;
+  status: DocumentStatus;
+  aantal_elementen: number;
+  updated?: string | null;
+}
+
+export interface DocumentCreate {
+  bwbId: string;
+  artikel: string;
+  lid?: string | null;
+  werkgebied?: string;
+}
+
+export interface Wijziging {
+  klasse?: string | null;
+  tekst?: string | null;
+  toelichting?: string | null;
+  lid?: string | null;
+}
+
+export interface BeslissingInvoer {
+  type: BeslissingType;
+  review_reason?: ReviewReason | null;
+  comment?: string;
+  wijziging?: Wijziging | null;
+}
+
+/** Eén voorgesteld element uit de graph-qa `/v1/annoteer`-SSE (nog niet gepersisteerd). */
+export interface VoorstelElement {
+  klasse: string;
+  tekst: string;
+  lid: string;
+  toelichting: string;
+  vindplaats: string;
+  span?: number[] | null;
+  alternatieven: Alternatief[];
+  grounded: boolean;
+}
