@@ -133,6 +133,26 @@ def _parse_final(final: Any) -> tuple[list[dict[str, Any]], list[str]]:
     return tool_uses, text_parts
 
 
+def _schoon_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Strip lege tekstblokken (Anthropic weigert {"type":"text","text":""} — Claude stuurt die soms
+    mee náást een tool_use; via het gespreksgeheugen komen ze terug). Berichten waarvan de content
+    daardoor leeg wordt, slaan we over; tool_use/tool_result en string-content blijven ongemoeid."""
+    schoon: list[dict[str, Any]] = []
+    for m in messages:
+        c = m.get("content")
+        if isinstance(c, list):
+            nieuw = [
+                b
+                for b in c
+                if not (isinstance(b, dict) and b.get("type") == "text" and not str(b.get("text", "")).strip())
+            ]
+            if nieuw:
+                schoon.append({**m, "content": nieuw})
+        else:
+            schoon.append(m)
+    return schoon
+
+
 class State(TypedDict, total=False):
     question: str
     messages: Annotated[list[dict[str, Any]], operator.add]      # episodisch, gepersisteerd
@@ -232,7 +252,7 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
             max_tokens=4096,
             system=system,
             tools=anthropic_schemas(only=spec.tools),
-            messages=state["messages"],
+            messages=_schoon_messages(state["messages"]),
         ) as stream:
             # Beurt-narratie stroomt per beurt binnen; op een beurt-grens ontbreekt anders een
             # scheiding, zodat "…tegelijkertijd." + "De thesaurus…" aan elkaar plakt. Emit één
@@ -249,7 +269,7 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
 
         tool_uses, text_parts = _parse_final(final)
 
-        assistant_content: list[dict[str, Any]] = [{"type": "text", "text": p} for p in text_parts]
+        assistant_content: list[dict[str, Any]] = [{"type": "text", "text": p} for p in text_parts if p and p.strip()]
         assistant_content += [
             {"type": "tool_use", "id": t["id"], "name": t["name"], "input": t["input"]}
             for t in tool_uses
@@ -429,7 +449,7 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
             antwoord = ""
             for _turn in range(settings.sub_max_turns):
                 with llm.stream(
-                    model=model, max_tokens=4096, system=system, tools=schemas, messages=msgs,
+                    model=model, max_tokens=4096, system=system, tools=schemas, messages=_schoon_messages(msgs),
                 ) as stream:
                     first = True
                     for delta in stream.text_deltas:
@@ -440,7 +460,7 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
                         first = False
                     final = stream.final_message()
                 tool_uses, text_parts = _parse_final(final)
-                assistant_content: list[dict[str, Any]] = [{"type": "text", "text": p} for p in text_parts]
+                assistant_content: list[dict[str, Any]] = [{"type": "text", "text": p} for p in text_parts if p and p.strip()]
                 assistant_content += [
                     {"type": "tool_use", "id": t["id"], "name": t["name"], "input": t["input"]}
                     for t in tool_uses
