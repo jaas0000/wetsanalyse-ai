@@ -1483,25 +1483,26 @@ _BWB_RE = re.compile(<span class="st">r"\bBWBR\d+\b"</span>)</div>
     <div class="slide" id="s17">
       <div>
         <div class="slide-label"><span class="dot"></span>Wetsanalyse · workbench</div>
-        <h2>Twee samenwerkende modi</h2>
+        <h2>De agent annoteert, de jurist reviewt</h2>
       </div>
       <p>Een chat-scherm (ChatGPT/Claude-stijl) met <strong>links een documentpaneel</strong> dat het
-        opgehaalde artikel toont. Op die tekst annoteert de jurist volgens het JAS — handmatig én met de agent.</p>
+        opgehaalde artikel toont. <strong>De agent produceert de JAS-annotatie; de mens beslist en corrigeert.</strong>
+        Dat is het einddoel — geen losstaande handmatige-annotatietool.</p>
 
       <div class="g2">
-        <div class="card c-blue glow-blue">
-          <div class="badge b-blue" style="margin-bottom:10px">modus 1 · de jurist stuurt</div>
-          <h3>Handmatig annoteren</h3>
-          <p>Selecteer een tekstfragment → ken een JAS-klasse + toelichting toe → onder de tekst groeit een
-            <strong>annotatietabel</strong> (klasse · fragment · toelichting · vindplaats). Vraag de agent
-            desgewenst als <strong>sparringpartner</strong> om een suggestie op je selectie.</p>
-        </div>
         <div class="card c-purple glow-purple">
-          <div class="badge b-purple" style="margin-bottom:10px">modus 2 · de agent stelt voor</div>
-          <h3 style="color:#B794FF">Agent-annotatie met HITL</h3>
-          <p>De agent voert zelf een JAS-annotatie uit en biedt <strong>elk element afzonderlijk</strong> aan
-            voor een menselijke beslissing — <strong>approve · edit · reject · comment</strong> — met per
-            beslissing een <em>lesson learned</em>. Elke stap in de audit trail.</p>
+          <div class="badge b-purple" style="margin-bottom:10px">de agent · produceert</div>
+          <h3 style="color:#B794FF">Stelt de annotatie voor</h3>
+          <p>De agent voert een JAS-annotatie uit op het opgehaalde artikel en biedt <strong>elk element
+            afzonderlijk</strong> aan — brongetrouw (klasse · fragment · vindplaats), met bij twijfel
+            alternatieven en mogelijk-ontbrekende elementen.</p>
+        </div>
+        <div class="card c-blue glow-blue">
+          <div class="badge b-blue" style="margin-bottom:10px">de jurist · beslist</div>
+          <h3>Reviewt en corrigeert</h3>
+          <p>Per element een beslissing — <strong>approve · edit · reject · comment</strong> — met per
+            beslissing een <em>lesson learned</em>. Corrigeren tijdens de review is de enige handmatige
+            touch; from-scratch handmatig annoteren is geen doel en verdwijnt.</p>
         </div>
       </div>
 
@@ -1680,10 +1681,9 @@ _BWB_RE = re.compile(<span class="st">r"\bBWBR\d+\b"</span>)</div>
       </div>
 
       <div class="stat-row" style="margin-top:16px">
-        <div class="stat"><span class="val">D0</span><span class="lbl">Artifact</span></div>
-        <div class="stat"><span class="val">0</span><span class="lbl">Fundament</span></div>
-        <div class="stat"><span class="val">1</span><span class="lbl">Workbench · MVP</span></div>
-        <div class="stat"><span class="val">2</span><span class="lbl">Agent + HITL</span></div>
+        <div class="stat"><span class="val">D0</span><span class="lbl">Artifact ✓</span></div>
+        <div class="stat"><span class="val">1</span><span class="lbl">MVP agent→review</span></div>
+        <div class="stat"><span class="val">2</span><span class="lbl">Review-workflow</span></div>
         <div class="stat"><span class="val">3</span><span class="lbl">Activiteit 3</span></div>
         <div class="stat"><span class="val">4</span><span class="lbl">Graaf-promotie</span></div>
       </div>
