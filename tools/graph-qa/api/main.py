@@ -11,7 +11,8 @@ Endpoint: POST /v1/chat
     {"type": "grounding", "grounded": bool, "unsupported": [...]}
     {"type": "done"}
     {"type": "error", "message": "..."}
-    (annotatie-route emit daarnaast {"type":"doel",...} en {"type":"element",...})
+    (annotatie-route emit daarnaast {"type":"doel",...}, {"type":"element",...} — het element draagt
+     een Critic-`aandacht` (groen|geel|rood) + `critic`-motivatie — en één {"type":"ontbrekend","items":[...]})
 
 Authenticatie: optionele Bearer-token via env QA_API_TOKEN (timing-safe vergeleken).
 Als QA_API_TOKEN niet gezet is, is het endpoint open (voor lokale dev).

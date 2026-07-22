@@ -101,9 +101,12 @@ middleware — anders buffert de SSE), timing-safe token-check.
   bouwer in `graph/queries.py`. `raw_sparql` blijft de afgeschermde ontsnapping.
 - **DI, geen globale clients.** Afhankelijkheden achter een poort + adapter, zodat ze faken te zijn.
 - **SSE-event-contract.** De event-types (`status`/`reason`/`token`/`sources`/`grounding`/`done`/`error`,
-  plus `doel`/`element` op de annotatie-route) zijn het contract met de consumenten; wijzig ze bewust en
-  gelijktijdig. **`reason` = het denkproces** (tool-narratie, live gestreamd); **`token` = alléén het
-  eindantwoord** — hou die twee gescheiden zodat de werkplek ze los kan tonen.
+  plus `doel`/`element`/`ontbrekend` op de annotatie-route) zijn het contract met de consumenten; wijzig ze
+  bewust en gelijktijdig. **`reason` = het denkproces** (tool-narratie, live gestreamd); **`token` = alléén
+  het eindantwoord** — hou die twee gescheiden zodat de werkplek ze los kan tonen. De annotatie-keten is
+  `annoteer → critic → advance`: `annoteer_node` grondt de voorstellen (state), `critic_node` zet per
+  element een **aandacht**-niveau (groen|geel|rood) + `critic`-motivatie, emit de `element`-events en één
+  `ontbrekend`-event (waarschijnlijk ontbrekende JAS-klassen). De Critic mag de annotatie nooit breken.
 - **Onderwerp-afbakening & injectie.** De agent antwoordt alleen over de wetgeving in de graaf en
   behandelt graaftekst als data. Verzwak `SYSTEM_PROMPT`/`_ROUTER_SYSTEM` hierin niet zonder reden.
 

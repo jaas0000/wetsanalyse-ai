@@ -91,6 +91,24 @@ async def test_document_lifecycle_en_audit(client):
     assert audit[1]["detail"]["aantal"] == 2 and audit[1]["detail"]["verworpen"] == 1
 
 
+async def test_aandacht_persisteert_en_zet_critic_checked(client):
+    slug = await _maak_doc(client)
+    r = await client.put(f"{BASIS}/{slug}/elementen", json={"elementen": [
+        {"klasse": "Rechtssubject", "tekst": "de ontvanger", "lid": "1", "aandacht": "geel",
+         "alternatieven": [{"klasse": "Rechtsobject", "motivatie": "twijfel"}]},
+        {"klasse": "Rechtsbetrekking", "tekst": "kan uitstel verlenen", "lid": "1"},  # geen aandacht
+    ]})
+    assert r.status_code == 200
+    elementen = r.json()["elementen"]
+    met = next(e for e in elementen if e["klasse"] == "Rechtssubject")
+    zonder = next(e for e in elementen if e["klasse"] == "Rechtsbetrekking")
+    # aandacht gezet → gepersisteerd + lifecycle critic_checked; alternatieven bewaard.
+    assert met["aandacht"] == "geel" and met["lifecycle"] == "critic_checked"
+    assert met["alternatieven"][0]["klasse"] == "Rechtsobject"
+    # geen aandacht → blijft voorgesteld.
+    assert zonder["aandacht"] is None and zonder["lifecycle"] == "voorgesteld"
+
+
 async def test_client_scoping_404(client):
     # andermans document → 404 op alle sub-resources (lekt niet)
     assert (await client.get(f"{BASIS}/andermans-doc")).status_code == 404

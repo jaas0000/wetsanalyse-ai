@@ -110,10 +110,14 @@ async def zet_elementen(
         if e.klasse not in GELDIGE_JAS_KLASSEN or not e.tekst.strip():
             verworpen += 1
             continue
+        # Heeft de Critic een aandacht-niveau gezet, dan is het element al door de Critic gezien →
+        # lifecycle `critic_checked`; anders `voorgesteld`.
+        lifecycle = Lifecycle.critic_checked if e.aandacht is not None else Lifecycle.voorgesteld
         elementen.append(AnnotatieElement(
             id=uuid.uuid4().hex[:12], klasse=e.klasse, tekst=e.tekst, lid=e.lid,
             toelichting=e.toelichting, vindplaats=e.vindplaats, span=e.span,
-            herkomst="agent", lifecycle=Lifecycle.voorgesteld, alternatieven=e.alternatieven,
+            herkomst="agent", lifecycle=lifecycle, alternatieven=e.alternatieven,
+            aandacht=e.aandacht, critic=e.critic,
         ))
     await store.vervang_elementen(slug, elementen)
     await store.schrijf_audit(

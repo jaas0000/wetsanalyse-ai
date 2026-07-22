@@ -50,3 +50,46 @@ def annotatie_userprompt(bwb_id: str, artikel: str, artikeltekst: str, lid: str 
         f"Regeling {bwb_id}, {plek}. Markeer en classificeer de JAS-elementen in onderstaande "
         f"tekst.{scope}\n\n--- ARTIKELTEKST ---\n{artikeltekst}\n--- EINDE ARTIKELTEKST ---"
     )
+
+
+def critic_systeemprompt() -> str:
+    klassen = ", ".join(JAS_KLASSEN_VOLGORDE)
+    return f"""Je bent een kritische reviewer (Critic) die JAS-annotatievoorstellen controleert VÓÓRDAT een jurist ze beoordeelt. Je maakt de annotaties zelf NIET; je beoordeelt de kwaliteit ervan en signaleert waar de jurist extra op moet letten.
+
+DE DERTIEN JAS-KLASSEN (gebruik exact deze namen, verzin geen andere):
+{_klassen_referentie()}
+
+WAAR JE OP LET (per voorgesteld element):
+- Verkeerde of te grove klasse (past een andere JAS-klasse beter?).
+- Zwak of onvolledig gemarkeerd fragment (te lang/te kort, verkeerde grens).
+- Echte twijfel tussen klassen (dan hoort er disambiguatie te zijn).
+
+AANDACHT-NIVEAU per element — géén verzonnen zekerheidscijfer, maar een oordeel op bovenstaande signalen:
+- "groen": klasse en fragment zijn helder en juist; geen bezwaar.
+- "geel": twijfel of een aandachtspunt — jurist moet even kijken (bv. plausibel alternatief, grensgeval).
+- "rood": waarschijnlijk fout — verkeerde klasse of niet-onderbouwd fragment.
+
+ONTBREKEND: benoem JAS-klassen die waarschijnlijk óók in de tekst voorkomen maar niet zijn gemarkeerd (met een korte reden). Verzin niets buiten de aangeleverde tekst.
+
+UITVOER — geef UITSLUITEND geldige JSON terug, zonder omliggende tekst of code-fences, in deze vorm:
+{{"oordelen": [
+  {{"index": <0-based index van het element>, "aandacht": "<groen|geel|rood>", "motivatie": "<één korte zin>"}}
+], "ontbrekend": [
+  {{"klasse": "<een van: {klassen}>", "reden": "<korte reden>"}}
+]}}
+Geef voor ELK aangeleverd element precies één oordeel (met de juiste index). `ontbrekend` mag leeg zijn."""
+
+
+def critic_userprompt(voorstellen: list[dict], artikeltekst: str) -> str:
+    regels = []
+    for i, v in enumerate(voorstellen):
+        alt = ", ".join(a.get("klasse", "") for a in v.get("alternatieven", []) if a.get("klasse"))
+        alt_tekst = f" | alternatieven: {alt}" if alt else ""
+        regels.append(f'[{i}] klasse={v.get("klasse", "")} | tekst="{v.get("tekst", "")}"{alt_tekst}')
+    lijst = "\n".join(regels) if regels else "(geen voorstellen)"
+    return (
+        "Beoordeel de onderstaande voorgestelde JAS-elementen tegen de artikeltekst. Geef per index een "
+        "aandacht-niveau + motivatie, en noem waarschijnlijk ontbrekende elementen.\n\n"
+        f"--- VOORSTELLEN ---\n{lijst}\n--- EINDE VOORSTELLEN ---\n\n"
+        f"--- ARTIKELTEKST ---\n{artikeltekst}\n--- EINDE ARTIKELTEKST ---"
+    )

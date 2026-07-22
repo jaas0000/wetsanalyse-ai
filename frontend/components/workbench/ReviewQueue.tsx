@@ -16,9 +16,16 @@ const REDENEN: { waarde: ReviewReason; label: string }[] = [
 
 const LIFECYCLE_LABEL: Record<string, string> = {
   voorgesteld: "voorgesteld",
+  critic_checked: "te reviewen",
   human_approved: "akkoord",
   edited: "aangepast",
   rejected: "verworpen",
+};
+
+const AANDACHT: Record<string, { emoji: string; label: string }> = {
+  groen: { emoji: "🟢", label: "groen — geen bezwaar" },
+  geel: { emoji: "🟡", label: "geel — even kijken" },
+  rood: { emoji: "🔴", label: "rood — waarschijnlijk fout" },
 };
 
 type Actie = "reject" | "edit" | "comment" | null;
@@ -41,7 +48,8 @@ function DecisionCard({
   const [toelichting, setToelichting] = useState(el.toelichting);
   const [bezig, setBezig] = useState(false);
 
-  const beslist = el.lifecycle !== "voorgesteld";
+  // "beslist" = de mens heeft al een besluit genomen; `voorgesteld`/`critic_checked` zijn nog te reviewen.
+  const beslist = ["human_approved", "edited", "rejected"].includes(el.lifecycle);
 
   async function verstuur(req: BeslissingInvoer) {
     setBezig(true);
@@ -61,7 +69,14 @@ function DecisionCard({
       }`}
     >
       <div className="flex items-center justify-between gap-2">
-        <span className={`rounded px-2 py-0.5 text-xs font-semibold ${jasStyle(el.klasse)}`}>{el.klasse}</span>
+        <span className="flex items-center gap-1.5">
+          {el.aandacht && (
+            <span title={el.critic || AANDACHT[el.aandacht]?.label} aria-label={AANDACHT[el.aandacht]?.label}>
+              {AANDACHT[el.aandacht]?.emoji}
+            </span>
+          )}
+          <span className={`rounded px-2 py-0.5 text-xs font-semibold ${jasStyle(el.klasse)}`}>{el.klasse}</span>
+        </span>
         <span className="text-[0.65rem] uppercase tracking-wide text-muted">
           {LIFECYCLE_LABEL[el.lifecycle] ?? el.lifecycle}
           {el.lid ? ` · lid ${el.lid}` : ""}
@@ -69,12 +84,29 @@ function DecisionCard({
       </div>
       <p className="mt-1.5 text-sm text-ink">“{el.tekst}”</p>
       {el.toelichting && <p className="mt-1 text-xs text-muted">{el.toelichting}</p>}
-      {el.alternatieven.length > 0 && (
-        <p className="mt-1 text-xs text-muted">
-          Twijfel:{" "}
-          {el.alternatieven.map((a) => a.klasse).join(", ")}
-        </p>
-      )}
+      {el.critic && <p className="mt-1 text-xs italic text-muted">Critic: {el.critic}</p>}
+      {el.alternatieven.length > 0 &&
+        (beslist ? (
+          <p className="mt-1 text-xs text-muted">Twijfel: {el.alternatieven.map((a) => a.klasse).join(", ")}</p>
+        ) : (
+          <div className="mt-1 flex flex-wrap items-center gap-1 text-xs text-muted" onClick={(e) => e.stopPropagation()}>
+            <span>Twijfel — kies om te wijzigen:</span>
+            {el.alternatieven.map((a) => (
+              <button
+                key={a.klasse}
+                title={a.motivatie}
+                onClick={() => {
+                  setKlasse(a.klasse);
+                  setReden("verkeerde_klasse");
+                  setActie("edit");
+                }}
+                className={`rounded px-1.5 py-0.5 text-xs font-medium ${jasStyle(a.klasse)} hover:ring-1 hover:ring-lint`}
+              >
+                {a.klasse}
+              </button>
+            ))}
+          </div>
+        ))}
 
       {!beslist && actie === null && (
         <div className="mt-2 flex flex-wrap gap-1.5" onClick={(e) => e.stopPropagation()}>
@@ -225,7 +257,9 @@ export function ReviewQueue({
     <div className="space-y-2">
       <div className="flex items-center gap-3 text-xs text-muted">
         <span>{elementen.length} elementen</span>
-        {telling.voorgesteld ? <span>🟡 {telling.voorgesteld} te reviewen</span> : null}
+        {(telling.voorgesteld ?? 0) + (telling.critic_checked ?? 0) > 0 ? (
+          <span>🟡 {(telling.voorgesteld ?? 0) + (telling.critic_checked ?? 0)} te reviewen</span>
+        ) : null}
         {telling.human_approved ? <span>🟢 {telling.human_approved} akkoord</span> : null}
         {telling.rejected ? <span>🔴 {telling.rejected} verworpen</span> : null}
       </div>

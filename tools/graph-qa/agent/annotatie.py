@@ -13,9 +13,11 @@ from collections.abc import Iterator
 from typing import Any
 
 from .jas_klassen import GELDIGE_JAS_KLASSEN
-from .models import AnnotatieAlternatief, AnnotatieVoorstel
+from .models import AnnotatieAlternatief, AnnotatieVoorstel, OntbrekendItem
 
 logger = logging.getLogger("graph_qa.annotatie")
+
+_AANDACHT = {"groen", "geel", "rood"}
 
 _WS = re.compile(r"\s+")
 
@@ -129,3 +131,63 @@ def _verwerk(
             )
         )
     return voorstellen, verworpen
+
+
+def _verwerk_critic(llm_text: str, aantal: int) -> tuple[dict[int, tuple[str, str]], list[OntbrekendItem]]:
+    """Parse het Critic-JSON: per element-index een (aandacht, motivatie) en een ontbrekend-lijst.
+
+    Robuust tegen proza/afkapping (fast-path hele-JSON, anders de gebalanceerde {…}-objecten). Ongeldige
+    aandacht-waarden of indices buiten bereik worden genegeerd (leeg gelaten). Nooit exceptions naar de
+    caller — de Critic mag de annotatie niet breken.
+    """
+    oordelen: dict[int, tuple[str, str]] = {}
+    ontbrekend: list[OntbrekendItem] = []
+
+    data: dict[str, Any] | None = None
+    raw = (llm_text or "").strip()
+    kandidaat = raw.strip("`")
+    if kandidaat.lower().startswith("json"):
+        kandidaat = kandidaat[4:]
+    s, e = kandidaat.find("{"), kandidaat.rfind("}")
+    if s != -1 and e > s:
+        try:
+            parsed = json.loads(kandidaat[s : e + 1])
+            if isinstance(parsed, dict):
+                data = parsed
+        except json.JSONDecodeError:
+            data = None
+    # Fallback: los de gebalanceerde objecten op en herken oordeel-/ontbrekend-objecten.
+    oordeel_objs: list[dict[str, Any]] = []
+    ontbrekend_objs: list[dict[str, Any]] = []
+    if isinstance(data, dict):
+        oordeel_objs = [o for o in data.get("oordelen", []) if isinstance(o, dict)]
+        ontbrekend_objs = [o for o in data.get("ontbrekend", []) if isinstance(o, dict)]
+    else:
+        for obj in _balanced_objecten(raw):
+            try:
+                d = json.loads(obj)
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(d, dict):
+                continue
+            if "index" in d and "aandacht" in d:
+                oordeel_objs.append(d)
+            elif "klasse" in d and "reden" in d:
+                ontbrekend_objs.append(d)
+
+    for o in oordeel_objs:
+        try:
+            idx = int(o.get("index"))
+        except (TypeError, ValueError):
+            continue
+        aandacht = str(o.get("aandacht", "")).strip().lower()
+        if aandacht not in _AANDACHT or not (0 <= idx < aantal):
+            continue
+        oordelen[idx] = (aandacht, str(o.get("motivatie", "")).strip())
+
+    for o in ontbrekend_objs:
+        klasse = str(o.get("klasse", "")).strip()
+        if klasse in GELDIGE_JAS_KLASSEN:
+            ontbrekend.append(OntbrekendItem(klasse=klasse, reden=str(o.get("reden", "")).strip()))
+
+    return oordelen, ontbrekend

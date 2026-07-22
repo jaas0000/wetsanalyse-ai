@@ -90,6 +90,7 @@ class AnnotatieElement(BaseModel):
     lifecycle: Lifecycle = Lifecycle.voorgesteld
     alternatieven: list[Alternatief] = []
     aandacht: Aandacht | None = None
+    critic: str = ""           # korte Critic-motivatie bij het aandacht-niveau
     diff: dict = {}            # bij een edit: {veld: {"voor": ..., "na": ...}}
     beslissingen: list[Beslissing] = []
 
@@ -139,6 +140,8 @@ class ElementInvoer(BaseModel):
     vindplaats: str = ""
     span: list[int] | None = None
     alternatieven: list[Alternatief] = []
+    aandacht: Aandacht | None = None   # Critic-oordeel (groen|geel|rood); None = geen Critic-pas
+    critic: str = ""                   # korte Critic-motivatie
 
 
 class ElementenInvoer(BaseModel):

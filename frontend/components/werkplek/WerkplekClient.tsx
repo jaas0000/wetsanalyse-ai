@@ -26,15 +26,17 @@ import type {
   Bron,
   DocumentSamenvatting,
   GraafArtikel,
+  OntbrekendItem,
   VoorstelElement,
   WetChoice,
 } from "@/lib/types";
+import { jasStyle } from "@/lib/jas";
 import { wettenOverheidHref } from "@/lib/url";
 
 type Item =
   | { id: string; type: "user"; tekst: string }
   | { id: string; type: "antwoord"; tekst: string; denk?: string; bronnen?: Bron[] }
-  | { id: string; type: "annotatie"; slug: string };
+  | { id: string; type: "annotatie"; slug: string; ontbrekend?: OntbrekendItem[] };
 
 const SESSIE_KEY = "wa_werkplek_sessie";
 
@@ -142,6 +144,7 @@ export function WerkplekClient() {
 
     const doelRef: { d: AgentDoel | null } = { d: null };
     const els: VoorstelElement[] = [];
+    const ontbrekend: OntbrekendItem[] = [];
     let tekst = "";
     let denk = "";
     try {
@@ -165,6 +168,7 @@ export function WerkplekClient() {
           onSources: (b) => updateItem(antId, { bronnen: b }),
           onDoel: (d) => (doelRef.d = d),
           onElement: (e) => els.push(e),
+          onOntbrekend: (items) => ontbrekend.push(...items),
         },
         sessieRef.current,
       );
@@ -186,7 +190,11 @@ export function WerkplekClient() {
         const bijgewerkt = await zetElementen(document.slug, els);
         setDocs((m) => ({ ...m, [bijgewerkt.slug]: bijgewerkt }));
         setInfos((m) => ({ ...m, [bijgewerkt.slug]: graaf }));
-        setItems((xs) => xs.map((x) => (x.id === antId ? { id: antId, type: "annotatie", slug: bijgewerkt.slug } : x)));
+        setItems((xs) =>
+          xs.map((x) =>
+            x.id === antId ? { id: antId, type: "annotatie", slug: bijgewerkt.slug, ontbrekend } : x,
+          ),
+        );
         verversLijst();
       } else if (!tekst.trim()) {
         updateItem(antId, { tekst: "(geen antwoord)" });
@@ -351,6 +359,7 @@ export function WerkplekClient() {
                   key={item.id}
                   doc={docs[item.slug]}
                   info={infos[item.slug]}
+                  ontbrekend={item.ontbrekend}
                   actiefId={actiefId}
                   onKies={setActiefId}
                   onBeslissing={(elementId, req) => beslissing(item.slug, elementId, req)}
@@ -396,12 +405,14 @@ const VOORBEELDEN = [
 function AnnotatieKaart({
   doc,
   info,
+  ontbrekend,
   actiefId,
   onKies,
   onBeslissing,
 }: {
   doc: AnnotatieDocument;
   info: GraafArtikel;
+  ontbrekend?: OntbrekendItem[];
   actiefId?: string;
   onKies: (id?: string) => void;
   onBeslissing: (elementId: string, req: BeslissingInvoer) => Promise<void>;
@@ -416,11 +427,24 @@ function AnnotatieKaart({
         actiefId={actiefId}
         onKies={onKies}
       />
-      <div>
+      <div className="space-y-3">
         {doc.elementen.length > 0 ? (
           <ReviewQueue elementen={doc.elementen} actiefId={actiefId} onKies={onKies} onBeslissing={onBeslissing} />
         ) : (
           <p className="text-sm text-muted">Geen elementen.</p>
+        )}
+        {ontbrekend && ontbrekend.length > 0 && (
+          <div className="rounded-xl border border-dashed border-line bg-paper p-3">
+            <p className="text-xs font-medium text-muted">Mogelijk ontbrekend (Critic-suggestie)</p>
+            <ul className="mt-1.5 space-y-1">
+              {ontbrekend.map((o, i) => (
+                <li key={i} className="flex items-start gap-1.5 text-xs">
+                  <span className={`shrink-0 rounded px-1.5 py-0.5 font-medium ${jasStyle(o.klasse)}`}>{o.klasse}</span>
+                  {o.reden && <span className="text-muted">{o.reden}</span>}
+                </li>
+              ))}
+            </ul>
+          </div>
         )}
       </div>
     </div>

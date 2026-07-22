@@ -25,8 +25,13 @@ from langgraph.config import get_stream_writer
 from langgraph.graph import END, START, StateGraph
 
 from .agent_common import truncate
-from .annotatie import _parse_elementen, _verwerk
-from .annotatie_prompt import annotatie_systeemprompt, annotatie_userprompt
+from .annotatie import _parse_elementen, _verwerk, _verwerk_critic
+from .annotatie_prompt import (
+    annotatie_systeemprompt,
+    annotatie_userprompt,
+    critic_systeemprompt,
+    critic_userprompt,
+)
 from .config import Settings
 from .graph.results import parse_select
 from .grounding import check_grounding, curate_sources
@@ -174,6 +179,9 @@ class State(TypedDict, total=False):
     # solve_node zet ze in één keer). De per-deelvraag agent⇄tools-loop draait lokaal in solve_node.
     sub_questions: list[str]
     sub_findings: list[dict[str, str]]
+    # Annotatie: de gegronde voorstellen (als dicts) die annoteer_node maakt; critic_node scoort ze
+    # met een aandacht-niveau en emit ze dán pas als `element`-events.
+    voorstellen: list[dict[str, Any]]
 
 
 def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGraph:
@@ -299,8 +307,9 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
 
     def annoteer_node(state: State) -> dict[str, Any]:
         """Aparte annoteer-stap: de ophaal-agent heeft de bepaling opgehaald (in de source_trace).
-        Hier doet een PURE LLM-call (geen tools) de JAS-analyse op ALLEEN die tekst, we gronden elk
-        element ertegen en emitten doel (mét de tekst) + elementen."""
+        Hier doet een PURE LLM-call (geen tools) de JAS-analyse op ALLEEN die tekst en gronden we elk
+        element ertegen. De gegronde voorstellen gaan naar de state; de aparte critic_node scoort ze en
+        emit ze dán als `element`-events. annoteer emit alléén `doel` (en een melding bij lege uitkomst)."""
         writer = get_stream_writer()
         doel = _bepaal_doel(state)
         corpus = _corpus_uit_trace(state.get("source_trace", []))
@@ -312,7 +321,7 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
                 "artikel/lid (bij een beleidsregel bv. '9.1')."
             )
             writer({"type": "token", "content": melding})
-            return {"answer": melding}
+            return {"answer": melding, "voorstellen": []}
 
         resp = llm.create(
             model=model,
@@ -322,15 +331,71 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
             messages=[{"role": "user", "content": annotatie_userprompt(doel.get("bwbId", ""), aanduiding, corpus, doel.get("lid", ""))}],
         )
         llm_text = "".join(b.text for b in resp.content if b.type == "text")
-        voorstellen, verworpen = _verwerk(llm_text, corpus, doel.get("bwbId", ""), aanduiding, doel.get("lid", ""))
+        voorstellen, _verworpen = _verwerk(llm_text, corpus, doel.get("bwbId", ""), aanduiding, doel.get("lid", ""))
 
         # Stuur de opgehaalde tekst mee zodat de frontend precies dít toont (één bron, ook voor divisies).
         doel_uit = {**doel, "leden_teksten": [{"lid": doel.get("lid", ""), "tekst": corpus}]}
         writer({"type": "doel", "doel": doel_uit})
-        for v in voorstellen:
-            writer({"type": "element", "element": v.model_dump()})
+        if not voorstellen:
+            plek = f"artikel {aanduiding}" + (f" lid {doel['lid']}" if doel.get("lid") else "")
+            leeg = f"Ik vond geen JAS-elementen om te markeren in {plek}."
+            writer({"type": "token", "content": leeg})
+            return {"answer": leeg, "voorstellen": []}
+        return {"voorstellen": [v.model_dump() for v in voorstellen], "answer": ""}
+
+    def critic_node(state: State) -> dict[str, Any]:
+        """Critic-pas: controleert de gegronde voorstellen vóór de jurist en zet per element een
+        aandacht-niveau (groen/geel/rood) + korte motivatie, plus een lijst waarschijnlijk ontbrekende
+        elementen. Eén LLM-call (geen tools). Faalt de Critic → elementen komen gewoon door met lege
+        aandacht (nooit de annotatie breken). Emit de `element`-events + één `ontbrekend`-event + de
+        samenvattings-`token`."""
+        writer = get_stream_writer()
+        voorstellen = list(state.get("voorstellen") or [])
+        if not voorstellen:
+            return {}  # annoteer_node heeft de lege/foutmelding al geëmit
+
+        doel = _bepaal_doel(state)
+        corpus = _corpus_uit_trace(state.get("source_trace", []))
+        aanduiding = doel.get("artikel") or doel.get("nummer") or ""
+
+        oordelen: dict[int, tuple[str, str]] = {}
+        ontbrekend: list[Any] = []
+        try:
+            resp = llm.create(
+                model=model,
+                max_tokens=2048,
+                system=critic_systeemprompt(),
+                tools=[],
+                messages=[{"role": "user", "content": critic_userprompt(voorstellen, corpus)}],
+            )
+            crit_text = "".join(b.text for b in resp.content if b.type == "text")
+            oordelen, ontbrekend = _verwerk_critic(crit_text, len(voorstellen))
+        except Exception:  # noqa: BLE001 — Critic mag de annotatie nooit breken
+            logger = __import__("logging").getLogger("graph_qa.orchestrator")
+            logger.warning("critic: beoordeling mislukt; elementen zonder aandacht doorgelaten", exc_info=True)
+
+        met_aandacht = 0
+        for i, v in enumerate(voorstellen):
+            aandacht, motivatie = oordelen.get(i, ("", ""))
+            # Deterministische regel: aanwezige alternatieven = disambiguatie = minimaal 'geel'.
+            if v.get("alternatieven") and aandacht in ("", "groen"):
+                aandacht = "geel"
+                motivatie = motivatie or "Er zijn plausibele alternatieve klassen."
+            v["aandacht"] = aandacht
+            v["critic"] = motivatie
+            if aandacht in ("geel", "rood"):
+                met_aandacht += 1
+            writer({"type": "element", "element": v})
+
+        writer({"type": "ontbrekend", "items": [o.model_dump() for o in ontbrekend]})
+
         plek = f"artikel {aanduiding}" + (f" lid {doel['lid']}" if doel.get("lid") else "")
-        samenvatting = f"Ik heb {len(voorstellen)} JAS-elementen voorgesteld voor {plek}."
+        delen = [f"Ik heb {len(voorstellen)} JAS-elementen voorgesteld voor {plek}"]
+        if met_aandacht:
+            delen.append(f"{met_aandacht} met aandacht")
+        if ontbrekend:
+            delen.append(f"{len(ontbrekend)} mogelijk ontbrekend")
+        samenvatting = "; ".join(delen) + "."
         writer({"type": "token", "content": samenvatting})
         return {"answer": samenvatting}
 
@@ -540,6 +605,7 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
         g.add_node("agent", agent_node)
         g.add_node("tools", tools_node)
         g.add_node("annoteer", annoteer_node)
+        g.add_node("critic", critic_node)
         g.add_node("advance", advance_node)
         entrymap = {"agent": "agent", "decompose": "decompose"}
         g.add_edge(START, "supervisor")
@@ -555,7 +621,8 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
         )
         g.add_edge("tools", "agent")
         g.add_edge("finalize", "advance")
-        g.add_edge("annoteer", "advance")
+        g.add_edge("annoteer", "critic")
+        g.add_edge("critic", "advance")
         g.add_conditional_edges("advance", route_after_advance, {**entrymap, "einde": END})
         return g
 
@@ -568,6 +635,7 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
         # Supervisor → agent⇄tools → (verify→finalize | annoteer_finalize) → advance → (volgende | einde).
         g.add_node("supervisor", supervisor_node)
         g.add_node("annoteer", annoteer_node)
+        g.add_node("critic", critic_node)
         g.add_node("advance", advance_node)
         g.add_edge(START, "supervisor")
         g.add_conditional_edges("supervisor", _entry_node, {"agent": "agent"})
@@ -579,7 +647,8 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
         g.add_conditional_edges("verify", route_after_verify, {"correct": "correct", "finalize": "finalize"})
         g.add_edge("correct", "agent")
         g.add_edge("finalize", "advance")
-        g.add_edge("annoteer", "advance")
+        g.add_edge("annoteer", "critic")
+        g.add_edge("critic", "advance")
         g.add_conditional_edges("advance", route_after_advance, {"agent": "agent", "einde": END})
         return g
 

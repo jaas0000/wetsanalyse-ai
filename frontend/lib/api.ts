@@ -47,6 +47,7 @@ import type {
   DocumentCreate,
   DocumentSamenvatting,
   GraafArtikel,
+  OntbrekendItem,
   VoorstelElement,
 } from "./types";
 import { pathSegment } from "./url";
@@ -466,6 +467,7 @@ export async function annoteerAgentStream(
     onSources?: (bronnen: Bron[]) => void;
     onDoel?: (doel: AgentDoel) => void;
     onElement?: (el: VoorstelElement) => void;
+    onOntbrekend?: (items: OntbrekendItem[]) => void;
   },
   conversationId?: string,
   signal?: AbortSignal,
@@ -505,6 +507,7 @@ export async function annoteerAgentStream(
               content?: string;
               doel?: AgentDoel;
               element?: VoorstelElement;
+              items?: OntbrekendItem[];
               sources?: Bron[];
             }
           | null;
@@ -515,6 +518,7 @@ export async function annoteerAgentStream(
         else if (ev.type === "sources" && ev.sources) handlers.onSources?.(ev.sources);
         else if (ev.type === "doel" && ev.doel) handlers.onDoel?.(ev.doel);
         else if (ev.type === "element" && ev.element) handlers.onElement?.(ev.element);
+        else if (ev.type === "ontbrekend") handlers.onOntbrekend?.(ev.items ?? []);
         else if (ev.type === "error") throw { status: 502, detail: ev.message ?? "Agent mislukt." } as ApiError;
       }
     }

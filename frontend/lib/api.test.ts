@@ -63,6 +63,7 @@ describe("annoteerAgentStream", () => {
       `data: ${JSON.stringify({ type: "sources", sources: [{ label: "IW art. 9", uri: "x" }] })}\r\n\r\n`,
       `data: ${JSON.stringify({ type: "doel", doel: { bwbId: "BWBR0004770", artikel: "9", lid: "1" } })}\r\n\r\n`,
       `data: ${JSON.stringify({ type: "element", element })}\r\n\r\n`,
+      `data: ${JSON.stringify({ type: "ontbrekend", items: [{ klasse: "Rechtsfeit", reden: "handeling" }] })}\r\n\r\n`,
       `data: ${JSON.stringify({ type: "done" })}\r\n\r\n`,
     ];
     vi.stubGlobal("fetch", vi.fn(async () => sseResponse(frames)));
@@ -71,6 +72,7 @@ describe("annoteerAgentStream", () => {
     let denk = "";
     let doel: unknown = null;
     const elementen: unknown[] = [];
+    let ontbrekend: unknown[] = [];
     let bronnen: unknown[] = [];
     await annoteerAgentStream("annoteer artikel 9 lid 1 IW", {
       onStatus: (m) => (denk += `[${m}]`),
@@ -79,6 +81,7 @@ describe("annoteerAgentStream", () => {
       onSources: (b) => (bronnen = b),
       onDoel: (d) => (doel = d),
       onElement: (e) => elementen.push(e),
+      onOntbrekend: (items) => (ontbrekend = items),
     });
 
     expect(tekst).toBe("Antwoord hier."); // token = alléén het eindantwoord
@@ -86,6 +89,7 @@ describe("annoteerAgentStream", () => {
     expect(bronnen).toEqual([{ label: "IW art. 9", uri: "x" }]);
     expect(doel).toEqual({ bwbId: "BWBR0004770", artikel: "9", lid: "1" });
     expect(elementen).toEqual([element]);
+    expect(ontbrekend).toEqual([{ klasse: "Rechtsfeit", reden: "handeling" }]);
   });
 });
 

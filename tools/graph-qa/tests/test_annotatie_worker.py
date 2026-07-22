@@ -2,7 +2,8 @@
 ANNOTEER-stap. Draait de échte LangGraph (prod-config: decompositie aan) met FakeLLM/FakeGraph.
 
 FakeLLM-volgorde per annotatie: supervisor(create) → ophaal-agent turn1(stream, tool_use) →
-ophaal-agent turn2(stream, doel-JSON) → annoteer-stap(create, elementen-JSON).
+ophaal-agent turn2(stream, doel-JSON) → annoteer-stap(create, elementen-JSON) → critic-stap(create,
+oordelen-JSON). De Critic mag falen zonder de annotatie te breken (elementen dan zonder aandacht).
 """
 from __future__ import annotations
 
@@ -22,6 +23,14 @@ ELEMENTEN_JSON = json.dumps({
     ],
 })
 
+CRITIC_JSON = json.dumps({
+    "oordelen": [
+        {"index": 0, "aandacht": "groen", "motivatie": "helder"},
+        {"index": 1, "aandacht": "rood", "motivatie": "twijfelachtige klasse"},
+    ],
+    "ontbrekend": [{"klasse": "Rechtsfeit", "reden": "de handeling zelf lijkt niet gemarkeerd"}],
+})
+
 
 def _run(gen):
     async def collect():
@@ -36,6 +45,7 @@ def test_ophalen_dan_annoteren_grondt_lid():
         response([tool_block("t1", "get_lid", {"bwb_id": "BWBR0004770", "artikel": "9", "lid": "1"})], "tool_use"),
         response([text_block('{"bwbId":"BWBR0004770","artikel":"9","lid":"1","nummer":"","citeertitel":"IW 1990"}')], "end_turn"),
         response([text_block(ELEMENTEN_JSON)], "end_turn"),                                           # annoteer-stap
+        response([text_block(CRITIC_JSON)], "end_turn"),                                              # critic-stap
     ])
     events = _run(answer_stream(
         "annoteer artikel 9 lid 1 van de Invorderingswet 1990",
@@ -52,6 +62,13 @@ def test_ophalen_dan_annoteren_grondt_lid():
         assert el["grounded"] is True
         assert el["vindplaats"] == "BWBR0004770 art. 9 lid 1"
 
+    # Critic-pas zette het aandacht-niveau per element.
+    aandacht = {el["klasse"]: el["aandacht"] for el in elementen}
+    assert aandacht == {"Rechtssubject": "groen", "Rechtsbetrekking": "rood"}
+    # één ontbrekend-event met de vermoede klasse.
+    ontbrekend = next(e for e in events if e["type"] == "ontbrekend")["items"]
+    assert [o["klasse"] for o in ontbrekend] == ["Rechtsfeit"]
+
 
 def test_get_bepaling_route_voor_decimaal_nummer():
     # Beleidsregel/divisie: de ophaal-agent gebruikt get_bepaling('9.1'); doel.nummer/artikel = '9.1'.
@@ -61,6 +78,7 @@ def test_get_bepaling_route_voor_decimaal_nummer():
         response([tool_block("t1", "get_bepaling", {"bwb_id": "BWBR0024096", "nummer": "9.1"})], "tool_use"),
         response([text_block('{"bwbId":"BWBR0024096","nummer":"9.1","artikel":"","lid":"","citeertitel":"Leidraad Invordering 2008"}')], "end_turn"),
         response([text_block(json.dumps({"elementen": [{"klasse": "Rechtsfeit", "tekst": "voorlopige aanslagen", "lid": "", "toelichting": "x", "alternatieven": []}]}))], "end_turn"),
+        response([text_block(json.dumps({"oordelen": [{"index": 0, "aandacht": "groen", "motivatie": "ok"}], "ontbrekend": []}))], "end_turn"),  # critic
     ])
     events = _run(answer_stream(
         "annoteer artikel 9 lid 1 van de Leidraad Invordering 2008",
@@ -71,6 +89,49 @@ def test_get_bepaling_route_voor_decimaal_nummer():
     elementen = [e["element"] for e in events if e["type"] == "element"]
     assert len(elementen) == 1
     assert elementen[0]["vindplaats"] == "BWBR0024096 art. 9.1"
+
+
+def test_critic_geel_bump_bij_alternatieven():
+    # Deterministische regel: een element met alternatieven wordt minimaal 'geel', ook als de Critic
+    # 'groen' zei (disambiguatie = aandacht).
+    elementen = json.dumps({"elementen": [
+        {"klasse": "Rechtssubject", "tekst": "De ontvanger", "lid": "1", "toelichting": "wie",
+         "alternatieven": [{"klasse": "Rechtsobject", "motivatie": "kan ook object zijn"}]},
+    ]})
+    critic = json.dumps({"oordelen": [{"index": 0, "aandacht": "groen", "motivatie": "leek ok"}], "ontbrekend": []})
+    llm = FakeLLM([
+        response([text_block("WORKERS: annotatie\nPLAN: annoteer art 9 lid 1")], "end_turn"),
+        response([tool_block("t1", "get_lid", {"bwb_id": "BWBR0004770", "artikel": "9", "lid": "1"})], "tool_use"),
+        response([text_block('{"bwbId":"BWBR0004770","artikel":"9","lid":"1","nummer":"","citeertitel":"IW"}')], "end_turn"),
+        response([text_block(elementen)], "end_turn"),
+        response([text_block(critic)], "end_turn"),
+    ])
+    events = _run(answer_stream(
+        "annoteer artikel 9 lid 1 van de Invorderingswet 1990",
+        settings=make_settings(enable_decomposition=True), llm=llm, graph=FakeGraph(result=LID_TSV),
+    ))
+    el = next(e["element"] for e in events if e["type"] == "element")
+    assert el["aandacht"] == "geel"       # groen → geel gebumpt door de alternatieven
+    assert el["alternatieven"][0]["klasse"] == "Rechtsobject"
+
+
+def test_critic_faalt_stil_elementen_komen_door():
+    # Geen critic-respons in de FakeLLM: de create() raist → critic degradeert, elementen komen door
+    # met lege aandacht (de annotatie mag nooit breken).
+    llm = FakeLLM([
+        response([text_block("WORKERS: annotatie\nPLAN: annoteer art 9 lid 1")], "end_turn"),
+        response([tool_block("t1", "get_lid", {"bwb_id": "BWBR0004770", "artikel": "9", "lid": "1"})], "tool_use"),
+        response([text_block('{"bwbId":"BWBR0004770","artikel":"9","lid":"1","nummer":"","citeertitel":"IW"}')], "end_turn"),
+        response([text_block(ELEMENTEN_JSON)], "end_turn"),
+        # géén critic-respons → FakeLLM raist bij de critic-create
+    ])
+    events = _run(answer_stream(
+        "annoteer artikel 9 lid 1 van de Invorderingswet 1990",
+        settings=make_settings(enable_decomposition=True), llm=llm, graph=FakeGraph(result=LID_TSV),
+    ))
+    elementen = [e["element"] for e in events if e["type"] == "element"]
+    assert len(elementen) == 2
+    assert all(el["aandacht"] == "" for el in elementen)   # gedegradeerd, maar wel doorgelaten
 
 
 def test_gewone_vraag_blijft_antwoord_geen_annotatie():

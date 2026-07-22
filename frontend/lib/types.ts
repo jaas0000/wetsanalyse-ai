@@ -722,6 +722,7 @@ export interface AnnotatieElement {
   lifecycle: Lifecycle;
   alternatieven: Alternatief[];
   aandacht?: Aandacht | null;
+  critic?: string;
   diff: Record<string, { voor: unknown; na: unknown }>;
   beslissingen: Beslissing[];
 }
@@ -808,7 +809,7 @@ export interface GraafArtikel {
   leden_teksten: { lid: string; tekst: string }[];
 }
 
-/** Eén voorgesteld element uit de graph-qa `/v1/annoteer`-SSE (nog niet gepersisteerd). */
+/** Eén voorgesteld element uit de graph-qa annotatie-SSE (nog niet gepersisteerd). */
 export interface VoorstelElement {
   klasse: string;
   tekst: string;
@@ -818,4 +819,12 @@ export interface VoorstelElement {
   span?: number[] | null;
   alternatieven: Alternatief[];
   grounded: boolean;
+  aandacht?: Aandacht;   // Critic-oordeel (groen|geel|rood); afwezig = geen Critic-pas
+  critic?: string;       // korte Critic-motivatie
+}
+
+/** Een door de Critic vermoed ontbrekend JAS-element (suggestief; geen span/bron). */
+export interface OntbrekendItem {
+  klasse: string;
+  reden: string;
 }

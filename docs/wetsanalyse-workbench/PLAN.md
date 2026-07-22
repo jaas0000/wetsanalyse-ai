@@ -105,6 +105,17 @@ Het eindtoestand-hart in het klein, end-to-end:
 Critic-agent, disambiguatie (alternatieven), missing-elements, element-diff, aandacht-niveau,
 lessons-learned + pre-flight (leerlus), knowledge-check. `review_reason` verplicht bij edit/reject.
 
+**Deels geleverd (Increment 3, 2026-07-22):** de **Critic-pas** als vaste node in de graph-qa-orchestrator
+(`annoteer → critic → advance`) die per element een **aandacht-niveau** (groen/geel/rood) + korte
+motivatie zet (afgeleid van echte signalen; aanwezige alternatieven → minimaal geel) en een
+**missing-elements**-lijst (`ontbrekend`-SSE-event) produceert; de Critic mag de annotatie nooit breken
+(faalt stil). `aandacht`/`critic` persisteren in het api-domein (`ElementInvoer`/`AnnotatieElement`,
+lifecycle → `critic_checked`). In de werkplek-review: 🟢🟡🔴-badge + Critic-motivatie, **klikbare
+alternatieven** (disambiguatie → edit met `review_reason: verkeerde_klasse` voorgevuld) en een
+"Mogelijk ontbrekend"-sectie (ephemeral). Element-diff bestond al (edit).
+**Nog open → Increment 4:** lessons-learned + pre-flight (leerlus), knowledge-check vóór publicatie,
+en persistente `mogelijk_ontbrekend` op het document.
+
 ### Fase 3 — Diepere JAS (activiteit 3)
 Van markeren naar **begrippen + afleidingsregels** (vers uit de bron; werkgebied-brede ontdubbeling).
 Zelfde review-workflow + audit.

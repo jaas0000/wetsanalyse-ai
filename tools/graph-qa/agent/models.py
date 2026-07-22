@@ -73,6 +73,16 @@ class AnnotatieVoorstel(BaseModel):
     span: list[int] | None = None      # [start, end] in de (genormaliseerde) artikeltekst
     grounded: bool = False
     vindplaats: str = ""               # bwbId/artikel/lid/jci-notatie
+    aandacht: str = ""                 # "" | groen | geel | rood — gezet door de Critic-node
+    critic: str = ""                   # korte Critic-motivatie bij het aandacht-niveau
+
+
+class OntbrekendItem(BaseModel):
+    """Een door de Critic vermoed ontbrekend element: een JAS-klasse die waarschijnlijk óók in de tekst
+    zit maar niet is gemarkeerd. Suggestief (geen span/bron) — de jurist beoordeelt."""
+
+    klasse: str
+    reden: str = ""
 
 
 # --- Artikeltekst uit de graaf (workbench-documentpaneel) ---------------------
