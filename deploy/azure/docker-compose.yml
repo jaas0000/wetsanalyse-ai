@@ -1,13 +1,14 @@
-# Wetsanalyse — docker-compose.yml (4 containers)
+# Wetsanalyse — docker-compose.yml (5 containers)
 #
 # Containers:
 #   postgres       — PostgreSQL 17 database
 #   wettenbank-mcp — Wetteksten MCP-server (overheid.nl)
 #   api            — FastAPI backend
+#   graph-qa       — kennisgraaf-agent (verbindt met de GraphDB-MCP; Fase 1 = de huidige graaf)
 #   frontend       — Next.js BFF
 #
 # Gebruik:
-#   1. Kopieer .env.example naar .env en vul LLM_API_KEY, LLM_API_BASE en AUTH_URL in.
+#   1. Kopieer .env.example naar .env en vul LLM_API_KEY, LLM_API_BASE, AUTH_URL en GRAPHDB_TOKEN in.
 #   2. python3 gen-secrets.py
 #   3. docker compose up -d   of:   podman-compose up -d
 #
@@ -92,6 +93,38 @@ services:
       retries: 5
       start_period: 20s
 
+  graph-qa:
+    image: ghcr.io/palmw01/graph-qa:latest
+    container_name: wetsanalyse-graph-qa
+    restart: unless-stopped
+    environment:
+      # graph-qa gebruikt de Anthropic-SDK → base-URL met `/anthropic` (i.t.t. de api/LiteLLM).
+      AZURE_FOUNDRY_BASE_URL:     ${LLM_API_BASE}/anthropic
+      AZURE_FOUNDRY_API_KEY_FILE: /run/secrets/llm_api_key
+      LLM_MODEL:                  ${LLM_MODEL:-claude-sonnet-4-6}
+      GRAPHDB_MCP_URL:            ${GRAPHDB_MCP_URL:-https://graphdb-mcp.ipalm.nl/mcp}
+      GRAPHDB_TOKEN_FILE:         /run/secrets/graphdb_token
+      GRAPHDB_REPOSITORY_ID:      inning
+      QA_API_TOKEN_FILE:          /run/secrets/qa_api_token
+      SIMILARITY_INDEX:           ${SIMILARITY_INDEX:-bwb_similarity}
+      ENABLE_DECOMPOSITION:       "1"
+      CHECKPOINT_DB_PATH:         /tmp/checkpoints.db
+      HOME:                       /tmp
+    secrets:
+      - llm_api_key
+      - graphdb_token
+      - qa_api_token
+    networks:
+      - intern
+    expose:
+      - "8080"
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c 'import urllib.request,sys; sys.exit(0 if urllib.request.urlopen(\"http://127.0.0.1:8080/health\").status==200 else 1)'"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
   frontend:
     image: ghcr.io/palmw01/wetsanalyse-frontend:latest
     container_name: wetsanalyse-frontend
@@ -101,20 +134,25 @@ services:
     environment:
       NODE_ENV:              production
       API_BASE_URL:          http://api:3000
+      GRAPH_QA_URL:          http://graph-qa:8080
       AUTH_URL:              ${AUTH_URL}
       AUTH_TRUST_HOST:       "true"
       API_TOKEN_FILE:        /run/secrets/frontend_api_token
       ADMIN_API_TOKEN_FILE:  /run/secrets/frontend_admin_token
       AUTH_SECRET_FILE:      /run/secrets/frontend_auth_secret
+      GRAPH_QA_TOKEN_FILE:   /run/secrets/frontend_graph_qa_token
     secrets:
       - frontend_api_token
       - frontend_admin_token
       - frontend_auth_secret
+      - frontend_graph_qa_token
     networks:
       - intern
     depends_on:
       api:
         condition: service_healthy
+      graph-qa:
+        condition: service_started
     healthcheck:
       test: ["CMD-SHELL", "node -e 'fetch(\"http://127.0.0.1:3000/api/health\").then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))'"]
       interval: 30s
@@ -148,3 +186,9 @@ secrets:
     file: ./secrets/frontend_admin_token
   frontend_auth_secret:
     file: ./secrets/frontend_auth_secret
+  frontend_graph_qa_token:
+    file: ./secrets/frontend_graph_qa_token
+  graphdb_token:
+    file: ./secrets/graphdb_token
+  qa_api_token:
+    file: ./secrets/qa_api_token

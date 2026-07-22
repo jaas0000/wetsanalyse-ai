@@ -29,20 +29,24 @@ def main() -> None:
 
     fe_tok  = secrets.token_hex(24)
     adm_tok = secrets.token_hex(24)
+    qa_tok  = secrets.token_hex(24)  # frontend ↔ graph-qa (QA_API_TOKEN)
     db_pass = secrets.token_hex(24)
     fernet  = base64.urlsafe_b64encode(os.urandom(32)).decode()
     auth    = base64.b64encode(os.urandom(32)).decode()
     db_url  = f"postgresql+asyncpg://wetsanalyse:{db_pass}@postgres:5432/wetsanalyse"
 
     print(f"Secrets schrijven naar {secrets_dir}/")
-    write_secret(secrets_dir / "postgres_password",    db_pass)
-    write_secret(secrets_dir / "database_url",         db_url)
-    write_secret(secrets_dir / "api_tokens",           f"frontend:{fe_tok}")
-    write_secret(secrets_dir / "admin_tokens",         f"admin:{adm_tok}")
-    write_secret(secrets_dir / "frontend_api_token",   fe_tok)
-    write_secret(secrets_dir / "frontend_admin_token", adm_tok)
-    write_secret(secrets_dir / "frontend_auth_secret", auth)
-    write_secret(secrets_dir / "llm_config_secret",    fernet)
+    write_secret(secrets_dir / "postgres_password",       db_pass)
+    write_secret(secrets_dir / "database_url",            db_url)
+    write_secret(secrets_dir / "api_tokens",              f"frontend:{fe_tok}")
+    write_secret(secrets_dir / "admin_tokens",            f"admin:{adm_tok}")
+    write_secret(secrets_dir / "frontend_api_token",      fe_tok)
+    write_secret(secrets_dir / "frontend_admin_token",    adm_tok)
+    write_secret(secrets_dir / "frontend_auth_secret",    auth)
+    write_secret(secrets_dir / "llm_config_secret",       fernet)
+    # graph-qa ↔ frontend: hetzelfde token als QA_API_TOKEN én als frontend-bearer.
+    write_secret(secrets_dir / "qa_api_token",            qa_tok)
+    write_secret(secrets_dir / "frontend_graph_qa_token", qa_tok)
 
     llm_key_path = secrets_dir / "llm_api_key"
     if not llm_key_path.exists():
@@ -50,6 +54,14 @@ def main() -> None:
         if not key:
             key = input("  Azure AI Foundry API-key: ").strip()
         write_secret(llm_key_path, key)
+
+    # GraphDB-MCP-bearer (huidige graaf) — nodig voor graph-qa; niet gegenereerd, aangeleverd.
+    graphdb_path = secrets_dir / "graphdb_token"
+    if not graphdb_path.exists():
+        tok = _read_env_var("GRAPHDB_TOKEN")
+        if not tok:
+            tok = input("  GraphDB-MCP bearer-token (GRAPHDB_TOKEN): ").strip()
+        write_secret(graphdb_path, tok)
 
     print("\nKlaar. Start de stack met:")
     print("  docker compose up -d")

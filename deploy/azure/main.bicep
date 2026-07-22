@@ -50,6 +50,18 @@ param frontendAdminToken string
 @secure()
 param dbAdminPassword string
 
+// ── graph-qa (kennisgraaf-agent) ───────────────────────────────────────────────
+@secure()
+@description('Bearer-token voor de GraphDB-MCP (huidige graaf).')
+param graphdbToken string
+
+@secure()
+@description('Bearer-token dat de frontend gebruikt om graph-qa aan te roepen (= graph-qa QA_API_TOKEN).')
+param qaApiToken string
+
+@description('GraphDB-MCP-URL voor graph-qa. Fase 1: de huidige publieke MCP; Fase 2: eigen instantie.')
+param graphdbMcpUrl string = 'https://graphdb-mcp.ipalm.nl/mcp'
+
 // ─────────────────────────────────────────────────────────────────────────────
 // 1. PostgreSQL Flexible Server
 // ─────────────────────────────────────────────────────────────────────────────
@@ -252,13 +264,99 @@ resource apiApp 'Microsoft.App/containerApps@2024-03-01' = {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 5. Frontend Container App (external HTTPS)
+// 5. graph-qa Container App (internal) — de agent op de BWB-kennisgraaf (GraphDB)
 // ─────────────────────────────────────────────────────────────────────────────
-// Interne API-FQDN uit de resource (bevat `.internal.`); de externe frontend-URL mág met de hand
-// (extern = `<app>.<defaultDomain>`) — een `.ingress.fqdn`-referentie zou hier een cycle geven
+// Fase 1: verbindt met de HUIDIGE graaf via de publieke GraphDB-MCP (graphdbMcpUrl-default). Intern
+// (alleen binnen de CAE); niet publiek, want graph-qa praat met de open+writable GraphDB. Fase 2:
+// graphdbMcpUrl + graphdb-token omzetten naar een eigen GraphDB-instantie.
+resource graphQaApp 'Microsoft.App/containerApps@2024-03-01' = {
+  name: '${appName}-graph-qa'
+  location: location
+  properties: {
+    managedEnvironmentId: cae.id
+    configuration: {
+      ingress: {
+        external: false
+        targetPort: 8080
+        transport: 'auto'
+      }
+      secrets: [
+        { name: 'llm-api-key',   value: llmApiKey }
+        { name: 'graphdb-token', value: graphdbToken }
+        { name: 'qa-api-token',  value: qaApiToken }
+      ]
+    }
+    template: {
+      volumes: [
+        {
+          name: 'graph-qa-secrets'
+          storageType: 'Secret'
+          secrets: [
+            { secretRef: 'llm-api-key',   path: 'llm_api_key' }
+            { secretRef: 'graphdb-token', path: 'graphdb_token' }
+            { secretRef: 'qa-api-token',  path: 'qa_api_token' }
+          ]
+        }
+      ]
+      containers: [
+        {
+          name: 'graph-qa'
+          image: 'ghcr.io/palmw01/graph-qa:latest'
+          resources: {
+            cpu: json('0.5')
+            memory: '1Gi'
+          }
+          volumeMounts: [
+            {
+              volumeName: 'graph-qa-secrets'
+              mountPath: '/run/secrets'
+            }
+          ]
+          env: [
+            // graph-qa gebruikt de Anthropic-SDK → de base-URL draagt het `/anthropic`-segment
+            // (i.t.t. de api/LiteLLM die kale LLM_API_BASE gebruikt).
+            { name: 'AZURE_FOUNDRY_BASE_URL',     value: '${llmApiBase}/anthropic' }
+            { name: 'AZURE_FOUNDRY_API_KEY_FILE', value: '/run/secrets/llm_api_key' }
+            { name: 'LLM_MODEL',                  value: llmModel }
+            { name: 'GRAPHDB_MCP_URL',            value: graphdbMcpUrl }
+            { name: 'GRAPHDB_TOKEN_FILE',         value: '/run/secrets/graphdb_token' }
+            { name: 'GRAPHDB_REPOSITORY_ID',      value: 'inning' }
+            { name: 'QA_API_TOKEN_FILE',          value: '/run/secrets/qa_api_token' }
+            { name: 'SIMILARITY_INDEX',           value: 'bwb_similarity' }
+            { name: 'ENABLE_DECOMPOSITION',       value: '1' }
+            // Ephemere CA-FS: schrijfbaar pad; gespreksgeheugen reset bij redeploy (ok voor Fase 1).
+            { name: 'CHECKPOINT_DB_PATH',         value: '/tmp/checkpoints.db' }
+            { name: 'HOME',                       value: '/tmp' }
+          ]
+          probes: [
+            {
+              type: 'Liveness'
+              httpGet: { path: '/health', port: 8080 }
+              initialDelaySeconds: 15
+              periodSeconds: 30
+              timeoutSeconds: 5
+              failureThreshold: 3
+            }
+          ]
+        }
+      ]
+      scale: {
+        minReplicas: 1
+        maxReplicas: 2
+      }
+    }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 6. Frontend Container App (external HTTPS)
+// ─────────────────────────────────────────────────────────────────────────────
+// Interne API-/graph-qa-FQDN uit de resource (bevat `.internal.`); de externe frontend-URL mág met de
+// hand (extern = `<app>.<defaultDomain>`) — een `.ingress.fqdn`-referentie zou hier een cycle geven
 // omdat frontendPublicUrl binnen frontendApp zelf als AUTH_URL wordt gebruikt.
-var apiInternalUrl    = 'https://${apiApp.properties.configuration.ingress.fqdn}'
-var frontendPublicUrl = 'https://${appName}-frontend.${cae.properties.defaultDomain}'
+var apiInternalUrl     = 'https://${apiApp.properties.configuration.ingress.fqdn}'
+var graphQaInternalUrl = 'https://${graphQaApp.properties.configuration.ingress.fqdn}'
+var frontendPublicUrl  = 'https://${appName}-frontend.${cae.properties.defaultDomain}'
 
 resource frontendApp 'Microsoft.App/containerApps@2024-03-01' = {
   name: '${appName}-frontend'
@@ -276,6 +374,7 @@ resource frontendApp 'Microsoft.App/containerApps@2024-03-01' = {
         { name: 'api-token',       value: frontendApiToken }
         { name: 'admin-api-token', value: frontendAdminToken }
         { name: 'auth-secret',     value: authSecret }
+        { name: 'graph-qa-token',  value: qaApiToken }
       ]
     }
     template: {
@@ -287,6 +386,7 @@ resource frontendApp 'Microsoft.App/containerApps@2024-03-01' = {
             { secretRef: 'api-token',       path: 'frontend_api_token' }
             { secretRef: 'admin-api-token', path: 'frontend_admin_token' }
             { secretRef: 'auth-secret',     path: 'frontend_auth_secret' }
+            { secretRef: 'graph-qa-token',  path: 'frontend_graph_qa_token' }
           ]
         }
       ]
@@ -307,12 +407,14 @@ resource frontendApp 'Microsoft.App/containerApps@2024-03-01' = {
           env: [
             { name: 'NODE_ENV',              value: 'production' }
             { name: 'API_BASE_URL',          value: apiInternalUrl }
+            { name: 'GRAPH_QA_URL',          value: graphQaInternalUrl }
             { name: 'AUTH_URL',              value: frontendPublicUrl }
             { name: 'AUTH_TRUST_HOST',       value: 'true' }
             { name: 'HOME',                  value: '/tmp' }
             { name: 'API_TOKEN_FILE',        value: '/run/secrets/frontend_api_token' }
             { name: 'ADMIN_API_TOKEN_FILE',  value: '/run/secrets/frontend_admin_token' }
             { name: 'AUTH_SECRET_FILE',      value: '/run/secrets/frontend_auth_secret' }
+            { name: 'GRAPH_QA_TOKEN_FILE',   value: '/run/secrets/frontend_graph_qa_token' }
           ]
           probes: [
             {
@@ -337,7 +439,8 @@ resource frontendApp 'Microsoft.App/containerApps@2024-03-01' = {
 // ─────────────────────────────────────────────────────────────────────────────
 // Outputs
 // ─────────────────────────────────────────────────────────────────────────────
-output frontendUrl     string = 'https://${frontendApp.properties.configuration.ingress.fqdn}'
-output apiInternalFqdn string = apiApp.properties.configuration.ingress.fqdn
-output mcpInternalFqdn string = mcpApp.properties.configuration.ingress.fqdn
-output dbServerFqdn    string = pgServer.properties.fullyQualifiedDomainName
+output frontendUrl        string = 'https://${frontendApp.properties.configuration.ingress.fqdn}'
+output apiInternalFqdn    string = apiApp.properties.configuration.ingress.fqdn
+output graphQaInternalFqdn string = graphQaApp.properties.configuration.ingress.fqdn
+output mcpInternalFqdn    string = mcpApp.properties.configuration.ingress.fqdn
+output dbServerFqdn       string = pgServer.properties.fullyQualifiedDomainName

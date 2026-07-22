@@ -35,6 +35,10 @@ def main() -> None:
     p.add_argument("--llm-api-base",  required=True,
                    help="Azure AI Foundry base-URL (bijv. https://<resource>.services.ai.azure.com)")
     p.add_argument("--llm-model",     default="claude-sonnet-4-6")
+    p.add_argument("--graphdb-token", default=os.environ.get("GRAPHDB_TOKEN"),
+                   help="Bearer-token voor de GraphDB-MCP (of via GRAPHDB_TOKEN env). Nodig voor graph-qa.")
+    p.add_argument("--graphdb-mcp-url", default=os.environ.get("GRAPHDB_MCP_URL", "https://graphdb-mcp.ipalm.nl/mcp"),
+                   help="GraphDB-MCP-URL voor graph-qa. Fase 1: de huidige publieke MCP (default).")
     p.add_argument("--resource-group", default="rg-wetsanalyse")
     p.add_argument("--location",      default="westeurope")
     p.add_argument("--app-name",      default="wetsanalyse")
@@ -46,9 +50,13 @@ def main() -> None:
 
     if not args.azure_ai_key:
         p.error("azure_ai_key is vereist — geef het als argument of zet AZURE_AI_KEY in de omgeving.")
+    if not args.graphdb_token:
+        p.error("graphdb_token is vereist — geef --graphdb-token of zet GRAPHDB_TOKEN in de omgeving "
+                "(bearer van de huidige GraphDB-MCP; zonder dit start graph-qa niet).")
 
     tok_frontend = secrets.token_hex(24)
     tok_admin    = secrets.token_hex(24)
+    tok_qa       = secrets.token_hex(24)  # frontend ↔ graph-qa (QA_API_TOKEN)
     db_pass      = secrets.token_hex(24)
     fernet       = base64.urlsafe_b64encode(os.urandom(32)).decode()
     auth         = base64.b64encode(os.urandom(32)).decode()
@@ -71,6 +79,9 @@ def main() -> None:
             "frontendApiToken":   {"value": tok_frontend},
             "frontendAdminToken": {"value": tok_admin},
             "dbAdminPassword":    {"value": db_pass},
+            "graphdbToken":       {"value": args.graphdb_token},
+            "qaApiToken":         {"value": tok_qa},
+            "graphdbMcpUrl":      {"value": args.graphdb_mcp_url},
         },
     }
 
