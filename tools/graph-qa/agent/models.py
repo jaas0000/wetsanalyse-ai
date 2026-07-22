@@ -13,12 +13,6 @@ class ChatRequest(BaseModel):
     conversation_id: str | None = None  # stuur mee voor gespreksgeheugen
 
 
-class AnnoteerRequest(BaseModel):
-    bwb_id: str
-    artikel: str
-    lid: str | None = None
-
-
 class Source(BaseModel):
     label: str
     uri: str
@@ -26,11 +20,6 @@ class Source(BaseModel):
     iri: str | None = None
     jci: str | None = None
     origin_tool: str | None = None
-
-
-class ChatResponse(BaseModel):
-    answer: str
-    sources: list[Source]
 
 
 # SSE-events

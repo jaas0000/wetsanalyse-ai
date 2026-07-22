@@ -1,28 +1,19 @@
 """
-Annotatie-flow: de agent markeert JAS-elementen in een wetsartikel.
-
-Een dedicated flow (geen QA-chat): haal het artikel op via de GraphPort, laat het LLM de JAS-elementen
-voorstellen (gestructureerde JSON), en verifieer elk element **brongetrouw** — het fragment moet
-letterlijk in de artikeltekst voorkomen. Niet-onderbouwde of ongeldig-geclassificeerde voorstellen
-worden verworpen (nooit stil doorgelaten). Hergebruikt de bouwstenen van de QA-agent (LLMPort,
-GraphPort, run_sync, observability); spiegelt het SSE-event-contract van `agent.py:answer_stream`.
+Annotatie-grounding-helpers: parse de JAS-JSON van het model en verifieer elk element **brongetrouw**
+(het fragment moet letterlijk in de opgehaalde artikeltekst voorkomen). Niet-onderbouwde of
+ongeldig-geclassificeerde voorstellen worden verworpen (nooit stil doorgelaten). Gebruikt door de
+annoteer-stap in `orchestrator.py` (`_parse_elementen`/`_verwerk`).
 """
 from __future__ import annotations
 
 import json
 import logging
 import re
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import Iterator
 from typing import Any
 
-from .agent_common import run_sync
-from .annotatie_prompt import annotatie_systeemprompt, annotatie_userprompt
-from .artikel import artikel_corpus
-from .config import Settings
 from .jas_klassen import GELDIGE_JAS_KLASSEN
 from .models import AnnotatieAlternatief, AnnotatieVoorstel
-from .observability import get_tracer
-from .ports import GraphPort, LLMPort
 
 logger = logging.getLogger("graph_qa.annotatie")
 
@@ -138,83 +129,3 @@ def _verwerk(
             )
         )
     return voorstellen, verworpen
-
-
-async def annoteer_stream(
-    bwb_id: str,
-    artikel: str,
-    lid: str | None = None,
-    *,
-    settings: Settings | None = None,
-    llm: LLMPort | None = None,
-    graph: GraphPort | None = None,
-) -> AsyncIterator[dict[str, Any]]:
-    """
-    Async generator die SSE-events yield:
-      {"type": "status", "message": "..."}
-      {"type": "element", "element": {...}}      # per grounded JAS-element
-      {"type": "done", "aantal": int, "verworpen": int}
-      {"type": "error", "message": "..."}
-    """
-    settings = settings or Settings.from_env()
-
-    try:
-        if graph is None:
-            from .adapters.graphdb_graph import make_graph
-
-            graph = make_graph(settings)
-        if llm is None:
-            from .adapters.anthropic_llm import AnthropicLLM
-
-            llm = AnthropicLLM(settings)
-        await run_sync(graph.initialize)
-    except Exception as exc:
-        logger.warning("MCP-verbinding mislukt", exc_info=True)
-        yield {"type": "error", "message": f"MCP-verbinding mislukt: {exc}"}
-        if graph is not None:
-            graph.close()
-        return
-
-    tracer = get_tracer(__name__)
-    try:
-        with tracer.start_as_current_span("graph_qa.annoteer") as span:
-            span.set_attribute("annotatie.bwb_id", bwb_id)
-            span.set_attribute("annotatie.artikel", artikel)
-            yield {"type": "status", "message": f"Artikel {artikel} ophalen..."}
-            # Eén bron: dezelfde (gecleande) tekst die het documentpaneel toont, is ook de corpus
-            # waartegen de brongetrouwheid wordt gecheckt.
-            corpus = await run_sync(artikel_corpus, bwb_id, artikel, graph, lid)
-            if not (corpus or "").strip():
-                plek = f"artikel {artikel}" + (f" lid {lid}" if lid else "")
-                yield {"type": "error", "message": f"Geen tekst gevonden voor {bwb_id} {plek}."}
-                return
-
-            yield {"type": "status", "message": "Agent annoteert volgens het JAS..."}
-            resp = await run_sync(
-                lambda: llm.create(
-                    model=settings.llm_model,
-                    max_tokens=8192,
-                    system=annotatie_systeemprompt(),
-                    tools=[],
-                    messages=[{"role": "user", "content": annotatie_userprompt(bwb_id, artikel, corpus, lid)}],
-                )
-            )
-            llm_text = "".join(b.text for b in resp.content if b.type == "text")
-            voorstellen, verworpen = _verwerk(llm_text, corpus, bwb_id, artikel, lid)
-
-            for v in voorstellen:
-                yield {"type": "element", "element": v.model_dump()}
-            span.set_attribute("annotatie.elementen", len(voorstellen))
-            span.set_attribute("annotatie.verworpen", verworpen)
-            logger.info(
-                "annotatie klaar",
-                extra={"categorie": "functioneel", "annotatie_bwb_id": bwb_id, "annotatie_artikel": artikel,
-                       "annotatie_elementen": len(voorstellen), "annotatie_verworpen": verworpen,
-                       "stop_reason": getattr(resp, "stop_reason", None), "respons_lengte": len(llm_text)},
-            )
-            yield {"type": "done", "aantal": len(voorstellen), "verworpen": verworpen}
-    except Exception as exc:
-        logger.error("annotatie-fout", exc_info=True)
-        yield {"type": "error", "message": f"Annotatie-fout: {exc}"}
-    finally:
-        graph.close()
