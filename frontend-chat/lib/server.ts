@@ -25,6 +25,7 @@ export async function postAuthVerify(payload: Record<string, unknown>): Promise<
       headers: { ...apiAuthHeader(), "Content-Type": "application/json" },
       body: JSON.stringify(payload),
       cache: "no-store",
+      signal: AbortSignal.timeout(5000),
     });
     const raw = (await res.json().catch(() => ({}))) as Partial<VerifyResult>;
     const body: VerifyResult = { ok: false, code: "", userid: "", email: "", role: "", ...raw };
@@ -49,6 +50,7 @@ export async function getAccountStatus(userid: string): Promise<AccountStatus> {
     const res = await fetch(`${apiBaseUrl()}/v1/auth/status/${encodeURIComponent(userid)}`, {
       headers: apiAuthHeader(),
       cache: "no-store",
+      signal: AbortSignal.timeout(5000),
     });
     if (!res.ok) return { status: "onbekend", role: "", email: "" };
     return (await res.json()) as AccountStatus;
@@ -62,6 +64,7 @@ export async function getMe(userid: string): Promise<{ userid: string; email: st
     const res = await fetch(`${apiBaseUrl()}/v1/users/${encodeURIComponent(userid)}`, {
       headers: apiAuthHeader(),
       cache: "no-store",
+      signal: AbortSignal.timeout(5000),
     });
     if (!res.ok) return null;
     return await res.json();

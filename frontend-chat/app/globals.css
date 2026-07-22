@@ -102,6 +102,7 @@
   animation-play-state: paused;
 }
 
+
 /* Respecteer het systeemvoorkeur voor minder beweging */
 @media (prefers-reduced-motion: reduce) {
   .chat-bg-orb1, .chat-bg-orb2, .chat-bg-orb3, .chat-particle {
