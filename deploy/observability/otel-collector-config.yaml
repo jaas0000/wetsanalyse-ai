@@ -8,7 +8,7 @@
 #   servicegraph -> edges src->dst (traces_service_graph_request_total / _server_seconds / _failed_total)
 # Die metrics gaan de metrics-pipeline in en komen zo óók bij de prometheus-exporter op :8889 terecht;
 # Prometheus scrapet dat al (prometheus.yml) — geen extra scrape-config nodig. De servicegraph voedt
-# het Node Graph-panel (topologie die zich uit de traces tekent, incl. de frontend- en n8n-edges).
+# het Node Graph-panel (topologie die zich uit de traces tekent, incl. de frontend- en graph-qa-edges).
 
 receivers:
   otlp:
@@ -42,7 +42,7 @@ connectors:
     store:
       ttl: 5s
       max_items: 2000
-    # Niet-geïnstrumenteerde afhankelijkheden (LLM-provider, n8n, overheid.nl, Postgres) verschijnen
+    # Niet-geïnstrumenteerde afhankelijkheden (LLM-provider, overheid.nl, Postgres) verschijnen
     # als VIRTUELE peer-node op basis van deze span-attributen — anders zou de edge onzichtbaar blijven.
     virtual_node_peer_attributes:
       - peer.service

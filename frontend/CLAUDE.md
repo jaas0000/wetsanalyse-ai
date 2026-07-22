@@ -1,9 +1,11 @@
 # CLAUDE.md — wetsanalyse-frontend
 
-Next.js (App Router) + TypeScript-webapp bovenop de [wetsanalyse-API](../api). Ontsluit de hele
-JAS-workflow in de browser: analyse aanmaken, live voortgang (SSE), de human-in-the-loop review-lus,
-het eindrapport, de **RegelSpraak-formaliseringsfase** (starten + model bekijken/downloaden), en een
-`/beheer`-scherm voor LLM-modelprofielen, de wet-catalogus en token-verbruik.
+Next.js (App Router) + TypeScript-webapp bovenop de [wetsanalyse-API](../api) én de graph-qa-agent.
+Twee gezichten: (a) de **analyse-webapp** — analyse aanmaken, live voortgang (SSE), de
+human-in-the-loop review-lus, het eindrapport, de **RegelSpraak-formaliseringsfase** (starten + model
+bekijken/downloaden), en een `/beheer`-scherm voor LLM-modelprofielen, de wet-catalogus en
+token-verbruik — en (b) **de werkplek** (`/workbench`, de *Assistent-pagina*): één gespreksvenster voor
+**vragen én JAS-annotatie**, live tegen graph-qa (§*Werkplek*).
 Lees ook de projectroot-`CLAUDE.md` en `../api/CLAUDE.md` — de API is de bron van waarheid voor de
 datacontracten en de state machine; deze app is een **dunne, server-getokende schil** eroverheen.
 Operationele details (lokaal draaien, env-vars, deployment) staan in de `README.md`; dit bestand
@@ -116,28 +118,32 @@ De **harde scheidingslijn**: alles met een token is server-only.
   scherm overlopen. De JAS-klassekleuren in `lib/jas.ts` zijn de **exacte labelkleuren uit
   `docs/wa-table.png`**; job-state-kleuren in `lib/states.ts`.
 
-## Annotatie-workbench (`/workbench`)
+## Werkplek — de Assistent-pagina (`/workbench`)
 
-De review-workbench voor de wetsanalyse (**de agent annoteert, de mens reviewt**; zie
-`docs/wetsanalyse-workbench/PLAN.md`). `app/workbench/page.tsx` → `components/workbench/WorkbenchClient.tsx`:
-kies wet+artikel → agent stelt JAS-elementen voor (live SSE) → per element approve/edit/reject/comment.
-- **`DocumentPaneel`** highlight de **letterlijke** fragmenten in de artikeltekst (`segmenteer` +
-  `lib/jas.ts:jasStyle`); robuust t.o.v. het span-corpus (substring-terugvinden). **`ReviewQueue`** =
-  decision-cards (edit/reject vragen een `review_reason`).
-- **Twee backends, frontend orkestreert:** state via de api (BFF `app/api/annotatie/*` → `/v1/annotatie/*`
-  via `proxy()`); het **voorstel via graph-qa** (BFF `app/api/annotatie/annoteer/route.ts` = SSE-passthrough
-  naar `GRAPH_QA_URL` + `GRAPH_QA_TOKEN`, gespiegeld op de chat-route). Client-helpers +
-  `annoteerStream` in `lib/api.ts`; types in `lib/types.ts` (afgeleid van `api/app/annotatie_contracts.py`).
-- **Config:** `GRAPH_QA_URL` (intern, default `http://graph-qa:8080`) + `GRAPH_QA_TOKEN(_FILE)` — de
-  frontend moet graph-qa op `homeinfra_internal` kunnen bereiken (`lib/config.ts`).
+De **Assistent-pagina** (`app/workbench/page.tsx`, titel "Assistent") → `components/werkplek/WerkplekClient.tsx`:
+één gespreksvenster voor **twee werkwijzen** — **vragen** aan de Juridische Assistent (Q&A over de
+kennisgraaf) én **JAS-annotatie** (de agent annoteert een bepaling → de mens reviewt; zie
+`docs/wetsanalyse-workbench/PLAN.md`). Beide lopen als SSE tegen graph-qa's unified agent.
+- De annotatie-sub-UI zit in `components/workbench/`: **`DocumentPaneel`** highlight de **letterlijke**
+  fragmenten in de artikeltekst (`segmenteer` + `lib/jas.ts:jasStyle`; substring-terugvinden), **`ReviewQueue`**
+  = decision-cards (edit/reject vragen een `review_reason`), `DocumentLijst` de open documenten.
+- **Twee backends, frontend orkestreert:** het **live agent-verkeer via graph-qa** — BFF
+  `app/api/annotatie/agent/route.ts` = SSE-passthrough naar `graphQaBaseUrl()` + `GRAPH_QA_TOKEN`
+  (client-helper `annoteerAgentStream` in `lib/api.ts`), en het documentpaneel haalt de artikeltekst via
+  `app/api/annotatie/artikel/route.ts` → graph-qa `GET /v1/artikel` (`haalArtikelGraaf`). De **persistente
+  review-state via de api** — BFF `app/api/annotatie/documenten/*` → `/v1/annotatie/*` via `proxy()`.
+  Types in `lib/types.ts` (afgeleid van `api/app/annotatie_contracts.py`).
+- **Config:** `GRAPH_QA_URL` (intern, default `http://graph-qa:8080`, via `graphQaBaseUrl()`) +
+  `GRAPH_QA_TOKEN(_FILE)` — de frontend moet graph-qa op `homeinfra_internal` kunnen bereiken (`lib/config.ts`).
 
 ## Observability
 
 `instrumentation.ts` registreert OpenTelemetry via `@vercel/otel` (gated op
 `OTEL_EXPORTER_OTLP_ENDPOINT`; auto-tracing van route handlers + uitgaande `fetch` met
-traceparent-propagatie → end-to-end trace over de chat-keten). `lib/logger.ts` is de **server-only**
-gestructureerde JSON-logger (mirror van de MCP-logger: secret-redactie, `LOG_LEVEL`, `trace_id`/
-`span_id`), ingezet in de BFF-lagen (`app/api/_lib/proxy.ts`, `lib/server.ts`, de chat-route). Nooit
+traceparent-propagatie → end-to-end trace over de keten frontend → API/graph-qa). `lib/logger.ts` is de
+**server-only** gestructureerde JSON-logger (mirror van de MCP-logger: secret-redactie, `LOG_LEVEL`,
+`trace_id`/`span_id`), ingezet in de BFF-lagen (`app/api/_lib/proxy.ts`, `lib/server.ts`, de
+annotatie-agent-route). Nooit
 importeren vanuit een Client Component (net als `lib/config.ts`/`lib/server.ts`), en nooit
 tokens/secrets/inhoud loggen. In de vitest-node-omgeving wordt `server-only` gestubd
 (`vitest.config.ts` → `test/stub-empty.ts`). Zie `docs/observability.md`.

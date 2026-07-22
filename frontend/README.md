@@ -14,6 +14,12 @@ twee-checkpoint review-lus (GegevensSpraak-objectmodel en RegelSpraak-regels), w
 **RegelSpraak-weergave** het model toont (met herkomst per declaratie/regel) en een `.rs`/`.md`-download
 biedt.
 
+Daarnaast is er **de werkplek** (`/workbench`, de *Assistent-pagina*): één gespreksvenster met **twee
+werkwijzen** — **vragen** aan de Juridische Assistent (brongetrouwe Q&A over de kennisgraaf) en
+**JAS-annotatie** (de agent stelt JAS-elementen voor → de jurist reviewt per element:
+approve/edit/reject/comment). Die pagina praat live met de graph-qa-agent (SSE) en bewaart de
+review-state via de API.
+
 Het geaggregeerde live-overzicht van álle analyses (per analyse de engine-stap tot op
 **functieniveau**, met verstreken tijd, token-verbruik en foutstatus) is **verhuisd naar Grafana**
 — het dashboard *"Wetsanalyse — systeemtopologie"* (`deploy/observability/`), gevoed door een
@@ -134,9 +140,14 @@ AUTH_SECRET=<openssl rand -base64 32>   # ondertekent de login-sessiecookie (Aut
 | `ADMIN_API_TOKEN_FILE` | —                             | Pad naar secret-bestand met het admin-token (heeft voorrang).  |
 | `AUTH_SECRET`          | —                             | Ondertekent de Auth.js-sessiecookie/JWT. Verplicht voor login. |
 | `AUTH_URL`             | —                             | Publieke origin (bv. `https://wetsanalyse.ipalm.nl`). **Verplicht achter een reverse proxy** — anders redirecten login/logout naar het interne `0.0.0.0:3000`. |
+| `GRAPH_QA_URL`         | `http://graph-qa:8080`        | Server-side adres van de graph-qa-agent (werkplek). |
+| `GRAPH_QA_TOKEN`       | —                             | Bearer voor graph-qa (alleen nodig als die achter een token staat). Server-side. |
+| `GRAPH_QA_TOKEN_FILE`  | —                             | Pad naar secret-bestand met het graph-qa-token (heeft voorrang). |
 
-De **kennisgraaf-chatbot** (zwevende chatbel) heeft geen env-var: webhook-URL, secret en de
-aan/uit-schakelaar staan in de API-settings en worden via het `/beheer`-scherm beheerd.
+De **werkplek** (`/workbench`) praat met de graph-qa-agent via `GRAPH_QA_URL` (server-side, default
+intern `http://graph-qa:8080`) en optioneel `GRAPH_QA_TOKEN`/`GRAPH_QA_TOKEN_FILE`. De BFF-routes
+`app/api/annotatie/agent` (SSE naar `POST /v1/chat`) en `app/api/annotatie/artikel` (`GET /v1/artikel`)
+houden dat token server-side.
 
 ## Observability
 

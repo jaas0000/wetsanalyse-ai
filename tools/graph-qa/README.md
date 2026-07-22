@@ -87,11 +87,10 @@ altijd opnieuw via de tools geverifieerd.
 | Endpoint | Doel |
 |---|---|
 | `GET /health` | Liveness (geen auth). |
-| `POST /v1/chat` | **SSE-stream**: body `{question, conversation_id?}` → events `status` · `token` · `sources` · `grounding` · `done` · `error`. |
-| `POST /v1/chat-webhook` | **Niet-streamend** contract voor een chat-UI: body `{chatInput, sessionId, secret?}` (of header `X-Chat-Secret`) → `{"output": "<antwoord + bronnenlijst>"}`. In dit project belt de webapp-chatbel dit endpoint via de API-chatproxy. |
-| `POST /v1/annoteer` | **SSE-stream**: body `{bwb_id, artikel, lid?}` → de agent stelt JAS-annotatie-elementen voor. Events `status` · `element` (per brongetrouw element: klasse · fragment · span · vindplaats · alternatieven) · `done` · `error`. De basis van de wetsanalyse-workbench (agent produceert, mens reviewt). |
+| `POST /v1/chat` | **SSE-stream**: body `{question, conversation_id?}`. De unified agent kiest per vraag een worker-keten. Antwoord-events: `status` · `reason` (denkproces) · `token` (eindantwoord) · `sources` · `grounding` · `done` · `error` · `conversation_id`. Kiest de supervisor de **annotatie-worker**, dan komen daar `doel` · `element` (per brongetrouw JAS-element, mét `aandacht` 🟢🟡🔴 + `critic`) · `ontbrekend` bij — de basis van de werkplek (agent produceert, mens reviewt). |
+| `GET /v1/artikel` | Artikeltekst uit de kennisgraaf voor het documentpaneel van de werkplek: query `bwb_id`, `artikel`, optioneel `lid`. |
 
-Authenticatie is optioneel (`QA_API_TOKEN` / `X-Chat-Secret`, timing-safe vergeleken); bij een
+Authenticatie is optioneel (`QA_API_TOKEN`, timing-safe vergeleken); bij een
 intern-only deployment staat het slot doorgaans uit. Verdere beveiliging: CORS met credentials
 uitsluitend bij een expliciete origin-lijst, een per-IP rate-limit, en een read-only-vangnet dat
 SPARQL-updates weigert.

@@ -371,7 +371,7 @@
                     "x": -1,
                     "y": 0
                   },
-                  "targetName": "n_n8n"
+                  "targetName": "n_graphqa"
                 }
               ]
             },
@@ -603,7 +603,7 @@
             },
             {
               "type": "text",
-              "name": "l_n8n",
+              "name": "l_graphqa",
               "config": {
                 "align": "center",
                 "valign": "middle",
@@ -634,7 +634,7 @@
             },
             {
               "type": "metric-value",
-              "name": "n_n8n",
+              "name": "n_graphqa",
               "config": {
                 "align": "center",
                 "valign": "middle",
@@ -644,12 +644,12 @@
                 },
                 "text": {
                   "mode": "field",
-                  "field": "n8n"
+                  "field": "graph-qa (chat)"
                 }
               },
               "background": {
                 "color": {
-                  "field": "n8n"
+                  "field": "graph-qa (chat)"
                 }
               },
               "border": {
@@ -887,11 +887,11 @@
             "uid": "wa-prometheus"
           },
           "editorMode": "code",
-          "expr": "sum(increase(traces_spanmetrics_calls_total{span_name=\"chat.agent\"}[15m])) or vector(0)",
+          "expr": "sum(increase(traces_spanmetrics_calls_total{span_name=\"POST /v1/chat\"}[15m])) or vector(0)",
           "instant": true,
-          "legendFormat": "n8n",
+          "legendFormat": "graph-qa (chat)",
           "range": false,
-          "refId": "n8n"
+          "refId": "graphqa"
         },
         {
           "datasource": {
@@ -927,7 +927,7 @@
         "type": "tempo",
         "uid": "wa-tempo"
       },
-      "description": "Automatisch uit de traces getekende service-graph (servicegraph-connector). Bolgrootte = request-rate, rand-kleur = foutratio. Bevat alleen de gekoppelde edges (user/frontend/API/DB); externe hops (MCP→overheid, n8n) ontbreken hier — die staan in de hand-gebouwde canvas hierboven.",
+      "description": "Automatisch uit de traces getekende service-graph (servicegraph-connector). Bolgrootte = request-rate, rand-kleur = foutratio. Bevat alleen de gekoppelde edges (user/frontend/API/DB); externe hops (MCP→overheid) ontbreken hier — die staan in de hand-gebouwde canvas hierboven.",
       "gridPos": {
         "h": 12,
         "w": 12,
@@ -954,7 +954,7 @@
         "type": "tempo",
         "uid": "wa-tempo"
       },
-      "description": "Recente executies. Klik een TraceID → waterfall (frontend → API → MCP/LLM/Postgres) — de n8n-executieweergave als trace.",
+      "description": "Recente executies. Klik een TraceID → waterfall (frontend → API/graph-qa → MCP/LLM/Postgres).",
       "gridPos": {
         "h": 12,
         "w": 12,

@@ -2,7 +2,7 @@
 
 Een **stdio-MCP-server** die de bestaande admin-API van de Wetsanalyse-webapp (`/v1/admin/*`) als
 agent-tools ontsluit, zodat een MCP-client (Claude Code) de app kan configureren: modelprofielen,
-wet-catalogus, runtime-settings (chat/capture), gebruikers, token-verbruik en de genereerbare
+wet-catalogus, runtime-settings (LLM-call-capture), gebruikers, token-verbruik en de genereerbare
 API-tokens (read). Het *wrapt* de admin-API — er is geen tweede configuratie-API.
 
 Draait **lokaal** (op jouw machine) wanneer je Claude Code draait en praat over HTTPS met de API met

@@ -4,74 +4,82 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Wat dit project is
 
-Werkruimte voor **Wetsanalyse**: het gestructureerd, brongetrouw en traceerbaar duiden van
-Nederlandse wet- en regelgeving volgens de methode Wetsanalyse (Ausems, Bulles & Lokin) en
-het Juridisch Analyseschema (JAS). Het project kent een **skill-spoor** (interactief in Claude Code)
-en een **dienst-spoor** (API + webapp); beide hergebruiken dezelfde MCP-databron en dezelfde
-inhoudelijke `references/`/`scripts/`. De samenwerkende delen:
+Een **agent-platform** voor **Wetsanalyse**: het gestructureerd, brongetrouw en traceerbaar duiden
+van Nederlandse wet- en regelgeving volgens de methode Wetsanalyse (Ausems, Bulles & Lokin) en het
+Juridisch Analyseschema (JAS). De kern is een gedeployde dienst — de **wetsanalyse-API**, de
+**webapp met de werkplek**, de eigen **QA/annotatie-agent (`tools/graph-qa/`, "de Juridische
+Assistent")** en de **wettenbank-MCP** als databron — die draait op Azure Container Apps én Portainer.
 
-1. **`tools/wettenbank-mcp/`** — een MCP-server (TypeScript) die de actuele wettekst ophaalt
-   via de publieke SRU-API van `overheid.nl`. Dit is de databron. Heeft een eigen, gedetailleerde
+Brongetrouwheid is niet onderhandelbaar: werk alleen met letterlijk opgehaalde wettekst, citeer
+letterlijk, en houd elke markering/begrip/regel/annotatie herleidbaar naar artikel + lid +
+`bronreferentie` (jci-uri). Het platform is een hulpmiddel voor de jurist, geen vervanger — de AI
+produceert, de mens beoordeelt en corrigeert; interpretatiekeuzes (incl. twijfel en aannames) worden
+expliciet gemaakt in plaats van schijnzekerheid.
+
+> **Legacy / oorsprong.** Het project begon als een **interactieve Claude Code-skill** in de CLI
+> (`.claude/skills/wetsanalyse` + `regelspraak`). Dat skill-spoor bestaat nog en is de **gedeelde
+> inhoudsbron** (`references/`/`scripts/`) die het platform op runtime hergebruikt — maar het is niet
+> langer de kern. De skill-werkstromen staan verderop (§*De wetsanalyse-skill* / *De regelspraak-skill*).
+
+### Platform-componenten
+
+1. **`tools/wettenbank-mcp/`** — een MCP-server (TypeScript) die de actuele wettekst ophaalt via de
+   publieke SRU-API van `overheid.nl`. Dit is de databron. Heeft een eigen, gedetailleerde
    `CLAUDE.md` — lees die bij werk *in* de MCP.
-2. **`.claude/skills/wetsanalyse/`** — de inhoudelijke skill die de analyse uitvoert (activiteit 2:
-   markeren + classificeren in JAS-klassen; activiteit 3: begrippen + afleidingsregels) en een
-   `rapport.json` oplevert die via een HTML-viewer wordt gepresenteerd. Markdown is beschikbaar
-   als afgeleid exportformaat. De skill *gebruikt* de MCP als bron. Activiteit 3 is **twee-staps**
-   (3a begrippen → 3b regels): de begrippen zijn de bouwstenen, en een afleidingsregel wordt
-   **geannoteerd** met begrip-id's (uitvoer/invoer/parameters/voorwaarden verwijzen per
-   `begrip_id`, plus vindplaats en `markering_ids`) maar niet uitgeschreven in een
-   (pseudo)regeltaal — die uitvoerbare formulering is de taak van
-   de regelspraak-skill, zodat er één bron van waarheid voor de regel is.
-3. **`.claude/skills/regelspraak/`** — de **vervolgskill** die de geduide afleidingsregels en
-   begrippen formaliseert naar een uitvoerbare specificatie in **RegelSpraak + GegevensSpraak**
-   (Belastingdienst/ALEF). Leest een afgerond `rapport.json` (via `scripts/ingest_rapport.py`, of
-   werkt standalone vanaf wettekst), bouwt het objectmodel en de regels in twee stappen met elk een
-   review-checkpoint, en levert een `model.json` (HTML-viewer; `.rs`/Markdown als export).
-4. **`analyses/`** — output: per **werkgebied** een map met het eindrapport en de
+2. **`api/`** — headless FastAPI-backend (PostgreSQL-jobstore, per-client bearer-auth) die de
+   JAS-werkstroom als async REST-API aanbiedt: analyses aanmaken/reviewen (een **werkgebied** met
+   meerdere bronnen), al ná activiteit 2 afronden (`scope: "act2"`) met act3 on-demand
+   (`POST /v1/projects/{id}/act3`), en de **RegelSpraak-formaliseringsfase** als on-demand vervolg
+   (`POST /v1/projects/{id}/regelspraak`). Bevat óók het **annotatie-domein** van de werkplek
+   (`/v1/annotatie/*`: documenten/elementen/beslissingen + append-only auditlog). Het LLM wordt
+   aangestuurd via **benoemde modelprofielen** (in de database, beheerbaar via `/v1/admin/profiles`;
+   de env-`LLM_*`-waarden seeden alleen het eerste default-profiel). Eigen `CLAUDE.md` + `README.md`.
+3. **`frontend/`** — Next.js-webapp (BFF) bovenop de API, met twee gezichten. (a) De **analyse-webapp**:
+   analyses aanmaken (wet-dropdown met **artikel-autocomplete + lid-keuze**, en optioneel een
+   **bestaande begrippenlijst** plakken/uploaden als suggestieve act-3-invoer), de human-in-the-loop
+   review-lus, het rapport, de **RegelSpraak-fase** ("Naar RegelSpraak") en het **`/beheer`-scherm**
+   (modelprofielen, wet-catalogus, gebruikers, token-verbruik; achter een apart admin-token). (b) **De
+   werkplek** (`/workbench`, de *Assistent-pagina*): één gespreksvenster voor **vragen én
+   JAS-annotatie**, live tegen graph-qa. De hele webapp zit achter een **login met userid +
+   wachtwoord** (Auth.js; e-mail verplicht/uniek maar geen inlog-identiteit; de API is de
+   identiteitsbron; rollen `beheerder`/`analist`; eenmalige eerste-beheerder-registratie via `/setup`;
+   optionele TOTP-2FA via `/account`). De UI volgt de **Rijkshuisstijl** (Belastingdienst-stijlvak:
+   lintblauw, Fira-fonts, het officiële Belastingdienst-logo en JAS-klassekleuren uit
+   `docs/wetsanalyse/wa-table.png`). Eigen `CLAUDE.md` + `README.md`.
+4. **`tools/graph-qa/`** — de eigen **QA/annotatie-agent** ("de Juridische Assistent") die vragen over
+   wet- en regelgeving beantwoordt door de BWB-**kennisgraaf** (GraphDB via MCP) te bevragen en het
+   antwoord **brongetrouw** te onderbouwen (grounding + bronnen uit de tool-trace). Eén **unified
+   LangGraph-agent**: een **supervisor** kiest per vraag een worker-keten — de **antwoord-worker**
+   (specialisten `definitie`/`duiding`/`algemeen`: agent ⇄ tools → verify → finalize) of de
+   **annotatie-worker** (ophaal → annoteer → **Critic** → advance, met aandacht-niveau 🟢🟡🔴).
+   Endpoints: `POST /v1/chat` (SSE) en `GET /v1/artikel`. De werkplek praat er **direct** mee (SSE);
+   de persistente review-state loopt via de API (`/v1/annotatie/*`). Deployt via CI naar Azure
+   Container Apps én een Portainer-stack (image `ghcr.io/palmw01/graph-qa`). Eigen `CLAUDE.md` + `README.md`.
+5. **`analyses/`** — output van het skill-spoor: per **werkgebied** (kennisdomein met **meerdere
+   bronnen** — een bron = `bwbId`+`artikel`+`lid?`, niet één artikel) een map met het eindrapport en de
    `werk/`-tussenbestanden, plus desgewenst een `regelspraak/`-submap met het RegelSpraak-`model.json`.
-   De analyse-eenheid is het werkgebied (kennisdomein) met **meerdere
-   bronnen** (een bron = `bwbId`+`artikel`+`lid?`), niet één artikel: activiteit 2 markeert per bron,
-   activiteit 3 levert één gedeelde, ontdubbelde begrippenlijst over alle bronnen heen. De map heet
-   naar de werkgebied-naam (kebab-case); bij ontbreken valt ze terug op de eerste bron
-   (`<bwbid>-art<nr>[-lidN]`).
-5. **`api/`** — headless FastAPI-backend die dezelfde JAS-werkstroom als async REST-API aanbiedt
-   (PostgreSQL-jobstore, per-client bearer-auth). Heeft een eigen `CLAUDE.md` + `README.md` — lees die
-   bij werk *in* de API. Het LLM wordt aangestuurd via **benoemde modelprofielen** (in de database, beheerbaar
-   via `/v1/admin/profiles`); de env-`LLM_*`-waarden seeden alleen het eerste default-profiel. Een
-   analyse kan met feedback-status `akkoord-afronden` al ná activiteit 2 afgerond worden
-   (`scope: "act2"`); activiteit 3 volgt dan desgewenst later via `POST /v1/projects/{id}/act3`.
-   Naast de analyse biedt de API ook de **RegelSpraak-formaliseringsfase** als on-demand vervolg
-   op een afgeronde volledige analyse (`POST /v1/projects/{id}/regelspraak`).
-6. **`frontend/`** — Next.js-webapp (BFF) bovenop de API: analyses aanmaken (wet-dropdown met
-   **artikel-autocomplete + lid-keuze** via de wetsstructuur, en optioneel een **bestaande
-   begrippenlijst** plakken/uploaden als suggestieve act-3-invoer) en reviewen (incl. de knop
-   "Akkoord — afronden zonder act. 3" en het later alsnog starten van activiteit 3). Het live
-   per-analyse overzicht (voorheen `/dashboard`) is **verplaatst naar Grafana** (dashboard
-   *"Wetsanalyse — systeemtopologie"*, `deploy/observability/`); de aggregate-SSE-stream blijft wél
-   bestaan en houdt de projectenlijst (`/`) live. In de webapp beheer je verder de modelprofielen, de **wet-catalogus** (BWB-id + naam,
-   selecteerbaar via dropdown bij een nieuwe analyse) en het token-verbruik beheren via het
-   **`/beheer`-scherm** (achter een apart admin-token). De hele webapp zit achter een
-   **login met userid + wachtwoord** (Auth.js; e-mail wordt verplicht/uniek geregistreerd maar is
-   geen inlog-identiteit; de API is de identiteitsbron, rollen `beheerder`/`analist`, eenmalige
-   eerste-beheerder-registratie via `/setup`, optionele TOTP-2FA via `/account`, gebruikersbeheer in
-   `/beheer`). De UI volgt de **Rijkshuisstijl**
-   (Belastingdienst-stijlvak): lintblauw, Fira-fonts, het officiële Belastingdienst-logo en
-   JAS-klassekleuren uit `docs/wa-table.png`. Op een afgeronde analyse kan de gebruiker met
-   **"Naar RegelSpraak"** de formaliseringsfase starten en het RegelSpraak-model bekijken/downloaden.
-   Heeft een eigen `CLAUDE.md` + `README.md` — lees die bij werk *in* de frontend.
-7. **`tools/graph-qa/`** — de **eigen juridische QA-agent** (Python/FastAPI) die vragen over wet- en
-   regelgeving beantwoordt door de BWB-**kennisgraaf** (GraphDB via MCP) te bevragen en het antwoord
-   **brongetrouw** te onderbouwen (grounding + bronnen uit de tool-trace). Zit achter de
-   **webapp-chatbel**: de API proxyt die naar `POST /v1/chat-webhook` (voorheen n8n; nu deze agent).
-   Een LangGraph-orkestrator (router → specialist ↔ tools → verify → finalize) met een multi-agent
-   supervisor (`definitie`/`duiding`/`algemeen`), getypeerde toollaag, durable geheugen en SSE-
-   streaming. Draait intern-only als Portainer-stack via CI (image `ghcr.io/palmw01/graph-qa`).
-   Heeft een eigen `CLAUDE.md` + `README.md` — lees die bij werk *in* de agent.
+   Activiteit 2 markeert per bron; activiteit 3 levert één gedeelde, ontdubbelde begrippenlijst over
+   alle bronnen. De map heet naar de werkgebied-naam (kebab-case); bij ontbreken valt ze terug op de
+   eerste bron (`<bwbid>-art<nr>[-lidN]`).
 
-De skill is geen vervanger van de analist: de kern is interpretatiekeuzes **expliciet** maken,
-inclusief twijfel en aannames. Brongetrouwheid is niet onderhandelbaar — werk alleen met
-letterlijk opgehaalde wettekst, citeer letterlijk, en houd elke markering/begrip/regel
-herleidbaar naar artikel + lid + `bronreferentie` (jci-uri).
+### Legacy / oorsprong — het skill-spoor (gedeelde inhoudsbron)
+
+6. **`.claude/skills/wetsanalyse/`** — de inhoudelijke skill die de analyse **interactief in Claude
+   Code** uitvoert (activiteit 2: markeren + classificeren in JAS-klassen; activiteit 3 **twee-staps**:
+   3a begrippen → 3b regels met de begrippen als bouwstenen via begrip-id's) en een `rapport.json`
+   oplevert (HTML-viewer; Markdown als export). De skill *gebruikt* de MCP als bron. Een afleidingsregel
+   wordt **geannoteerd** met begrip-id's (uitvoer/invoer/parameters/voorwaarden per `begrip_id`, plus
+   vindplaats en `markering_ids`), niet uitgeschreven in een (pseudo)regeltaal — die uitvoerbare
+   formulering is de taak van de regelspraak-skill, zodat er één bron van waarheid voor de regel is.
+7. **`.claude/skills/regelspraak/`** — de **vervolgskill** die de geduide afleidingsregels en begrippen
+   formaliseert naar een uitvoerbare specificatie in **RegelSpraak + GegevensSpraak** (Belastingdienst/
+   ALEF). Leest een afgerond `rapport.json` (via `scripts/ingest_rapport.py`) of werkt standalone vanaf
+   wettekst, bouwt het objectmodel en de regels in twee stappen met elk een review-checkpoint, en levert
+   een `model.json` (HTML-viewer; `.rs`/Markdown als export).
+
+Beide skills leveren de `references/`/`scripts/` die **óók het platform** (de API-engine) op runtime
+gebruikt: één inhoudelijke bron van waarheid voor de JAS-methode en RegelSpraak. graph-qa staat hier
+los van — dat werkt op de GraphDB-kennisgraaf met zijn eigen toollaag en prompts.
 
 ## De onderdelen hangen via paden samen
 
@@ -213,7 +221,7 @@ vier hendels (Context, Tools, Loop, Governance) in plaats van het model te verde
 
 ## Observability
 
-Alle draaiende onderdelen (API, frontend, MCP, chatbot-hop) zijn **geïnstrumenteerd, niet bemeterd**:
+Alle draaiende onderdelen (API, frontend, MCP, graph-qa) zijn **geïnstrumenteerd, niet bemeterd**:
 ze emitteren gestructureerde JSON-logs (één gedeelde vorm, bron `tools/wettenbank-mcp/src/logger.ts`)
 en kunnen OpenTelemetry (traces/metrics/logs) naar een **configureerbaar OTLP-endpoint** sturen
 (`OTEL_EXPORTER_OTLP_ENDPOINT`; leeg = alleen logs, nul overhead). Eén trace-id verbindt de keten
@@ -223,7 +231,7 @@ afleiden) + Tempo + Loki + Prometheus, plus **Alloy** dat de stdout-logs van fro
 naar Loki shipt, **twee kant-en-klare Grafana-dashboards** (`grafana-dashboard-wetsanalyse.json` =
 trends; `grafana-dashboard-topologie.json` = *"systeemtopologie"*: de live keten die oplicht +
 de per-analyse jobs-tabel die het opgeheven frontend-`/dashboard` vervangt, via de read-only
-jobstore-datasource `wa-postgres`) en **alerting** (`alerting/` → n8n-webhook). Je koppelt 'm aan je bestaande Grafana; laat het endpoint
+jobstore-datasource `wa-postgres`) en **alerting** (`alerting/`, Grafana-contactpunt). Je koppelt 'm aan je bestaande Grafana; laat het endpoint
 leeg om alles ongewijzigd met alléén JSON-logs te draaien. De volledige uitleg (env-vars, logschema,
 AVG-redactie, dashboard/alerting) staat in **`docs/observability.md`**.
 
@@ -234,7 +242,8 @@ naar RegelSpraak/GegevensSpraak) in `.claude/skills/regelspraak/`.
 
 ## Referentiedocumentatie
 
-`docs/` bevat de methodische onderbouwing (niet code): `handleiding.pages.md`,
-`leidraad.pages.md`, en `docs/wetsanalyse-rijk/` (hoofdstukken over JAS en het kader). Raadpleeg
-deze bij inhoudelijke vragen over de methode; de skill-`references/` zijn de operationele
-samenvatting daarvan.
+`docs/` bevat de methodische onderbouwing (niet code): `docs/wetsanalyse/handleiding.pages.md`,
+`docs/wetsanalyse/leidraad.pages.md`, `docs/wetsanalyse/wetsanalyse-boek.md` en
+`docs/wetsanalyse/wetsanalyse-rijk/` (hoofdstukken over JAS en het kader), plus de
+RegelSpraak-specificaties in `docs/regelspraak/`. Raadpleeg deze bij inhoudelijke vragen over de
+methode; de skill-`references/` zijn de operationele samenvatting daarvan.

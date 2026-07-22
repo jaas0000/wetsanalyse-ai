@@ -1,8 +1,8 @@
 # graph-qa — deployment (Portainer, intern)
 
-De graph-qa-agent draait als intern-only Portainer-stack. De Wetsanalyse-API-chatproxy roept 'm aan op
-`http://graph-qa:8080/v1/chat-webhook` (server→server via het gedeelde Docker-netwerk). **Geen
-host-poort, geen publieke NPM-host nodig.** Image van GHCR via
+De graph-qa-agent draait als intern-only Portainer-stack. De **werkplek** (frontend `/workbench`) belt
+hem rechtstreeks op `POST /v1/chat` (SSE) via een server-side BFF-route — server→server over het gedeelde
+Docker-netwerk. **Geen host-poort, geen publieke NPM-host nodig.** Image van GHCR via
 `.github/workflows/graph-qa-docker-publish.yml`.
 
 ## 1. Host-secrets (eenmalig, op de host)
@@ -31,19 +31,16 @@ op het `graph_qa_data`-volume (`/data`).
 `(healthy)` wordt. Optioneel een externe health-URL: NPM proxy-host `graph-qa.ipalm.nl` →
 `graph-qa:8080` + `vars.GRAPH_QA_HEALTH_URL=https://graph-qa.ipalm.nl/health`.
 
-## 3. Chatbot koppelen (config-swap in de webapp)
+## 3. Werkplek koppelen
 
-In `/beheer` → kennisgraaf-chatbot (of admin-API `PUT /v1/admin/settings`):
-- **Webhook-URL:** `http://graph-qa:8080/v1/chat-webhook`
-- **Secret:** leeg laten (intern-only, geen slot).
-- **Ingeschakeld:** aan
+De werkplek zit in de **frontend-stack**, niet in graph-qa. Wijs de frontend naar deze service via env
+(zie `frontend/`): `GRAPH_QA_URL` (default intern `http://graph-qa:8080`). De BFF-route
+`app/api/annotatie/agent` streamt `POST /v1/chat` door en `app/api/annotatie/artikel` haalt `GET /v1/artikel`
+op; `conversation_id` geeft geheugen-continuïteit per gesprek. Bij een intern-only deployment is er geen
+slot nodig. Verifieer via de Assistent-pagina (`/workbench`).
 
-De API-chatproxy stuurt `{action, sessionId, chatInput}`; graph-qa antwoordt met `{output}`
-(antwoord + bronlinks). `sessionId` → `conversation_id` → geheugen-continuïteit per gesprek.
-Verifieer via de chatbel.
-
-> Wil je graph-qa tóch publiek exposen (NPM-host): zet dan `QA_API_TOKEN_FILE=/run/secrets/qa_api_token`
-> in de stack, leg `qa_api_token` op de host, en vul dat als chat-secret in `/beheer`.
+> Wil je graph-qa tóch achter een token zetten: zet `QA_API_TOKEN_FILE=/run/secrets/qa_api_token` in deze
+> stack, leg `qa_api_token` op de host, en geef de frontend hetzelfde token mee via `GRAPH_QA_TOKEN(_FILE)`.
 
 ## CI-driven deploy
 

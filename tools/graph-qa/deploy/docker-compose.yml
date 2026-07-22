@@ -1,6 +1,6 @@
 # Portainer-stack voor de graph-qa-agent (de kennisgraaf-QA-agent), intern.
 #
-# De Wetsanalyse-API-chatproxy roept dit endpoint aan op http://graph-qa:8080/v1/chat-webhook
+# De werkplek (frontend /workbench) belt de agent op http://graph-qa:8080/v1/chat (SSE)
 # (server→server via het gedeelde Docker-netwerk). GÉÉN host-poort en GÉÉN publieke NPM-host nodig —
 # de agent is alleen intern bereikbaar. De image komt van GHCR
 # (.github/workflows/graph-qa-docker-publish.yml).
@@ -41,7 +41,7 @@ services:
       # --- secrets via host-bestanden (*_FILE) ---
       GRAPHDB_TOKEN_FILE: /run/secrets/graphdb_token
       AZURE_FOUNDRY_API_KEY_FILE: /run/secrets/azure_foundry_api_key
-      # QA_API_TOKEN beschermt de eigen endpoints (/v1/chat, /v1/chat-webhook) — nodig zodra graph-qa
+      # QA_API_TOKEN beschermt de eigen endpoints (/v1/chat, /v1/artikel) — nodig zodra graph-qa
       # publiek via NPM bereikbaar is (/health blijft open). Het host-bestand qa_api_token MOÉT bestaan
       # en niet-leeg zijn (anders valt _read_secret stil terug op "geen slot" → endpoints open), én de
       # waarde MOET gelijk zijn aan chat_secret in /beheer, anders krijgt de webapp-chatbot 401.

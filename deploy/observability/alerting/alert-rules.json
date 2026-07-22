@@ -11,7 +11,6 @@
     "isPaused": false,
     "labels": { "team": "wetsanalyse", "severity": "warning" },
     "annotations": { "summary": "Eén of meer orchestrator-fasen faalden (wetsanalyse_fase_fouten_total)." },
-    "notification_settings": { "receiver": "wetsanalyse-n8n" },
     "data": [
       { "refId": "A", "relativeTimeRange": { "from": 600, "to": 0 }, "datasourceUid": "wa-prometheus",
         "model": { "expr": "sum(increase(wetsanalyse_fase_fouten_total[10m]))", "instant": true, "intervalMs": 1000, "maxDataPoints": 43200, "refId": "A" } },
@@ -31,7 +30,6 @@
     "isPaused": false,
     "labels": { "team": "wetsanalyse", "severity": "warning" },
     "annotations": { "summary": "De API geeft 5xx-responses terug." },
-    "notification_settings": { "receiver": "wetsanalyse-n8n" },
     "data": [
       { "refId": "A", "relativeTimeRange": { "from": 300, "to": 0 }, "datasourceUid": "wa-prometheus",
         "model": { "expr": "sum(rate(http_server_duration_milliseconds_count{exported_job=\"wetsanalyse-api\", http_status_code=~\"5..\"}[5m]))", "instant": true, "intervalMs": 1000, "maxDataPoints": 43200, "refId": "A" } },
@@ -51,7 +49,6 @@
     "isPaused": false,
     "labels": { "team": "wetsanalyse", "severity": "warning" },
     "annotations": { "summary": "API server-latency p95 > 5s gedurende 10m." },
-    "notification_settings": { "receiver": "wetsanalyse-n8n" },
     "data": [
       { "refId": "A", "relativeTimeRange": { "from": 600, "to": 0 }, "datasourceUid": "wa-prometheus",
         "model": { "expr": "histogram_quantile(0.95, sum by (le)(rate(http_server_duration_milliseconds_bucket{exported_job=\"wetsanalyse-api\"}[10m])))", "instant": true, "intervalMs": 1000, "maxDataPoints": 43200, "refId": "A" } },
@@ -71,7 +68,6 @@
     "isPaused": false,
     "labels": { "team": "wetsanalyse", "severity": "critical" },
     "annotations": { "summary": "Prometheus kan de OTel-collector niet scrapen (up == 0)." },
-    "notification_settings": { "receiver": "wetsanalyse-n8n" },
     "data": [
       { "refId": "A", "relativeTimeRange": { "from": 300, "to": 0 }, "datasourceUid": "wa-prometheus",
         "model": { "expr": "up{job=\"otel-collector\"}", "instant": true, "intervalMs": 1000, "maxDataPoints": 43200, "refId": "A" } },

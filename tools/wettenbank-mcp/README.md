@@ -1,8 +1,9 @@
 # Wettenbank-MCP
 
-MCP-server (TypeScript/ESM) die **vanuit Claude Code actuele Nederlandse wetgeving** ophaalt via de
-publieke SRU-interface van `wetten.overheid.nl`. Geen API-sleutel nodig — alle data is CC-0. Dit is
-de **databron** van het Wetsanalyse-project; de skill en de API roepen 'm intern aan.
+MCP-server (TypeScript/ESM) die **actuele Nederlandse wetgeving** ophaalt via de publieke
+SRU-interface van `wetten.overheid.nl`. Geen API-sleutel nodig — alle data is CC-0. Dit is de
+**databron** van het Wetsanalyse-platform: de wetsanalyse-API én de (legacy) Claude Code-skill
+roepen 'm intern aan.
 
 > **Diepe architectuur** (bwb-parser-pipeline, module-voor-module, gegevensmodel, XML-schema's als
 > ontwerpbasis, foutmodel) staat in **[`CLAUDE.md`](CLAUDE.md)** — die is de bron van waarheid voor

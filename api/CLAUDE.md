@@ -1,9 +1,10 @@
 # CLAUDE.md — wetsanalyse-api
 
-Headless API-backend die de Wetsanalyse (JAS) orchestreert. Maakt van de Claude Code-skill een
-zelfstandige, Dockeriseerbare dienst die je via HTTP (Postman/Swagger) bevraagt. Lees ook de
-projectroot-`CLAUDE.md` en `.claude/skills/wetsanalyse/SKILL.md` (de skill blijft de inhoudelijke
-bron; deze service is een parallelle harness over dezelfde references/scripts).
+Headless API-backend die de Wetsanalyse (JAS) orchestreert — een kerncomponent van het agent-platform,
+een zelfstandige, Dockeriseerbare dienst die je via HTTP (Postman/Swagger) bevraagt en die de webapp
+(analyse-webapp + werkplek) bedient. Lees ook de projectroot-`CLAUDE.md` en
+`.claude/skills/wetsanalyse/SKILL.md`: de (legacy) skill is de **gedeelde inhoudelijke bron**
+(references/scripts) die deze service op runtime hergebruikt.
 
 ## Dragend principe
 
@@ -195,7 +196,7 @@ Een **vers, apart domein** voor de wetsanalyse-workbench (agent annoteert → me
 (traces/metrics/logs), gated op `OTEL_EXPORTER_OTLP_ENDPOINT` — leeg = no-op, alleen logs. `setup()`
 draait vroeg in `main.py`; `RequestContextMiddleware` (pure ASGI, veilig voor de SSE-streams) zet een
 `X-Request-Id` en logt per request. De orchestrator wikkelt elke fase (`_guard`) in een span met
-metrics (fase-duur, fase-fouten per `FoutKlasse`, LLM-tokens); de chat-hop krijgt een `chat.agent`-span.
+metrics (fase-duur, fase-fouten per `FoutKlasse`, LLM-tokens).
 `get_tracer()`/`get_meter()` geven no-op-shims terug zonder de `otel`-extra, dus code mag
 onvoorwaardelijk spans/metrics maken. De `otel`-extra zit in de productie-image (`Dockerfile`:
 `uv sync --extra otel`). Nooit tokens/secrets/prompt-inhoud loggen. Zie `docs/observability.md`.

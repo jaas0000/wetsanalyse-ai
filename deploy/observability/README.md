@@ -59,7 +59,7 @@ Twee manieren (zie `grafana-datasources.yaml` voor de exacte waarden):
 ## 4. Verifiëren
 
 Draai een analyse en een chat in de webapp, dan in Grafana → **Explore**:
-- **Tempo**: één trace `frontend → API → MCP` (gedeelde `trace_id`) en de `chat.n8n`-span.
+- **Tempo**: één trace `frontend → API → MCP` (gedeelde `trace_id`), plus de keten `frontend → graph-qa`.
 - **Loki**: de gecorreleerde logregels (filter op `trace_id`); via de derived field spring je door naar
   de trace in Tempo.
 - **Prometheus**: `wetsanalyse_fase_duur_ms_milliseconds_*` (histogram; de OTLP→Prometheus-export
@@ -88,7 +88,7 @@ De twee hebben een **duidelijke rolverdeling** (en linken naar elkaar): topologi
 observability = *trends/analytics*. Metrics staan zo op één plek, zonder duplicatie.
 
 - `grafana-dashboard-topologie.json` — *"Wetsanalyse — systeemtopologie"* (**live/ops**): de **live keten
-  die oplicht** (Canvas: frontend → API → MCP/LLM/Postgres → overheid.nl, en API → n8n; met een rode
+  die oplicht** (Canvas: frontend → API → MCP/LLM/Postgres → overheid.nl, en frontend → graph-qa; met een rode
   **keten-fouten (15 min)**-badge), de **automatische Node Graph** (servicegraph-subset), een
   **trace-waterfall + logs** om één executie te volgen, en de **live analyses-tabel** (met gekleurde
   jobs-stats) die het opgeheven frontend-`/dashboard` vervangt. Geen trend-panels — die staan in het
@@ -111,7 +111,7 @@ daarnaast **`wa-postgres`** voor de live analyses-tabel (zie sectie 9); zonder d
 alle andere panels gewoon, alleen de jobs-tabel/tellers blijven leeg.
 
 > **Systeemtopologie afronden.** De Canvas is bewust een startpunt: doorloopt/lichthoogte fijn je het
-> makkelijkst interactief bij (*Edit → Canvas*). De node-queries voor frontend/Postgres/n8n/overheid.nl
+> makkelijkst interactief bij (*Edit → Canvas*). De node-queries voor frontend/Postgres/graph-qa/overheid.nl
 > leunen op de service-graph-metrics — draai eerst een analyse + chat zodat de connectors data hebben,
 > en verifieer dan de labelwaarden (`client`/`server`) in *Explore* voordat je ze vastzet.
 
@@ -145,14 +145,13 @@ niet — die komt al via OTLP, dus geen dubbeling), zet `service_name` op de con
 - Verifiëren: Grafana → Explore → Loki → `{service_name="wettenbank-mcp"}` en
   `{service_name="wetsanalyse-frontend"}` geven logregels.
 
-## 7. Alerting (→ n8n-webhook)
+## 7. Alerting
 
 `alerting/` bevat de definities (reproduceerbaar; de live-bron is de Grafana-provisioning-API):
-- `contact-point.json` — webhook-contactpunt `wetsanalyse-n8n` (**pas de `url` aan naar je eigen
-  n8n-webhook**).
 - `alert-rules.json` — 4 regels in groep `wetsanalyse-1m` (map "Wetsanalyse"): fase-fouten, HTTP 5xx,
-  latency p95 > 5s, telemetrie-backend down (`up{job="otel-collector"}==0`). Elke regel routeert via
-  `notification_settings` rechtstreeks naar het contactpunt (raakt je globale notificatie-policies niet).
+  latency p95 > 5s, telemetrie-backend down (`up{job="otel-collector"}==0`). De regels dragen **geen
+  eigen contactpunt** en volgen het **default notification-beleid** van je Grafana — richt daar je
+  gewenste ontvanger in (e-mail, Slack, …).
 - `apply.sh` — idempotent toepassen:
   `GRAFANA_URL=https://grafana.ipalm.nl GRAFANA_TOKEN=<sa-token> ./apply.sh`.
 
@@ -165,7 +164,7 @@ De hele observability-laag staat in één keer neer via **`.github/workflows/dep
    `configs:` — géén host-bestanden nodig). Idempotente PUT + wachten tot de 5 containers draaien.
 2. **Grafana provisionen** → `provision-grafana.sh` (idempotent: de 3 datasources + de map + het
    dashboard `grafana-dashboard-wetsanalyse.json`).
-3. **Alerting** → `alerting/apply.sh` (contactpunt + 4 regels).
+3. **Alerting** → `alerting/apply.sh` (de 4 regels; ze volgen het default notification-beleid).
 
 Benodigde secrets/vars: `PORTAINER_URL`/`PORTAINER_API_KEY`/`vars.PORTAINER_OBSERVABILITY_STACK_ID`,
 `GRAFANA_URL`/`GRAFANA_TOKEN`. Losse componenten draai je ook handmatig
@@ -173,4 +172,3 @@ Benodigde secrets/vars: `PORTAINER_URL`/`PORTAINER_API_KEY`/`vars.PORTAINER_OBSE
 
 > `docker-compose.stack.yml` is de **gedeployde** variant (inline configs, incl. Alloy); de
 > `docker-compose.yml` hiernaast is de bindmount-variant voor lokaal/handmatig. Houd ze equivalent.
-> De n8n-alert-webhook (ontvanger) leeft in n8n, buiten deze repo.

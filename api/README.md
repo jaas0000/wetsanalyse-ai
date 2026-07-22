@@ -1,12 +1,12 @@
 # wetsanalyse-api
 
-Headless HTTP-backend die de wetsanalyse (JAS) als zelfstandige dienst aanbiedt. Dezelfde
-inhoudelijke werkstroom als de Claude Code-skill — wettekst ophalen via de wettenbank-MCP,
-activiteit 2 (markeren & classificeren) en activiteit 3 (begrippen & afleidingsregels) — maar
-aangestuurd via een REST-API in plaats van via Claude Code.
+Headless HTTP-backend die de wetsanalyse (JAS) als REST-API aanbiedt — de kern van het agent-platform,
+onder de webapp (analyse-webapp + werkplek). De inhoudelijke werkstroom — wettekst ophalen via de
+wettenbank-MCP, activiteit 2 (markeren & classificeren) en activiteit 3 (begrippen & afleidingsregels)
+— deelt de `references/`/`scripts/` met de (legacy) Claude Code-skill als gemeenschappelijke inhoudsbron.
 
-Geschikt voor geautomatiseerde verwerking, integratie met andere systemen of als backend voor
-een webapp of Teams-client.
+Geschikt als backend voor de webapp, voor geautomatiseerde verwerking en voor integratie met andere
+systemen.
 
 ## Hoe het past in het project
 
@@ -44,7 +44,11 @@ Alle analyse-endpoints zijn client-gescopet (alleen je eigen analyses) en versio
 | `GET` | `/v1/wetten` | Keuzelijst wetten (BWB-id + naam; client-auth) voor de dropdown |
 | `GET` | `/v1/wetten/{bwbId}/structuur` | Afgeplatte artikellijst van een wet (voedt de artikel-autocomplete in het formulier) |
 | `GET` | `/v1/wetten/{bwbId}/artikelen/{artikel}` | Leden + opschrift + tekstsnippet van één artikel (voedt de lid-keuzelijst) |
-| `POST` | `/v1/chat` | Chatbot-hop: stuurt een vraag door naar de kennisgraaf-agent (graph-qa; webhook/secret via de runtime-settings, aparte rate-limit) |
+| `POST` | `/v1/annotatie/documenten` | Annotatie-document aanmaken (werkplek) |
+| `GET` `DELETE` | `/v1/annotatie/documenten/{slug}` | Document ophalen / verwijderen |
+| `PUT` | `/v1/annotatie/documenten/{slug}/elementen` | Door de agent voorgestelde JAS-elementen opslaan |
+| `POST` | `/v1/annotatie/documenten/{slug}/elementen/{id}/beslissing` | Human-decision (approve/edit/reject/comment) |
+| `GET` | `/v1/annotatie/documenten/{slug}/audit` | Append-only auditlog van het document |
 | `GET` | `/health` | Liveness check |
 | `GET` | `/ready` | Readiness check (booleans: auth, LLM, MCP, database geconfigureerd) |
 
@@ -245,7 +249,7 @@ env-`LLM_API_KEY` terugvallen en weigert de UI een key op te slaan.
 De API is **geïnstrumenteerd**: gestructureerde JSON-logging (request-id-middleware, secret-redactie)
 plus OpenTelemetry (traces/metrics/logs), gated op **`OTEL_EXPORTER_OTLP_ENDPOINT`** — leeg = no-op,
 alleen logs. De orchestrator wikkelt elke fase in een span met metrics (fase-duur, fase-fouten per
-klasse, LLM-tokens); de chat-hop krijgt een `chat.agent`-span. Eén trace-id verbindt frontend → API →
-MCP/agent. Nooit tokens/secrets/prompt-inhoud loggen. Zie `app/observability.py` en de projectbrede
+klasse, LLM-tokens). Eén trace-id verbindt frontend → API → MCP. Nooit tokens/secrets/prompt-inhoud
+loggen. Zie `app/observability.py` en de projectbrede
 [`docs/observability.md`](../docs/observability.md) (env-vars, logschema, en de optionele
 Grafana-stack in `deploy/observability/`).
