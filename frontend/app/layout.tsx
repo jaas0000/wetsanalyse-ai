@@ -3,6 +3,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { auth } from "@/auth";
 import { Providers } from "@/components/Providers";
+import { SiteFooter } from "@/components/SiteFooter";
 import { SiteNav } from "@/components/SiteNav";
 import { sans, mono } from "./fonts";
 import "./globals.css";
@@ -79,11 +80,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           </div>
         </header>
         <main className="mx-auto max-w-6xl px-6 py-10">{children}</main>
-        <footer className="mx-auto max-w-6xl px-6 pb-10 pt-4 text-xs text-faint">
-          <span className="font-medium text-muted">Belastingdienst</span> · Methode Wetsanalyse
-          (Ausems, Bulles &amp; Lokin) · Juridisch Analyseschema · brongetrouw herleidbaar naar
-          artikel, lid en bronreferentie.
-        </footer>
+        <SiteFooter />
         </Providers>
       </body>
     </html>
