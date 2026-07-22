@@ -29,6 +29,26 @@ export type AnnotatieEvent =
 export function useChatStream(conversationId: string | null) {
   const [state, setState] = useState<StreamState>(INIT);
   const abortRef = useRef<AbortController | null>(null);
+  // Throttle: setState maximaal 1x per 50ms tijdens streaming
+  const flushTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingState = useRef<Partial<StreamState>>({});
+
+  function scheduleFlush() {
+    if (flushTimer.current) return;
+    flushTimer.current = setTimeout(() => {
+      flushTimer.current = null;
+      const patch = pendingState.current;
+      pendingState.current = {};
+      if (Object.keys(patch).length > 0) {
+        setState(s => ({ ...s, ...patch }));
+      }
+    }, 50);
+  }
+
+  function patchState(patch: Partial<StreamState>) {
+    Object.assign(pendingState.current, patch);
+    scheduleFlush();
+  }
 
   // Reset stream-state bij gesprekswisseling
   const prevConvId = useRef(conversationId);
@@ -53,6 +73,7 @@ export function useChatStream(conversationId: string | null) {
       abortRef.current = ctrl;
 
       setState({ ...INIT, isStreaming: true });
+      pendingState.current = {};
 
       let reasoning = "";
       let answer = "";
@@ -106,25 +127,25 @@ export function useChatStream(conversationId: string | null) {
             if (msgType === "reason" || msgType === "reasoning_delta") {
               const chunk = ((parsed as Record<string, unknown>)["content"] ?? (parsed as Record<string, unknown>)["delta"] ?? "") as string;
               reasoning += chunk;
-              setState(s => ({ ...s, reasoningText: reasoning }));
+              patchState({ reasoningText: reasoning });
               onChunk({ reasoning });
 
             } else if (msgType === "token") {
               const chunk = ((parsed as Record<string, unknown>)["content"] ?? (parsed as Record<string, unknown>)["token"] ?? "") as string;
               answer += chunk;
-              setState(s => ({ ...s, answerText: answer }));
+              patchState({ answerText: answer });
               onChunk({ content: answer });
 
             } else if (msgType === "sources" && "sources" in parsed) {
               sources = parsed.sources;
               const gok = (parsed as Record<string, unknown>)["grounding_ok"];
               groundingOk = gok != null ? (gok as boolean) : null;
-              setState(s => ({ ...s, sources, groundingOk }));
+              patchState({ sources, groundingOk });
 
             } else if (msgType === "grounding") {
               const grounded = (parsed as Record<string, unknown>)["grounded"];
               groundingOk = grounded != null ? (grounded as boolean) : null;
-              setState(s => ({ ...s, groundingOk }));
+              patchState({ groundingOk });
 
             } else if (msgType === "doel") {
               onAnnotatie?.({ type: "doel", doel: (parsed as Record<string, unknown>)["doel"] as AnnotatieDoel });
@@ -144,12 +165,17 @@ export function useChatStream(conversationId: string | null) {
           }
         }
 
-        setState(s => ({ ...s, isStreaming: false }));
+        // Flush eventuele nog-openstaande pending state en zet isStreaming=false
+        if (flushTimer.current) { clearTimeout(flushTimer.current); flushTimer.current = null; }
+        setState(s => ({ ...s, ...pendingState.current, isStreaming: false }));
+        pendingState.current = {};
         onDone({ content: answer, reasoning, sources, groundingOk });
       } catch (err) {
         if ((err as Error).name === "AbortError") return;
         const msg = (err as Error).message;
-        setState(s => ({ ...s, isStreaming: false, error: msg }));
+        if (flushTimer.current) { clearTimeout(flushTimer.current); flushTimer.current = null; }
+        setState(s => ({ ...s, ...pendingState.current, isStreaming: false, error: msg }));
+        pendingState.current = {};
         onDone({ content: answer || "", reasoning, sources, groundingOk: false });
       }
     },
@@ -158,6 +184,8 @@ export function useChatStream(conversationId: string | null) {
 
   const abort = useCallback(() => {
     abortRef.current?.abort();
+    if (flushTimer.current) { clearTimeout(flushTimer.current); flushTimer.current = null; }
+    pendingState.current = {};
     setState(s => ({ ...s, isStreaming: false }));
   }, []);
 

@@ -147,12 +147,10 @@ export default function ChatClient({ userid, email, role, initials }: Props) {
 
     await chatStream.stream(
       q,
-      (partial) => {
-        convs.updateLastMessage(convId!, {
-          content: partial.content ?? "",
-          reasoning: partial.reasoning,
-        });
-      },
+      // onChunk: streaming content wordt live getoond via chatStream.answerText —
+      // updateLastMessage hier weglaten voorkomt localStorage-schrijven per token
+      // en daarmee het vastlopen van de browser bij snelle streams.
+      (_partial) => { /* geen localStorage-write per token */ },
       (final) => {
         convs.updateLastMessage(convId!, {
           content: final.content ?? "",
