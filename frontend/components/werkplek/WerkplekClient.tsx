@@ -73,6 +73,7 @@ export function WerkplekClient() {
   const [bezig, setBezig] = useState(false);
   const [actiefId, setActiefId] = useState<string | undefined>();
   const [hoogte, setHoogte] = useState<string>("70dvh");
+  const [menuOpen, setMenuOpen] = useState(false); // mobiele documenten-drawer
   const sessieRef = useRef<string>("");
   const lijstRef = useRef<HTMLDivElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -105,6 +106,16 @@ export function WerkplekClient() {
   useEffect(() => {
     lijstRef.current?.scrollTo({ top: lijstRef.current.scrollHeight, behavior: "smooth" });
   }, [items, bezig]);
+
+  // Escape sluit de mobiele drawer.
+  useEffect(() => {
+    if (!menuOpen) return;
+    const opEsc = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMenuOpen(false);
+    };
+    window.addEventListener("keydown", opEsc);
+    return () => window.removeEventListener("keydown", opEsc);
+  }, [menuOpen]);
 
   // Auto-groeiende textarea (groeit met de inhoud tot een max; daarna intern scrollen).
   useLayoutEffect(() => {
@@ -236,7 +247,7 @@ export function WerkplekClient() {
       style={{ height: hoogte }}
       className="grid gap-4 lg:grid-cols-[minmax(220px,260px)_1fr]"
     >
-      {/* Zijpaneel met lopende annotaties (op mobiel verborgen — chat-first) */}
+      {/* Zijpaneel met lopende annotaties (desktop; op mobiel via de drawer hieronder) */}
       <div className="hidden min-h-0 overflow-y-auto lg:block">
         <DocumentLijst
           documenten={documenten}
@@ -247,7 +258,53 @@ export function WerkplekClient() {
         />
       </div>
 
+      {/* Mobiele drawer met dezelfde documentenlijst */}
+      {menuOpen && (
+        <div className="fixed inset-0 z-40 lg:hidden" role="dialog" aria-modal="true" aria-label="Annotaties">
+          <div className="absolute inset-0 bg-ink/40" onClick={() => setMenuOpen(false)} />
+          <div className="absolute inset-y-0 left-0 w-[82%] max-w-xs overflow-y-auto bg-paper p-3 shadow-xl">
+            <div className="mb-2 flex items-center justify-between">
+              <span className="font-display text-sm font-semibold text-lint">Annotaties</span>
+              <button
+                type="button"
+                onClick={() => setMenuOpen(false)}
+                aria-label="Sluiten"
+                className="rounded-lg px-2 py-1 text-muted transition-colors hover:text-ink"
+              >
+                ✕
+              </button>
+            </div>
+            <DocumentLijst
+              documenten={documenten}
+              wetten={wetten}
+              onOpen={(slug) => {
+                setMenuOpen(false);
+                void openDocument(slug);
+              }}
+              onNew={() => {
+                setMenuOpen(false);
+                setItems([]);
+              }}
+              onVerwijder={verwijder}
+            />
+          </div>
+        </div>
+      )}
+
       <div className="flex min-h-0 min-w-0 flex-col">
+        {/* Mobiele triggerbalk voor de documenten-drawer (desktop heeft de zijkolom) */}
+        <div className="mb-1 flex shrink-0 lg:hidden">
+          <button
+            type="button"
+            onClick={() => setMenuOpen(true)}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-line px-2.5 py-1.5 text-xs text-ink transition-colors hover:border-lint"
+            aria-label="Annotaties openen"
+          >
+            <span aria-hidden>☰</span>
+            <span>Annotaties{documenten.length > 0 ? ` (${documenten.length})` : ""}</span>
+          </button>
+        </div>
+
         {/* Thread — enige scrollende gebied; berichten in een gecentreerde leeskolom */}
         <div ref={lijstRef} className="min-h-0 flex-1 overflow-y-auto" aria-live="polite">
           <div className="mx-auto max-w-3xl space-y-6 px-1 py-6">
