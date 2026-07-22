@@ -87,14 +87,21 @@ export function WerkplekClient() {
     verversLijst();
   }, []);
 
-  // Vul exact tot de onderkant van de viewport (runtime gemeten; geen magische aftrek), zodat de
-  // invoerbalk op de échte onderrand staat en alleen de thread scrollt. Herberekenen bij resize/
-  // toetsenbord (visualViewport op mobiel).
+  // Vul de ruimte tussen de eigen bovenkant en de globale footer (runtime gemeten; geen magische
+  // aftrek), zodat de invoerbalk laag staat en alleen de thread scrollt — én de footer + de onderrand
+  // van <main> zichtbaar blijven i.p.v. onder de viewport te vallen. Herberekenen bij resize/toetsenbord
+  // (visualViewport op mobiel); de footer wordt op smalle schermen hoger (tekst wrapt), dus meten.
   useLayoutEffect(() => {
     const meet = () => {
       const top = rootRef.current?.getBoundingClientRect().top ?? 0;
       const vh = window.visualViewport?.height ?? window.innerHeight;
-      setHoogte(`${Math.max(320, Math.round(vh - top - 8))}px`);
+      const footer = document.querySelector("footer");
+      const footerH = footer ? footer.offsetHeight : 0;
+      const mainEl = rootRef.current?.closest("main");
+      const mainPb = mainEl ? parseFloat(getComputedStyle(mainEl).paddingBottom) || 0 : 0;
+      // Reserveer de footer + de onderpadding van <main> + een kleine tussenruimte.
+      const reserve = footerH + mainPb + 8;
+      setHoogte(`${Math.max(320, Math.round(vh - top - reserve))}px`);
     };
     meet();
     window.addEventListener("resize", meet);
