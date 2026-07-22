@@ -42,6 +42,9 @@ class Settings(BaseModel):
 
     # Agent-loop
     max_turns: int = 20
+    # Cap op de historie die per beurt naar de LLM gaat (tegen onbegrensde promptgroei in een lange
+    # sessie). Char-budget; 0 = uit. Ruim genoeg dat de huidige vraag + tool-resultaten altijd passen.
+    max_history_chars: int = 40000
 
     # Geheugen
     memory_db_path: str | None = None
@@ -90,6 +93,7 @@ class Settings(BaseModel):
             "azure_foundry_base_url": e.get("AZURE_FOUNDRY_BASE_URL"),
             "llm_model": e.get("LLM_MODEL"),
             "max_turns": e.get("MAX_TURNS"),
+            "max_history_chars": e.get("MAX_HISTORY_CHARS"),
             "enable_decomposition": e.get("ENABLE_DECOMPOSITION"),
             "max_subquestions": e.get("MAX_SUBQUESTIONS"),
             "sub_max_turns": e.get("SUB_MAX_TURNS"),

@@ -141,6 +141,48 @@ def _parse_final(final: Any) -> tuple[list[dict[str, Any]], list[str]]:
     return tool_uses, text_parts
 
 
+def _msg_lengte(m: dict[str, Any]) -> int:
+    c = m.get("content")
+    if isinstance(c, str):
+        return len(c)
+    if isinstance(c, list):
+        return sum(len(str(b)) for b in c)
+    return 0
+
+
+def _is_tool_result_user(m: dict[str, Any]) -> bool:
+    """Een user-message dat (alleen) tool_result-blokken draagt — orphan als z'n tool_use is weggevallen."""
+    c = m.get("content")
+    return (
+        m.get("role") == "user"
+        and isinstance(c, list)
+        and any(isinstance(b, dict) and b.get("type") == "tool_result" for b in c)
+    )
+
+
+def _trim_messages(messages: list[dict[str, Any]], max_chars: int) -> list[dict[str, Any]]:
+    """Beperk de historie die naar de LLM gaat tot een char-budget, met behoud van de
+    tool_use/tool_result-integriteit (Anthropic weigert een orphan tool_result).
+
+    Neem het achterste venster binnen budget en strip vooraan zolang het eerste bericht een assistant is
+    óf een user-tool_result (cascadeert, zodat een losgeknipt tool_use→tool_result-paar samen wegvalt).
+    Nooit leeg: val terug op het laatste bericht (de huidige vraag). `max_chars<=0` → ongewijzigd.
+    """
+    if max_chars <= 0 or not messages:
+        return messages
+    total = 0
+    start = 0
+    for i in range(len(messages) - 1, -1, -1):
+        total += _msg_lengte(messages[i])
+        start = i
+        if total >= max_chars:
+            break
+    kept = messages[start:]
+    while kept and (kept[0].get("role") == "assistant" or _is_tool_result_user(kept[0])):
+        kept = kept[1:]
+    return kept or messages[-1:]
+
+
 def _schoon_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Strip lege tekstblokken (Anthropic weigert {"type":"text","text":""} — Claude stuurt die soms
     mee náást een tool_use; via het gespreksgeheugen komen ze terug). Berichten waarvan de content
@@ -264,7 +306,8 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
             max_tokens=4096,
             system=system,
             tools=anthropic_schemas(only=spec.tools),
-            messages=_schoon_messages(state["messages"]),
+            # Historie begrenzen (tegen onbegrensde promptgroei in een lange sessie); state blijft heel.
+            messages=_trim_messages(_schoon_messages(state["messages"]), settings.max_history_chars),
         ) as stream:
             # Beurt-narratie stroomt per beurt binnen als `reason` (het denkproces). Op een beurt-grens
             # ontbreekt anders een scheiding, zodat "…tegelijkertijd." + "De thesaurus…" aan elkaar
