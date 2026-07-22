@@ -143,3 +143,9 @@ cd tools/graph-qa && .venv/bin/python eval/run_eval.py --offline
   dan degradeert de tool naar `search_wetgeving`. Achtergrond: `docs/embeddings-runbook.md`.
 - De GraphDB-REST staat open + writable zonder auth — de read-only guard in `mcp_client.py` is een
   tweede net, geen slot. Openstaand punt (achter auth zetten).
+- **SSE-client-disconnect:** de LangGraph-nodes zijn synchroon en draaien in de default-executor; een
+  `run_in_executor`-future is niet annuleerbaar. Valt de client midden in de stream weg, dan loopt een
+  in-flight LLM-call (timeout 120s) of MCP-call in de achtergrondthread nog dóór tot hij klaar is —
+  ook al is de generator al gecancelt en heeft `finally: graph.close()` de httpx-client gesloten.
+  `MCPClient.close()` is daarom best-effort (idempotent, slikt fouten) zodat het sluiten niet stukloopt
+  op een nog lopende call. Volledige annulering vergt async-nodes; bewust niet gedaan.

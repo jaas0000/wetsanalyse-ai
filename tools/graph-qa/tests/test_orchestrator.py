@@ -65,6 +65,26 @@ def test_grounding_correctie_doet_extra_ronde():
     assert "done" in [e["type"] for e in events]
 
 
+def test_max_turns_kapt_af_zonder_orphan_tooluse():
+    # H1: bij max_turns met nog openstaande tools mag er geen orphan tool_use in de gepersisteerde
+    # messages belanden (die zou de vólgende beurt op Anthropic 400 laten crashen). De agent kapt af,
+    # laat de tools vallen en levert een net (niet-leeg) antwoord i.p.v. een lege beurt.
+    settings = make_settings(enable_planning=False, max_turns=2)
+    graph = FakeGraph(result=f"<{ART_IRI}> bwb:tekst 'x' .")
+    llm = FakeLLM([
+        response([tool_block("t1", "get_artikel", {"bwb_id": "BWBR0004770", "artikel": "9"})], "tool_use"),
+        response([tool_block("t2", "get_artikel", {"bwb_id": "BWBR0004770", "artikel": "9"})], "tool_use"),
+    ])
+    events = _run(answer_stream("vraag", settings=settings, llm=llm, graph=graph))
+    types = [e["type"] for e in events]
+    assert "error" not in types
+    assert "done" in types
+    assert llm.index == 2                 # gestopt op de cap; geen 3e agent-call
+    assert len(graph.queries) == 1        # alleen de 1e beurt voerde tools uit; de 2e viel weg
+    token = "".join(e["content"] for e in events if e["type"] == "token")
+    assert token.strip()                  # niet-leeg antwoord (de afkap-melding)
+
+
 def test_narratie_reason_antwoord_token_gescheiden():
     # Contract: de tool-narratie (het denkproces) stroomt als `reason`, het eindantwoord (de tool-loze
     # beurt) als `token`. De twee mogen niet vermengen — zo kan de werkplek ze los tonen.

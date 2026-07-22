@@ -38,3 +38,29 @@ def test_cors_credentials_niet_bij_wildcard():
     # De main-module leidt hieruit allow_credentials=False af (wildcard).
     # Bij een expliciete origin mag het wél.
     assert Settings(cors_origins=["https://x.nl"]).cors_origins == ["https://x.nl"]
+
+
+def test_cors_wildcard_ook_in_gemengde_lijst():
+    # M1: "*" naast een expliciete origin telt óók als wildcard → credentials uit. Anders reflecteert
+    # Starlette elke origin mét credentials (de omzeiling die de guard juist moet dichten).
+    from api import main
+
+    assert main._has_wildcard_origin(["*"]) is True
+    assert main._has_wildcard_origin(["*", "https://x.nl"]) is True
+    assert main._has_wildcard_origin(["https://x.nl"]) is False
+
+
+def test_client_ip_eert_xff_alleen_met_trust_proxy(monkeypatch):
+    # L4: standaard peer-IP (geen spoof-omzeiling); met trust_proxy de eerste X-Forwarded-For-hop.
+    from types import SimpleNamespace
+
+    from api import main
+
+    req = SimpleNamespace(
+        headers={"x-forwarded-for": "1.2.3.4, 10.0.0.1"},
+        client=SimpleNamespace(host="10.0.0.1"),
+    )
+    monkeypatch.setattr(main, "settings", SimpleNamespace(trust_proxy=False))
+    assert main._client_ip(req) == "10.0.0.1"
+    monkeypatch.setattr(main, "settings", SimpleNamespace(trust_proxy=True))
+    assert main._client_ip(req) == "1.2.3.4"

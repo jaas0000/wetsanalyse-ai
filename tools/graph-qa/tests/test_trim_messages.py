@@ -64,3 +64,23 @@ def test_orphan_tool_result_vooraan_valt_weg():
     assert _geen_orphan(kept)
     assert kept[0]["role"] == "user" and isinstance(kept[0]["content"], str)
     assert CONV[-1] in kept
+
+
+# Reeks zoals agent_node die ná tools_node ziet: eindigt op een tool_result, en de enige platte
+# user-beurt (de vraag) staat vér vooraan. Een krap budget mag géén orphan tool_result opleveren.
+CONV_EINDIGT_OP_RESULT = [
+    _u("de vraag"),
+    _a_tool("t1"), _r("t1", "x" * 8000),
+    _a_tool("t2"), _r("t2", "y" * 8000),
+    _a_tool("t3"), _r("t3", "z" * 8000),
+]
+
+
+def test_venster_zonder_platte_user_wordt_teruguitgebreid():
+    # Budget < één paar → het budget-venster bevat puur tool-paren; de trimmer moet terug-uitbreiden
+    # tot de vraag i.p.v. terug te vallen op een losse (orphan) tool_result.
+    for budget in (100, 5000, 8000, 15000):
+        kept = _trim_messages(CONV_EINDIGT_OP_RESULT, budget)
+        assert kept, "nooit leeg"
+        assert _geen_orphan(kept), f"geen orphan bij budget {budget}"
+        assert kept[0] == CONV_EINDIGT_OP_RESULT[0], "begint bij de platte user-vraag"

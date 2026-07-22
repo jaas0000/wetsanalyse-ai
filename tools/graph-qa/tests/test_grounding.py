@@ -34,6 +34,23 @@ def test_grounding_op_bwb_granulariteit_geen_vals_alarm():
     assert report.grounded is True
 
 
+def test_prefix_bwb_wordt_niet_vals_gegrond():
+    # L1: het antwoord noemt een prefix-id (BWBR0001) van het opgehaalde BWBR00012345. Exacte match
+    # (geen substring) → terecht ongegrond.
+    report = check_grounding("Volgens BWBR0001 geldt de termijn.", _trace("resultaat met BWBR00012345 erin"))
+    assert report.grounded is False
+    assert any("BWBR0001" in u for u in report.unsupported)
+
+
+def test_curate_prefix_bwb_wordt_niet_meegesleept():
+    # L1: een bron met langer id mag niet meeliften op een genoemde prefix-id.
+    langer = "https://ipalm.nl/bwb/BWBR00012345/artikel/1"
+    sources = [Source(label=langer, uri=langer), Source(label=IW, uri=IW)]
+    kept = [s.uri for s in curate_sources(sources, "Zie BWBR0001 en de Invorderingswet (BWBR0004770).")]
+    assert IW in kept
+    assert langer not in kept
+
+
 def test_curate_beperkt_tot_genoemde_regeling():
     sources = [
         Source(label=IW, uri=IW),

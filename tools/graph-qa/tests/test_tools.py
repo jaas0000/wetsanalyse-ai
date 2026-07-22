@@ -93,3 +93,25 @@ def test_semantic_search_met_index_roept_graaf():
     out = tools.dispatch("semantic_search", g, {"query": "belasting te laat"}, settings)
     assert out == "treffers"
     assert g.semantic_queries == ["belasting te laat"]
+
+
+def test_semantic_search_limit_geclampt():
+    # L5: limit clampen 1–50 en niet-int gracieus terugvallen op de default (10).
+    from types import SimpleNamespace
+
+    from agent.tools import _h_semantic_search
+
+    captured: dict[str, int] = {}
+
+    class G:
+        def semantic_search(self, query: str, limit: int = 10) -> str:
+            captured["limit"] = limit
+            return ""
+
+    s = SimpleNamespace(similarity_index="bwb_similarity")
+    _h_semantic_search(G(), {"query": "x", "limit": 100000}, s)
+    assert captured["limit"] == 50
+    _h_semantic_search(G(), {"query": "x", "limit": 0}, s)
+    assert captured["limit"] == 1
+    _h_semantic_search(G(), {"query": "x", "limit": "abc"}, s)
+    assert captured["limit"] == 10

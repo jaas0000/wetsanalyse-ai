@@ -160,13 +160,20 @@ def _is_tool_result_user(m: dict[str, Any]) -> bool:
     )
 
 
+def _is_plain_user(m: dict[str, Any]) -> bool:
+    """Een 'platte' user-beurt (de vraag/correctie) — géén tool_result-drager. Zo'n bericht is een
+    geldig venster-begin: alles erna is een compleet assistant→tool_result-verloop."""
+    return m.get("role") == "user" and not _is_tool_result_user(m)
+
+
 def _trim_messages(messages: list[dict[str, Any]], max_chars: int) -> list[dict[str, Any]]:
     """Beperk de historie die naar de LLM gaat tot een char-budget, met behoud van de
     tool_use/tool_result-integriteit (Anthropic weigert een orphan tool_result).
 
-    Neem het achterste venster binnen budget en strip vooraan zolang het eerste bericht een assistant is
-    óf een user-tool_result (cascadeert, zodat een losgeknipt tool_use→tool_result-paar samen wegvalt).
-    Nooit leeg: val terug op het laatste bericht (de huidige vraag). `max_chars<=0` → ongewijzigd.
+    Neem het achterste venster binnen budget en breid het begin zo nodig terug uit tot een platte
+    user-beurt, zodat elk tool_result zijn tool_use behoudt (Anthropic weigert een orphan). Omdat
+    messages[0] altijd een platte user-vraag is, termineert dat en is het resultaat nooit leeg;
+    correctheid gaat daarbij boven het strikte char-budget. `max_chars<=0` → ongewijzigd.
     """
     if max_chars <= 0 or not messages:
         return messages
@@ -177,10 +184,11 @@ def _trim_messages(messages: list[dict[str, Any]], max_chars: int) -> list[dict[
         start = i
         if total >= max_chars:
             break
-    kept = messages[start:]
-    while kept and (kept[0].get("role") == "assistant" or _is_tool_result_user(kept[0])):
-        kept = kept[1:]
-    return kept or messages[-1:]
+    # Loop terug over losgeknipte assistant/tool_result-berichten tot een geldig venster-begin
+    # (een platte user-beurt), zodat er geen orphan tool_result vooraan blijft staan.
+    while start > 0 and not _is_plain_user(messages[start]):
+        start -= 1
+    return messages[start:]
 
 
 def _schoon_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -323,6 +331,17 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
             final = stream.final_message()
 
         tool_uses, text_parts = _parse_final(final)
+
+        # max_turns-vangnet: op de laatste toegestane beurt geen openstaande tool_use persisteren.
+        # Anders belandt er een assistant(tool_use) zónder tool_result in de checkpointer (orphan →
+        # de volgende beurt in dezelfde conversatie crasht op Anthropic 400) én blijft het antwoord
+        # leeg. Laat de tools dan vallen en lever een net eind-antwoord (desnoods een korte melding).
+        if tool_uses and state.get("turns", 0) + 1 >= settings.max_turns:
+            tool_uses = []
+            if not any(p and p.strip() for p in text_parts):
+                text_parts = [
+                    "Ik kon deze vraag niet binnen de beurtlimiet afronden; stel 'm eventueel gerichter."
+                ]
 
         assistant_content: list[dict[str, Any]] = [{"type": "text", "text": p} for p in text_parts if p and p.strip()]
         assistant_content += [
@@ -566,7 +585,8 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
             antwoord = ""
             for _turn in range(settings.sub_max_turns):
                 with llm.stream(
-                    model=model, max_tokens=4096, system=system, tools=schemas, messages=_schoon_messages(msgs),
+                    model=model, max_tokens=4096, system=system, tools=schemas,
+                    messages=_trim_messages(_schoon_messages(msgs), settings.max_history_chars),
                 ) as stream:
                     first = True
                     for delta in stream.text_deltas:

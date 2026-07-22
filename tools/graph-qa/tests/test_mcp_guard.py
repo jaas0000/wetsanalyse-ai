@@ -41,3 +41,25 @@ def test_reject_updates_gooit_mcperror():
 def test_reject_updates_laat_select_door():
     # Mag geen exception geven.
     MCPClient._reject_updates({"query": "SELECT ?s WHERE { ?s ?p ?o }"})
+
+
+def _client(monkeypatch) -> MCPClient:
+    c = MCPClient(url="http://x/mcp", token="t")
+    monkeypatch.setattr(c, "_rpc", lambda *a, **k: {"content": []})  # geen netwerk
+    return c
+
+
+def test_semantic_search_verb_query_niet_geweigerd(monkeypatch):
+    # M2: de guard hoort op de SPARQL-string, niet op elk tool-argument. Een natuurlijke-taal-query
+    # voor similarity_search die met een verb begint of 'insert data' bevat, mag niet stuklopen.
+    c = _client(monkeypatch)
+    for q in ("insert data over de BRP", "Add-on regelingen bij de IW", "clear inzicht in verjaring"):
+        assert c.semantic_search(q) == ""  # geen MCPError
+
+
+def test_raw_sparql_update_nog_steeds_geweigerd(monkeypatch):
+    # De guard blijft wél gelden voor de rauwe SPARQL-route (sparql()).
+    c = _client(monkeypatch)
+    with pytest.raises(MCPError):
+        c.sparql("INSERT DATA { <a> <b> <c> }")
+    assert c.sparql("SELECT ?s WHERE { ?s ?p ?o }") == ""  # SELECT gewoon door

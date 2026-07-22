@@ -182,6 +182,23 @@ def setup(settings: Any) -> None:
     _geconfigureerd = True
 
 
+def shutdown() -> None:
+    """Flush + sluit de OTel-providers netjes af zodat de laatste gebufferde spans/metrics bij een
+    container-stop niet verloren gaan. No-op als OTel niet actief is. Aanroepen in de app-shutdown."""
+    if not _OTEL_API:
+        return
+    for _get in (
+        getattr(_ot_trace, "get_tracer_provider", None),
+        getattr(_ot_metrics, "get_meter_provider", None),
+    ):
+        try:
+            provider = _get() if _get else None
+            if provider is not None and hasattr(provider, "shutdown"):
+                provider.shutdown()  # flush'et de BatchSpanProcessor/MetricReader
+        except Exception:  # noqa: BLE001 — shutdown mag de app-stop nooit breken
+            logger.debug("OTel-provider shutdown overgeslagen", exc_info=True)
+
+
 def instrument_fastapi(app: Any) -> None:
     if not _OTEL_API:
         return

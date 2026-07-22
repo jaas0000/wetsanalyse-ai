@@ -97,7 +97,12 @@ def _h_semantic_search(g: GraphPort, a: dict[str, Any], settings: Any) -> str:
             "Semantisch zoeken is nog niet geconfigureerd (geen similarity-index). "
             "Gebruik search_wetgeving voor tekstueel zoeken."
         )
-    return g.semantic_search(a["query"], a.get("limit", 10))
+    try:
+        limit = int(a.get("limit", 10))
+    except (TypeError, ValueError):
+        limit = 10
+    limit = max(1, min(50, limit))  # clamp zoals search_wetgeving (kosten/DoS begrenzen)
+    return g.semantic_search(a["query"], limit)
 
 
 # ------------------------------------------------------------------

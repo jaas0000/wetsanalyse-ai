@@ -25,12 +25,15 @@ class GroundingReport:
 def check_grounding(answer_text: str, source_trace: list[tuple[str, str]]) -> GroundingReport:
     """Markeer citaties in het antwoord waarvan de bron niet in de trace voorkomt."""
     trace_text = "\n".join(t for _, t in source_trace if t)
+    # Exacte BWB-id's uit de trace (woordgrens via _BWB_RE), zodat een gehallucineerde prefix-id
+    # (bv. BWBR0001 t.o.v. het opgehaalde BWBR00012345) niet vals als gegrond geldt.
+    trace_bwbs = set(_BWB_RE.findall(trace_text))
     cited = citations_in(answer_text)
     unsupported: list[str] = []
     for c in cited:
         bwb = first_bwb(c)
         if bwb is not None:
-            if bwb not in trace_text:
+            if bwb not in trace_bwbs:
                 unsupported.append(c)
         elif c not in trace_text:
             unsupported.append(c)
@@ -47,5 +50,7 @@ def curate_sources(sources: list[Source], answer_text: str) -> list[Source]:
     bwbs = set(_BWB_RE.findall(answer_text))
     if not bwbs:
         return sources
-    kept = [s for s in sources if any(b in s.uri for b in bwbs)]
+    # Exacte BWB-id-match (woordgrens) i.p.v. substring, zodat een genoemde prefix-id geen bron van
+    # een langere regeling meesleept.
+    kept = [s for s in sources if (m := _BWB_RE.search(s.uri)) and m.group(0) in bwbs]
     return kept or sources

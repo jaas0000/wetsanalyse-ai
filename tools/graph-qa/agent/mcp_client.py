@@ -62,7 +62,6 @@ class MCPClient:
         self,
         url: str | None = None,
         token: str | None = None,
-        timeout: float = 30.0,
         repository_id: str | None = None,
         sparql_tool: str = "sparql_query",
         similarity_index: str = "",
@@ -70,7 +69,6 @@ class MCPClient:
         self.url = (url or os.environ["GRAPHDB_MCP_URL"]).rstrip("/")
         token = token or os.environ["GRAPHDB_TOKEN"]
         self._auth_header = f"Bearer {token}"
-        self._timeout = timeout
         self._repository_id = repository_id or os.environ.get("GRAPHDB_REPOSITORY_ID", "inning")
         self._sparql_tool = sparql_tool
         self._similarity_index = similarity_index
@@ -171,14 +169,18 @@ class MCPClient:
         return result.get("tools", [])
 
     def call_tool(self, name: str, arguments: dict[str, Any]) -> Any:
-        self._reject_updates(arguments)
         result = self._rpc("tools/call", {"name": name, "arguments": arguments})
         if result is None:
             return []
         return result.get("content", [])
 
     def sparql(self, query: str) -> str:
-        """Voer een read-only SPARQL-query uit via de MCP-sparql-tool."""
+        """Voer een read-only SPARQL-query uit via de MCP-sparql-tool.
+
+        De read-only guard hoort hier — op de SPARQL-string — en niet in het generieke `call_tool`:
+        anders zou hij ook de natuurlijke-taal-query van `similarity_search` scannen en die onterecht
+        weigeren zodra ze met een verb begint of iets als 'delete where' bevat."""
+        self._reject_updates({"query": query})
         content = self.call_tool(
             self._sparql_tool,
             {"query": query, "repositoryId": self._repository_id},
@@ -210,7 +212,12 @@ class MCPClient:
                 )
 
     def close(self) -> None:
-        self._client.close()
+        # Idempotent en best-effort: bij een SSE-client-disconnect kan `close()` samenvallen met een
+        # nog lopende call in een executor-thread; laat het sluiten daar niet op stuklopen.
+        try:
+            self._client.close()
+        except Exception:  # noqa: BLE001 — sluiten mag nooit de afhandeling breken
+            pass
 
     def __enter__(self) -> "MCPClient":
         return self
