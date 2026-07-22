@@ -56,6 +56,8 @@ describe("annoteerAgentStream", () => {
   it("splitst token/sources/doel/element-frames (incl. \\r\\n) naar de juiste handlers", async () => {
     const element = { klasse: "Rechtssubject", tekst: "de ontvanger" };
     const frames = [
+      `data: ${JSON.stringify({ type: "status", message: "Graaf bevragen: get_artikel" })}\r\n\r\n`,
+      `data: ${JSON.stringify({ type: "reason", content: "Ik zoek dit op." })}\r\n\r\n`,
       `data: ${JSON.stringify({ type: "token", content: "Antwoord " })}\r\n\r\n`,
       `data: ${JSON.stringify({ type: "token", content: "hier." })}\r\n\r\n`,
       `data: ${JSON.stringify({ type: "sources", sources: [{ label: "IW art. 9", uri: "x" }] })}\r\n\r\n`,
@@ -66,17 +68,21 @@ describe("annoteerAgentStream", () => {
     vi.stubGlobal("fetch", vi.fn(async () => sseResponse(frames)));
 
     let tekst = "";
+    let denk = "";
     let doel: unknown = null;
     const elementen: unknown[] = [];
     let bronnen: unknown[] = [];
     await annoteerAgentStream("annoteer artikel 9 lid 1 IW", {
+      onStatus: (m) => (denk += `[${m}]`),
+      onReason: (t) => (denk += t),
       onToken: (t) => (tekst += t),
       onSources: (b) => (bronnen = b),
       onDoel: (d) => (doel = d),
       onElement: (e) => elementen.push(e),
     });
 
-    expect(tekst).toBe("Antwoord hier.");
+    expect(tekst).toBe("Antwoord hier."); // token = alléén het eindantwoord
+    expect(denk).toBe("[Graaf bevragen: get_artikel]Ik zoek dit op."); // status + reason = denkproces
     expect(bronnen).toEqual([{ label: "IW art. 9", uri: "x" }]);
     expect(doel).toEqual({ bwbId: "BWBR0004770", artikel: "9", lid: "1" });
     expect(elementen).toEqual([element]);

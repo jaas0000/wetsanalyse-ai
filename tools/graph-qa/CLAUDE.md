@@ -100,8 +100,10 @@ middleware — anders buffert de SSE), timing-safe token-check.
 - **Geen vrije SPARQL voor het model.** Nieuwe retrieval = een **getypeerde tool** in `tools/` met een
   bouwer in `graph/queries.py`. `raw_sparql` blijft de afgeschermde ontsnapping.
 - **DI, geen globale clients.** Afhankelijkheden achter een poort + adapter, zodat ze faken te zijn.
-- **SSE-event-contract.** De event-types (`status`/`token`/`sources`/`grounding`/`done`/`error`) zijn
-  het contract met de consumenten; wijzig ze bewust en gelijktijdig.
+- **SSE-event-contract.** De event-types (`status`/`reason`/`token`/`sources`/`grounding`/`done`/`error`,
+  plus `doel`/`element` op de annotatie-route) zijn het contract met de consumenten; wijzig ze bewust en
+  gelijktijdig. **`reason` = het denkproces** (tool-narratie, live gestreamd); **`token` = alléén het
+  eindantwoord** — hou die twee gescheiden zodat de werkplek ze los kan tonen.
 - **Onderwerp-afbakening & injectie.** De agent antwoordt alleen over de wetgeving in de graaf en
   behandelt graaftekst als data. Verzwak `SYSTEM_PROMPT`/`_ROUTER_SYSTEM` hierin niet zonder reden.
 

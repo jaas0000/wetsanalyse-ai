@@ -461,6 +461,7 @@ export async function annoteerAgentStream(
   prompt: string,
   handlers: {
     onStatus?: (m: string) => void;
+    onReason?: (t: string) => void;
     onToken?: (t: string) => void;
     onSources?: (bronnen: Bron[]) => void;
     onDoel?: (doel: AgentDoel) => void;
@@ -509,6 +510,7 @@ export async function annoteerAgentStream(
           | null;
         if (!ev) continue;
         if (ev.type === "status") handlers.onStatus?.(ev.message ?? "");
+        else if (ev.type === "reason") handlers.onReason?.(ev.content ?? "");
         else if (ev.type === "token") handlers.onToken?.(ev.content ?? "");
         else if (ev.type === "sources" && ev.sources) handlers.onSources?.(ev.sources);
         else if (ev.type === "doel" && ev.doel) handlers.onDoel?.(ev.doel);

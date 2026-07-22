@@ -65,9 +65,9 @@ def test_grounding_correctie_doet_extra_ronde():
     assert "done" in [e["type"] for e in events]
 
 
-def test_beurt_narratie_krijgt_alinea_scheiding():
-    # Regressie: tekst van beurt 1 ("…op.") plakte aan beurt 2 ("De definitie…") vast omdat de
-    # tokens met "" werden samengevoegd. Op de beurt-grens hoort nu één alinea-scheiding.
+def test_narratie_reason_antwoord_token_gescheiden():
+    # Contract: de tool-narratie (het denkproces) stroomt als `reason`, het eindantwoord (de tool-loze
+    # beurt) als `token`. De twee mogen niet vermengen — zo kan de werkplek ze los tonen.
     settings = make_settings(enable_planning=False)
     graph = FakeGraph(result=f"<{ART_IRI}> bwb:tekst 'x' .")
     llm = FakeLLM([
@@ -78,9 +78,34 @@ def test_beurt_narratie_krijgt_alinea_scheiding():
         response([text_block("De definitie is helder.")], "end_turn"),
     ])
     events = _run(answer_stream("vraag", settings=settings, llm=llm, graph=graph))
-    tekst = "".join(e["content"] for e in events if e["type"] == "token")
-    assert "op.De" not in tekst                       # niet meer vastgeplakt
-    assert "Ik zoek nu op.\n\nDe definitie is helder." in tekst
+    reason = "".join(e["content"] for e in events if e["type"] == "reason")
+    token = "".join(e["content"] for e in events if e["type"] == "token")
+    assert "Ik zoek nu op." in reason and "Ik zoek nu op." not in token   # narratie → reason, niet in token
+    assert token == "De definitie is helder."                             # eindantwoord → token (schoon)
+    # (Het eindantwoord staat óók in reason — de antwoordbeurt streamt als denkproces en de frontend
+    #  klapt dat blok dicht zodra het antwoord landt. Bewuste tradeoff: geen extra call/flikkering.)
+
+
+def test_beurt_narratie_krijgt_alinea_scheiding_in_reason():
+    # Regressie: tekst van beurt 1 ("…op.") plakte aan beurt 2 ("…tweede stap.") vast omdat de deltas
+    # met "" werden samengevoegd. Op de beurt-grens hoort nu één alinea-scheiding — in de reason-stroom.
+    settings = make_settings(enable_planning=False)
+    graph = FakeGraph(result=f"<{ART_IRI}> bwb:tekst 'x' .")
+    llm = FakeLLM([
+        response([
+            text_block("Ik zoek nu op."),
+            tool_block("t1", "get_artikel", {"bwb_id": "BWBR0004770", "artikel": "9"}),
+        ], "tool_use"),
+        response([
+            text_block("Nu de tweede stap."),
+            tool_block("t2", "get_artikel", {"bwb_id": "BWBR0004770", "artikel": "10"}),
+        ], "tool_use"),
+        response([text_block("De definitie is helder.")], "end_turn"),
+    ])
+    events = _run(answer_stream("vraag", settings=settings, llm=llm, graph=graph))
+    reason = "".join(e["content"] for e in events if e["type"] == "reason")
+    assert "op.Nu" not in reason                                  # niet meer vastgeplakt
+    assert "Ik zoek nu op.\n\nNu de tweede stap." in reason       # alinea-scheiding op de beurt-grens
 
 
 def test_decompositie_deelvragen_retrieval_en_synthese():

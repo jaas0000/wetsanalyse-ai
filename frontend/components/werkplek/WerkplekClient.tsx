@@ -33,7 +33,7 @@ import { wettenOverheidHref } from "@/lib/url";
 
 type Item =
   | { id: string; type: "user"; tekst: string }
-  | { id: string; type: "antwoord"; tekst: string; bronnen?: Bron[] }
+  | { id: string; type: "antwoord"; tekst: string; denk?: string; bronnen?: Bron[] }
   | { id: string; type: "annotatie"; slug: string };
 
 const SESSIE_KEY = "wa_werkplek_sessie";
@@ -132,10 +132,21 @@ export function WerkplekClient() {
     const doelRef: { d: AgentDoel | null } = { d: null };
     const els: VoorstelElement[] = [];
     let tekst = "";
+    let denk = "";
     try {
       await annoteerAgentStream(
         prompt,
         {
+          // Het denkproces (statusstappen + tool-narratie) stroomt naar `denk`; het eindantwoord
+          // naar `tekst`. De frontend toont ze gescheiden (inklapbaar denkproces-blok + antwoord).
+          onStatus: (m) => {
+            denk += (denk ? "\n" : "") + "· " + m;
+            updateItem(antId, { denk });
+          },
+          onReason: (t) => {
+            denk += t;
+            updateItem(antId, { denk });
+          },
           onToken: (t) => {
             tekst += t;
             updateItem(antId, { tekst });
@@ -270,7 +281,12 @@ export function WerkplekClient() {
                 </div>
               ) : item.type === "antwoord" ? (
                 <div key={item.id} className="text-sm text-ink">
-                  {item.tekst ? <Markdown tekst={item.tekst} /> : <Punten />}
+                  {item.denk && <DenkProces tekst={item.denk} actief={bezig && !item.tekst} />}
+                  {item.tekst ? (
+                    <Markdown tekst={item.tekst} />
+                  ) : item.denk ? null : (
+                    <Punten />
+                  )}
                   {item.bronnen && item.bronnen.length > 0 && (
                     <div className="mt-2 break-words text-xs text-muted [overflow-wrap:anywhere]">
                       <span className="font-medium">Bronnen:</span>{" "}
@@ -385,5 +401,38 @@ function Punten() {
       <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-muted" />
       <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-muted" />
     </span>
+  );
+}
+
+// Inklapbaar "Denkproces"-blok (Claude-stijl): streamt live terwijl de agent werkt (`actief`) en klapt
+// automatisch dicht zodra het antwoord er is. De gebruiker kan het handmatig weer openen.
+function DenkProces({ tekst, actief }: { tekst: string; actief: boolean }) {
+  // `open` volgt standaard `actief` (open tijdens streamen, dicht zodra het antwoord landt); zodra de
+  // gebruiker zelf klikt, wint die keuze. Afgeleid tijdens render — geen setState-in-effect.
+  const [keuze, setKeuze] = useState<boolean | null>(null);
+  const open = keuze ?? actief;
+
+  return (
+    <div className="mb-2">
+      <button
+        type="button"
+        onClick={() => setKeuze(!open)}
+        className="inline-flex items-center gap-1.5 text-xs text-muted transition-colors hover:text-ink"
+        aria-expanded={open}
+      >
+        {actief && (
+          <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-muted" aria-hidden />
+        )}
+        <span>{actief ? "Denkt na…" : "Denkproces"}</span>
+        <span className={`transition-transform ${open ? "rotate-90" : ""}`} aria-hidden>
+          ▸
+        </span>
+      </button>
+      {open && (
+        <div className="mt-1.5 whitespace-pre-wrap border-l-2 border-line pl-3 text-xs leading-relaxed text-muted [overflow-wrap:anywhere]">
+          {tekst}
+        </div>
+      )}
+    </div>
   );
 }

@@ -4,11 +4,14 @@ FastAPI-backend voor de graph-qa agent.
 Endpoint: POST /v1/chat
   - Request: {"question": "..."}
   - Response: SSE-stream van JSON-events
-    {"type": "token", "content": "..."}
+    {"type": "status", "message": "..."}     # stap-labels (specialist/tools/deelvraag)
+    {"type": "reason", "content": "..."}     # denkproces-narratie (live), gescheiden van het antwoord
+    {"type": "token", "content": "..."}      # het eindantwoord
     {"type": "sources", "sources": [...]}
     {"type": "grounding", "grounded": bool, "unsupported": [...]}
     {"type": "done"}
     {"type": "error", "message": "..."}
+    (annotatie-route emit daarnaast {"type":"doel",...} en {"type":"element",...})
 
 Authenticatie: optionele Bearer-token via env QA_API_TOKEN (timing-safe vergeleken).
 Als QA_API_TOKEN niet gezet is, is het endpoint open (voor lokale dev).

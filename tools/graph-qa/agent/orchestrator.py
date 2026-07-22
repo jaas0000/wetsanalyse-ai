@@ -244,9 +244,10 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
             system = f"{system}\n\nAANPAK (door jou gepland):\n{state['plan']}"
         system += _memory_context(state)
 
-        # De annotatie-worker produceert JSON, geen leesbaar antwoord — die tokens niet naar de user
-        # streamen (annoteer_finalize emit straks een korte samenvatting).
-        stream_to_user = state.get("specialist") != "annotatie"
+        # De annotatie-worker produceert JSON, geen leesbaar antwoord — díe narratie tonen we niet
+        # (annoteer_node emit straks een korte samenvatting). De narratie van een gewone worker is de
+        # "denkproces"-stroom (reason), niet het antwoord: die scheiden we van het eindantwoord (token).
+        stream_naar_denk = state.get("specialist") != "annotatie"
         with llm.stream(
             model=model,
             max_tokens=4096,
@@ -254,16 +255,16 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
             tools=anthropic_schemas(only=spec.tools),
             messages=_schoon_messages(state["messages"]),
         ) as stream:
-            # Beurt-narratie stroomt per beurt binnen; op een beurt-grens ontbreekt anders een
-            # scheiding, zodat "…tegelijkertijd." + "De thesaurus…" aan elkaar plakt. Emit één
-            # alinea-scheiding vóór de éérste tekst van een vervolgbeurt (turns>0). Lazy, zodat
-            # een tool-only beurt (geen tekst) geen loshangende of dubbele witregel geeft.
+            # Beurt-narratie stroomt per beurt binnen als `reason` (het denkproces). Op een beurt-grens
+            # ontbreekt anders een scheiding, zodat "…tegelijkertijd." + "De thesaurus…" aan elkaar
+            # plakt. Emit één alinea-scheiding vóór de éérste tekst van een vervolgbeurt (turns>0).
+            # Lazy, zodat een tool-only beurt (geen tekst) geen loshangende of dubbele witregel geeft.
             first_delta = True
             for delta in stream.text_deltas:
-                if stream_to_user:
+                if stream_naar_denk:
                     if first_delta and state.get("turns", 0) > 0:
-                        writer({"type": "token", "content": "\n\n"})
-                    writer({"type": "token", "content": delta})
+                        writer({"type": "reason", "content": "\n\n"})
+                    writer({"type": "reason", "content": delta})
                 first_delta = False
             final = stream.final_message()
 
@@ -281,7 +282,12 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
             "turns": state.get("turns", 0) + 1,
         }
         if not tool_uses:
-            upd["answer"] = "\n\n".join(p for p in text_parts if p)
+            # De tool-loze beurt is het eindantwoord: dát is de leesbare `token`-stroom (de annotatie-
+            # route levert JSON, geen antwoord — daar geen token; annoteer_node vat samen).
+            antwoord = "\n\n".join(p for p in text_parts if p)
+            upd["answer"] = antwoord
+            if stream_naar_denk and antwoord:
+                writer({"type": "token", "content": antwoord})
         return upd
 
     def route_after_agent(state: State) -> str:
@@ -421,16 +427,17 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
     def solve_node(state: State) -> dict[str, Any]:
         """Beantwoord elke deelvraag met een eigen agent⇄tools-loop (lokale scratch-messages).
 
-        Bij MEERDERE deelvragen stromen de deelvraag-tokens niet naar de user (alleen de synthese
-        streamt). Bij ÉÉN deelvraag (een simpele vraag) is er geen aparte synthese nodig: dan streamt
-        het antwoord direct en wordt `answer` gezet, zodat een eenvoudige vraag geen synthese-tax
-        betaalt. De gedeelde source_trace accumuleert over álle deelvragen zodat grounding/provenance
-        ongewijzigd werken.
+        De per-beurt narratie stroomt als `reason` (het denkproces), nooit als `token`. Bij ÉÉN
+        deelvraag (een simpele vraag) is er geen aparte synthese nodig: de tool-loze eindbeurt ís het
+        eindantwoord en wordt als één `token` geëmit (en `answer` gezet), zodat een eenvoudige vraag
+        geen synthese-tax betaalt. Bij MEERDERE deelvragen emit solve géén token — `synthesize_node`
+        streamt dan het eindantwoord. De gedeelde source_trace accumuleert over álle deelvragen zodat
+        grounding/provenance ongewijzigd werken.
         """
         writer = get_stream_writer()
         spec = get_specialist(state.get("specialist"))
         subs = state.get("sub_questions") or [state["question"]]
-        stream_to_user = len(subs) == 1  # simpele vraag: direct streamen, synthese overslaan
+        enkelvoudig = len(subs) == 1  # simpele vraag: eindantwoord hier, synthese overslaan
         base_system = SYSTEM_PROMPT + (f"\n\n{spec.system}" if spec.system else "")
         schemas = anthropic_schemas(only=spec.tools)
         trace = list(state.get("source_trace", []))
@@ -453,10 +460,9 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
                 ) as stream:
                     first = True
                     for delta in stream.text_deltas:
-                        if stream_to_user:
-                            if first and _turn > 0:
-                                writer({"type": "token", "content": "\n\n"})  # alinea-scheiding tussen beurten
-                            writer({"type": "token", "content": delta})
+                        if first and _turn > 0:
+                            writer({"type": "reason", "content": "\n\n"})  # alinea-scheiding tussen beurten
+                        writer({"type": "reason", "content": delta})
                         first = False
                     final = stream.final_message()
                 tool_uses, text_parts = _parse_final(final)
@@ -478,9 +484,12 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
                 msgs.append({"role": "user", "content": results})
             findings.append({"vraag": sub, "antwoord": antwoord})
         upd: dict[str, Any] = {"sub_findings": findings, "source_trace": trace}
-        if stream_to_user:
-            # Simpele vraag: het gestreamde sub-antwoord ís het eind-antwoord (geen synthese).
-            upd["answer"] = findings[0]["antwoord"] if findings else ""
+        if enkelvoudig:
+            # Simpele vraag: de tool-loze eindbeurt ís het eind-antwoord (geen synthese) → als token.
+            antwoord = findings[0]["antwoord"] if findings else ""
+            upd["answer"] = antwoord
+            if antwoord:
+                writer({"type": "token", "content": antwoord})
         return upd
 
     def route_after_solve(state: State) -> str:
