@@ -119,10 +119,13 @@ class MCPClient:
                 data = resp.json()
             except Exception as exc:
                 raise MCPError(
-                    f"Geen geldige JSON van MCP-server: {resp.text[:200]}"
+                    f"Geen geldige JSON van MCP-server (HTTP {resp.status_code}): {resp.text[:200]}"
                 ) from exc
             if "error" in data:
                 raise MCPError(f"MCP-fout: {data['error']}")
+            # Non-2xx zonder JSON-RPC-result → expliciet falen i.p.v. stil een leeg resultaat teruggeven.
+            if resp.status_code >= 400 and "result" not in data:
+                raise MCPError(f"MCP HTTP {resp.status_code}: {resp.text[:200]}")
             return data.get("result")
 
     @staticmethod

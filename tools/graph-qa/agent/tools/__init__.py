@@ -12,12 +12,17 @@ De registry levert twee dingen aan de loop:
 """
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from typing import Any
+
+import httpx
 
 from ..graph import queries, schema
 from ..mcp_client import MCPError
 from ..ports import GraphPort
+
+logger = logging.getLogger("graph_qa.tools")
 
 Handler = Callable[[GraphPort, dict[str, Any]], str]
 
@@ -261,4 +266,13 @@ def dispatch(name: str, graph: GraphPort, args: dict[str, Any] | None, settings:
             return tool["handler"](graph, args or {}, settings)
         return tool["handler"](graph, args or {})
     except (ValueError, MCPError, KeyError) as exc:
+        # Verwachte fouten (ongeldig argument, MCP-fout, ontbrekende sleutel): als tekst teruggeven.
+        return f"Fout bij tool '{name}': {exc}"
+    except httpx.HTTPError as exc:
+        # Transport-/statusfout naar de graaf (timeout, connection-reset): NIET de hele beurt breken —
+        # geef 'm als tool-resultaat terug zodat de agent kan herstellen/rapporteren.
+        logger.warning("tool '%s' netwerkfout naar de graaf", name, exc_info=True)
+        return f"Fout bij tool '{name}': de kennisgraaf was tijdelijk onbereikbaar ({type(exc).__name__})."
+    except Exception as exc:  # noqa: BLE001 — vangnet: nooit de agent-beurt laten crashen op een tool
+        logger.error("tool '%s' onverwachte fout", name, exc_info=True)
         return f"Fout bij tool '{name}': {exc}"

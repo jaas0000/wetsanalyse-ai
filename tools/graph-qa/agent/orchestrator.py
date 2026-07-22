@@ -17,6 +17,7 @@ zodat de blocking LLM-/MCP-calls de event-loop niet blokkeren.
 """
 from __future__ import annotations
 
+import logging
 import operator
 import re
 from typing import Annotated, Any, TypedDict
@@ -41,6 +42,8 @@ from .provenance import collect_sources
 from .specialists import get as get_specialist
 from .supervisor import SUPERVISOR_SYSTEM, parse_supervisor
 from .tools import anthropic_schemas, dispatch
+
+logger = logging.getLogger("graph_qa.orchestrator")
 
 
 def _doel_uit_json(text: str) -> dict[str, str]:
@@ -371,7 +374,6 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
             crit_text = "".join(b.text for b in resp.content if b.type == "text")
             oordelen, ontbrekend = _verwerk_critic(crit_text, len(voorstellen))
         except Exception:  # noqa: BLE001 — Critic mag de annotatie nooit breken
-            logger = __import__("logging").getLogger("graph_qa.orchestrator")
             logger.warning("critic: beoordeling mislukt; elementen zonder aandacht doorgelaten", exc_info=True)
 
         met_aandacht = 0

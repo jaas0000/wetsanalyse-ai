@@ -52,6 +52,20 @@ def test_dispatch_vangt_validatiefout_op():
     assert not g.queries  # query is nooit uitgevoerd
 
 
+def test_dispatch_vangt_transportfout_op():
+    # F1: een httpx-transportfout (timeout/connection-reset) tijdens een tool-call mag de agent-beurt
+    # niet breken — dispatch geeft 'm als tool-resultaat terug zodat de agent kan herstellen.
+    import httpx
+
+    def _kapot(_q: str) -> str:
+        raise httpx.ConnectError("connection refused")
+
+    g = FakeGraph(results=_kapot)
+    out = tools.dispatch("get_artikel", g, {"bwb_id": "BWBR0004770", "artikel": "9"})
+    assert out.startswith("Fout bij tool 'get_artikel'")
+    assert "onbereikbaar" in out.lower()
+
+
 def test_dispatch_raw_sparql_forwards_query():
     g = FakeGraph(result="rows")
     tools.dispatch("raw_sparql", g, {"query": "SELECT ?s WHERE { ?s ?p ?o }"})
