@@ -54,7 +54,9 @@ export default function ChatClient({ userid, email, role, initials }: Props) {
   useEffect(() => {
     async function checkHealth() {
       try {
-        const res = await fetch("/api/health");
+        // Eigen client-time-out: hangt de fetch (bufferende proxy e.d.), dan valt
+        // de status terug op "offline" i.p.v. eeuwig op "Verbinding controleren…".
+        const res = await fetch("/api/health", { signal: AbortSignal.timeout(6000) });
         setGraphOnline(res.ok);
       } catch {
         setGraphOnline(false);
@@ -236,7 +238,7 @@ export default function ChatClient({ userid, email, role, initials }: Props) {
   }));
 
   return (
-    <div className="chat-shell">
+    <div className={`chat-shell${chatStream.isStreaming ? " streaming" : ""}`}>
       {/* Achtergrond effecten */}
       <div className="chat-bg">
         <div className="chat-bg-grid" />

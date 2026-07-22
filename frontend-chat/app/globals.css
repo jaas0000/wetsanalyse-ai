@@ -91,14 +91,31 @@
   100% { opacity: 0; transform: translateY(-100vh) scale(0.2); }
 }
 
+/* Tijdens het streamen: achtergrond-animaties pauzeren. De orbs/particles
+   bewegen anders achter de vaste, geblurde panelen (sidebar/topbar) en dwingen
+   die tot her-compositie op elke frame — precies wanneer de berichtkolom ook al
+   ~20×/sec herrendert. In ruste blijft de look identiek. */
+.chat-shell.streaming .chat-bg-orb1,
+.chat-shell.streaming .chat-bg-orb2,
+.chat-shell.streaming .chat-bg-orb3,
+.chat-shell.streaming .chat-particle {
+  animation-play-state: paused;
+}
+
+/* Respecteer het systeemvoorkeur voor minder beweging */
+@media (prefers-reduced-motion: reduce) {
+  .chat-bg-orb1, .chat-bg-orb2, .chat-bg-orb3, .chat-particle {
+    animation: none;
+  }
+}
+
 /* ── Sidebar ──────────────────────────────────────────────────────── */
 .chat-sidebar {
   position: relative; z-index: 10;
   width: var(--sidebar-w); min-width: var(--sidebar-w); height: 100vh;
   display: flex; flex-direction: column;
-  background: rgba(1, 6, 18, 0.96);
+  background: rgba(1, 6, 18, 0.98);
   border-right: 1px solid var(--c-border);
-  backdrop-filter: blur(24px);
   flex-shrink: 0;
 }
 
@@ -260,9 +277,8 @@
 /* Dropdown */
 .chat-dropdown {
   position: absolute; bottom: calc(100% + 6px); left: 4px; right: 4px;
-  background: rgba(2, 10, 28, 0.97); border: 1px solid var(--c-border2);
+  background: rgba(2, 10, 28, 0.99); border: 1px solid var(--c-border2);
   border-radius: 12px; padding: 6px; z-index: 50;
-  backdrop-filter: blur(24px);
   box-shadow: 0 -12px 40px rgba(0,0,0,0.6),
               0 0 0 1px rgba(0,212,255,0.06);
   /* 3D entrance */
@@ -307,9 +323,8 @@
   height: var(--topbar-h); flex-shrink: 0;
   display: flex; align-items: center; gap: 12px;
   padding: 0 20px;
-  background: rgba(2, 8, 20, 0.80);
+  background: rgba(2, 8, 20, 0.95);
   border-bottom: 1px solid var(--c-border);
-  backdrop-filter: blur(20px);
 }
 .chat-topbar-title-wrap { flex: 1; min-width: 0; }
 .chat-topbar-title {
@@ -650,10 +665,9 @@
   max-width: 720px; margin: 0 auto;
 }
 .chat-input-box {
-  background: rgba(0,18,44,0.82);
+  background: rgba(0,18,44,0.96);
   border: 1px solid var(--c-border2);
   border-radius: 16px; padding: 10px 12px;
-  backdrop-filter: blur(20px);
   box-shadow: 0 8px 32px rgba(0,0,0,0.3),
               0 0 0 1px rgba(0,212,255,0.04),
               inset 0 1px 0 rgba(255,255,255,0.03);
@@ -707,9 +721,8 @@
   position: relative; z-index: 8;
   width: var(--artifact-w); flex-shrink: 0;
   height: 100vh; overflow-y: auto; overflow-x: hidden;
-  background: rgba(0,10,28,0.94);
+  background: rgba(0,10,28,0.98);
   border-left: 1px solid var(--c-border);
-  backdrop-filter: blur(24px);
   /* 3D slide-in */
   animation: artifact-in 0.28s cubic-bezier(0.16,1,0.3,1);
 }
@@ -723,9 +736,8 @@
 .chat-artifact-header {
   position: sticky; top: 0; z-index: 1;
   padding: 14px 16px 10px;
-  background: rgba(0,10,28,0.96);
+  background: rgba(0,10,28,0.99);
   border-bottom: 1px solid var(--c-border);
-  backdrop-filter: blur(16px);
   display: flex; align-items: center; justify-content: space-between;
 }
 .chat-artifact-header-title {
@@ -887,9 +899,8 @@
 .chat-auth-card {
   position: relative; z-index: 1;
   width: 100%; max-width: 390px;
-  background: rgba(0,18,48,0.88); border: 1px solid var(--c-border2);
+  background: rgba(0,18,48,0.98); border: 1px solid var(--c-border2);
   border-radius: 20px; padding: 38px 32px 32px;
-  backdrop-filter: blur(28px);
   /* 3D card */
   box-shadow: 0 0 80px rgba(0,114,206,0.12),
               0 2px 40px rgba(0,0,0,0.6),
@@ -1146,8 +1157,7 @@
   /* Donker overlay achter de sidebar */
   .chat-sidebar-overlay {
     position: fixed; inset: 0; z-index: 199;
-    background: rgba(0, 0, 0, 0.55);
-    backdrop-filter: blur(2px);
+    background: rgba(0, 0, 0, 0.7);
     animation: overlayFadeIn 0.2s ease;
   }
   @keyframes overlayFadeIn {
