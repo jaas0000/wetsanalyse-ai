@@ -23,7 +23,7 @@ from __future__ import annotations
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
 
 from .. import api_tokens, app_settings, profiles, usage, users, wetten
 from ..auth import require_admin
@@ -392,26 +392,11 @@ async def trek_api_token_in(token_id: str, admin_id: str = Depends(require_admin
 
 class SettingsOut(BaseModel):
     capture_llm_calls: bool = False
-    # Kennisgraaf-chatbot (webapp). Het secret verlaat de server nooit — alleen of het gezet is.
-    chat_enabled: bool = False
-    chat_webhook_url: str = ""
-    chat_secret_set: bool = False
 
 
 class SettingsIn(BaseModel):
-    # Alle velden optioneel: partiële update (None = ongewijzigd). chat_secret is write-only.
+    # Partiële update (None = ongewijzigd).
     capture_llm_calls: bool | None = None
-    chat_enabled: bool | None = None
-    chat_webhook_url: str | None = None
-    chat_secret: str | None = None
-
-    @field_validator("chat_webhook_url")
-    @classmethod
-    def _valideer_webhook_url(cls, v: str | None) -> str | None:
-        # Tweede verdedigingslinie tegen SSRF: alleen http(s), geen interne/loopback-host → 422.
-        if v is None:
-            return v
-        return app_settings.veilige_webhook_url(v)
 
 
 class LlmCallOut(BaseModel):
@@ -434,13 +419,7 @@ class LlmCallOut(BaseModel):
 
 
 async def _settings_out(store: JobStore) -> SettingsOut:
-    enabled, url, secret = await app_settings.chat_config(store)
-    return SettingsOut(
-        capture_llm_calls=await app_settings.capture_enabled(store),
-        chat_enabled=enabled,
-        chat_webhook_url=url,
-        chat_secret_set=bool(secret),
-    )
+    return SettingsOut(capture_llm_calls=await app_settings.capture_enabled(store))
 
 
 @router.get("/settings", response_model=SettingsOut)
@@ -452,12 +431,6 @@ async def haal_settings(store: JobStore = Depends(get_store)):
 async def zet_settings(body: SettingsIn, store: JobStore = Depends(get_store)):
     if body.capture_llm_calls is not None:
         await app_settings.set_capture(store, body.capture_llm_calls)
-    await app_settings.set_chat(
-        store,
-        enabled=body.chat_enabled,
-        webhook_url=body.chat_webhook_url,
-        secret=body.chat_secret,
-    )
     return await _settings_out(store)
 
 

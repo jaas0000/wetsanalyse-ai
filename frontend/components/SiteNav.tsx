@@ -5,11 +5,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
 import { LinkButton } from "@/components/ui/Button";
-import { wisChatOpslag } from "@/lib/chatOpslag";
 
-/** Wis de lokale chatgeschiedenis en log dan uit (gedeelde-machine-hygiëne). */
 function uitloggen(): void {
-  wisChatOpslag();
   signOut({ callbackUrl: "/login" });
 }
 
