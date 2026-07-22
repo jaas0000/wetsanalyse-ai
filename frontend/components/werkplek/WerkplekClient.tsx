@@ -287,31 +287,7 @@ export function WerkplekClient() {
                   ) : item.denk ? null : (
                     <Punten />
                   )}
-                  {item.bronnen && item.bronnen.length > 0 && (
-                    <div className="mt-2 break-words text-xs text-muted [overflow-wrap:anywhere]">
-                      <span className="font-medium">Bronnen:</span>{" "}
-                      {item.bronnen.map((b, i) => {
-                        const href = wettenOverheidHref(b.uri);
-                        return (
-                          <span key={i}>
-                            {i > 0 && ", "}
-                            {href ? (
-                              <a
-                                href={href}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-lint underline underline-offset-2 [overflow-wrap:anywhere]"
-                              >
-                                {b.label}
-                              </a>
-                            ) : (
-                              b.label
-                            )}
-                          </span>
-                        );
-                      })}
-                    </div>
-                  )}
+                  {item.bronnen && item.bronnen.length > 0 && <Bronnen bronnen={item.bronnen} />}
                 </div>
               ) : docs[item.slug] && infos[item.slug] ? (
                 <AnnotatieKaart
@@ -431,6 +407,50 @@ function DenkProces({ tekst, actief }: { tekst: string; actief: boolean }) {
       {open && (
         <div className="mt-1.5 whitespace-pre-wrap border-l-2 border-line pl-3 text-xs leading-relaxed text-muted [overflow-wrap:anywhere]">
           {tekst}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Inklapbare bronnenlijst — standaard dicht met een teller, want de lijst kan lang zijn.
+function Bronnen({ bronnen }: { bronnen: Bron[] }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="mt-2">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="inline-flex items-center gap-1.5 text-xs text-muted transition-colors hover:text-ink"
+        aria-expanded={open}
+      >
+        <span className="font-medium">Bronnen ({bronnen.length})</span>
+        <span className={`transition-transform ${open ? "rotate-90" : ""}`} aria-hidden>
+          ▸
+        </span>
+      </button>
+      {open && (
+        <div className="mt-1.5 break-words border-l-2 border-line pl-3 text-xs text-muted [overflow-wrap:anywhere]">
+          {bronnen.map((b, i) => {
+            const href = wettenOverheidHref(b.uri);
+            return (
+              <span key={i}>
+                {i > 0 && ", "}
+                {href ? (
+                  <a
+                    href={href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-lint underline underline-offset-2 [overflow-wrap:anywhere]"
+                  >
+                    {b.label}
+                  </a>
+                ) : (
+                  b.label
+                )}
+              </span>
+            );
+          })}
         </div>
       )}
     </div>
