@@ -237,8 +237,10 @@ export function WerkplekClient() {
       const bij = await beslis(slug, elementId, req);
       setDocs((m) => ({ ...m, [slug]: bij }));
       verversLijst();
-    } catch {
-      /* stil */
+    } catch (e) {
+      // Niet stil slikken: een mislukte beslissing (409/422/404/429/netwerk) verdampt anders zonder
+      // dat de jurist het merkt — de kaart sluit alsof het lukte. Toon de fout in de thread.
+      setItems((xs) => [...xs, { id: uid(), type: "antwoord", tekst: `⚠️ Beslissing mislukt: ${foutTekst(e)}` }]);
     }
   }
 
