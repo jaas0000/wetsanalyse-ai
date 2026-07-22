@@ -218,7 +218,13 @@ export function WerkplekClient() {
         return;
       }
     }
-    setItems((xs) => [...xs, { id: uid(), type: "annotatie", slug }]);
+    // Staat dit document al open in de thread? Dan geen tweede kaart toevoegen (voorkomt duplicaten
+    // bij herhaald klikken in het linkermenu).
+    setItems((xs) =>
+      xs.some((x) => x.type === "annotatie" && x.slug === slug)
+        ? xs
+        : [...xs, { id: uid(), type: "annotatie", slug }],
+    );
   }
 
   async function verwijder(slug: string) {
