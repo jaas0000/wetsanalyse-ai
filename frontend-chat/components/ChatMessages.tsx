@@ -103,8 +103,8 @@ export default function ChatMessages({
   const containerRef = (scrollContainerRef as React.RefObject<HTMLDivElement>) ?? internalRef;
 
   // Autoscroll via rAF: we lezen scrollHeight alleen op het volgende animatieframe,
-  // niet synchroon na elke React-state-update. Dat voorkomt forced-layout-thrashing
-  // (20×/sec scrollHeight-reads tijdens streaming). De rAF-handle voorkomt opstapeling.
+  // niet synchroon na elke React-state-update. Dat voorkomt forced-layout-thrashing.
+  // De rAF-handle voorkomt opstapeling van meerdere pending scrolls.
   const rafRef = useRef<number | null>(null);
   const scheduleScroll = useCallback(() => {
     if (rafRef.current != null) return; // al ingepland
@@ -121,13 +121,29 @@ export default function ChatMessages({
 
   // Scroll bij nieuwe afgeronde berichten
   useEffect(() => { scheduleScroll(); }, [messages.length, scheduleScroll]);
-  // Scroll tijdens streaming (op elke streamingContent-wijziging één rAF, niet meer)
-  useEffect(() => { if (isStreaming) scheduleScroll(); }, [streamingContent, isStreaming, scheduleScroll]);
+
+  // Scroll tijdens streaming — alleen als de content daadwerkelijk langer is geworden.
+  // Een lengteref voorkomt dat het effect bij elke render opnieuw een rAF plant:
+  // React vergelijkt de dependency-array op referentie, maar streamingContent is elke
+  // 120ms een nieuwe string. De ref vangt overtollige triggers af zodat de rAF-dedup
+  // pas als vangnet hoeft te werken, niet als primaire filter.
+  const prevLenRef = useRef(0);
+  useEffect(() => {
+    const len = streamingContent?.length ?? 0;
+    if (isStreaming && len > prevLenRef.current) {
+      prevLenRef.current = len;
+      scheduleScroll();
+    }
+    if (!isStreaming) prevLenRef.current = 0;
+  }, [streamingContent, isStreaming, scheduleScroll]);
+
   // Ruim eventuele openstaande rAF op bij unmount
   useEffect(() => () => { if (rafRef.current != null) cancelAnimationFrame(rafRef.current); }, []);
 
-  // Streaming-HTML gememoïseerd op de live tekst (niet per render herparseren)
-  const streamHtml = useMemo(() => formatMarkdown(streamingContent ?? ""), [streamingContent]);
+  // Streaming-HTML: GEEN formatMarkdown tijdens streaming — rawtext tonen is O(1),
+  // formatMarkdown is O(n) en draait anders 8×/sec op de volledige tekst.
+  // Na het streamen toont MessageRow de voltooide tekst via formatMarkdown (één keer,
+  // beschermd door React.memo). Identiek aan hoe de werkplek-frontend het doet.
 
   if (messages.length === 0 && !isStreaming) {
     return <div ref={containerRef} className={`chat-messages-wrap${compact ? " compact" : ""}`}>{welcomeNode}</div>;
@@ -154,7 +170,9 @@ export default function ChatMessages({
               <ReasonBlock text={streamingReasoning} defaultOpen={false} isStreaming={true} />
             )}
             <div className="chat-msg-agent-content">
-              <span dangerouslySetInnerHTML={{ __html: streamHtml }} />
+              {/* Rawtext tijdens streaming: geen formatMarkdown-parse per tick.
+                  Na afronden rendert MessageRow de voltooide tekst als markdown. */}
+              <span style={{ whiteSpace: "pre-wrap" }}>{streamingContent}</span>
               <span className="chat-cursor" />
             </div>
           </div>

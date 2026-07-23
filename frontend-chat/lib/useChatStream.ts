@@ -29,7 +29,10 @@ export type AnnotatieEvent =
 export function useChatStream(conversationId: string | null) {
   const [state, setState] = useState<StreamState>(INIT);
   const abortRef = useRef<AbortController | null>(null);
-  // Throttle: setState maximaal 1x per 50ms tijdens streaming
+  // Throttle: setState maximaal 1x per 120ms tijdens streaming.
+  // 120ms geeft ~8 renders/sec — vloeiend zichtbaar en goedkoop genoeg om
+  // de main thread vrij te houden voor user-interactie. Eerder 50ms (20×/sec)
+  // gaf te weinig ruimte bij zware renders (formatMarkdown e.d.).
   const flushTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingState = useRef<Partial<StreamState>>({});
 
@@ -42,7 +45,7 @@ export function useChatStream(conversationId: string | null) {
       if (Object.keys(patch).length > 0) {
         setState(s => ({ ...s, ...patch }));
       }
-    }, 50);
+    }, 120);
   }
 
   function patchState(patch: Partial<StreamState>) {
