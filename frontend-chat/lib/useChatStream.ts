@@ -5,6 +5,7 @@ import type { Message, Source, SSEData, AnnotatieElement, OntbrekendItem, Annota
 
 interface StreamState {
   isStreaming: boolean;
+  statusText: string;
   reasoningText: string;
   answerText: string;
   sources: Source[];
@@ -14,6 +15,7 @@ interface StreamState {
 
 const INIT: StreamState = {
   isStreaming: false,
+  statusText: "",
   reasoningText: "",
   answerText: "",
   sources: [],
@@ -93,7 +95,7 @@ export function useChatStream(conversationId: string | null) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             question,
-            thread_id: conversationId ?? undefined,
+            conversation_id: conversationId ?? undefined,
           }),
           signal: ctrl.signal,
         });
@@ -135,7 +137,11 @@ export function useChatStream(conversationId: string | null) {
 
             const msgType = (parsed as Record<string, unknown>)["type"] as string | undefined;
 
-            if (msgType === "reason" || msgType === "reasoning_delta") {
+            if (msgType === "status") {
+              const msg = ((parsed as Record<string, unknown>)["message"] ?? "") as string;
+              patchState({ statusText: msg });
+
+            } else if (msgType === "reason" || msgType === "reasoning_delta") {
               const chunk = ((parsed as Record<string, unknown>)["content"] ?? (parsed as Record<string, unknown>)["delta"] ?? "") as string;
               reasoning += chunk;
               patchState({ reasoningText: reasoning });
@@ -148,7 +154,7 @@ export function useChatStream(conversationId: string | null) {
               onChunk({ content: answer });
 
             } else if (msgType === "sources" && "sources" in parsed) {
-              sources = parsed.sources;
+              sources = (parsed as Record<string, unknown>)["sources"] as Source[];
               const gok = (parsed as Record<string, unknown>)["grounding_ok"];
               groundingOk = gok != null ? (gok as boolean) : null;
               patchState({ sources, groundingOk });
@@ -171,8 +177,8 @@ export function useChatStream(conversationId: string | null) {
               streamDone = true;
               break;
             } else if (msgType === "error") {
-              const detail = (parsed as Record<string, unknown>)["detail"] as string | undefined;
-              if (detail) throw new Error(detail);
+              const message = (parsed as Record<string, unknown>)["message"] as string | undefined;
+              throw new Error(message ?? "Agent mislukt.");
             }
           }
         }

@@ -83,7 +83,8 @@ export interface Source {
 // --- SSE events van graph-qa ------------------------------------------------
 
 export type SSEEventType =
-  | "reasoning_delta"
+  | "status"
+  | "reason"
   | "token"
   | "sources"
   | "grounding"
@@ -97,13 +98,14 @@ export interface SSEEvent {
 }
 
 export type SSEData =
-  | { delta: string }                         // reasoning_delta
-  | { token: string }                         // token
-  | { sources: Source[]; grounding_ok?: boolean } // sources
-  | { grounding_ok: boolean }                 // grounding
-  | { answer?: string }                       // done
-  | { detail: string }                        // error
-  | Record<string, never>;                    // ping
+  | { type: "status"; message: string }
+  | { type: "reason"; content: string }
+  | { type: "token"; content: string }
+  | { type: "sources"; sources: Source[]; grounding_ok?: boolean }
+  | { type: "grounding"; grounded: boolean }
+  | { type: "done" }
+  | { type: "error"; message: string }
+  | Record<string, unknown>;                  // ping / overige
 
 // --- Account ----------------------------------------------------------------
 
