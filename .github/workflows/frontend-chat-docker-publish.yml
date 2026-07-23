@@ -1,0 +1,144 @@
+# Bouwt de Juridische Assistent chat-frontend image en pusht naar GitHub Container Registry (GHCR).
+# Draait bij wijzigingen in frontend-chat/ op master en bij versietags (v*). Portainer pullt
+# vervolgens ghcr.io/<owner>/juridische-assistent:latest.
+# Spiegelt .github/workflows/frontend-docker-publish.yml qua opzet en securitypoort.
+
+name: frontend-chat-docker-publish
+
+on:
+  push:
+    branches: [master]
+    tags: ["v*"]
+    paths:
+      - "frontend-chat/**"
+      - "!frontend-chat/**/*.md"
+      - ".github/workflows/frontend-chat-docker-publish.yml"
+  workflow_dispatch:
+
+env:
+  IMAGE: ghcr.io/${{ github.repository_owner }}/juridische-assistent
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  # ── Kwaliteits- en kwetsbaarhedenpoort (BIO2 / ISO 27002:2022 §8.8) ──────────
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: frontend-chat
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: "26"
+          cache: npm
+          cache-dependency-path: frontend-chat/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run build
+      - name: npm audit (faalt bij high/critical)
+        run: npm audit --omit=dev --audit-level=high
+
+  build-and-push:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      security-events: write
+    env:
+      PORTAINER_URL: ${{ secrets.PORTAINER_URL }}
+      PORTAINER_API_KEY: ${{ secrets.PORTAINER_API_KEY }}
+      PORTAINER_STACK_ID: ${{ vars.PORTAINER_CHAT_STACK_ID }}
+      PORTAINER_ENDPOINT_ID: "1"
+      PROXY_NETWORK: "homeinfra_internal"
+      SECRETS_DIR: ${{ vars.SECRETS_DIR }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4
+
+      - name: Log in bij GHCR
+        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Metadata (tags + labels)
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=ref,event=tag
+            type=sha,format=short
+
+      - name: Buildtijd bepalen
+        id: buildtime
+        run: echo "ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+
+      - name: Build en push
+        id: build
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
+        with:
+          context: frontend-chat
+          file: frontend-chat/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            GIT_SHA=${{ github.sha }}
+            BUILD_TIME=${{ steps.buildtime.outputs.ts }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          sbom: true
+          provenance: mode=max
+
+      # ── Image-scan (BIO2 / ISO 27002:2022 §8.8) ───────────────────────────────
+      - name: Trivy image-scan (SARIF)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.IMAGE }}@${{ steps.build.outputs.digest }}
+          format: sarif
+          output: trivy-results.sarif
+          ignore-unfixed: true
+          vuln-type: os,library
+
+      - name: Upload Trivy-resultaten naar Security-tab
+        if: always()
+        uses: github/codeql-action/upload-sarif@54f647b7e1bb85c95cddabcd46b0c578ec92bc1a # v4
+        with:
+          sarif_file: trivy-results.sarif
+
+      - name: Trivy gate (faalt bij CRITICAL)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.IMAGE }}@${{ steps.build.outputs.digest }}
+          format: table
+          ignore-unfixed: true
+          severity: CRITICAL
+          exit-code: "1"
+
+      - name: Portainer redeploy (op digest, met convergentie-verificatie)
+        if: ${{ github.ref == 'refs/heads/master' && env.PORTAINER_API_KEY != '' && env.PORTAINER_STACK_ID != '' }}
+        env:
+          HEALTH_URL: ${{ vars.CHAT_HEALTH_URL }}
+          IMAGE_DIGEST_REF: ${{ env.IMAGE }}@${{ steps.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          jq -n \
+            --rawfile compose frontend-chat/docker-compose.yml \
+            --arg net "$PROXY_NETWORK" \
+            --arg img "$IMAGE_DIGEST_REF" \
+            --arg secrets_dir "${SECRETS_DIR:-/volume1/docker/secrets/wetsanalyse-api}" \
+            '{stackFileContent:$compose,
+              env:[{name:"PROXY_NETWORK",value:$net},
+                   {name:"JURIDISCHE_ASSISTENT_IMAGE",value:$img},
+                   {name:"SECRETS_DIR",value:$secrets_dir}],
+              pullImage:true, prune:false}' > /tmp/payload.json
+          bash .github/scripts/portainer-deploy.sh /tmp/payload.json juridische-assistent "$IMAGE_DIGEST_REF" "${HEALTH_URL:-}"
