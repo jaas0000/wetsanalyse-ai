@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import type { AnnotatieElement, AnnotatieDoel, OntbrekendItem } from "@/lib/chat-types";
 
 // JAS-klasse → compacte afkorting + kleur
@@ -121,8 +121,15 @@ export default function AnnotatieWorkbench({ doel, elementen, ontbrekend, isStre
   const elementRefs = useRef<(HTMLDivElement | null)[]>([]);
   const tekstRef = useRef<HTMLDivElement>(null);
 
-  const corpusTekst = doel.leden_teksten.map(l => l.tekst).join("\n\n");
-  const annoHtml = buildAnnotatedHtml(corpusTekst, elementen, actiefIdx);
+  const corpusTekst = useMemo(
+    () => doel.leden_teksten.map(l => l.tekst).join("\n\n"),
+    [doel.leden_teksten]
+  );
+  // Herbouw de geannoteerde HTML alleen als de corpus, de elementen of de selectie wijzigt
+  const annoHtml = useMemo(
+    () => buildAnnotatedHtml(corpusTekst, elementen, actiefIdx),
+    [corpusTekst, elementen, actiefIdx]
+  );
 
   function selecteer(idx: number) {
     setActiefIdx(prev => prev === idx ? null : idx);

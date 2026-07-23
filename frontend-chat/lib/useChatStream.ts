@@ -50,12 +50,16 @@ export function useChatStream(conversationId: string | null) {
     scheduleFlush();
   }
 
-  // Reset stream-state bij gesprekswisseling
+  // Reset stream-state bij gesprekswisseling, maar NIET als er al een stream
+  // actief is. Dat geval treedt op wanneer createConversation() en stream()
+  // in dezelfde event-handler worden aangeroepen: React batcht de state-updates
+  // tot één render, waarna de useEffect de conversationId-wijziging (null → newId)
+  // detecteert en anders ten onrechte alles naar INIT reset terwijl de stream loopt.
   const prevConvId = useRef(conversationId);
   useEffect(() => {
     if (prevConvId.current !== conversationId) {
       prevConvId.current = conversationId;
-      setState(INIT);
+      setState(s => s.isStreaming ? s : INIT);
     }
   }, [conversationId]);
 
@@ -99,8 +103,12 @@ export function useChatStream(conversationId: string | null) {
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
         let buf = "";
+        // Vlag zodat een `done`-event óók de buitenste leeslus verlaat. Zonder dit
+        // brak `break` alleen de frame-lus en blokkeerde reader.read() tot de
+        // upstream-timeout (300s) als de socket na `done` open blijft → schijnbaar vast.
+        let streamDone = false;
 
-        while (true) {
+        while (!streamDone) {
           const { done, value } = await reader.read();
           if (done) break;
           buf += decoder.decode(value, { stream: true });
@@ -157,6 +165,7 @@ export function useChatStream(conversationId: string | null) {
               onAnnotatie?.({ type: "ontbrekend", items: (parsed as Record<string, unknown>)["items"] as OntbrekendItem[] ?? [] });
 
             } else if (msgType === "done" || eventType === "done") {
+              streamDone = true;
               break;
             } else if (msgType === "error") {
               const detail = (parsed as Record<string, unknown>)["detail"] as string | undefined;
@@ -164,6 +173,10 @@ export function useChatStream(conversationId: string | null) {
             }
           }
         }
+
+        // Bij `done` de reader losmaken van de (mogelijk nog open) upstream-socket
+        // zodat er geen verbinding blijft hangen.
+        if (streamDone) await reader.cancel().catch(() => {});
 
         // Flush eventuele nog-openstaande pending state en zet isStreaming=false
         if (flushTimer.current) { clearTimeout(flushTimer.current); flushTimer.current = null; }

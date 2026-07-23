@@ -2,7 +2,7 @@
 
 import type { Message } from "@/lib/chat-types";
 import { ReasonBlock, SourcesCard } from "./SourcesCard";
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 
 interface Props {
   messages: Message[];
@@ -51,6 +51,41 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
+// Eén afgerond bericht. React.memo zorgt dat een onveranderd bericht niet
+// herrendert (en dus formatMarkdown niet opnieuw draait) bij elke streaming-tick.
+const MessageRow = memo(function MessageRow({
+  msg,
+  showReasoning,
+}: {
+  msg: Message;
+  showReasoning: boolean;
+}) {
+  // formatMarkdown alleen opnieuw draaien als de tekst van dít bericht wijzigt
+  const html = useMemo(() => formatMarkdown(msg.content), [msg.content]);
+
+  if (msg.role === "user") {
+    return (
+      <div className="chat-msg-user">
+        <div className="chat-msg-user-bubble">{msg.content}</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="chat-msg-agent">
+      <div className="chat-msg-agent-name">Juridische Assistent</div>
+      {showReasoning && msg.reasoning && <ReasonBlock text={msg.reasoning} />}
+      <div className="chat-msg-agent-content" dangerouslySetInnerHTML={{ __html: html }} />
+      <div className="chat-msg-actions">
+        <CopyButton text={msg.content} />
+      </div>
+      {msg.sources && msg.sources.length > 0 && (
+        <SourcesCard sources={msg.sources} groundingOk={msg.groundingOk ?? null} />
+      )}
+    </div>
+  );
+});
+
 export default function ChatMessages({
   messages,
   streamingContent,
@@ -67,9 +102,19 @@ export default function ChatMessages({
   // Gebruik de externe ref als die gegeven is, anders de interne
   const containerRef = (scrollContainerRef as React.RefObject<HTMLDivElement>) ?? internalRef;
 
+  // Autoscroll: instant (niet smooth — smooth herstart 20×/sec en verzadigt de compositor)
+  // en alléén als de gebruiker al onderaan zit, zodat terugscrollen niet wordt afgebroken.
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages.length, streamingContent]);
+    const el = containerRef.current;
+    if (!el) return;
+    const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    if (distFromBottom < 120) {
+      bottomRef.current?.scrollIntoView({ behavior: "auto" });
+    }
+  }, [messages.length, streamingContent, containerRef]);
+
+  // Streaming-HTML gememoïseerd op de live tekst (niet per render herparseren)
+  const streamHtml = useMemo(() => formatMarkdown(streamingContent ?? ""), [streamingContent]);
 
   if (messages.length === 0 && !isStreaming) {
     return <div ref={containerRef} className={`chat-messages-wrap${compact ? " compact" : ""}`}>{welcomeNode}</div>;
@@ -78,34 +123,12 @@ export default function ChatMessages({
   return (
     <div ref={containerRef} className={`chat-messages-wrap${compact ? " compact" : ""}`}>
       <div className="chat-messages-inner">
-        {messages.map(msg => {
+        {messages.map(msg =>
           // Placeholder wordt getoond via het live streaming-blok — overslaan
-          if (msg.isStreaming) return null;
-          return (
-          <div key={msg.id}>
-            {msg.role === "user" ? (
-              <div className="chat-msg-user">
-                <div className="chat-msg-user-bubble">{msg.content}</div>
-              </div>
-            ) : (
-              <div className="chat-msg-agent">
-                <div className="chat-msg-agent-name">Juridische Assistent</div>
-                {showReasoning && msg.reasoning && <ReasonBlock text={msg.reasoning} />}
-                <div
-                  className="chat-msg-agent-content"
-                  dangerouslySetInnerHTML={{ __html: formatMarkdown(msg.content) }}
-                />
-                <div className="chat-msg-actions">
-                  <CopyButton text={msg.content} />
-                </div>
-                {msg.sources && msg.sources.length > 0 && (
-                  <SourcesCard sources={msg.sources} groundingOk={msg.groundingOk ?? null} />
-                )}
-              </div>
-            )}
-          </div>
-          );
-        })}
+          msg.isStreaming ? null : (
+            <MessageRow key={msg.id} msg={msg} showReasoning={showReasoning} />
+          )
+        )}
 
         {/* Live streaming message */}
         {isStreaming && showStreaming && (
@@ -113,7 +136,7 @@ export default function ChatMessages({
             <div className="chat-msg-agent-name">Juridische Assistent</div>
             {showReasoning && streamingReasoning && <ReasonBlock text={streamingReasoning} defaultOpen={true} />}
             <div className="chat-msg-agent-content">
-              <span dangerouslySetInnerHTML={{ __html: formatMarkdown(streamingContent ?? "") }} />
+              <span dangerouslySetInnerHTML={{ __html: streamHtml }} />
               <span className="chat-cursor" />
             </div>
           </div>
