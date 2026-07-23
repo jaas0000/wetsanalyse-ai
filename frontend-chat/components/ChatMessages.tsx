@@ -160,7 +160,7 @@ export default function ChatMessages({
         )}
 
         {/* Live streaming message */}
-        {isStreaming && showStreaming && (
+        {messages[messages.length - 1]?.isStreaming && showStreaming && (
           <div className="chat-msg-agent">
             <div className="chat-msg-agent-name">Juridische Assistent</div>
             {showReasoning && streamingReasoning && (
