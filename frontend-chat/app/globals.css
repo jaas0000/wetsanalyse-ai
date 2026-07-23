@@ -35,7 +35,7 @@
 /* ── Reset / base ─────────────────────────────────────────────────── */
 .chat-shell, .chat-shell * { box-sizing: border-box; }
 .chat-shell {
-  width: 100vw; height: 100vh; overflow: hidden;
+  width: 100vw; height: 100dvh; overflow: hidden;
   background: var(--c-bg);
   color: var(--c-text);
   font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
@@ -126,7 +126,7 @@
 /* ── Sidebar ──────────────────────────────────────────────────────── */
 .chat-sidebar {
   position: relative; z-index: 10;
-  width: var(--sidebar-w); min-width: var(--sidebar-w); height: 100vh;
+  width: var(--sidebar-w); min-width: var(--sidebar-w); height: 100dvh;
   display: flex; flex-direction: column;
   background: rgba(1, 6, 18, 0.98);
   border-right: 1px solid var(--c-border);
@@ -443,6 +443,7 @@
 }
 .chat-msg-agent-content {
   font-size: 0.86rem; line-height: 1.75; color: var(--c-text);
+  overflow-wrap: break-word; word-break: break-word;
 }
 .chat-msg-agent-content p + p { margin-top: 10px; }
 .chat-msg-agent-content strong { color: var(--c-neon); font-weight: 600; }
@@ -594,6 +595,10 @@
   padding: 8px 0; border-top: 1px solid rgba(0,212,255,0.05);
 }
 .chat-source-item:first-of-type { border-top: none; padding-top: 0; }
+.chat-source-info {
+  min-width: 0;
+  overflow-wrap: break-word; word-break: break-word;
+}
 .chat-source-num {
   font-size: 0.62rem; font-weight: 800; color: var(--c-neon);
   background: rgba(0,212,255,0.10); border-radius: 4px;
@@ -746,7 +751,7 @@
 .chat-artifact {
   position: relative; z-index: 8;
   width: var(--artifact-w); flex-shrink: 0;
-  height: 100vh; overflow-y: auto; overflow-x: hidden;
+  height: 100dvh; overflow-y: auto; overflow-x: hidden;
   background: rgba(0,10,28,0.98);
   border-left: 1px solid var(--c-border);
   /* 3D slide-in */
@@ -924,7 +929,7 @@
 
 /* ── Auth screens ─────────────────────────────────────────────────── */
 .chat-auth-page {
-  min-height: 100vh; display: flex; align-items: center; justify-content: center;
+  min-height: 100dvh; display: flex; align-items: center; justify-content: center;
   background: var(--c-bg); position: relative; overflow: hidden;
   font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
 }

@@ -70,7 +70,7 @@ export function SourcesCard({ sources, groundingOk, noCollapse }: Props) {
           return (
             <div className="chat-source-item" key={i}>
               <span className="chat-source-num">{i + 1}</span>
-              <div>
+              <div className="chat-source-info">
                 {wet && <div className="chat-source-wet">{wet}</div>}
                 <div className="chat-source-art">
                   {href ? (
