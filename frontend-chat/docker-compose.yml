@@ -4,7 +4,7 @@
 # publiceert GÉÉN host-poort: NPM bereikt 'm via het gedeelde Docker-netwerk op hostnaam
 # `juridische-assistent`, poort 3000.
 #
-# In NPM → Proxy Hosts → Add: Domain `graph-qa.ipalm.nl` (of apart domein), Scheme `http`,
+# In NPM → Proxy Hosts → Add: Domain `assistent.ipalm.nl`, Scheme `http`,
 # Forward Hostname `juridische-assistent`, Forward Port `3000`, SSL (Let's Encrypt) aan.
 # Belangrijk voor SSE: zet in NPM (Advanced) proxy buffering uit:
 #   proxy_buffering off;
@@ -13,7 +13,7 @@
 # Stack-omgeving (in Portainer of door CI meegegeven):
 #   PROXY_NETWORK  — naam van het bestaande NPM-netwerk (default homeinfra_internal).
 #   SECRETS_DIR    — host-pad naar de secrets-map.
-#   AUTH_URL       — publieke origin van de webapp (bv. https://graph-qa.ipalm.nl). Verplicht
+#   AUTH_URL       — publieke origin van de webapp (bv. https://assistent.ipalm.nl). Verplicht
 #                    achter een reverse proxy: Auth.js pint hierop z'n login/logout-redirects.
 #
 # Secret-bestanden op de host in SECRETS_DIR (mode 644):
@@ -37,7 +37,7 @@ services:
       API_TOKEN_FILE: /run/secrets/frontend_api_token
       # Auth.js
       AUTH_SECRET_FILE: /run/secrets/frontend_auth_secret
-      AUTH_URL: "${AUTH_URL:-https://graph-qa.ipalm.nl}"
+      AUTH_URL: "${AUTH_URL:-https://assistent.ipalm.nl}"
       NODE_ENV: production
       LOG_LEVEL: ${LOG_LEVEL:-info}
     volumes:
