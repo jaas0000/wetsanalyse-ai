@@ -48,26 +48,39 @@ export async function verifyCredentials(
 }
 
 export async function getAccountStatus(userid: string): Promise<AccountStatus> {
+  // GET /v1/auth/me — geeft userid/email/role terug op basis van X-User-Id header.
+  // /v1/auth/status/{userid} bestaat niet in de API; /v1/auth/me is het correcte
+  // herverificatie-endpoint. De X-User-Id header wordt server-side gezet (nooit uit browser-input).
   try {
-    const res = await fetch(`${apiBaseUrl()}/v1/auth/status/${encodeURIComponent(userid)}`, {
-      headers: apiAuthHeader(),
+    const res = await fetch(`${apiBaseUrl()}/v1/auth/me`, {
+      headers: { ...apiAuthHeader(), "X-User-Id": userid },
       cache: "no-store",
       signal: AbortSignal.timeout(5000),
     });
     if (!res.ok) {
+      // 401 = account ingetrokken of onbekend; andere fouten = tijdelijk onbereikbaar
+      if (res.status === 401) return { status: "ingetrokken", role: "", email: "" };
       logger.warn("Auth-status: niet-ok", { http_status: res.status });
       return { status: "onbekend", role: "", email: "" };
     }
-    return (await res.json()) as AccountStatus;
+    const data = (await res.json()) as { userid: string; email: string; role: string };
+    return {
+      status: "actief",
+      role: (data.role as "beheerder" | "analist") || "",
+      email: data.email || "",
+    };
   } catch {
     return { status: "onbekend", role: "", email: "" };
   }
 }
 
 export async function getMe(userid: string): Promise<{ userid: string; email: string; role: string; name?: string } | null> {
+  // GET /v1/auth/me met X-User-Id header — hetzelfde endpoint als getAccountStatus
+  // maar retourneert het ruwe object voor gebruik buiten de auth-callback.
+  // NB: /v1/users/{userid} (zonder /admin) bestaat niet; de admin-route is /v1/admin/users.
   try {
-    const res = await fetch(`${apiBaseUrl()}/v1/users/${encodeURIComponent(userid)}`, {
-      headers: apiAuthHeader(),
+    const res = await fetch(`${apiBaseUrl()}/v1/auth/me`, {
+      headers: { ...apiAuthHeader(), "X-User-Id": userid },
       cache: "no-store",
       signal: AbortSignal.timeout(5000),
     });
