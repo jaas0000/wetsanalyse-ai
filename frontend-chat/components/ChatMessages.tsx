@@ -2,7 +2,7 @@
 
 import type { Message } from "@/lib/chat-types";
 import { ReasonBlock, SourcesCard } from "./SourcesCard";
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 interface Props {
   messages: Message[];
@@ -102,16 +102,29 @@ export default function ChatMessages({
   // Gebruik de externe ref als die gegeven is, anders de interne
   const containerRef = (scrollContainerRef as React.RefObject<HTMLDivElement>) ?? internalRef;
 
-  // Autoscroll: instant (niet smooth — smooth herstart 20×/sec en verzadigt de compositor)
-  // en alléén als de gebruiker al onderaan zit, zodat terugscrollen niet wordt afgebroken.
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-    if (distFromBottom < 120) {
-      bottomRef.current?.scrollIntoView({ behavior: "auto" });
-    }
-  }, [messages.length, streamingContent, containerRef]);
+  // Autoscroll via rAF: we lezen scrollHeight alleen op het volgende animatieframe,
+  // niet synchroon na elke React-state-update. Dat voorkomt forced-layout-thrashing
+  // (20×/sec scrollHeight-reads tijdens streaming). De rAF-handle voorkomt opstapeling.
+  const rafRef = useRef<number | null>(null);
+  const scheduleScroll = useCallback(() => {
+    if (rafRef.current != null) return; // al ingepland
+    rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = null;
+      const el = containerRef.current;
+      if (!el) return;
+      const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+      if (distFromBottom < 120) {
+        bottomRef.current?.scrollIntoView({ behavior: "auto" });
+      }
+    });
+  }, [containerRef]);
+
+  // Scroll bij nieuwe afgeronde berichten
+  useEffect(() => { scheduleScroll(); }, [messages.length, scheduleScroll]);
+  // Scroll tijdens streaming (op elke streamingContent-wijziging één rAF, niet meer)
+  useEffect(() => { if (isStreaming) scheduleScroll(); }, [streamingContent, isStreaming, scheduleScroll]);
+  // Ruim eventuele openstaande rAF op bij unmount
+  useEffect(() => () => { if (rafRef.current != null) cancelAnimationFrame(rafRef.current); }, []);
 
   // Streaming-HTML gememoïseerd op de live tekst (niet per render herparseren)
   const streamHtml = useMemo(() => formatMarkdown(streamingContent ?? ""), [streamingContent]);

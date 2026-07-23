@@ -47,6 +47,10 @@
 /* ── Background particles & grid ──────────────────────────────────── */
 .chat-bg {
   position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden;
+  /* contain: strict plaatst .chat-bg in een eigen stacking context zodat
+     animaties binnen deze laag de rest van de compositing-pijplijn niet
+     raken (geen layout/paint-thrashing op de berichtkolom). */
+  contain: strict;
 }
 .chat-bg-grid {
   position: absolute; inset: 0;
@@ -59,18 +63,24 @@
   position: absolute; width: 900px; height: 900px; border-radius: 50%;
   background: radial-gradient(circle, rgba(0,114,206,0.09) 0%, transparent 70%);
   top: -280px; left: -220px;
+  /* will-change: transform promoot de orb naar een eigen GPU-compositing-layer;
+     animaties worden dan door de compositor afgehandeld zonder de main thread
+     of andere layers opnieuw te triggeren. */
+  will-change: transform;
   animation: orb-drift 18s ease-in-out infinite alternate;
 }
 .chat-bg-orb2 {
   position: absolute; width: 700px; height: 700px; border-radius: 50%;
   background: radial-gradient(circle, rgba(123,47,255,0.07) 0%, transparent 70%);
   bottom: -180px; right: -140px;
+  will-change: transform;
   animation: orb-drift 22s ease-in-out infinite alternate-reverse;
 }
 .chat-bg-orb3 {
   position: absolute; width: 500px; height: 500px; border-radius: 50%;
   background: radial-gradient(circle, rgba(0,212,255,0.05) 0%, transparent 70%);
   top: 35%; left: 50%;
+  will-change: transform;
   animation: orb-drift 14s ease-in-out infinite alternate;
 }
 @keyframes orb-drift {
@@ -78,10 +88,13 @@
   100% { transform: translate(30px, 20px) scale(1.05); }
 }
 
-/* Particles */
+/* Particles — gereduceerd van 12 naar 6 (ChatClient.tsx render-array
+   aangepast; zie daar). will-change op de class zodat elk particle
+   z'n eigen compositor-layer krijgt. */
 .chat-particle {
   position: absolute; border-radius: 50%;
   background: var(--c-neon); opacity: 0;
+  will-change: transform, opacity;
   animation: particle-float linear infinite;
 }
 @keyframes particle-float {
@@ -102,11 +115,11 @@
   animation-play-state: paused;
 }
 
-
 /* Respecteer het systeemvoorkeur voor minder beweging */
 @media (prefers-reduced-motion: reduce) {
   .chat-bg-orb1, .chat-bg-orb2, .chat-bg-orb3, .chat-particle {
     animation: none;
+    will-change: auto;
   }
 }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Conversation, Message } from "./chat-types";
 
 const STORAGE_KEY = "chat_conversations";
@@ -15,10 +15,22 @@ function load(): Conversation[] {
   }
 }
 
-function save(convs: Conversation[]) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(convs));
-  } catch { /* quota */ }
+// Gedebouncete save: schrijft pas naar localStorage nadat de mutaties 500ms
+// niet meer zijn veranderd. Hiermee vallen de synchrone JSON.stringify-calls
+// per token/bericht weg — alleen de eindstand wordt weggeschreven.
+function useDebouncedSave(delay = 500) {
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const save = useCallback((convs: Conversation[]) => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => {
+      timerRef.current = null;
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(convs)); }
+      catch { /* quota */ }
+    }, delay);
+  }, [delay]);
+  // Flush bij unmount zodat niets verloren gaat bij navigatie
+  useEffect(() => () => { if (timerRef.current) clearTimeout(timerRef.current); }, []);
+  return save;
 }
 
 function uid() {
@@ -32,6 +44,7 @@ function titleFromQuestion(q: string): string {
 export function useChatConversations() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
+  const save = useDebouncedSave();
 
   useEffect(() => {
     const stored = load();
@@ -57,7 +70,7 @@ export function useChatConversations() {
     });
     setActiveId(conv.id);
     return conv;
-  }, []);
+  }, [save]);
 
   const addMessage = useCallback((convId: string, msg: Omit<Message, "id" | "createdAt">) => {
     const full: Message = { ...msg, id: uid(), createdAt: Date.now() };
@@ -70,7 +83,7 @@ export function useChatConversations() {
       return next;
     });
     return full;
-  }, []);
+  }, [save]);
 
   const updateLastMessage = useCallback((convId: string, patch: Partial<Message>) => {
     setConversations(prev => {
@@ -84,7 +97,7 @@ export function useChatConversations() {
       save(next);
       return next;
     });
-  }, []);
+  }, [save]);
 
   const deleteConversation = useCallback((id: string) => {
     setConversations(prev => {
@@ -93,7 +106,7 @@ export function useChatConversations() {
       if (activeId === id) setActiveId(next[0]?.id ?? null);
       return next;
     });
-  }, [activeId]);
+  }, [activeId, save]);
 
   const renameConversation = useCallback((id: string, newTitle: string) => {
     const title = newTitle.trim();
@@ -103,7 +116,7 @@ export function useChatConversations() {
       save(next);
       return next;
     });
-  }, []);
+  }, [save]);
 
   const clearAll = useCallback(() => {
     setConversations([]);

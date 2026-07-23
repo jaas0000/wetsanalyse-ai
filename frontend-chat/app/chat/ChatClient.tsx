@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { signOut } from "next-auth/react";
 import ChatSidebar from "@/components/ChatSidebar";
 import ChatTopbar from "@/components/ChatTopbar";
@@ -12,7 +12,8 @@ import AccountPanel from "@/components/AccountPanel";
 import AnnotatieWorkbench from "@/components/AnnotatieWorkbench";
 import { useChatConversations } from "@/lib/useChatConversations";
 import { useChatStream } from "@/lib/useChatStream";
-import type { PanelView, Source, AnnotatieElement, AnnotatieDoel, OntbrekendItem } from "@/lib/chat-types";
+import { useAnnotatie } from "@/lib/useAnnotatie";
+import type { PanelView, Source } from "@/lib/chat-types";
 
 interface Props {
   userid: string;
@@ -40,15 +41,26 @@ export default function ChatClient({ userid, email, role, initials }: Props) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const messagesWrapRef = useRef<HTMLDivElement>(null);
 
-  // Annotatie-cache: per gesprek-id bewaren we doel + elementen + ontbrekend + feedback.
-  // Zo blijft de annotatie beschikbaar na een gesprekswisseling.
-  type AnnotatieCache = {
-    doel: AnnotatieDoel;
-    elementen: AnnotatieElement[];
-    ontbrekend: OntbrekendItem[];
-    feedback: Record<number, { feedback: "akkoord" | "afwijzen" | "twijfel"; notitie: string }>;
+  const convs = useChatConversations();
+  const chatStream = useChatStream(convs.activeId);
+
+  // Annotatie-state per gesprek — geïsoleerd in een eigen hook zodat annotatie-
+  // updates alleen de workbench laten herrenderen, niet de hele ChatClient.
+  const annot = useAnnotatie(convs.activeId);
+
+  // Sync annotatie-cache naar het nieuwe gesprek bij gesprekswisseling
+  const handleSelect = (id: string) => {
+    convs.setActiveId(id);
+    annot.syncActief(id);
+    setPanel("chat");
+    setSidebarOpen(false);
   };
-  const annotatieCache = useRef<Record<string, AnnotatieCache>>({});
+
+  const handleNew = () => {
+    convs.setActiveId(null);
+    annot.syncActief(null);
+    setPanel("chat");
+  };
 
   // C3 — periodieke health-check kennisgraaf (elke 30s)
   useEffect(() => {
@@ -117,10 +129,7 @@ export default function ChatClient({ userid, email, role, initials }: Props) {
     return () => window.removeEventListener("storage", onStorage);
   }, []);
 
-  const convs = useChatConversations();
-  const chatStream = useChatStream(convs.activeId);
-
-  // Propageer stream-fouten naar de UI (moet ná chatStream-declaratie staan)
+  // Propageer stream-fouten naar de UI
   useEffect(() => {
     if (chatStream.error) setStreamError(chatStream.error);
   }, [chatStream.error]);
@@ -143,10 +152,6 @@ export default function ChatClient({ userid, email, role, initials }: Props) {
     convs.addMessage(convId, { role: "user", content: q });
     convs.addMessage(convId, { role: "assistant", content: "", isStreaming: true });
 
-    // Annotatie-accumulatoren geldig voor precies dit convId
-    let doelVoorConv: AnnotatieDoel | null = null;
-    const elementenVoorConv: AnnotatieElement[] = [];
-
     await chatStream.stream(
       q,
       // onChunk: streaming content wordt live getoond via chatStream.answerText —
@@ -167,30 +172,13 @@ export default function ChatClient({ userid, email, role, initials }: Props) {
           if (settingsRef.current.autoSources !== false) setArtifactOpen(true);
         }
       },
-      // onAnnotatie — schrijf direct naar de cache van het juiste convId
-      (event) => {
-        const cached = annotatieCache.current[convId!] ?? {
-          doel: null as unknown as AnnotatieDoel,
-          elementen: [],
-          ontbrekend: [],
-          feedback: {},
-        };
-        if (event.type === "doel") {
-          doelVoorConv = event.doel;
-          annotatieCache.current[convId!] = { ...cached, doel: event.doel };
-        } else if (event.type === "element") {
-          elementenVoorConv.push(event.element);
-          annotatieCache.current[convId!] = { ...cached, elementen: [...elementenVoorConv] };
-        } else if (event.type === "ontbrekend") {
-          annotatieCache.current[convId!] = { ...cached, ontbrekend: event.items };
-        }
-        // Trigger re-render zodat workbench live mee-update
-        setAnnotatieRev(r => r + 1);
-      }
+      // onAnnotatie — delegeer naar de useAnnotatie-hook zodat alleen
+      // AnnotatieWorkbench opnieuw rendert, niet de hele ChatClient.
+      (event) => annot.handleEvent(convId!, event),
     );
-  }, [input, chatStream, convs, panel]);
+  }, [input, chatStream, convs, annot]);
 
-  const grouped = convs.grouped();
+  const grouped = useMemo(() => convs.grouped(), [convs.grouped, convs.conversations]);
   const active = convs.active;
   const displayTitle = panel === "settings" ? "Instellingen"
     : panel === "account" ? "Account"
@@ -198,44 +186,17 @@ export default function ChatClient({ userid, email, role, initials }: Props) {
 
   const userName = userid;
 
-  // Reset feedback bij nieuw gesprek
-  const handleNew = () => {
-    convs.setActiveId(null);
-    setPanel("chat");
-  };
-
-  // Reset feedback ook bij gesprekswisseling via sidebar
-  const handleSelect = (id: string) => {
-    convs.setActiveId(id);
-    setPanel("chat");
-    setSidebarOpen(false); // sluit sidebar op mobiel na gesprekskeuze
-  };
-
   const handleFeedback = (idx: number, feedback: "akkoord" | "afwijzen" | "twijfel", notitie: string) => {
     const id = convs.activeId;
     if (!id) return;
-    const cached = annotatieCache.current[id];
-    if (!cached) return;
-    annotatieCache.current[id] = {
-      ...cached,
-      feedback: { ...cached.feedback, [idx]: { feedback, notitie } },
-    };
-    // Forceer re-render door een dummy state-update
-    setAnnotatieRev(r => r + 1);
+    annot.handleFeedback(id, idx, feedback, notitie);
   };
 
-  // Teller om re-render te triggeren na cache-mutatie
-  const [annotatieRev, setAnnotatieRev] = useState(0);
+  // Reset feedback bij nieuw gesprek — al afgehandeld door handleNew / handleSelect via annot.syncActief
 
-  // Lees annotatie-data uit cache (stream OF eerder gecachede waarde)
-  const actieveCacheId = convs.activeId ?? "";
-  const annotatieData = annotatieCache.current[actieveCacheId] ?? null;
-  const heeftAnnotatie = !!annotatieData;
-
-  const elementenMetFeedback: AnnotatieElement[] = (annotatieData?.elementen ?? []).map((el, i) => ({
-    ...el,
-    ...(annotatieData?.feedback[i] ?? {}),
-  }));
+  const heeftAnnotatie = !!annot.actief;
+  const annotatieData = annot.actief;
+  const elementenMetFeedback = annot.elementenMetFeedback;
 
   return (
     <div className={`chat-shell${chatStream.isStreaming ? " streaming" : ""}`}>
@@ -245,18 +206,19 @@ export default function ChatClient({ userid, email, role, initials }: Props) {
         <div className="chat-bg-orb1" />
         <div className="chat-bg-orb2" />
         <div className="chat-bg-orb3" />
-        {/* Particles */}
-        {Array.from({ length: 12 }).map((_, i) => (
+        {/* Particles — gereduceerd van 12 naar 6 om het aantal compositor-layers
+            te beperken; elke particle heeft will-change: transform (zie globals.css). */}
+        {Array.from({ length: 6 }).map((_, i) => (
           <div
             key={i}
             className="chat-particle"
             style={{
               width: 2 + (i % 3),
               height: 2 + (i % 3),
-              left: `${(i * 8.3) % 100}%`,
+              left: `${(i * 16.6) % 100}%`,
               bottom: "-10px",
-              animationDuration: `${8 + (i * 1.3) % 10}s`,
-              animationDelay: `${(i * 0.7) % 8}s`,
+              animationDuration: `${10 + (i * 2.1) % 10}s`,
+              animationDelay: `${(i * 1.3) % 8}s`,
             }}
           />
         ))}
