@@ -122,9 +122,11 @@ async def answer_stream(
                     extra={"grounded": grounded, "chat_session_id": conversation_id or ""},
                 )
 
-        if conversation_id:
-            yield {"type": "conversation_id", "conversation_id": conversation_id}
-        yield {"type": "done"}
+            # Yield done BINNEN de checkpointer-context: anders kan AsyncSqliteSaver.__aexit__
+            # (SQLite-commit/flush) de generator blokkeren vóórdat 'done' de client bereikt.
+            if conversation_id:
+                yield {"type": "conversation_id", "conversation_id": conversation_id}
+            yield {"type": "done"}
 
     except Exception as exc:
         logger.error("agent-fout", exc_info=True)

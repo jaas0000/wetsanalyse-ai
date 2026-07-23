@@ -104,7 +104,7 @@ const MessageRow = memo(function MessageRow({
             <CopyButton text={msg.content} />
           </div>
           {msg.sources && msg.sources.length > 0 && (
-            <SourcesCard sources={msg.sources} groundingOk={msg.groundingOk ?? null} />
+            <SourcesCard sources={msg.sources} groundingOk={msg.groundingOk ?? null} noCollapse />
           )}
         </>
       )}
@@ -219,7 +219,7 @@ function formatMarkdown(text: string): string {
     return escHtml(s)
       // Links vóór bold/italic (anders verslinden sterretjes de markdown)
       .replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, label, href) =>
-        `<a href="${escHtml(href)}" target="_blank" rel="noreferrer">${label}</a>`)
+        `<a href="${href}" target="_blank" rel="noreferrer">${label}</a>`)
       .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
       .replace(/\*(.+?)\*/g, "<em>$1</em>")
       .replace(/`([^`]+)`/g, "<code>$1</code>");
@@ -302,7 +302,7 @@ function formatMarkdown(text: string): string {
     while (
       i < lines.length &&
       lines[i].trim() !== "" &&
-      !/^(#{1,3}|[-*+]|\d+\.|>|```)/.test(lines[i])
+      !/^(#{1,3}|[-*+]\s|\d+\.\s|>|```)/.test(lines[i])
     ) {
       paraLines.push(inlineFormat(lines[i]));
       i++;
