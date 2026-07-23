@@ -548,11 +548,24 @@
 .chat-reason-chevron { margin-left: auto; transition: transform 0.2s; }
 .chat-reason-block.open .chat-reason-chevron { transform: rotate(180deg); }
 .chat-reason-body {
-  display: none; font-size: 0.76rem; color: var(--c-dim); line-height: 1.65;
-  margin-top: 10px; padding-top: 10px;
-  border-top: 1px solid rgba(123,47,255,0.12);
+  /* max-height animatie i.p.v. display:none/block: het element blijft altijd
+     in de layout-tree. De browser hoeft alleen te clippen, niet de volledige
+     pre-wrap tekst opnieuw te wrappen bij elke streaming-update (20×/sec).
+     Dat voorkomt de forced-layout-thrashing die de main thread blokkeert. */
+  overflow: hidden;
+  max-height: 0;
+  font-size: 0.76rem; color: var(--c-dim); line-height: 1.65;
+  margin-top: 0; padding-top: 0;
+  border-top: 1px solid transparent;
+  transition: max-height 0.25s ease, margin-top 0.25s ease,
+              padding-top 0.25s ease, border-color 0.25s ease;
 }
-.chat-reason-block.open .chat-reason-body { display: block; }
+.chat-reason-block.open .chat-reason-body {
+  max-height: 400px;
+  overflow-y: auto;
+  margin-top: 10px; padding-top: 10px;
+  border-top-color: rgba(123,47,255,0.12);
+}
 
 /* ── Sources card ─────────────────────────────────────────────────── */
 .chat-sources-card {

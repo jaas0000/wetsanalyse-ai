@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { Source } from "@/lib/chat-types";
 
 interface Props {
@@ -98,11 +98,28 @@ export function SourcesCard({ sources, groundingOk, noCollapse }: Props) {
 interface ReasonProps {
   text: string;
   defaultOpen?: boolean;
+  /** Wanneer true: blok standaard dicht, tekst in DOM beperkt tot 2000 chars
+   *  om layout-reflows (pre-wrap rewrap, 20×/sec) te voorkomen. */
+  isStreaming?: boolean;
 }
 
-export function ReasonBlock({ text, defaultOpen = false }: ReasonProps) {
+// Maximale DOM-tekst tijdens streaming — voorkomt dat de browser 16 000+ chars
+// per-wrap opnieuw herbreekt bij elke 50ms-flush. De volledige tekst blijft in
+// React state; na afronden wordt hij in één keer volledig getoond.
+const STREAMING_DOM_CAP = 2000;
+
+export function ReasonBlock({ text, defaultOpen = false, isStreaming = false }: ReasonProps) {
   const [open, setOpen] = useState(defaultOpen);
   if (!text) return null;
+
+  // Fix 3: beperk DOM-tekst tijdens streaming tot de laatste STREAMING_DOM_CAP chars.
+  // useMemo herberekent alleen als text of isStreaming wijzigt.
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  const displayText = useMemo(() => {
+    if (!isStreaming || text.length <= STREAMING_DOM_CAP) return text;
+    return "…" + text.slice(-STREAMING_DOM_CAP);
+  }, [text, isStreaming]);
+
   return (
     <div className={`chat-reason-block${open ? " open" : ""}`} onClick={() => setOpen(v => !v)}>
       <div className="chat-reason-header">
@@ -110,6 +127,12 @@ export function ReasonBlock({ text, defaultOpen = false }: ReasonProps) {
           <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z" fill="#B97EFF" />
         </svg>
         <span>Redenering van de agent</span>
+        {isStreaming && (
+          // Subtiele indicator dat er nog tekst binnenstroomt
+          <span style={{ marginLeft: 4, fontSize: "0.65rem", color: "var(--c-neon)", opacity: 0.7 }}>
+            live
+          </span>
+        )}
         <svg
           className="chat-reason-chevron"
           width="14" height="14" viewBox="0 0 24 24" fill="none"
@@ -118,7 +141,7 @@ export function ReasonBlock({ text, defaultOpen = false }: ReasonProps) {
         </svg>
       </div>
       <div className="chat-reason-body" style={{ whiteSpace: "pre-wrap" }}>
-        {text}
+        {displayText}
       </div>
     </div>
   );

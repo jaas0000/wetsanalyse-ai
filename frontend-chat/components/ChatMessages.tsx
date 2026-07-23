@@ -147,7 +147,12 @@ export default function ChatMessages({
         {isStreaming && showStreaming && (
           <div className="chat-msg-agent">
             <div className="chat-msg-agent-name">Juridische Assistent</div>
-            {showReasoning && streamingReasoning && <ReasonBlock text={streamingReasoning} defaultOpen={true} />}
+            {showReasoning && streamingReasoning && (
+              // Fix 2: standaard dicht tijdens streaming — voorkomt pre-wrap reflow-cascade.
+              // De gebruiker kan het blok zelf openklikken; "live"-indicator is zichtbaar.
+              // Fix 3: isStreaming=true → DOM-tekst beperkt tot 2000 chars in ReasonBlock.
+              <ReasonBlock text={streamingReasoning} defaultOpen={false} isStreaming={true} />
+            )}
             <div className="chat-msg-agent-content">
               <span dangerouslySetInnerHTML={{ __html: streamHtml }} />
               <span className="chat-cursor" />
