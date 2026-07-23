@@ -152,7 +152,7 @@ export default function LoginPage() {
                   autoFocus
                   value={userid}
                   onChange={e => setUserid(e.target.value)}
-                  placeholder="jouw.naam"
+                  placeholder=""
                   disabled={loading}
                   style={{ width: "100%" }}
                 />
