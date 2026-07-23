@@ -1,6 +1,7 @@
 // SSE-proxy naar graph-qa /v1/chat — de kern van de chat-app.
 import { chatAuthHeader, chatApiBaseUrl } from "@/lib/config";
 import { auth } from "@/auth";
+import { logger } from "@/lib/logger";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +17,7 @@ export async function POST(req: Request) {
   const signal = AbortSignal.any([req.signal, AbortSignal.timeout(UPSTREAM_TIMEOUT_MS)]);
 
   let upstream: Response;
+  const t0 = performance.now();
   try {
     upstream = await fetch(`${chatApiBaseUrl()}/v1/chat`, {
       method: "POST",
@@ -30,6 +32,7 @@ export async function POST(req: Request) {
     });
   } catch (err) {
     const msg = (err as Error).message;
+    logger.warn("Chat-proxy: agent onbereikbaar", { fout: msg });
     return new Response(
       `event: error\ndata: ${JSON.stringify({ detail: `Agent onbereikbaar (${msg})` })}\n\n`,
       { status: 502, headers: { "Content-Type": "text/event-stream" } }
@@ -43,6 +46,13 @@ export async function POST(req: Request) {
       headers: { "Content-Type": upstream.headers.get("content-type") ?? "application/json" },
     });
   }
+
+  logger.info("Chat-proxy", {
+    http_method: "POST",
+    http_path: "/v1/chat",
+    http_status: upstream.status,
+    duur_ms: Math.round(performance.now() - t0),
+  });
 
   return new Response(upstream.body, {
     status: 200,

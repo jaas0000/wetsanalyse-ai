@@ -1,6 +1,7 @@
 // Proxy naar graph-qa /v1/artikel — haalt wettekst op voor annotatie-modus.
 import { chatAuthHeader, chatApiBaseUrl } from "@/lib/config";
 import { auth } from "@/auth";
+import { logger } from "@/lib/logger";
 
 export const dynamic = "force-dynamic";
 
@@ -27,6 +28,7 @@ export async function GET(req: Request) {
       headers: { "Content-Type": upstream.headers.get("content-type") ?? "application/json" },
     });
   } catch (err) {
+    logger.warn("Artikel-proxy: agent onbereikbaar", { fout: (err as Error).message });
     return Response.json(
       { detail: `Agent onbereikbaar (${(err as Error).message})` },
       { status: 502 }

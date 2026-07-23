@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { logger } from "@/lib/logger";
 
 const CHAT_API_URL = process.env.CHAT_API_URL ?? "";
 
@@ -9,7 +10,8 @@ export async function GET() {
     });
     const ok = res.ok;
     return NextResponse.json({ ok }, { status: ok ? 200 : 502 });
-  } catch {
+  } catch (err) {
+    logger.warn("Health-proxy: agent onbereikbaar", { fout: (err as Error).message });
     return NextResponse.json({ ok: false }, { status: 502 });
   }
 }

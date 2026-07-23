@@ -1,6 +1,7 @@
 // Server-only helpers: praten rechtstreeks (server→server) met de wetsanalyse-API voor auth.
 import "server-only";
 import { apiBaseUrl, apiAuthHeader } from "./config";
+import { logger } from "./logger";
 
 export interface VerifyResult {
   ok: boolean;
@@ -30,7 +31,8 @@ export async function postAuthVerify(payload: Record<string, unknown>): Promise<
     const raw = (await res.json().catch(() => ({}))) as Partial<VerifyResult>;
     const body: VerifyResult = { ok: false, code: "", userid: "", email: "", role: "", ...raw };
     return { status: res.status, body };
-  } catch {
+  } catch (err) {
+    logger.warn("Auth-verify: API onbereikbaar", { fout: (err as Error).message });
     return { status: 503, body: { ok: false, code: "unavailable", userid: "", email: "", role: "" } };
   }
 }
@@ -52,7 +54,10 @@ export async function getAccountStatus(userid: string): Promise<AccountStatus> {
       cache: "no-store",
       signal: AbortSignal.timeout(5000),
     });
-    if (!res.ok) return { status: "onbekend", role: "", email: "" };
+    if (!res.ok) {
+      logger.warn("Auth-status: niet-ok", { http_status: res.status });
+      return { status: "onbekend", role: "", email: "" };
+    }
     return (await res.json()) as AccountStatus;
   } catch {
     return { status: "onbekend", role: "", email: "" };
@@ -66,7 +71,10 @@ export async function getMe(userid: string): Promise<{ userid: string; email: st
       cache: "no-store",
       signal: AbortSignal.timeout(5000),
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      logger.warn("Profiel: niet-ok", { http_status: res.status });
+      return null;
+    }
     return await res.json();
   } catch {
     return null;
