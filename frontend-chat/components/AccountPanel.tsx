@@ -71,7 +71,7 @@ export default function AccountPanel({ userid, email, role, initials, onClose }:
               <div className="chat-row-label">Gebruikersnaam</div>
               <div className="chat-row-desc">Inlog-identiteit — niet wijzigbaar via de assistent.</div>
             </div>
-            <input className="chat-input-field" value={userid} readOnly style={{ maxWidth: 200, opacity: 0.6 }} />
+            <input className="chat-input-field chat-input-fixed" value={userid} readOnly />
           </div>
 
           <div className="chat-row">
@@ -79,7 +79,7 @@ export default function AccountPanel({ userid, email, role, initials, onClose }:
               <div className="chat-row-label">E-mailadres</div>
               <div className="chat-row-desc">Wijzigen via de Wetsanalyse-webapp (/account).</div>
             </div>
-            <input className="chat-input-field" value={email} readOnly style={{ maxWidth: 240, opacity: 0.6 }} />
+            <input className="chat-input-field chat-input-fixed" value={email} readOnly />
           </div>
         </div>
 

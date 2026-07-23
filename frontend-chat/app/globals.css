@@ -880,6 +880,12 @@
   box-shadow: 0 0 0 3px rgba(0,212,255,0.08);
 }
 .chat-input-field::placeholder { color: var(--c-muted); }
+/* Readonly-velden op de profielpagina: vaste breedte zodat beide rijen
+   rechts op dezelfde lijn uitlijnen, ongeacht de inhoud. flex-shrink:0
+   voorkomt dat de flexbox het veld smaller maakt dan de vaste breedte. */
+.chat-input-fixed {
+  width: 220px; flex-shrink: 0; opacity: 0.6; cursor: default;
+}
 
 /* Buttons */
 .chat-btn-primary {
