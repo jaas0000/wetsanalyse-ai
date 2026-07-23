@@ -47,23 +47,63 @@ export function SourcesCard({ sources, groundingOk, noCollapse }: Props) {
       arr.findIndex(x => (x.label ?? x.uri) === (s.label ?? s.uri)) === i
   );
 
-  return (
-    <div className={`chat-sources-card${open ? " open" : ""}${noCollapse ? " no-collapse" : ""}`}>
-      {!noCollapse && (
-        <div className="chat-sources-header" onClick={() => setOpen(v => !v)}>
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
-            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="var(--c-neon)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
-          <div className="chat-sources-title">Bronnen ({unique.length})</div>
+  // noCollapse = ArtifactPanel (zijpaneel heeft eigen header) → oude stijl
+  if (noCollapse) {
+    return (
+      <div className="chat-sources-card no-collapse">
+        <div className="chat-sources-body" style={{ display: "block", padding: "14px" }}>
+          {unique.map((s, i) => {
+            const { wet, artikel } = parseLabel(s);
+            const href = s.uri?.startsWith("http") ? s.uri : undefined;
+            return (
+              <div className="chat-source-item" key={i}>
+                <span className="chat-source-num">{i + 1}</span>
+                <div className="chat-source-info">
+                  {wet && <div className="chat-source-wet">{wet}</div>}
+                  <div className="chat-source-art">
+                    {href ? (
+                      <a href={href} target="_blank" rel="noreferrer" style={{ color: "var(--c-neon)", textDecoration: "none" }}>
+                        {artikel}
+                      </a>
+                    ) : artikel}
+                  </div>
+                  {s.tekst && <div className="chat-source-cite">&ldquo;{s.tekst}&rdquo;</div>}
+                </div>
+              </div>
+            );
+          })}
           {groundingOk !== null && (
-            <span style={{ width: 6, height: 6, borderRadius: "50%", background: groundingOk ? "var(--c-green)" : "var(--c-orange)", display: "inline-block", flexShrink: 0 }} title={groundingOk ? "Gegrond" : "Onvolledig"} />
+            <div className={`chat-grounding-chip ${groundingOk ? "" : "grounding-warn"}`}>
+              <span style={{ width: 6, height: 6, borderRadius: "50%", background: groundingOk ? "var(--c-green)" : "var(--c-orange)", display: "inline-block" }} />
+              {groundingOk ? "Antwoord gegrond in bronnen" : "Bron-dekking onvolledig — verifieer"}
+            </div>
           )}
-          <svg className="chat-sources-chevron" width="13" height="13" viewBox="0 0 24 24" fill="none">
-            <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-          </svg>
         </div>
-      )}
-      <div className="chat-sources-body">
+      </div>
+    );
+  }
+
+  // Standaard: ReasonBlock-achtige groene inklapbare kaart
+  return (
+    <div className={`chat-sources-block${open ? " open" : ""}`} onClick={() => setOpen(v => !v)}>
+      <div className="chat-sources-block-header">
+        {/* Boek-icoon in groen */}
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+          <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" stroke="var(--c-green)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+          <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" stroke="var(--c-green)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+        <span>Bronnen ({unique.length})</span>
+        {groundingOk !== null && (
+          <span
+            style={{ width: 6, height: 6, borderRadius: "50%", background: groundingOk ? "var(--c-green)" : "var(--c-orange)", display: "inline-block", flexShrink: 0 }}
+            title={groundingOk ? "Gegrond" : "Onvolledig"}
+          />
+        )}
+        <svg className="chat-sources-block-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none">
+          <path d="M6 9l6 6 6-6" stroke="var(--c-green)" strokeWidth="2" strokeLinecap="round"/>
+        </svg>
+      </div>
+      <div className="chat-sources-block-body">
         {unique.map((s, i) => {
           const { wet, artikel } = parseLabel(s);
           const href = s.uri?.startsWith("http") ? s.uri : undefined;
@@ -85,7 +125,7 @@ export function SourcesCard({ sources, groundingOk, noCollapse }: Props) {
           );
         })}
         {groundingOk !== null && (
-          <div className={`chat-grounding-chip ${groundingOk ? "" : "grounding-warn"}`}>
+          <div className={`chat-grounding-chip ${groundingOk ? "" : "grounding-warn"}`} style={{ marginTop: 10 }}>
             <span style={{ width: 6, height: 6, borderRadius: "50%", background: groundingOk ? "var(--c-green)" : "var(--c-orange)", display: "inline-block" }} />
             {groundingOk ? "Antwoord gegrond in bronnen" : "Bron-dekking onvolledig — verifieer"}
           </div>
