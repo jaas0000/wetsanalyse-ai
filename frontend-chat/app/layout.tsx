@@ -6,7 +6,7 @@ export const metadata: Metadata = {
   description: "Brongetrouw juridisch vragen beantwoorden via de kennisgraaf.",
   // favicon.ico, icon.png en apple-icon.png in app/ worden door Next.js
   // automatisch opgepikt als <link rel="icon"> / <link rel="apple-touch-icon">.
-  manifest: "/manifest.webmanifest",
+  // manifest wordt geserveerd via app/manifest.ts (route handler, werkt in standalone).
 };
 
 export const viewport: Viewport = { themeColor: "#020B18" };
