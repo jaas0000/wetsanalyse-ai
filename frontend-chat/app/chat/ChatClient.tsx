@@ -60,6 +60,7 @@ export default function ChatClient({ userid, email, role, initials }: Props) {
     convs.setActiveId(null);
     annot.syncActief(null);
     setPanel("chat");
+    setSidebarOpen(false);
   };
 
   // C3 — periodieke health-check kennisgraaf (elke 30s)
@@ -235,8 +236,8 @@ export default function ChatClient({ userid, email, role, initials }: Props) {
         userEmail={email}
         userInitials={initials}
         userRole={role === "beheerder" ? "Beheerder" : "Jurist · Analist"}
-        onSettings={() => setPanel("settings")}
-        onAccount={() => setPanel("account")}
+        onSettings={() => { setSidebarOpen(false); setPanel("settings"); }}
+        onAccount={() => { setSidebarOpen(false); setPanel("account"); }}
         onLogout={() => signOut({ callbackUrl: "/login" })}
         graphOnline={graphOnline}
         mobileOpen={sidebarOpen}
