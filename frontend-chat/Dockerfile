@@ -42,9 +42,10 @@ RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
 # Non-root + read-only-fs-proof: groep 0, UID 10002.
 RUN useradd --no-create-home --uid 10002 --gid 0 nodeapp
 
-# Standalone-server + statische assets.
+# Standalone-server + statische assets + public/-map (icons, favicons e.d.).
 COPY --from=builder --chown=10002:0 /app/.next/standalone ./
 COPY --from=builder --chown=10002:0 /app/.next/static ./.next/static
+COPY --from=builder --chown=10002:0 /app/public ./public
 RUN chgrp -R 0 /app && chmod -R g=u /app
 
 # Entrypoint laadt AUTH_SECRET uit een secret-bestand.
