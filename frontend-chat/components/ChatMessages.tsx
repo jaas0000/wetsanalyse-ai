@@ -51,17 +51,26 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
-// Eén afgerond bericht. React.memo zorgt dat een onveranderd bericht niet
-// herrendert (en dus formatMarkdown niet opnieuw draait) bij elke streaming-tick.
+// Eén bericht — zowel streaming als afgerond. Dezelfde component met dezelfde key
+// blijft gemount tijdens de overgang; geen unmount/mount-sprong.
+// React.memo voorkomt herrenderen van afgeronde berichten bij streaming-ticks.
 const MessageRow = memo(function MessageRow({
   msg,
   showReasoning,
+  isStreaming = false,
+  streamingContent = "",
+  streamingReasoning = "",
+  showStreaming = true,
 }: {
   msg: Message;
   showReasoning: boolean;
+  isStreaming?: boolean;
+  streamingContent?: string;
+  streamingReasoning?: string;
+  showStreaming?: boolean;
 }) {
-  // formatMarkdown alleen opnieuw draaien als de tekst van dít bericht wijzigt
-  const html = useMemo(() => formatMarkdown(msg.content), [msg.content]);
+  // formatMarkdown alleen draaien als niet-streaming (O(n), te zwaar per tick)
+  const html = useMemo(() => isStreaming ? "" : formatMarkdown(msg.content), [msg.content, isStreaming]);
 
   if (msg.role === "user") {
     return (
@@ -71,16 +80,33 @@ const MessageRow = memo(function MessageRow({
     );
   }
 
+  const reasonText = isStreaming ? streamingReasoning : (msg.reasoning ?? "");
+
   return (
     <div className="chat-msg-agent">
       <div className="chat-msg-agent-name">Juridische Assistent</div>
-      {showReasoning && msg.reasoning && <ReasonBlock text={msg.reasoning} />}
-      <div className="chat-msg-agent-content" dangerouslySetInnerHTML={{ __html: html }} />
-      <div className="chat-msg-actions">
-        <CopyButton text={msg.content} />
+      {showReasoning && reasonText && (
+        <ReasonBlock text={reasonText} defaultOpen={false} isStreaming={isStreaming} />
+      )}
+      <div className="chat-msg-agent-content">
+        {isStreaming && showStreaming ? (
+          <>
+            <span style={{ whiteSpace: "pre-wrap" }}>{streamingContent}</span>
+            <span className="chat-cursor" />
+          </>
+        ) : (
+          <div dangerouslySetInnerHTML={{ __html: html }} />
+        )}
       </div>
-      {msg.sources && msg.sources.length > 0 && (
-        <SourcesCard sources={msg.sources} groundingOk={msg.groundingOk ?? null} />
+      {!isStreaming && (
+        <>
+          <div className="chat-msg-actions">
+            <CopyButton text={msg.content} />
+          </div>
+          {msg.sources && msg.sources.length > 0 && (
+            <SourcesCard sources={msg.sources} groundingOk={msg.groundingOk ?? null} />
+          )}
+        </>
       )}
     </div>
   );
@@ -152,31 +178,22 @@ export default function ChatMessages({
   return (
     <div ref={containerRef} className={`chat-messages-wrap${compact ? " compact" : ""}`}>
       <div className="chat-messages-inner">
-        {messages.map(msg =>
-          // Placeholder wordt getoond via het live streaming-blok — overslaan
-          msg.isStreaming ? null : (
-            <MessageRow key={msg.id} msg={msg} showReasoning={showReasoning} />
-          )
-        )}
-
-        {/* Live streaming message */}
-        {messages[messages.length - 1]?.isStreaming && showStreaming && (
-          <div className="chat-msg-agent">
-            <div className="chat-msg-agent-name">Juridische Assistent</div>
-            {showReasoning && streamingReasoning && (
-              // Fix 2: standaard dicht tijdens streaming — voorkomt pre-wrap reflow-cascade.
-              // De gebruiker kan het blok zelf openklikken; "live"-indicator is zichtbaar.
-              // Fix 3: isStreaming=true → DOM-tekst beperkt tot 2000 chars in ReasonBlock.
-              <ReasonBlock text={streamingReasoning} defaultOpen={false} isStreaming={true} />
-            )}
-            <div className="chat-msg-agent-content">
-              {/* Rawtext tijdens streaming: geen formatMarkdown-parse per tick.
-                  Na afronden rendert MessageRow de voltooide tekst als markdown. */}
-              <span style={{ whiteSpace: "pre-wrap" }}>{streamingContent}</span>
-              <span className="chat-cursor" />
-            </div>
-          </div>
-        )}
+        {messages.map((msg, idx) => {
+          // Streaming-bericht via dezelfde MessageRow als afgeronde berichten.
+          // Zelfde key = zelfde DOM-element = geen unmount/mount-sprong bij overgang.
+          const isLastStreaming = msg.isStreaming === true && idx === messages.length - 1;
+          return (
+            <MessageRow
+              key={msg.id}
+              msg={msg}
+              showReasoning={showReasoning}
+              isStreaming={isLastStreaming}
+              streamingContent={isLastStreaming ? (streamingContent ?? "") : ""}
+              streamingReasoning={isLastStreaming ? (streamingReasoning ?? "") : ""}
+              showStreaming={showStreaming}
+            />
+          );
+        })}
       </div>
       <div ref={bottomRef} />
     </div>

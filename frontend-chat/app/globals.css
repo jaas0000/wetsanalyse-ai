@@ -561,8 +561,7 @@
               padding-top 0.25s ease, border-color 0.25s ease;
 }
 .chat-reason-block.open .chat-reason-body {
-  max-height: 400px;
-  overflow-y: auto;
+  max-height: 1500px;
   margin-top: 10px; padding-top: 10px;
   border-top-color: rgba(123,47,255,0.12);
 }
