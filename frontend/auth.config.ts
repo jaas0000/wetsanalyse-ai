@@ -24,7 +24,11 @@ function isPublic(path: string): boolean {
     path === "/api/setup" ||
     path === "/api/login-verify" ||
     path === "/api/login-2fa" ||
-    path === "/api/health"
+    path === "/api/health" ||
+    // De PoC-disclaimer-strip in layout.tsx is bewust ook zichtbaar voor uitgelogde bezoekers
+    // ("ook voor wie nog voor de deur staat") — zonder deze vrijstelling zou `!user` (verderop)
+    // die klik naar /login sturen in plaats van naar de volledige tekst.
+    path === "/disclaimer"
   );
 }
 
