@@ -52,6 +52,21 @@ export function bronHref(ref?: string | null): string | undefined {
   return undefined;
 }
 
+// Gebruik alleen het pad van een callbackUrl op hetzelfde origin; voorkomt een sprong naar een
+// andere host (bv. een intern 0.0.0.0:3000 dat door een verkeerd geconfigureerde proxy ontstaat).
+// `origin` is een parameter i.p.v. een greep naar `window.location.origin`, zodat de functie ook
+// buiten de browser te testen is. Gebruikt na het inloggen én na het accepteren van de disclaimer.
+export function veiligPad(cb: string | null, origin: string): string {
+  if (!cb) return "/";
+  try {
+    const u = new URL(cb, origin);
+    return u.origin === origin ? u.pathname + u.search : "/";
+  } catch {
+    // Alleen een echt intern pad; sluit protocol-relatieve paden (`//evil.com`) expliciet uit.
+    return cb.startsWith("/") && !cb.startsWith("//") ? cb : "/";
+  }
+}
+
 // Veilige href voor een verwijzing-target: altijd als pad ónder wetten.overheid.nl opgebouwd,
 // en daarna gevalideerd, zodat een vreemd schema of een andere host nooit kan ontsnappen.
 export function wettenOverheidHref(target?: string | null): string | undefined {

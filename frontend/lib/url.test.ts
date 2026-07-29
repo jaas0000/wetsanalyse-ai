@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bronHref, normaliseerJci, pathSegment, wettenOverheidHref } from "./url";
+import { bronHref, normaliseerJci, pathSegment, veiligPad, wettenOverheidHref } from "./url";
 
 describe("normaliseerJci", () => {
   it("voegt &z= toe (gelijk aan &g=) als alleen &g= aanwezig is", () => {
@@ -100,5 +100,29 @@ describe("wettenOverheidHref", () => {
   it("geeft undefined bij lege invoer", () => {
     expect(wettenOverheidHref("")).toBeUndefined();
     expect(wettenOverheidHref(null)).toBeUndefined();
+  });
+});
+
+describe("veiligPad", () => {
+  const eigen = "https://app.example";
+
+  it("houdt pad en query van een callbackUrl op het eigen origin", () => {
+    expect(veiligPad("/projecten/abc?tab=rapport", eigen)).toBe("/projecten/abc?tab=rapport");
+  });
+
+  it("werkt met een absolute URL op het eigen origin", () => {
+    expect(veiligPad(`${eigen}/beheer`, eigen)).toBe("/beheer");
+  });
+
+  it("weigert een sprong naar een andere host", () => {
+    expect(veiligPad("https://evil.example/pad", eigen)).toBe("/");
+  });
+
+  it("weigert een protocol-relatief pad", () => {
+    expect(veiligPad("//evil.example", eigen)).toBe("/");
+  });
+
+  it("valt zonder callbackUrl terug op de startpagina", () => {
+    expect(veiligPad(null, eigen)).toBe("/");
   });
 });

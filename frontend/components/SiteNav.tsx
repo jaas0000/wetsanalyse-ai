@@ -5,9 +5,14 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
 import { LinkButton } from "@/components/ui/Button";
+import { wisDisclaimer } from "@/lib/api";
 
-function uitloggen(): void {
-  signOut({ callbackUrl: "/login" });
+/** Wis het disclaimer-akkoord en log dan pas uit (gedeelde-machine-hygiëne). Zonder het wissen
+ *  overleeft de disclaimer-sessiecookie een logout binnen dezelfde browsersessie en ziet de
+ *  volgende gebruiker de waarschuwing niet. */
+async function uitloggen(): Promise<void> {
+  await wisDisclaimer();
+  await signOut({ callbackUrl: "/login" });
 }
 
 type NavItem = { href: string; label: string; adminOnly?: boolean };
@@ -93,7 +98,7 @@ export function SiteNav() {
         </span>
         <button
           type="button"
-          onClick={uitloggen}
+          onClick={() => void uitloggen()}
           className="ml-2 rounded-button px-3 py-3.5 text-sm font-medium text-muted transition-colors hover:text-lint focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-lint"
         >
           Uitloggen
@@ -148,7 +153,7 @@ export function SiteNav() {
             type="button"
             onClick={() => {
               setOpen(false);
-              uitloggen();
+              void uitloggen();
             }}
             className="mt-1 w-full rounded-button px-3 py-3 text-left text-sm font-medium text-muted transition-colors hover:text-lint"
           >
