@@ -24,7 +24,7 @@
     "@opentelemetry/sdk-metrics": "^2.9.0",
     "@opentelemetry/sdk-node": "^0.221.0",
     "@xmldom/xmldom": "^0.9.10",
-    "jose": "^6.2.3",
+    "jose": "^6.2.4",
     "zod": "^4.4.3"
   },
   "overrides": {
