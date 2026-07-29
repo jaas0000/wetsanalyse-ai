@@ -27,7 +27,7 @@ llm = ["litellm>=1.89.3", "mcp>=1.28.0"]
 otel = [
     "opentelemetry-sdk>=1.29.0",
     "opentelemetry-exporter-otlp>=1.29.0",
-    "opentelemetry-instrumentation-fastapi>=0.50b0",
+    "opentelemetry-instrumentation-fastapi>=0.65b0",
     "opentelemetry-instrumentation-httpx>=0.50b0",
     "opentelemetry-instrumentation-sqlalchemy>=0.50b0",
     "opentelemetry-instrumentation-asyncpg>=0.50b0",
