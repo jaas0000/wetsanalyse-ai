@@ -1,14 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
 import { Button } from "@/components/ui/Button";
 import { Field, Input } from "@/components/ui/Field";
 import { Melding } from "@/components/ui/Melding";
 
 export function SetupClient() {
-  const router = useRouter();
   const [userid, setUserid] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -43,14 +41,11 @@ export function SetupClient() {
         );
         return;
       }
-      // Direct inloggen met de zojuist aangemaakte beheerder.
+      // Direct inloggen met de zojuist aangemaakte beheerder. Harde navigatie (niet router.push):
+      // "/" kan door de disclaimer-gate omgeleid worden naar /disclaimer, en dat combineert niet
+      // goed met een soft router.push (zie de toelichting in LoginClient.tsx).
       const login = await signIn("credentials", { redirect: false, userid, password });
-      if (login?.error) {
-        router.push("/login");
-      } else {
-        router.push("/");
-      }
-      router.refresh();
+      window.location.href = login?.error ? "/login" : "/";
     } finally {
       setBezig(false);
     }

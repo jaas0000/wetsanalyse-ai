@@ -2,26 +2,15 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { signIn } from "next-auth/react";
 import { Button } from "@/components/ui/Button";
 import { Field, Input } from "@/components/ui/Field";
 import { Melding } from "@/components/ui/Melding";
 import { login2fa } from "@/lib/api";
-
-/** Alleen een intern pad op hetzelfde origin (zie LoginClient.veiligPad). */
-function veiligPad(cb: string | null): string {
-  if (!cb) return "/";
-  try {
-    const u = new URL(cb, window.location.origin);
-    return u.origin === window.location.origin ? u.pathname + u.search : "/";
-  } catch {
-    return cb.startsWith("/") && !cb.startsWith("//") ? cb : "/";
-  }
-}
+import { veiligPad } from "@/lib/url";
 
 export function TwoFactorClient() {
-  const router = useRouter();
   const params = useSearchParams();
   // undefined = sessionStorage nog niet gelezen; null = afwezig (opnieuw beginnen); string = ok.
   const [userid, setUserid] = useState<string | null | undefined>(undefined);
@@ -67,8 +56,9 @@ export function TwoFactorClient() {
       }
       sessionStorage.removeItem("wa_login_userid");
       sessionStorage.removeItem("wa_login_remember");
-      router.push(veiligPad(params.get("callbackUrl")));
-      router.refresh();
+      // Harde navigatie, zie de toelichting in LoginClient.tsx: de disclaimer-gate kan hier
+      // omleiden, en dat combineert niet goed met een soft router.push.
+      window.location.href = veiligPad(params.get("callbackUrl"), window.location.origin);
     } finally {
       setBezig(false);
     }

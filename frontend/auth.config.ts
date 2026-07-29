@@ -4,6 +4,7 @@
 // alleen in `auth.ts`; hier staat de route-gate (`authorized`) en het sessie-/JWT-vormgeven.
 
 import type { NextAuthConfig } from "next-auth";
+import { DISCLAIMER_COOKIE, DISCLAIMER_PAD, vereistAkkoord } from "@/lib/disclaimer";
 
 export type Role = "beheerder" | "analist";
 
@@ -88,6 +89,17 @@ export const authConfig = {
       if (isPublic(path)) return true;
       const user = auth?.user;
       if (!user) return false; // → redirect naar de signIn-pagina (/login)
+      // PoC-disclaimer: ingelogd maar deze sessie nog niet gezien → eerst het disclaimer-scherm.
+      // De oorspronkelijke bestemming reist mee als callbackUrl, zodat een deeplink na akkoord
+      // alsnog landt. `/api/**` blijft vrijgesteld (zie vereistAkkoord): een redirect naar HTML
+      // zou de SSE-streams en elke BFF-fetch breken. `request.cookies` is optioneel benaderd omdat
+      // de testfixture in auth.config.test.ts een kaal request-object doorgeeft.
+      if (vereistAkkoord(path) && !request.cookies?.get(DISCLAIMER_COOKIE)) {
+        const doel = new URL(DISCLAIMER_PAD, nextUrl);
+        const terug = path + nextUrl.search;
+        if (terug !== "/") doel.searchParams.set("callbackUrl", terug);
+        return Response.redirect(doel);
+      }
       // Alleen beheerders mogen /beheer en de admin-BFF-routes.
       const role = (user as { role?: Role }).role;
       if ((path.startsWith("/beheer") || path.startsWith("/api/admin")) && role !== "beheerder") {

@@ -39,6 +39,18 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       <body className="min-h-screen">
         <Providers session={session}>
         <header className="relative z-30">
+          {/* Permanente PoC-strip, bóven de logobalk. Ook zichtbaar als je uitgelogd bent: het ís
+              een testomgeving, ook voor wie nog voor de deur staat. Linkt naar de volledige tekst;
+              kleuren via de waarschuwing-tokens (zie components/ui/Melding.tsx), geen losse hex. */}
+          <Link
+            href="/disclaimer"
+            className="block bg-waarschuwing/10 text-ink transition-colors hover:bg-waarschuwing/20 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-lint"
+          >
+            <p className="mx-auto max-w-6xl px-6 py-1.5 text-center text-xs">
+              <span className="font-semibold">Testomgeving — proof of concept.</span>{" "}
+              Analyses kunnen verloren gaan. <span className="underline">Lees de voorwaarden</span>
+            </p>
+          </Link>
           {/* Logobalk (Rijkshuisstijl): het LINT staat altijd op de horizontale middenas,
               bovenaan op een witte achtergrond, met het woordmerk rechts ernaast; géén andere
               elementen in de balk. Lintbreedte 50px desktop, schaalt naar 45/40px (tablet/mobiel)

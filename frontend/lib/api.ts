@@ -335,6 +335,20 @@ export async function login2fa(
   return (await res.json()) as LoginVerifyResult;
 }
 
+// --- PoC-disclaimer ----------------------------------------------------------
+
+export async function accepteerDisclaimer(): Promise<void> {
+  const res = await fetch("/api/disclaimer", { method: "POST" });
+  if (!res.ok) throw await parseError(res);
+}
+
+/** Bij het uitloggen: de sessiecookie overleeft anders een logout in dezelfde browsersessie. */
+export async function wisDisclaimer(): Promise<void> {
+  await fetch("/api/disclaimer", { method: "DELETE" }).catch(() => {
+    /* uitloggen mag hier nooit op stuklopen */
+  });
+}
+
 // --- Account (self-service): 2FA --------------------------------------------
 
 export async function getAccount(): Promise<MeAccount> {

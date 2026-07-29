@@ -7,19 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { Field, Input } from "@/components/ui/Field";
 import { Melding } from "@/components/ui/Melding";
 import { loginVerify } from "@/lib/api";
-
-/** Gebruik alleen het pad van een callbackUrl op hetzelfde origin; voorkomt een sprong naar een
- *  ander host (bv. een intern 0.0.0.0:3000 dat door een verkeerd geconfigureerde proxy ontstaat). */
-function veiligPad(cb: string | null): string {
-  if (!cb) return "/";
-  try {
-    const u = new URL(cb, window.location.origin);
-    return u.origin === window.location.origin ? u.pathname + u.search : "/";
-  } catch {
-    // Alleen een echt intern pad; sluit protocol-relatieve paden (`//evil.com`) expliciet uit.
-    return cb.startsWith("/") && !cb.startsWith("//") ? cb : "/";
-  }
-}
+import { veiligPad } from "@/lib/url";
 
 export function LoginClient() {
   const router = useRouter();
@@ -68,8 +56,13 @@ export function LoginClient() {
         setFout("Inloggen mislukt. Probeer het opnieuw.");
         return;
       }
-      router.push(veiligPad(params.get("callbackUrl")));
-      router.refresh();
+      // Harde navigatie (niet router.push): de bestemming kan door de disclaimer-gate in
+      // auth.config.ts naar /disclaimer omgeleid worden. Een router.push (soft navigation)
+      // gecombineerd met een middleware-redirect laat de Next.js-router in de war achter — de
+      // pagina laadt dan wel, maar eigen client-side navigatie (knoppen, links) erop reageert
+      // niet meer tot een handmatige refresh. Een window.location-navigatie doorloopt de
+      // redirect zoals een normale paginalaad (en dat is precies wat een refresh ook doet).
+      window.location.href = veiligPad(params.get("callbackUrl"), window.location.origin);
     } finally {
       setBezig(false);
     }
