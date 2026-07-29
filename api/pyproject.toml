@@ -25,7 +25,7 @@ llm = ["litellm>=1.89.3", "mcp>=1.28.0"]
 # OpenTelemetry (traces/metrics/logs). Optioneel: alleen nodig als OTEL_EXPORTER_OTLP_ENDPOINT
 # gezet is; zonder deze extra draait de app met alleen gestructureerde JSON-logging.
 otel = [
-    "opentelemetry-sdk>=1.29.0",
+    "opentelemetry-sdk>=1.44.0",
     "opentelemetry-exporter-otlp>=1.29.0",
     "opentelemetry-instrumentation-fastapi>=0.65b0",
     "opentelemetry-instrumentation-httpx>=0.50b0",
