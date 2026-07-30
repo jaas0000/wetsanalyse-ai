@@ -12,6 +12,7 @@ async function serverGet<T>(path: string): Promise<T> {
   const res = await fetch(`${apiBaseUrl()}${path}`, {
     headers: { ...authHeader() },
     cache: "no-store",
+    signal: AbortSignal.timeout(10_000),
   });
   if (!res.ok) {
     logger.warn("Server-fetch niet-ok", { http_path: path, http_status: res.status });
