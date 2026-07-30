@@ -25,9 +25,10 @@ function isPublic(path: string): boolean {
     path === "/api/login-verify" ||
     path === "/api/login-2fa" ||
     path === "/api/health" ||
-    // De PoC-disclaimer-strip in layout.tsx is bewust ook zichtbaar voor uitgelogde bezoekers
-    // ("ook voor wie nog voor de deur staat") — zonder deze vrijstelling zou `!user` (verderop)
-    // die klik naar /login sturen in plaats van naar de volledige tekst.
+    // De PoC-disclaimer blijft zonder sessie leesbaar: de tekst gaat over wat deze omgeving is en
+    // wat er met je werk kan gebeuren, en dat moet je kunnen nalezen (bv. via een bookmark) zonder
+    // eerst in te loggen. Zonder deze vrijstelling zou `!user` (verderop) zo'n bezoek naar /login
+    // sturen. De strip in layout.tsx toont zichzelf overigens alleen ná inloggen.
     path === "/disclaimer"
   );
 }

@@ -25,11 +25,17 @@ import type { JobSummary } from "@/lib/types";
 
 const PAGE_SIZE = 25;
 
-function formatDatum(iso: string): string {
+/** Tijdstip in Europe/Amsterdam, expliciet en niet in de tijdzone van de omgeving. De server draait
+ *  in UTC (Docker) terwijl analisten in NL werken: zonder vaste `timeZone` rendert de SSR een
+ *  UTC-tijd en de browser een lokale, wat 's zomers twee uur scheelt én een hydration-mismatch
+ *  oplevert. Eén vaste zone lost beide op. Zelfde afweging als `vandaag()` in
+ *  `tools/wettenbank-mcp/src/shared/utils.ts`. Geëxporteerd om testbaar te zijn. */
+export function formatDatum(iso: string): string {
   if (!iso) return "—";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
   return d.toLocaleString("nl-NL", {
+    timeZone: "Europe/Amsterdam",
     day: "numeric",
     month: "short",
     hour: "2-digit",
@@ -298,7 +304,7 @@ export function ProjectenLijstClient({ initieel }: { initieel: JobSummary[] }) {
                           </span>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-xs text-muted" suppressHydrationWarning>{formatDatum(p.updated)}</td>
+                      <td className="px-4 py-3 text-xs text-muted">{formatDatum(p.updated)}</td>
                     </tr>
                   ))}
                 </tbody>

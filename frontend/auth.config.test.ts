@@ -164,7 +164,7 @@ describe("PoC-disclaimer-gate", () => {
     expect(res).toBe(true);
   });
 
-  it("houdt /disclaimer zelf bereikbaar zonder sessie (de strip is ook voor uitgelogde bezoekers)", async () => {
+  it("houdt /disclaimer zelf bereikbaar zonder sessie (moet ook zonder inloggen na te lezen zijn)", async () => {
     const res = await authorized({
       auth: null,
       request: fakeRequest("GET", "https://app.example/disclaimer", {}, false),
