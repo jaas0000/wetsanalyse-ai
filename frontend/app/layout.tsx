@@ -44,12 +44,13 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               kleuren via de waarschuwing-tokens (zie components/ui/Melding.tsx), geen losse hex. */}
           <Link
             href="/disclaimer"
-            className="block bg-waarschuwing/10 text-ink transition-colors hover:bg-waarschuwing/20 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-lint"
+            className="block bg-waarschuwing/10 py-1.5 text-ink transition-colors hover:bg-waarschuwing/20 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-lint"
           >
-            <p className="mx-auto max-w-6xl px-6 py-1.5 text-center text-xs">
+            <span className="mx-auto block max-w-6xl px-6 text-center text-xs">
               <span className="font-semibold">Testomgeving — proof of concept.</span>{" "}
-              Analyses kunnen verloren gaan. <span className="underline">Lees de voorwaarden</span>
-            </p>
+              Analyses kunnen verloren gaan.{" "}
+              <span className="underline">Lees de voorwaarden</span>
+            </span>
           </Link>
           {/* Logobalk (Rijkshuisstijl): het LINT staat altijd op de horizontale middenas,
               bovenaan op een witte achtergrond, met het woordmerk rechts ernaast; géén andere
