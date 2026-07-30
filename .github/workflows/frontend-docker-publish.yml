@@ -52,13 +52,6 @@ jobs:
       packages: write
       security-events: write
     env:
-      PORTAINER_URL: ${{ secrets.PORTAINER_URL }}
-      PORTAINER_API_KEY: ${{ secrets.PORTAINER_API_KEY }}
-      PORTAINER_STACK_ID: ${{ vars.PORTAINER_FRONTEND_STACK_ID }}
-      PORTAINER_ENDPOINT_ID: "1"
-      PROXY_NETWORK: "homeinfra_internal"
-      SECRETS_DIR: ${{ vars.SECRETS_DIR }}
-      # Azure — alleen voor containerapp update (infra via azure-infra.yml).
       AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
       AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
@@ -131,33 +124,6 @@ jobs:
           ignore-unfixed: true
           severity: CRITICAL
           exit-code: "1"
-
-      - name: Portainer redeploy (op digest, met convergentie-verificatie)
-        if: ${{ github.ref == 'refs/heads/master' && env.PORTAINER_API_KEY != '' && env.PORTAINER_STACK_ID != '' }}
-        env:
-          HEALTH_URL: https://wetsanalyse.ipalm.nl/api/health
-          IMAGE_DIGEST_REF: ${{ env.IMAGE }}@${{ steps.build.outputs.digest }}
-          # OTel-export moet in de stack-env blijven staan — de compose-default is leeg (= uit),
-          # dus zónder deze regel zet een redeploy de observability stil. Overschrijf via repo-var
-          # vars.OTEL_EXPORTER_OTLP_ENDPOINT; default = de OTel-Collector op homeinfra_internal.
-          OTEL_EXPORTER_OTLP_ENDPOINT: ${{ vars.OTEL_EXPORTER_OTLP_ENDPOINT || 'http://otel-collector:4318' }}
-        run: |
-          set -euo pipefail
-          jq -n \
-            --rawfile compose frontend/docker-compose.yml \
-            --arg net "$PROXY_NETWORK" \
-            --arg img "$IMAGE_DIGEST_REF" \
-            --arg otel "$OTEL_EXPORTER_OTLP_ENDPOINT" \
-            --arg secrets_dir "${SECRETS_DIR:-/volume1/docker/secrets/wetsanalyse-api}" \
-            '{stackFileContent:$compose,
-              env:[{name:"PROXY_NETWORK",value:$net},
-                   {name:"WETSANALYSE_FRONTEND_IMAGE",value:$img},
-                   {name:"OTEL_EXPORTER_OTLP_ENDPOINT",value:$otel},
-                   {name:"SECRETS_DIR",value:$secrets_dir}],
-              pullImage:true, prune:false}' > /tmp/payload.json
-          # PUT (idempotente retry) + convergentie: orphan-'Created'-containers opruimen en bevestigen
-          # dat er precies één verse, gezonde container op de nieuwe digest draait. Zie het script.
-          bash .github/scripts/portainer-deploy.sh /tmp/payload.json wetsanalyse-frontend "$IMAGE_DIGEST_REF" "$HEALTH_URL"
 
       - name: Azure Container App update (frontend)
         if: ${{ github.ref == 'refs/heads/master' && env.AZURE_CLIENT_ID != '' && env.AZURE_CLIENT_SECRET != '' }}

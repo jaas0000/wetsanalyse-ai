@@ -49,12 +49,6 @@ jobs:
       packages: write
       security-events: write
     env:
-      PORTAINER_URL: ${{ secrets.PORTAINER_URL }}
-      PORTAINER_API_KEY: ${{ secrets.PORTAINER_API_KEY }}
-      PORTAINER_STACK_ID: ${{ vars.PORTAINER_CHAT_STACK_ID }}
-      PORTAINER_ENDPOINT_ID: "1"
-      PROXY_NETWORK: "homeinfra_internal"
-      SECRETS_DIR: ${{ vars.SECRETS_DIR }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
@@ -124,21 +118,3 @@ jobs:
           severity: CRITICAL
           exit-code: "1"
 
-      - name: Portainer redeploy (op digest, met convergentie-verificatie)
-        if: ${{ github.ref == 'refs/heads/master' && env.PORTAINER_API_KEY != '' && env.PORTAINER_STACK_ID != '' }}
-        env:
-          HEALTH_URL: ${{ vars.CHAT_HEALTH_URL }}
-          IMAGE_DIGEST_REF: ${{ env.IMAGE }}@${{ steps.build.outputs.digest }}
-        run: |
-          set -euo pipefail
-          jq -n \
-            --rawfile compose frontend-chat/docker-compose.yml \
-            --arg net "$PROXY_NETWORK" \
-            --arg img "$IMAGE_DIGEST_REF" \
-            --arg secrets_dir "${SECRETS_DIR:-/volume1/docker/secrets/wetsanalyse-api}" \
-            '{stackFileContent:$compose,
-              env:[{name:"PROXY_NETWORK",value:$net},
-                   {name:"JURIDISCHE_ASSISTENT_IMAGE",value:$img},
-                   {name:"SECRETS_DIR",value:$secrets_dir}],
-              pullImage:true, prune:false}' > /tmp/payload.json
-          bash .github/scripts/portainer-deploy.sh /tmp/payload.json juridische-assistent "$IMAGE_DIGEST_REF" "${HEALTH_URL:-}"
