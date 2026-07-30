@@ -298,7 +298,7 @@ export function ProjectenLijstClient({ initieel }: { initieel: JobSummary[] }) {
                           </span>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-xs text-muted">{formatDatum(p.updated)}</td>
+                      <td className="px-4 py-3 text-xs text-muted" suppressHydrationWarning>{formatDatum(p.updated)}</td>
                     </tr>
                   ))}
                 </tbody>
