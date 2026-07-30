@@ -1,6 +1,5 @@
 # Bouwt de Wettenbank MCP-image en pusht naar GitHub Container Registry (GHCR).
 # Draait bij wijzigingen in de MCP-map op main en bij versietags (v*).
-# Portainer pullt vervolgens ghcr.io/<owner>/wettenbank-mcp:latest.
 
 name: docker-publish
 
