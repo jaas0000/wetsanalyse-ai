@@ -6,7 +6,7 @@ WORKDIR /app
 # OTEL_EXPORTER_OTLP_ENDPOINT gezet is; zonder die packages degradeert observability naar alleen
 # JSON-logs zónder trace_id). Pip eerst upgraden zodat de base-image-pip (met bekende CVE's) niet in
 # de image achterblijft — Trivy scant 'm anders als alert.
-RUN pip install --no-cache-dir --upgrade pip \
+RUN pip install --no-cache-dir --upgrade pip 'setuptools>=78.1.1' \
  && pip install --no-cache-dir \
     anthropic \
     fastapi \
@@ -17,6 +17,7 @@ RUN pip install --no-cache-dir --upgrade pip \
     sse-starlette \
     langgraph \
     langgraph-checkpoint-sqlite \
+    "msgpack>=1.1.0" \
     "opentelemetry-sdk>=1.29.0" \
     "opentelemetry-exporter-otlp>=1.29.0" \
     "opentelemetry-instrumentation-fastapi>=0.50b0" \

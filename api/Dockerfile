@@ -34,7 +34,7 @@ RUN apt-get update \
     && apt-get upgrade -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
-RUN pip install --no-cache-dir --upgrade 'pip>=26.1'
+RUN pip install --no-cache-dir --upgrade 'pip>=26.1' 'setuptools>=78.1.1'
 
 WORKDIR /app/api
 
