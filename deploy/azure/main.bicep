@@ -172,7 +172,7 @@ resource mcpApp 'Microsoft.App/containerApps@2024-03-01' = {
 var dbUrl = 'postgresql+asyncpg://wetsanalyse:${dbAdminPassword}@${pgServer.properties.fullyQualifiedDomainName}:5432/wetsanalyse?ssl=require'
 // Interne app-FQDN dragen het verplichte `.internal.`-segment (`<app>.internal.<defaultDomain>`);
 // die niet met de hand opbouwen maar uit de resource lezen, anders resolvet de host niet.
-var mcpInternalUrl = 'https://${mcpApp.properties.configuration.ingress.fqdn}/mcp'
+var mcpInternalUrl = 'http://${mcpApp.properties.configuration.ingress.fqdn}/mcp'
 
 resource apiApp 'Microsoft.App/containerApps@2024-03-01' = {
   name: '${appName}-api'
@@ -354,8 +354,8 @@ resource graphQaApp 'Microsoft.App/containerApps@2024-03-01' = {
 // Interne API-/graph-qa-FQDN uit de resource (bevat `.internal.`); de externe frontend-URL mág met de
 // hand (extern = `<app>.<defaultDomain>`) — een `.ingress.fqdn`-referentie zou hier een cycle geven
 // omdat frontendPublicUrl binnen frontendApp zelf als AUTH_URL wordt gebruikt.
-var apiInternalUrl     = 'https://${apiApp.properties.configuration.ingress.fqdn}'
-var graphQaInternalUrl = 'https://${graphQaApp.properties.configuration.ingress.fqdn}'
+var apiInternalUrl     = 'http://${apiApp.properties.configuration.ingress.fqdn}'
+var graphQaInternalUrl = 'http://${graphQaApp.properties.configuration.ingress.fqdn}'
 var frontendPublicUrl  = 'https://${appName}-frontend.${cae.properties.defaultDomain}'
 
 resource frontendApp 'Microsoft.App/containerApps@2024-03-01' = {
