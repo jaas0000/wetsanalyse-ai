@@ -1,6 +1,5 @@
 # Bouwt de Juridische Assistent chat-frontend image en pusht naar GitHub Container Registry (GHCR).
-# Draait bij wijzigingen in frontend-chat/ op master en bij versietags (v*). Portainer pullt
-# vervolgens ghcr.io/<owner>/juridische-assistent:latest.
+# Draait bij wijzigingen in frontend-chat/ op master en bij versietags (v*).
 # Spiegelt .github/workflows/frontend-docker-publish.yml qua opzet en securitypoort.
 
 name: frontend-chat-docker-publish
@@ -48,7 +47,6 @@ jobs:
       contents: read
       packages: write
       security-events: write
-    env:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 

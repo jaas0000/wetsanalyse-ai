@@ -1,10 +1,6 @@
 # Bouwt de graph-qa-agent-image (de eigen kennisgraaf-chatbot-agent) en pusht naar GHCR.
-# Draait bij wijzigingen in tools/graph-qa/ op master en bij versietags (v*). Portainer pullt
-# vervolgens ghcr.io/<owner>/graph-qa. Spiegelt .github/workflows/api-docker-publish.yml.
-#
-# De service is INTERN (geen publieke NPM-host): de Wetsanalyse-API bereikt 'm op
-# http://graph-qa:8080/v1/n8n-chat via het gedeelde Docker-netwerk. De health-verificatie in de
-# deploy loopt daarom op container-status (Docker-healthcheck), niet op een publieke URL.
+# Draait bij wijzigingen in tools/graph-qa/ op master en bij versietags (v*).
+# Spiegelt .github/workflows/api-docker-publish.yml.
 
 name: graph-qa-docker-publish
 

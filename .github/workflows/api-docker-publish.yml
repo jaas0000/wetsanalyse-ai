@@ -1,7 +1,6 @@
 # Bouwt de Wetsanalyse API-image en pusht naar GitHub Container Registry (GHCR).
 # Draait bij wijzigingen in de API-map (of de gebakken skill-references/scripts) op master en
-# bij versietags (v*). Portainer pullt vervolgens ghcr.io/<owner>/wetsanalyse-api:latest.
-# Spiegelt .github/workflows/docker-publish.yml (de MCP) qua opzet en securitypoort.
+# bij versietags (v*). Spiegelt .github/workflows/docker-publish.yml (de MCP) qua opzet en securitypoort.
 
 name: api-docker-publish
 
