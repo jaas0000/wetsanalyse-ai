@@ -47,18 +47,6 @@ jobs:
       packages: write
       security-events: write
     env:
-      PORTAINER_URL: ${{ secrets.PORTAINER_URL }}
-      PORTAINER_API_KEY: ${{ secrets.PORTAINER_API_KEY }}
-      PORTAINER_STACK_ID: ${{ vars.PORTAINER_GRAPH_QA_STACK_ID }}
-      PORTAINER_ENDPOINT_ID: "1"
-      PROXY_NETWORK: "homeinfra_internal"
-      # Niet-geheime stack-variabelen (secrets leven on-host als bestanden).
-      LLM_MODEL: ${{ vars.LLM_MODEL }}
-      GRAPHDB_MCP_URL: ${{ vars.GRAPHDB_MCP_URL }}
-      AZURE_FOUNDRY_BASE_URL: ${{ vars.AZURE_FOUNDRY_BASE_URL }}
-      SIMILARITY_INDEX: ${{ vars.GRAPH_QA_SIMILARITY_INDEX }}
-      SECRETS_DIR: ${{ vars.GRAPH_QA_SECRETS_DIR }}
-      # Azure — alleen voor containerapp update (infra via azure-infra.yml).
       AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
       AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
@@ -123,38 +111,6 @@ jobs:
           ignore-unfixed: true
           severity: CRITICAL
           exit-code: "1"
-
-      - name: Portainer redeploy (op digest; container-healthcheck gate + optionele externe health)
-        if: ${{ github.ref == 'refs/heads/master' && env.PORTAINER_API_KEY != '' && env.PORTAINER_STACK_ID != '' }}
-        env:
-          IMAGE_DIGEST_REF: ${{ env.IMAGE }}@${{ steps.build.outputs.digest }}
-          OTEL_EXPORTER_OTLP_ENDPOINT: ${{ vars.OTEL_EXPORTER_OTLP_ENDPOINT || 'http://otel-collector:4318' }}
-          # Container-healthcheck (compose) gate't elke deploy. Zet daarnaast vars.GRAPH_QA_HEALTH_URL
-          # (bv. https://graph-qa.ipalm.nl/health) voor een externe verificatie zodra er een NPM-host is.
-          HEALTH_URL: ${{ vars.GRAPH_QA_HEALTH_URL }}
-        run: |
-          set -euo pipefail
-          jq -n \
-            --rawfile compose tools/graph-qa/deploy/docker-compose.yml \
-            --arg net "$PROXY_NETWORK" \
-            --arg img "$IMAGE_DIGEST_REF" \
-            --arg model "${LLM_MODEL:-claude-sonnet-4-6}" \
-            --arg mcp "${GRAPHDB_MCP_URL:-https://graphdb-mcp.ipalm.nl/mcp}" \
-            --arg base "${AZURE_FOUNDRY_BASE_URL:-}" \
-            --arg sim "${SIMILARITY_INDEX:-bwb_similarity}" \
-            --arg otel "$OTEL_EXPORTER_OTLP_ENDPOINT" \
-            --arg secrets_dir "${SECRETS_DIR:-/volume1/docker/secrets/graph-qa}" \
-            '{stackFileContent:$compose,
-              env:[{name:"PROXY_NETWORK",value:$net},
-                   {name:"GRAPH_QA_IMAGE",value:$img},
-                   {name:"LLM_MODEL",value:$model},
-                   {name:"GRAPHDB_MCP_URL",value:$mcp},
-                   {name:"AZURE_FOUNDRY_BASE_URL",value:$base},
-                   {name:"SIMILARITY_INDEX",value:$sim},
-                   {name:"OTEL_EXPORTER_OTLP_ENDPOINT",value:$otel},
-                   {name:"SECRETS_DIR",value:$secrets_dir}],
-              pullImage:true, prune:false}' > /tmp/payload.json
-          bash .github/scripts/portainer-deploy.sh /tmp/payload.json graph-qa "$IMAGE_DIGEST_REF" "${HEALTH_URL:-}"
 
       - name: Azure Container App update (graph-qa)
         if: ${{ github.ref == 'refs/heads/master' && env.AZURE_CLIENT_ID != '' && env.AZURE_CLIENT_SECRET != '' }}

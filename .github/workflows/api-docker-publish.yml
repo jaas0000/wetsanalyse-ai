@@ -53,19 +53,6 @@ jobs:
       packages: write
       security-events: write
     env:
-      # CI → Portainer stack-redeploy. Inactief tot de secrets/vars bestaan.
-      PORTAINER_URL: ${{ secrets.PORTAINER_URL }}
-      PORTAINER_API_KEY: ${{ secrets.PORTAINER_API_KEY }}
-      PORTAINER_STACK_ID: ${{ vars.PORTAINER_API_STACK_ID }}
-      PORTAINER_ENDPOINT_ID: "1"
-      PROXY_NETWORK: "homeinfra_internal"
-      # Niet-geheime stack-variabelen (secrets leven on-host als bestanden; zie api/CLAUDE.md).
-      LLM_PROVIDER: ${{ vars.LLM_PROVIDER }}
-      LLM_MODEL: ${{ vars.LLM_MODEL }}
-      LLM_API_BASE: ${{ vars.LLM_API_BASE }}
-      LLM_API_VERSION: ${{ vars.LLM_API_VERSION }}
-      SECRETS_DIR: ${{ vars.SECRETS_DIR }}
-      # Azure — alleen voor containerapp update (infra via azure-infra.yml).
       AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
       AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
@@ -139,49 +126,6 @@ jobs:
           ignore-unfixed: true
           severity: CRITICAL
           exit-code: "1"
-
-      - name: Portainer redeploy (op digest, met convergentie-verificatie)
-        if: ${{ github.ref == 'refs/heads/master' && env.PORTAINER_API_KEY != '' && env.PORTAINER_STACK_ID != '' }}
-        env:
-          HEALTH_URL: https://wetsanalyse-api.ipalm.nl/health
-          # Deploy exact de zojuist gebouwde/gescande/geattesteerde image (digest), niet "wat :latest
-          # toevallig is" — deterministisch, en het deploy-script kan zo verifiëren dat de NIEUWE
-          # image daadwerkelijk draait i.p.v. een oude container die de health-check false-passt.
-          IMAGE_DIGEST_REF: ${{ env.IMAGE }}@${{ steps.build.outputs.digest }}
-          # OTel-export moet in de stack-env blijven staan — de compose-default is leeg (= uit),
-          # dus zónder deze regel zet een redeploy de observability stil. Overschrijf via repo-var
-          # vars.OTEL_EXPORTER_OTLP_ENDPOINT; default = de OTel-Collector op homeinfra_internal.
-          OTEL_EXPORTER_OTLP_ENDPOINT: ${{ vars.OTEL_EXPORTER_OTLP_ENDPOINT || 'http://otel-collector:4318' }}
-        run: |
-          set -euo pipefail
-          # Secrets (LLM_API_KEY, tokens) leven on-host als bestanden; CI stuurt ze niet mee.
-          if [ -z "${LLM_MODEL:-}" ]; then
-            echo "::error::LLM_MODEL is leeg — zet de repo-variabele vars.LLM_MODEL. Redeploy overgeslagen."
-            exit 1
-          fi
-          jq -n \
-            --rawfile compose api/docker-compose.yml \
-            --arg net "$PROXY_NETWORK" \
-            --arg img "$IMAGE_DIGEST_REF" \
-            --arg prov "${LLM_PROVIDER:-azure_ai}" \
-            --arg model "$LLM_MODEL" \
-            --arg base "${LLM_API_BASE:-}" \
-            --arg ver "${LLM_API_VERSION:-}" \
-            --arg otel "$OTEL_EXPORTER_OTLP_ENDPOINT" \
-            --arg secrets_dir "${SECRETS_DIR:-/volume1/docker/secrets/wetsanalyse-api}" \
-            '{stackFileContent:$compose,
-              env:[{name:"PROXY_NETWORK",value:$net},
-                   {name:"WETSANALYSE_API_IMAGE",value:$img},
-                   {name:"LLM_PROVIDER",value:$prov},
-                   {name:"LLM_MODEL",value:$model},
-                   {name:"LLM_API_BASE",value:$base},
-                   {name:"LLM_API_VERSION",value:$ver},
-                   {name:"OTEL_EXPORTER_OTLP_ENDPOINT",value:$otel},
-                   {name:"SECRETS_DIR",value:$secrets_dir}],
-              pullImage:true, prune:false}' > /tmp/payload.json
-          # PUT (idempotente retry) + convergentie: orphan-'Created'-containers opruimen en bevestigen
-          # dat er precies één verse, gezonde container op de nieuwe digest draait. Zie het script.
-          bash .github/scripts/portainer-deploy.sh /tmp/payload.json wetsanalyse-api "$IMAGE_DIGEST_REF" "$HEALTH_URL"
 
       - name: Azure Container App update (API)
         if: ${{ github.ref == 'refs/heads/master' && env.AZURE_CLIENT_ID != '' && env.AZURE_CLIENT_SECRET != '' }}
