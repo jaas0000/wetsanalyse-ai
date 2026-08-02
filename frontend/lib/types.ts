@@ -6,20 +6,11 @@ export type JobState =
   | "queued"
   | "act2-runt"
   | "wacht-op-review-act2"
-  | "act3-runt"
-  | "wacht-op-review-act3"
   | "bouwt"
   | "klaar"
-  | "fout"
-  // RegelSpraak-vervolgfase (on-demand op een afgeronde analyse)
-  | "rs-gegevens-runt"
-  | "wacht-op-review-rs-gegevens"
-  | "rs-regels-runt"
-  | "wacht-op-review-rs-regels"
-  | "rs-bouwt"
-  | "rs-klaar";
+  | "fout";
 
-export type Activiteit = "2" | "3" | "rs-gegevens" | "rs-regels";
+export type Activiteit = "2";
 
 export type FoutKlasse = "mcp" | "llm" | "validatie" | "intern" | "quota";
 
@@ -32,44 +23,25 @@ export interface BronInput {
   lid?: string | null;
 }
 
-/** Eén begrip uit een aangeleverde (bestaande) begrippenlijst — suggestieve act-3-invoer. */
-export interface BegripInvoer {
-  id?: string; // bij ontbreken nummert de API door: ab1..abN
-  naam: string;
-  synoniemen?: string[];
-  definitie?: string;
-  klasse?: string;
-  bron?: string;
-  toelichting?: string;
-}
-
 export interface StartRequest {
   bronnen: BronInput[];
   naam?: string;
   omschrijving?: string;
   analysefocus?: string | null; // hoofdvraag
-  // Bestaande begrippenlijst (optioneel, suggestief): act 3 hergebruikt waar de betekenis past
-  // en registreert per begrip de herkomst (hergebruikt/aangepast/nieuw).
-  begrippenlijst?: BegripInvoer[] | null;
   review: boolean;
   model_profile?: string | null;
 }
 
-/** Optionele body bij het starten van de RegelSpraak-fase (review=null erft Job.review). */
-export interface RegelspraakStart {
-  review?: boolean | null;
-}
-
 export interface Feedback {
-  // "akkoord-afronden" = akkoord op activiteit 2 én daar afronden (geen activiteit 3);
-  // alleen geldig op activiteit "2" en zonder opmerkingen.
+  // "akkoord-afronden" = akkoord op activiteit 2 én de analyse daar afronden;
+  // alleen geldig zonder opmerkingen.
   status: "akkoord" | "wijzigingen" | "akkoord-afronden";
   activiteit: Activiteit;
   items: Record<string, string>;
   algemeen: string;
 }
 
-// Analyse-omvang: "act2" = bewust afgerond zonder activiteit 3 (kan later alsnog).
+// Analyse-omvang: sinds activiteit 3 is verwijderd altijd "act2" (veld blijft voor telemetrie).
 export type Scope = "volledig" | "act2";
 
 // --- Responses --------------------------------------------------------------
@@ -132,10 +104,7 @@ export interface Job {
   review: boolean;
   model_profile: string;
   analysefocus: string;
-  // Aangeleverde bestaande begrippenlijst (suggestief; zie StartRequest.begrippenlijst).
-  begrippenlijst: BegripInvoer[];
   client_id: string;
-  regelspraak_review?: boolean | null;
   scope: Scope;
   current_activiteit: Activiteit | null;
   current_ronde: number;
@@ -163,15 +132,6 @@ export interface Vindplaats {
   lid: string;
 }
 
-/** Lichte bron-index (bron_id → leesbaar label) die activiteit 3 meedraagt. */
-export interface BronRef {
-  bron_id: string;
-  label: string;
-  bwbId: string;
-  artikel: string;
-  lid: string | null;
-}
-
 export interface Lid {
   lid: string;
   tekst: string;
@@ -185,39 +145,6 @@ export interface Markering {
   klasse: string;
   vindplaats: string; // lid-relatief binnen de bron
   toelichting: string;
-  twijfel: string;
-}
-
-/** Gestructureerd kenmerk/relatie van een begrip. */
-export interface BegripRelatie {
-  soort: string; // relatie | kenmerk
-  beschrijving: string;
-  doel_begrip?: string | null; // begrip-id bij soort=relatie
-}
-
-/** Herkomst t.o.v. een aangeleverde begrippenlijst (suggestief hergebruik). */
-export interface BegripHerkomst {
-  status: string; // hergebruikt | aangepast | nieuw
-  aangeleverd_id: string;
-  motivatie: string;
-}
-
-export interface Begrip {
-  id: string;
-  naam: string; // voorkeursterm
-  synoniemen: string[];
-  klasse: string;
-  definitie: string;
-  is_interpretatie?: boolean; // true = eigen werkdefinitie i.p.v. letterlijke brondefinitie
-  grondformulering: string;
-  voorbeeld: string;
-  kenmerken: string;
-  relaties?: BegripRelatie[];
-  vindplaatsen: Vindplaats[];
-  markering_ids?: string[]; // act-2-markeringen waarop het begrip berust
-  verwijst_naar_begrippen: string[];
-  bron_verwijzing?: string;
-  herkomst?: BegripHerkomst | null;
   twijfel: string;
 }
 
@@ -237,46 +164,6 @@ export interface Verwijzing {
   status: string; // opgehaald | gevolgd | gesignaleerd | buiten-scope-diepte
   betekenis: string;
   volgen?: boolean;
-}
-
-/** Wat de regel afleidt — een begrip (de begrippen zijn de bouwstenen van regels). */
-export interface RegelUitvoer {
-  begrip_id: string;
-  toelichting: string;
-}
-
-export interface RegelInvoer {
-  begrip_id: string;
-  toelichting: string;
-}
-
-export interface RegelParameter {
-  begrip_id: string;
-  waarde: string; // leeg = staat in een (nog niet geanalyseerde) delegatie
-  eenheid: string;
-  geldigheid: string;
-  vindplaats: Vindplaats;
-  toelichting: string;
-}
-
-export interface RegelVoorwaarde {
-  tekst: string;
-  begrip_ids: string[];
-  verbinding: string; // EN | OF | "" (koppeling met de vórige voorwaarde)
-}
-
-export interface Afleidingsregel {
-  id: string;
-  naam: string;
-  type: string;
-  uitvoer: RegelUitvoer;
-  invoer: RegelInvoer[];
-  parameters: RegelParameter[];
-  voorwaarden: RegelVoorwaarde[];
-  toelichting: string;
-  vindplaatsen: Vindplaats[];
-  markering_ids?: string[]; // Afleidingsregel-markering(en) uit act 2
-  twijfel: string;
 }
 
 /** Eén bron in het werkgebied: een (bwbId, artikel, lid?)-eenheid met haar act-2-uitkomst. */
@@ -305,14 +192,6 @@ export interface Analyse2 {
   bronnen: Bron[];
 }
 
-export interface Analyse3 {
-  werkgebied: Werkgebied;
-  bronnen: BronRef[];
-  begrippen: Begrip[];
-  afleidingsregels: Afleidingsregel[];
-  validatiepunten: string[];
-}
-
 // --- Rapport ----------------------------------------------------------------
 
 export interface ReviewRonde {
@@ -331,122 +210,13 @@ export interface ReviewActiviteit {
 
 export interface Reviewlog {
   activiteit2?: ReviewActiviteit;
-  activiteit3?: ReviewActiviteit;
 }
 
 export interface Rapport {
   werkgebied: Werkgebied;
   bronnen: Bron[];
-  begrippen: Begrip[];
-  afleidingsregels: Afleidingsregel[];
-  validatiepunten: string[];
   reviewlog: Reviewlog;
   aandachtspunten: string;
-}
-
-// --- RegelSpraak-model (GegevensSpraak + regels) ----------------------------
-
-/** Herkomst van een declaratie/regel terug naar de wetsanalyse (begrip/regel + vindplaats). */
-export interface RegelspraakHerkomst {
-  begrip_ids?: string[];
-  regel_id?: string;
-  bron_id?: string;
-  vindplaatsen?: Vindplaats[];
-}
-
-export interface RsAttribuut {
-  naam: string;
-  lidwoord?: string;
-  datatype: string;
-  eenheid?: string;
-}
-
-export interface RsKenmerk {
-  naam: string;
-  soort?: string; // bijvoeglijk | bezittelijk | overig
-}
-
-export interface RsObjecttype {
-  id: string;
-  naam: string;
-  lidwoord?: string;
-  meervoud?: string;
-  bezield?: boolean;
-  attributen?: RsAttribuut[];
-  kenmerken?: RsKenmerk[];
-  regelspraak_tekst?: string;
-  herkomst?: RegelspraakHerkomst;
-  twijfel?: string;
-}
-
-export interface RsRol {
-  naam: string;
-  lidwoord?: string;
-  objecttype?: string;
-  multipliciteit?: string; // een | meerdere
-}
-
-export interface RsFeittype {
-  id: string;
-  naam: string;
-  wederkerig?: boolean;
-  rollen?: RsRol[];
-  relatiebeschrijving?: string;
-  regelspraak_tekst?: string;
-  herkomst?: RegelspraakHerkomst;
-}
-
-export interface RsParameter {
-  id: string;
-  naam: string;
-  lidwoord?: string;
-  datatype: string;
-  eenheid?: string;
-  regelspraak_tekst?: string;
-  herkomst?: RegelspraakHerkomst;
-}
-
-export interface RsDomein {
-  naam: string;
-  regelspraak_tekst?: string;
-  herkomst?: RegelspraakHerkomst;
-}
-
-export interface RsEenheidssysteem {
-  naam: string;
-  regelspraak_tekst?: string;
-}
-
-export interface GegevensSpraak {
-  eenheidssystemen?: RsEenheidssysteem[];
-  domeinen?: RsDomein[];
-  objecttypen?: RsObjecttype[];
-  feittypen?: RsFeittype[];
-  parameters?: RsParameter[];
-  dimensies?: unknown[];
-  tijdlijnen?: unknown[];
-  dagsoorten?: unknown[];
-}
-
-export interface RsRegel {
-  id: string;
-  // naam/soort/regelspraak_tekst komen van het LLM en zijn API-zijdig niet hard gevalideerd
-  // (regels is een ongetypeerde list); spiegel dat zwakke contract met optionele velden.
-  naam?: string;
-  soort?: string;
-  regelspraak_tekst?: string;
-  herkomst?: RegelspraakHerkomst;
-  twijfel?: string;
-}
-
-export interface RegelspraakModel {
-  werkgebied: Werkgebied;
-  gegevensspraak: GegevensSpraak;
-  regels: RsRegel[];
-  reviewlog_gegevensspraak: string;
-  reviewlog_regels: string;
-  validatiepunten: string[];
-  reviewlog?: unknown;
 }
 
 // --- Catalogus (niet-admin): keuzelijsten -----------------------------------

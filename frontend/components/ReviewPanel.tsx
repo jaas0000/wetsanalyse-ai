@@ -8,14 +8,9 @@ import { JasBadge } from "@/components/ui/Badge";
 import { Textarea } from "@/components/ui/Field";
 import { LedenLijst } from "@/components/LedenLijst";
 import { getRonde, sendFeedback, isApiError } from "@/lib/api";
-import {
-  begripNaamMap, herkomstLabel, regelVelden, relatiesText, verwijstNaarText,
-} from "@/lib/begrippen";
-import { bronLabelMap, vindplaatsText } from "@/lib/bronnen";
+import { bronLabelMap } from "@/lib/bronnen";
 import { jasVolgorde } from "@/lib/jas";
-import type {
-  Activiteit, Analyse2, Analyse3, Bron, Feedback, GegevensSpraak, Job, Lid, RsRegel,
-} from "@/lib/types";
+import type { Activiteit, Analyse2, Bron, Feedback, Job, Lid } from "@/lib/types";
 
 /** Alle leden van alle bronnen samen, als wettekst-context voor de review. */
 function ledenUitBronnen(bronnen: Bron[] | undefined): Lid[] {
@@ -44,135 +39,45 @@ function splitsWaarschuwingen(ws: string[]): { perId: Record<string, string[]>; 
   return { perId, algemeen };
 }
 
-/** ReviewItems voor de RegelSpraak-stappen (GegevensSpraak / regels). */
-function itemsUitRegelspraak(act: "rs-gegevens" | "rs-regels", data: unknown): ReviewItem[] {
-  if (act === "rs-gegevens") {
-    const gs = ((data as { gegevensspraak?: GegevensSpraak })?.gegevensspraak ?? {}) as GegevensSpraak;
-    const out: ReviewItem[] = [];
-    for (const o of gs.objecttypen ?? []) {
-      out.push({
-        id: o.id, titel: o.naam || o.id, klasse: "objecttype", soort: "gegeven",
-        regels: [
-          { label: "Attributen", waarde: (o.attributen ?? []).map((a) => a.naam).join(", ") },
-          { label: "Kenmerken", waarde: (o.kenmerken ?? []).map((k) => k.naam).join(", ") },
-          { label: "RegelSpraak", waarde: o.regelspraak_tekst ?? "" },
-        ],
-        twijfel: o.twijfel,
-      });
-    }
-    for (const f of gs.feittypen ?? []) {
-      out.push({
-        id: f.id, titel: f.naam || f.id, klasse: "feittype", soort: "gegeven",
-        regels: [
-          { label: "Rollen", waarde: (f.rollen ?? []).map((r) => r.naam).join(", ") },
-          { label: "RegelSpraak", waarde: f.regelspraak_tekst ?? "" },
-        ],
-      });
-    }
-    for (const p of gs.parameters ?? []) {
-      out.push({
-        id: p.id, titel: p.naam || p.id, klasse: "parameter", soort: "gegeven",
-        regels: [
-          { label: "Datatype", waarde: p.datatype },
-          { label: "RegelSpraak", waarde: p.regelspraak_tekst ?? "" },
-        ],
-      });
-    }
-    return out;
-  }
-  const regels = ((data as { regels?: RsRegel[] })?.regels ?? []) as RsRegel[];
-  return regels.map((r) => ({
-    id: r.id, titel: r.naam || r.id, klasse: r.soort, soort: "regel",
-    regels: [{ label: "RegelSpraak", waarde: r.regelspraak_tekst ?? "" }],
-    twijfel: r.twijfel,
-  }));
-}
-
-function itemsUitAnalyse(act: Activiteit, data: unknown): ReviewItem[] {
-  if (act === "rs-gegevens" || act === "rs-regels") {
-    return itemsUitRegelspraak(act, data);
-  }
-  return items2of3(act, data as Analyse2 | Analyse3);
-}
-
-function items2of3(act: "2" | "3", data: Analyse2 | Analyse3): ReviewItem[] {
-  if (act === "2") {
-    const a = data as Analyse2;
-    const labels = bronLabelMap(a.bronnen);
-    const out: ReviewItem[] = [];
-    for (const bron of a.bronnen ?? []) {
-      const bronNaam = labels[bron.bron_id] || bron.label;
-      const markeringen = [...(bron.markeringen ?? [])].sort(
-        (x, y) => jasVolgorde(x.klasse) - jasVolgorde(y.klasse),
-      );
-      for (const m of markeringen) {
-        out.push({
-          id: m.id,
-          titel: m.formulering || m.id,
-          klasse: m.klasse,
-          soort: "markering",
-          regels: [
-            { label: "Bron", waarde: bronNaam },
-            { label: "Vindplaats", waarde: m.vindplaats },
-            { label: "Toelichting", waarde: m.toelichting },
-          ],
-          twijfel: m.twijfel,
-        });
-      }
-      for (const v of bron.verwijzingen ?? []) {
-        out.push({
-          id: v.id,
-          titel: v.doel?.label || v.functie || v.id,
-          soort: "verwijzing",
-          regels: [
-            { label: "Bron", waarde: bronNaam },
-            { label: "Functie", waarde: v.functie },
-            { label: "Status", waarde: v.status },
-            { label: "Betekenis", waarde: v.betekenis },
-          ],
-        });
-      }
-    }
-    return out;
-  }
-  const a = data as Analyse3;
+/** ReviewItems voor activiteit 2 (markeringen + verwijzingen per bron). */
+function itemsUitAnalyse(_act: Activiteit, data: unknown): ReviewItem[] {
+  const a = data as Analyse2;
   const labels = bronLabelMap(a.bronnen);
-  const namen = begripNaamMap(a.begrippen);
-  const begrippen: ReviewItem[] = [...(a.begrippen ?? [])]
-    .sort((x, y) => jasVolgorde(x.klasse) - jasVolgorde(y.klasse))
-    .map((b) => ({
-    id: b.id,
-    titel: b.naam || b.id,
-    klasse: b.klasse,
-    regels: [
-      { label: "Synoniemen", waarde: (b.synoniemen ?? []).join(", ") },
-      {
-        label: "Definitie",
-        waarde: b.definitie + (b.is_interpretatie ? " [interpretatie]" : ""),
-      },
-      { label: "Grondformulering", waarde: b.grondformulering },
-      { label: "Kenmerken", waarde: b.kenmerken },
-      { label: "Relaties", waarde: relatiesText(b.relaties, namen) },
-      { label: "Verwijst naar", waarde: verwijstNaarText(b.verwijst_naar_begrippen, namen) },
-      { label: "Bron-verwijzing", waarde: b.bron_verwijzing ?? "" },
-      { label: "Markeringen", waarde: (b.markering_ids ?? []).join(", ") },
-      { label: "Herkomst", waarde: herkomstLabel(b.herkomst) + (b.herkomst?.motivatie ? ` — ${b.herkomst.motivatie}` : "") },
-      { label: "Vindplaats", waarde: vindplaatsText(b.vindplaatsen, labels) },
-    ],
-    twijfel: b.twijfel,
-  }));
-  const regels: ReviewItem[] = (a.afleidingsregels ?? []).map((r) => ({
-    id: r.id,
-    titel: r.naam || r.id,
-    klasse: r.type,
-    regels: [
-      ...regelVelden(r, namen),
-      { label: "Markeringen", waarde: (r.markering_ids ?? []).join(", ") },
-      { label: "Vindplaats", waarde: vindplaatsText(r.vindplaatsen, labels) },
-    ],
-    twijfel: r.twijfel,
-  }));
-  return [...begrippen, ...regels];
+  const out: ReviewItem[] = [];
+  for (const bron of a.bronnen ?? []) {
+    const bronNaam = labels[bron.bron_id] || bron.label;
+    const markeringen = [...(bron.markeringen ?? [])].sort(
+      (x, y) => jasVolgorde(x.klasse) - jasVolgorde(y.klasse),
+    );
+    for (const m of markeringen) {
+      out.push({
+        id: m.id,
+        titel: m.formulering || m.id,
+        klasse: m.klasse,
+        soort: "markering",
+        regels: [
+          { label: "Bron", waarde: bronNaam },
+          { label: "Vindplaats", waarde: m.vindplaats },
+          { label: "Toelichting", waarde: m.toelichting },
+        ],
+        twijfel: m.twijfel,
+      });
+    }
+    for (const v of bron.verwijzingen ?? []) {
+      out.push({
+        id: v.id,
+        titel: v.doel?.label || v.functie || v.id,
+        soort: "verwijzing",
+        regels: [
+          { label: "Bron", waarde: bronNaam },
+          { label: "Functie", waarde: v.functie },
+          { label: "Status", waarde: v.status },
+          { label: "Betekenis", waarde: v.betekenis },
+        ],
+      });
+    }
+  }
+  return out;
 }
 
 export function ReviewPanel({
@@ -209,19 +114,8 @@ export function ReviewPanel({
         const d = await getRonde(job.id, activiteit, ronde);
         if (!actief) return;
         setItems(itemsUitAnalyse(activiteit, d));
-        // Wettekst als context. Bij activiteit 2 zit 'leden' in de ronde zelf; bij de andere
-        // stappen (act 3, regelspraak) niet, maar de brongetrouwe wettekst is in elke
-        // activiteit-2-ronde identiek → haal 'm best-effort uit ronde 1 van activiteit 2.
-        if (activiteit === "2") {
-          setLeden(ledenUitBronnen((d as Analyse2).bronnen));
-        } else {
-          try {
-            const a2 = await getRonde(job.id, "2", 1);
-            if (actief) setLeden(ledenUitBronnen((a2 as Analyse2).bronnen));
-          } catch {
-            /* wettekst is context, geen blocker */
-          }
-        }
+        // Wettekst als context: bij activiteit 2 zit 'leden' in de ronde zelf.
+        setLeden(ledenUitBronnen((d as Analyse2).bronnen));
       } catch (e) {
         if (actief) setLaadFout(isApiError(e) ? e.detail : (e as Error).message);
       }
@@ -259,14 +153,7 @@ export function ReviewPanel({
     setBezig(null);
   }
 
-  const titel =
-    activiteit === "2"
-      ? "Review activiteit 2 — markeringen & classificaties"
-      : activiteit === "3"
-        ? "Review activiteit 3 — begrippen & afleidingsregels"
-        : activiteit === "rs-gegevens"
-          ? "Review RegelSpraak — GegevensSpraak (objectmodel)"
-          : "Review RegelSpraak — regels";
+  const titel = "Review activiteit 2 — markeringen & classificaties";
 
   return (
     <Card className="p-6">
@@ -276,14 +163,8 @@ export function ReviewPanel({
       </div>
       <p className="mb-5 max-w-prose text-sm text-muted">
         Beoordeel elk item. Laat een veld leeg als je akkoord bent. Bij twijfel van de analyse staat
-        een geel kader. Kies daarna <em>Akkoord</em> (door naar de volgende fase) of{" "}
+        een geel kader. Kies daarna <em>Akkoord</em> (rond de analyse af en stel het rapport samen) of{" "}
         <em>Wijzigingen indienen</em> (nieuwe ronde met jouw opmerkingen).
-        {activiteit === "2" && (
-          <>
-            {" "}Wil je alleen de markeringen en classificaties vastleggen, kies dan{" "}
-            <em>Akkoord — afronden zonder act. 3</em>; activiteit 3 kan later alsnog.
-          </>
-        )}
       </p>
 
       {laadFout && (
@@ -398,23 +279,13 @@ export function ReviewPanel({
           >
             {bezig === "wijzigingen" ? "Versturen…" : "Wijzigen"}
           </Button>
-          {activiteit === "2" && (
-            <Button
-              variant="secondary"
-              onClick={() => verstuur("akkoord-afronden")}
-              disabled={bezig !== null || verwijderBezig || !items}
-              title="Keur activiteit 2 goed en rond de analyse hier af — begrippen en afleidingsregels (activiteit 3) worden niet opgesteld; dat kan later alsnog."
-              className="w-full sm:w-auto"
-            >
-              {bezig === "akkoord-afronden" ? "Versturen…" : "Akkoord — afronden zonder act. 3"}
-            </Button>
-          )}
           <Button
             onClick={() => verstuur("akkoord")}
             disabled={bezig !== null || verwijderBezig || !items}
+            title="Keur activiteit 2 goed en stel het rapport samen."
             className="w-full sm:w-auto"
           >
-            {bezig === "akkoord" ? "Versturen…" : "Akkoord"}
+            {bezig === "akkoord" ? "Versturen…" : "Akkoord — afronden"}
           </Button>
         </div>
       </div>

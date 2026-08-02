@@ -1,7 +1,7 @@
 // Presentatie-helpers voor het werkgebied/bronnen-model. Eén plek voor bron-labels,
 // vindplaats-rendering en de wet-afleiding voor filters.
 
-import type { Bron, BronInput, BronRef, Vindplaats } from "./types";
+import type { Bron, BronInput, Vindplaats } from "./types";
 
 type LabelbareBron = { bwbId?: string | null; artikel?: string; lid?: string | null; label?: string };
 
@@ -20,8 +20,8 @@ export function bronnenSamenvatting(bronnen: BronInput[] | undefined): string {
   return `${n} bronnen`;
 }
 
-/** bron_id → leesbaar label, voor het renderen van cross-bron vindplaatsen (act-3). */
-export function bronLabelMap(bronnen: (Bron | BronRef)[] | undefined): Record<string, string> {
+/** bron_id → leesbaar label, voor het renderen van cross-bron vindplaatsen. */
+export function bronLabelMap(bronnen: Bron[] | undefined): Record<string, string> {
   const map: Record<string, string> = {};
   for (const b of bronnen || []) map[b.bron_id] = b.label || b.bron_id;
   return map;

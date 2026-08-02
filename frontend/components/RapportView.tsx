@@ -5,10 +5,7 @@ import { Melding } from "@/components/ui/Melding";
 import { JasBadge, Tag } from "@/components/ui/Badge";
 import { LedenLijst } from "@/components/LedenLijst";
 import { bronHref, wettenOverheidHref } from "@/lib/url";
-import {
-  begripNaamMap, herkomstLabel, regelVelden, relatiesText, verwijstNaarText,
-} from "@/lib/begrippen";
-import { bronLabel, bronLabelMap, vindplaatsText } from "@/lib/bronnen";
+import { bronLabel } from "@/lib/bronnen";
 import { jasVolgorde } from "@/lib/jas";
 import type { Bron, Markering, Rapport, Verwijzing } from "@/lib/types";
 
@@ -156,8 +153,6 @@ function BronSectie({ bron }: { bron: Bron }) {
 export function RapportView({ rapport }: { rapport: Rapport }) {
   const wg = rapport.werkgebied ?? ({} as Rapport["werkgebied"]);
   const bronnen = rapport.bronnen ?? [];
-  const labels = bronLabelMap(bronnen);
-  const namen = begripNaamMap(rapport.begrippen);
   const hoofdvraag = wg.hoofdvraag || wg.analysefocus;
 
   return (
@@ -189,79 +184,6 @@ export function RapportView({ rapport }: { rapport: Rapport }) {
         <BronSectie key={b.bron_id} bron={b} />
       ))}
 
-      {/* Begrippen — gedeeld over het werkgebied */}
-      {rapport.begrippen?.length > 0 && (
-        <Section title="Begrippen" count={rapport.begrippen.length} subtitle="activiteit 3 · gedeeld" level={3}>
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-            {[...rapport.begrippen].sort((a, b) => jasVolgorde(a.klasse) - jasVolgorde(b.klasse)).map((b) => (
-              <Card key={b.id} className="p-4">
-                <div className="flex items-start justify-between gap-2">
-                  <p className="min-w-0 break-words font-display text-base font-medium text-ink">{b.naam}</p>
-                  <div className="flex shrink-0 flex-wrap justify-end gap-1">
-                    {b.herkomst?.status && <Tag>{herkomstLabel(b.herkomst)}</Tag>}
-                    {b.klasse && <JasBadge klasse={b.klasse} />}
-                  </div>
-                </div>
-                <div className="mt-2 space-y-1">
-                  {b.synoniemen?.length > 0 && <Veld label="Synoniemen" waarde={b.synoniemen.join(", ")} />}
-                  <Veld
-                    label="Definitie"
-                    waarde={b.definitie ? b.definitie + (b.is_interpretatie ? " [interpretatie]" : "") : ""}
-                  />
-                  <Veld label="Grondformulering" waarde={b.grondformulering} />
-                  <Veld label="Voorbeeld" waarde={b.voorbeeld} />
-                  <Veld label="Kenmerken" waarde={b.kenmerken} />
-                  <Veld label="Relaties" waarde={relatiesText(b.relaties, namen)} />
-                  <Veld label="Verwijst naar" waarde={verwijstNaarText(b.verwijst_naar_begrippen, namen)} />
-                  <Veld label="Bron-verwijzing" waarde={b.bron_verwijzing} />
-                  <Veld
-                    label="Herkomst"
-                    waarde={b.herkomst?.motivatie ? `${herkomstLabel(b.herkomst)} — ${b.herkomst.motivatie}` : ""}
-                  />
-                  <Veld label="Vindplaats" waarde={vindplaatsText(b.vindplaatsen, labels)} />
-                </div>
-                <Twijfel tekst={b.twijfel} />
-              </Card>
-            ))}
-          </div>
-        </Section>
-      )}
-
-      {/* Afleidingsregels — gedeeld over het werkgebied */}
-      {rapport.afleidingsregels?.length > 0 && (
-        <Section title="Afleidingsregels" count={rapport.afleidingsregels.length} subtitle="activiteit 3 · gedeeld" level={3}>
-          <div className="space-y-3">
-            {rapport.afleidingsregels.map((r) => (
-              <Card key={r.id} className="p-4">
-                <div className="flex items-start justify-between gap-2">
-                  <p className="min-w-0 break-words font-display text-base font-medium text-ink">{r.naam}</p>
-                  {r.type && <Tag>{r.type}</Tag>}
-                </div>
-                <div className="mt-2 space-y-1">
-                  {regelVelden(r, namen).map((v) => (
-                    <Veld key={v.label} label={v.label} waarde={v.waarde} />
-                  ))}
-                  <Veld label="Vindplaats" waarde={vindplaatsText(r.vindplaatsen, labels)} />
-                </div>
-                <Twijfel tekst={r.twijfel} />
-              </Card>
-            ))}
-          </div>
-        </Section>
-      )}
-
-      {/* Validatiepunten */}
-      {rapport.validatiepunten?.length > 0 && (
-        <Section title="Validatiepunten" count={rapport.validatiepunten.length} level={3}>
-          <Card className="p-4">
-            <ul className="list-inside list-disc space-y-1 text-sm text-muted">
-              {rapport.validatiepunten.map((v, i) => (
-                <li key={i}>{v}</li>
-              ))}
-            </ul>
-          </Card>
-        </Section>
-      )}
 
       {/* Reviewlog */}
       <Reviewlog rapport={rapport} />
@@ -304,7 +226,7 @@ function groepeerVerwijzingen(verwijzingen: Verwijzing[]): [string, Verwijzing[]
 
 function Reviewlog({ rapport }: { rapport: Rapport }) {
   const log = rapport.reviewlog ?? {};
-  const blokken = (["activiteit2", "activiteit3"] as const)
+  const blokken = (["activiteit2"] as const)
     .map((k) => ({ key: k, data: log[k] }))
     .filter((b) => b.data && (b.data.samenvatting || (b.data.rondes?.length ?? 0) > 0));
   if (blokken.length === 0) return null;
@@ -315,7 +237,7 @@ function Reviewlog({ rapport }: { rapport: Rapport }) {
         {blokken.map(({ key, data }) => (
           <details key={key} className="rounded-xl border border-line bg-surface/80 p-4">
             <summary className="cursor-pointer text-sm font-medium text-ink">
-              {key === "activiteit2" ? "Activiteit 2" : "Activiteit 3"}
+              {key === "activiteit2" ? "Activiteit 2" : key}
               {data?.rondes?.length ? (
                 <span className="ml-2 font-mono text-xs text-faint">
                   {data.rondes.length} ronde(n)

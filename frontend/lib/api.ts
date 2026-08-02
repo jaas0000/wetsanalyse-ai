@@ -3,7 +3,6 @@
 
 import type {
   Analyse2,
-  Analyse3,
   ApiError,
   ApiTokenCreated,
   ApiTokenOut,
@@ -21,8 +20,6 @@ import type {
   MeAccount,
   ProfileChoice,
   Rapport,
-  RegelspraakModel,
-  RegelspraakStart,
   Role,
   SettingsUpdate,
   StartRequest,
@@ -122,31 +119,11 @@ export async function getRapport(id: string): Promise<Rapport> {
 
 export async function getRonde(
   id: string,
-  act: "2" | "3" | "rs-gegevens" | "rs-regels",
+  act: "2",
   n: number,
-): Promise<Analyse2 | Analyse3> {
+): Promise<Analyse2> {
   const res = await fetch(`/api/projects/${pathSegment(id)}/ronde/${act}/${n}`, { cache: "no-store" });
-  return json<Analyse2 | Analyse3>(res);
-}
-
-/** Voer activiteit 3 alsnog uit op een analyse die na activiteit 2 is afgerond (scope act2). */
-export async function startAct3(id: string): Promise<CreateAccepted> {
-  const res = await fetch(`/api/projects/${pathSegment(id)}/act3`, { method: "POST" });
-  return json<CreateAccepted>(res);
-}
-
-export async function startRegelspraak(id: string, body: RegelspraakStart = {}): Promise<CreateAccepted> {
-  const res = await fetch(`/api/projects/${pathSegment(id)}/regelspraak`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  return json<CreateAccepted>(res);
-}
-
-export async function getRegelspraak(id: string): Promise<RegelspraakModel> {
-  const res = await fetch(`/api/projects/${pathSegment(id)}/regelspraak`, { cache: "no-store" });
-  return json<RegelspraakModel>(res);
+  return json<Analyse2>(res);
 }
 
 export function isApiError(e: unknown): e is ApiError {
