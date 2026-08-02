@@ -34,11 +34,9 @@ from ..llm.litellm_client import build_llm_client
 from .. import profiles
 from ..jobstore import IdConflict, JobStore
 from ..rapport import bouw_rapport_async
-from ..validation import (
-    brongetrouwheid_check, regelspraak_brongetrouwheid_check, regelspraak_schema_check, schema_check,
-)
+from ..validation import brongetrouwheid_check, schema_check
 from ..wettenbank import WettenbankClient, WettenbankError, map_artikel_naar_bron_basis, parse_jci
-from . import prompts, regelspraak_steps as rs_steps, steps
+from . import prompts, steps
 from .retry import met_retry
 
 logger = logging.getLogger(__name__)
@@ -122,7 +120,6 @@ class WetsanalyseEngine:
                 review=req.review,
                 model_profile=req.model_profile or self.s.default_model_profile,
                 analysefocus=req.analysefocus or "",
-                begrippenlijst=self._normaliseer_begrippenlijst(req),
                 client_id=client_id,
             )
             try:
@@ -149,7 +146,6 @@ class WetsanalyseEngine:
                 review=req.review,
                 model_profile=req.model_profile or self.s.default_model_profile,
                 analysefocus=req.analysefocus or "",
-                begrippenlijst=self._normaliseer_begrippenlijst(req),
                 client_id=client_id,
             )
             try:
@@ -158,15 +154,6 @@ class WetsanalyseEngine:
             except IdConflict:
                 continue
         raise IdConflict("Kon geen uniek analyse-id reserveren; probeer opnieuw.")
-
-    @staticmethod
-    def _normaliseer_begrippenlijst(req: StartRequest) -> list:
-        """Aangeleverde begrippen krijgen bij ontbreken een genummerd id (ab1..abN), zodat de
-        herkomst-registratie (`herkomst.aangeleverd_id`) altijd een aanwijsbaar doel heeft."""
-        return [
-            b.model_copy(update={"id": b.id or f"ab{i}"})
-            for i, b in enumerate(req.begrippenlijst or [], 1)
-        ]
 
     @staticmethod
     def _valideer_bronnen(req: StartRequest) -> None:
@@ -187,9 +174,6 @@ class WetsanalyseEngine:
     # Review-state → (activiteit-code in de rondes-tabel, runt-state om naar te claimen).
     _REVIEW_MAP = {
         JobState.wacht_review_act2: ("2", JobState.act2_runt),
-        JobState.wacht_review_act3: ("3", JobState.act3_runt),
-        JobState.wacht_review_rs_gegevens: ("rs-gegevens", JobState.rs_gegevens_runt),
-        JobState.wacht_review_rs_regels: ("rs-regels", JobState.rs_regels_runt),
     }
 
     async def apply_feedback(self, job_id: str, feedback) -> None:
@@ -204,91 +188,17 @@ class WetsanalyseEngine:
             return
         ronde = claimed.current_ronde
         await self.store.schrijf_feedback(claimed.id, activiteit, ronde, feedback)
-        if activiteit in ("2", "3"):
-            await self._guard(claimed, f"act{activiteit}",
-                              self._fase_feedback(claimed, activiteit, ronde, feedback))
-        else:
-            await self._guard(claimed, activiteit,
-                              self._fase_rs_feedback(claimed, activiteit, ronde, feedback))
-
-    async def claim_regelspraak(self, job_id: str, review: bool | None = None) -> Job | None:
-        """Claim de RegelSpraak-vervolgfase **synchroon**: klaar → rs_gegevens_runt + veld-setup.
-        Retourneert de geclaimde job, of None als het project niet (meer) `klaar` is (al bezig /
-        verloren race). De aanroeper (router) schedulet daarna `run_regelspraak_fase`, zodat de
-        DB-state al niet-terminaal is vóór de 202 — geen optimistische false-202 en geen race waarin
-        de per-project events-stream meteen `done` stuurt."""
-        job = await self.store.claim(
-            job_id, {JobState.klaar}, JobState.rs_gegevens_runt, self.owner, self.s.lease_s
-        )
-        if job is None:
-            return None
-        job.regelspraak_review = review if review is not None else job.review
-        job.current_activiteit = "rs-gegevens"
-        job.current_ronde = 0
-        job.error = None
-        await self._save(job)
-        return job
-
-    async def run_regelspraak_fase(self, job: Job) -> None:
-        """Draai de eerste rs-stap (GegevensSpraak) op een reeds via `claim_regelspraak` geclaimde job."""
-        await self._guard(job, "rs-gegevens", self._fase_rs_gegevens_start(job))
-
-    async def run_regelspraak(self, job_id: str, review: bool | None = None) -> None:
-        """On-demand: start de RegelSpraak-vervolgfase op een afgeronde (`klaar`) analyse.
-        Dunne wrapper (claim + fase) voor aanroepers die de claim niet apart hoeven; de router
-        splitst de twee bewust om de claim synchroon vóór de 202 te leggen."""
-        job = await self.claim_regelspraak(job_id, review)
-        if job is None:
-            return
-        await self.run_regelspraak_fase(job)
-
-    async def claim_act3(self, job_id: str) -> Job | None:
-        """Claim on-demand activiteit 3 op een act2-only-afgeronde analyse: klaar → act3_runt.
-        Scope gaat meteen terug naar "volledig": zodra geclaimd is de state niet meer `klaar`,
-        en het bestaande retry-pad (r3>0 → wacht-op-review-act3, anders wacht-op-review-act2)
-        herstelt een gefaalde run dan ongewijzigd. De router checkt scope=="act2" vóór de claim."""
-        job = await self.store.claim(
-            job_id, {JobState.klaar}, JobState.act3_runt, self.owner, self.s.lease_s
-        )
-        if job is None:
-            return None
-        job.scope = "volledig"
-        job.current_activiteit = "3"
-        job.current_ronde = 0
-        job.error = None
-        await self._save(job)
-        return job
-
-    async def run_act3_fase(self, job: Job) -> None:
-        """Draai activiteit 3 op een reeds via `claim_act3` geclaimde job (review erft `job.review`);
-        na de act3-review/akkoord wordt het rapport langs het normale pad herbouwd."""
-        await self._guard(job, "act3", self._fase_act3_start(job))
-
-    async def run_act3(self, job_id: str) -> None:
-        """On-demand: voer activiteit 3 alsnog uit op een act2-only-afgeronde analyse.
-        Dunne wrapper (claim + fase); de router splitst de twee om de claim vóór de 202 te leggen."""
-        job = await self.claim_act3(job_id)
-        if job is None:
-            return
-        await self.run_act3_fase(job)
+        await self._guard(claimed, f"act{activiteit}",
+                          self._fase_feedback(claimed, activiteit, ronde, feedback))
 
     async def retry(self, job_id: str) -> None:
         job = await self.store.load_job(job_id)
         if job is None or job.state != JobState.fout:
             return
-        # Faalde de regelspraak-vervolgfase, dan herstellen we bínnen die fase (de analyse zelf was
-        # al `klaar`). current_activiteit (gezet bij de claim) wijst de fase aan, ook vóór de eerste
-        # ronde-write.
-        if job.current_activiteit in ("rs-gegevens", "rs-regels"):
-            await self._retry_regelspraak(job)
-            return
         r2 = await self.store.hoogste_ronde(job.id, "2")
-        r3 = await self.store.hoogste_ronde(job.id, "3")
         # Doelstate vóór de claim bepalen. Een verse job (geen rondes) gaat direct naar act2_runt
         # i.p.v. via een queued-tussenstap, zodat er geen venster is waarin niets de job claimt.
-        if r3 > 0:
-            naar, activiteit, ronde = JobState.wacht_review_act3, "3", r3
-        elif r2 > 0:
+        if r2 > 0:
             naar, activiteit, ronde = JobState.wacht_review_act2, "2", r2
         else:
             naar, activiteit, ronde = JobState.act2_runt, None, 0
@@ -366,62 +276,30 @@ class WetsanalyseEngine:
         await self._genereer_act2_vers(job, 1, bron_bases)
 
     async def _fase_feedback(self, job: Job, activiteit: str, ronde: int, feedback) -> None:
-        if feedback.status == "akkoord-afronden":
-            # Bewust afronden ná activiteit 2 (contract-validatie borgt: alleen act 2, zonder
-            # opmerkingen). Zelfde promotie-garantie als akkoord, maar rechtstreeks naar het
-            # rapport; scope="act2" markeert de analyse als act2-only (RegelSpraak-gate + UI).
+        # Elke afronding van activiteit 2 (akkoord, akkoord-afronden of ronde-cap) leidt sinds het
+        # verwijderen van activiteit 3 rechtstreeks naar het rapport (scope="act2").
+        if (
+            feedback.status == "akkoord-afronden"
+            or feedback.is_akkoord_zonder_opmerkingen()
+            or ronde >= self.s.max_rondes
+        ):
             if not await self._herassert_brongetrouw(job, activiteit):
-                return
+                return  # onbetrouwbare (via retry hervatte) ronde → fout i.p.v. promoveren
             job.scope = "act2"
             await self._bouw_rapport(job)
             return
-        if feedback.is_akkoord_zonder_opmerkingen() or ronde >= self.s.max_rondes:
-            if not await self._herassert_brongetrouw(job, activiteit):
-                return  # onbetrouwbare (via retry hervatte) ronde → fout i.p.v. promoveren
-            await self._advance_akkoord(job, activiteit)
-            return
-        job.state = JobState.act2_runt if activiteit == "2" else JobState.act3_runt
+        job.state = JobState.act2_runt
         await self._save(job)
         llm = await self._llm_for(job)
         vorige = await self.store.lees_analyse(job.id, activiteit, ronde) or {}
-        # Context voor prompt + merge: act-2 herziet op de brongetrouwe bronnen van ronde 1;
-        # act-3 op de goedgekeurde act-2 (leden-tekst + bron-index, zelfde context als vers).
-        context = (await self._context_act2(job)) if activiteit == "2" else (await self._act2_akkoord(job))
+        # Context voor prompt + merge: act-2 herziet op de brongetrouwe bronnen van ronde 1.
+        context = await self._context_act2(job)
         fb = feedback.model_dump()
 
         async def maak():
-            return await steps.herzie(
-                llm, activiteit, context, ronde + 1, vorige, fb,
-                omschrijving=job.omschrijving,
-                analysefocus=job.analysefocus or None,
-                begrippenlijst=self._begrippenlijst(job),
-            )
+            return await steps.herzie(llm, activiteit, context, ronde + 1, vorige, fb)
 
         await self._afronden_ronde(job, activiteit, ronde + 1, maak)
-
-    async def _advance_akkoord(self, job: Job, activiteit: str) -> None:
-        if activiteit == "2":
-            await self._fase_act3_start(job)
-        else:
-            await self._bouw_rapport(job)
-
-    async def _fase_act3_start(self, job: Job) -> None:
-        """Start activiteit 3 (ronde 1) op de goedgekeurde act-2 — vanuit de normale flow
-        (`_advance_akkoord`) of on-demand (`run_act3_fase` op een act2-only-`klaar`)."""
-        job.state = JobState.act3_runt
-        await self._save(job)
-        llm = await self._llm_for(job)
-        act2 = await self._act2_akkoord(job)
-
-        async def maak():
-            return await steps.genereer_act3(
-                llm, 1, act2,
-                omschrijving=job.omschrijving,
-                analysefocus=job.analysefocus or None,
-                begrippenlijst=self._begrippenlijst(job),
-            )
-
-        await self._afronden_ronde(job, "3", 1, maak)
 
     async def _herassert_brongetrouw(self, job: Job, activiteit: str) -> bool:
         """Her-bevestig de HARDE brongetrouwheid-invariant vóór een akkoord-promotie. Een ronde die
@@ -429,21 +307,11 @@ class WetsanalyseEngine:
         op brongetrouwheid gefaalde (en tóch weggeschreven) ronde in de review-akkoord-state hervatten.
         Zonder deze her-check zou 'akkoord' dan een onherleidbaar model promoveren — in strijd met de
         garantie 'HARD brongetrouwheid → fout, nooit stil door'. No-op voor geldige modellen."""
-        is_rs = activiteit in ("rs-gegevens", "rs-regels")
         n = await self.store.hoogste_ronde(job.id, activiteit)
         analyse = await self.store.lees_analyse(job.id, activiteit, n) or {}
-        if is_rs:
-            # Ook hier de ingest meegeven: een via retry hervatte ronde met dangling herkomst mag
-            # niet alsnog promoveren (zelfde garantie als de afronding van een verse ronde).
-            rapport = await self.store.lees_rapport(job.id) or {}
-            schendingen = regelspraak_brongetrouwheid_check(
-                analyse, activiteit, self._rs_gegevens_context(rapport)
-            )
-        else:
-            schendingen = brongetrouwheid_check(analyse, activiteit)
+        schendingen = brongetrouwheid_check(analyse, activiteit)
         if schendingen:
-            stap = activiteit if is_rs else f"act{activiteit}"
-            await self._fail(job, stap, FoutKlasse.validatie,
+            await self._fail(job, f"act{activiteit}", FoutKlasse.validatie,
                              "Promotie geweigerd — brongetrouwheid faalt: " + "; ".join(schendingen))
             return False
         return True
@@ -454,11 +322,6 @@ class WetsanalyseEngine:
         return {"naam": job.naam, "hoofdvraag": job.analysefocus or "",
                 "omschrijving": job.omschrijving or "", "scoping": ""}
 
-    def _begrippenlijst(self, job: Job) -> list[dict] | None:
-        """De aangeleverde begrippenlijst als plain dicts (prompt- en validatiecontext)."""
-        if not job.begrippenlijst:
-            return None
-        return [b.model_dump() for b in job.begrippenlijst]
 
     async def _context_act2(self, job: Job) -> dict:
         """De act-2-aggregaat van ronde 1 (brongetrouwe bronnen) — merge-basis voor act-2-revise."""
@@ -520,15 +383,7 @@ class WetsanalyseEngine:
                 )
                 return
 
-        # Act-3-context (eenmalig vóór de lus): de goedgekeurde act-2 activeert de dekkings-/
-        # markering-id-checks, de aangeleverde begrippenlijst de herkomst-checks.
-        act2 = (await self._act2_akkoord(job)) if activiteit == "3" else None
-        bl = self._begrippenlijst(job)
-
         def _schema(a: dict) -> tuple[list[str], list[str]]:
-            if activiteit == "3":
-                return schema_check(a, activiteit, act2=act2,
-                                    begrippenlijst={"begrippen": bl} if bl else None)
             return schema_check(a, activiteit)
 
         await self._set_fase(job, "llm-generatie")
@@ -583,11 +438,14 @@ class WetsanalyseEngine:
             )
             return
         if job.review:
-            job.state = JobState.wacht_review_act2 if activiteit == "2" else JobState.wacht_review_act3
+            job.state = JobState.wacht_review_act2
             await self._save(job)
             await self._set_fase(job, None)  # wachtstate: geen lopende functiefase
             return
-        await self._advance_akkoord(job, activiteit)
+        # review:false → autonoom afronden. Sinds act 3 is verwijderd leidt een geslaagde
+        # activiteit 2 rechtstreeks naar het rapport (scope act2-only).
+        job.scope = "act2"
+        await self._bouw_rapport(job)
 
     # --- rapport ----------------------------------------------------------
 
@@ -596,7 +454,6 @@ class WetsanalyseEngine:
         await self._save(job)
         await self._set_fase(job, "reviewlog")
         reviewlog_act2 = await self._reviewlog(job, "2")
-        reviewlog_act3 = await self._reviewlog(job, "3")
         await self._set_fase(job, "aandachtspunten")
         aandachtspunten = await self._aandachtspunten(job)
         await self._set_fase(job, "rapport-wegschrijven")
@@ -604,7 +461,6 @@ class WetsanalyseEngine:
             self.store,
             job.id,
             reviewlog_act2=reviewlog_act2,
-            reviewlog_act3=reviewlog_act3,
             aandachtspunten=aandachtspunten,
         )
         await self.store.schrijf_rapport(job.id, rapport)
@@ -623,246 +479,10 @@ class WetsanalyseEngine:
         return f"{n} rondes — feedback per ronde verwerkt tot akkoord."
 
     async def _aandachtspunten(self, job: Job) -> str:
-        n = await self.store.hoogste_ronde(job.id, "3")
-        a3 = await self.store.lees_analyse(job.id, "3", n) or {}
-        punten = list(a3.get("validatiepunten") or [])
-        for b in a3.get("begrippen", []) + a3.get("afleidingsregels", []):
-            if (b.get("twijfel") or "").strip():
-                punten.append(f"{b.get('naam', b.get('id', '?'))}: {b['twijfel']}")
+        punten: list[str] = []
         if job.waarschuwingen:
             punten.append("Mechanische waarschuwingen: " + "; ".join(job.waarschuwingen))
         return "\n".join(f"- {p}" for p in punten) if punten else ""
-
-    # --- RegelSpraak-vervolgfase (GegevensSpraak → regels → model) --------
-
-    def _rs_review(self, job: Job) -> bool:
-        return job.regelspraak_review if job.regelspraak_review is not None else job.review
-
-    async def _retry_regelspraak(self, job: Job) -> None:
-        """Herstel een gefaalde regelspraak-fase: hervat in de review-state als er al een ronde is,
-        anders herstart de generatie van de betreffende stap."""
-        n_rg = await self.store.hoogste_ronde(job.id, "rs-regels")
-        n_gs = await self.store.hoogste_ronde(job.id, "rs-gegevens")
-        if n_rg > 0:
-            naar, stap, ronde = JobState.wacht_review_rs_regels, "rs-regels", n_rg
-        elif n_gs > 0:
-            naar, stap, ronde = JobState.wacht_review_rs_gegevens, "rs-gegevens", n_gs
-        else:
-            naar, stap, ronde = JobState.rs_gegevens_runt, None, 0
-        claimed = await self.store.claim(job.id, {JobState.fout}, naar, self.owner, self.s.lease_s)
-        if claimed is None:
-            return
-        try:
-            claimed.error = None
-            if stap is not None:
-                claimed.current_activiteit, claimed.current_ronde = stap, ronde
-            else:
-                claimed.current_activiteit, claimed.current_ronde = "rs-gegevens", 0
-            await self.store.save_job(claimed)
-        except Exception:  # noqa: BLE001
-            logger.exception("Retry regelspraak van job %s kon de state niet herstellen", job.id)
-            return
-        if naar == JobState.rs_gegevens_runt:
-            await self._guard(claimed, "rs-gegevens", self._fase_rs_gegevens_start(claimed))
-
-    def _rs_gegevens_context(self, rapport: dict) -> dict:
-        """Trim het rapport tot wat de GegevensSpraak-stap voedt: werkgebied + begrippen +
-        afleidingsregels + per bron de identificatie (incl. `pad`), de letterlijke `leden`,
-        de `verwijzingen`, de brondefinitie-markeringen én de markeringen waar een begrip/regel
-        via `markering_ids` op steunt. Zelfde trim als de skill-ingest (`ingest_rapport.py`)."""
-        gerefereerd: set[str] = set()
-        for groep in ("begrippen", "afleidingsregels"):
-            for item in (rapport.get(groep) or []):
-                gerefereerd.update(m for m in (item.get("markering_ids") or []) if m)
-        bronnen = []
-        for b in rapport.get("bronnen") or []:
-            markeringen = b.get("markeringen") or []
-            bron = {
-                "bron_id": b.get("bron_id"), "label": b.get("label"),
-                "bwbId": b.get("bwbId"), "artikel": b.get("artikel"), "lid": b.get("lid"),
-                "versiedatum": b.get("versiedatum"), "bronreferentie": b.get("bronreferentie"),
-                "pad": b.get("pad"),
-                # Pariteit met de skill-ingest: de letterlijke leden-tekst en de verwijzingen
-                # gaan mee, zodat het dienst-spoor met dezelfde brongetrouwe context
-                # formaliseert (de prompt-token-guard bewaakt de omvang).
-                "leden": b.get("leden") or [],
-                "verwijzingen": b.get("verwijzingen") or [],
-                "brondefinities": [
-                    m for m in markeringen if m.get("klasse") == "Brondefinitie"
-                ],
-                "gekoppelde_markeringen": [
-                    m for m in markeringen
-                    if m.get("klasse") != "Brondefinitie" and m.get("id") in gerefereerd
-                ],
-            }
-            bronnen.append(bron)
-        return {
-            "werkgebied": rapport.get("werkgebied") or {},
-            "bronnen": bronnen,
-            "begrippen": rapport.get("begrippen") or [],
-            "afleidingsregels": rapport.get("afleidingsregels") or [],
-        }
-
-    async def _rs_regels_context(self, job: Job) -> dict:
-        """Context voor de regels-stap: het objectmodel van de hoogste GegevensSpraak-ronde +
-        de afleidingsregels uit het rapport."""
-        n = await self.store.hoogste_ronde(job.id, "rs-gegevens")
-        gs_model = await self.store.lees_analyse(job.id, "rs-gegevens", n) or {}
-        rapport = await self.store.lees_rapport(job.id) or {}
-        basis = self._rs_gegevens_context(rapport)
-        return {
-            "werkgebied": gs_model.get("werkgebied") or rapport.get("werkgebied") or {},
-            "gegevensspraak": gs_model.get("gegevensspraak") or {},
-            "afleidingsregels": rapport.get("afleidingsregels") or [],
-            "bronnen": basis["bronnen"],
-        }
-
-    async def _fase_rs_gegevens_start(self, job: Job) -> None:
-        job.state = JobState.rs_gegevens_runt
-        await self._save(job)
-        rapport = await self.store.lees_rapport(job.id) or {}
-        context = self._rs_gegevens_context(rapport)
-        llm = await self._llm_for(job)
-
-        async def maak():
-            return await rs_steps.genereer_gegevens(llm, 1, context)
-
-        await self._afronden_rs_ronde(job, "rs-gegevens", 1, maak)
-
-    async def _afronden_rs_ronde(self, job: Job, stap: str, ronde: int, maak) -> None:
-        """Afronding van één regelspraak-ronde: budget-check, auto-correctie op de harde
-        herkomst-invariant, zachte schema-check, wegschrijven en de overgang (review of door)."""
-        if self.s.llm_token_budget > 0:
-            gebruikt = sum(p.tokens_in + p.tokens_out for p in job.provenance)
-            if gebruikt >= self.s.llm_token_budget:
-                await self._fail(job, stap, FoutKlasse.quota,
-                                 f"LLM-tokenbudget ({self.s.llm_token_budget}) overschreden na "
-                                 f"{gebruikt} tokens.")
-                return
-
-        # De wetsanalyse-als-ingest: voedt de herkomst-cross-check (dangling = hard, dekking = zacht).
-        rapport = await self.store.lees_rapport(job.id) or {}
-        ingest = self._rs_gegevens_context(rapport)
-
-        fase = "regelspraak-gegevens-generatie" if stap == "rs-gegevens" else "regelspraak-regels-generatie"
-        await self._set_fase(job, fase)
-        with gebruik_context(project_slug=job.id, activiteit=stap, ronde=ronde,
-                             poging=1, fase="generatie"):
-            analyse, prov = await self._met_retry(maak)
-            pogingen = 0
-            while pogingen < self.s.max_autocorrectie and regelspraak_brongetrouwheid_check(analyse, stap, ingest):
-                pogingen += 1
-                werk_context_bij(poging=pogingen + 1, fase="auto-correctie")
-                await self._set_fase(job, "auto-correctie")
-                analyse, prov = await self._met_retry(maak)
-
-        await self._set_fase(job, "brongetrouwheid-check")
-        schendingen = regelspraak_brongetrouwheid_check(analyse, stap, ingest)
-        await self._set_fase(job, "schema-check")
-        fouten, waarschuwingen = regelspraak_schema_check(analyse, stap, ingest)
-
-        await self._set_fase(job, "analyse-wegschrijven")
-        await self.store.schrijf_analyse(job.id, stap, ronde, analyse)
-        job.provenance.append(RondeProvenance(**prov))
-        _m_tokens.add(prov.get("tokens_in", 0) + prov.get("tokens_out", 0), {"stap": stap})
-        job.current_activiteit = stap
-        job.current_ronde = ronde
-        job.waarschuwingen = schendingen + fouten + waarschuwingen
-        await self._save(job)
-
-        if schendingen:
-            await self._fail(job, stap, FoutKlasse.validatie,
-                             "Herkomst ontbreekt na auto-correctie: " + "; ".join(schendingen))
-            return
-        if self._rs_review(job):
-            job.state = (JobState.wacht_review_rs_gegevens if stap == "rs-gegevens"
-                         else JobState.wacht_review_rs_regels)
-            await self._save(job)
-            await self._set_fase(job, None)
-            return
-        await self._advance_rs_akkoord(job, stap)
-
-    async def _advance_rs_akkoord(self, job: Job, stap: str) -> None:
-        if stap == "rs-gegevens":
-            job.state = JobState.rs_regels_runt
-            await self._save(job)
-            context = await self._rs_regels_context(job)
-            llm = await self._llm_for(job)
-
-            async def maak():
-                return await rs_steps.genereer_regels(llm, 1, context)
-
-            await self._afronden_rs_ronde(job, "rs-regels", 1, maak)
-        else:
-            await self._bouw_regelspraak(job)
-
-    async def _fase_rs_feedback(self, job: Job, stap: str, ronde: int, feedback) -> None:
-        if feedback.is_akkoord_zonder_opmerkingen() or ronde >= self.s.max_rondes:
-            if not await self._herassert_brongetrouw(job, stap):
-                return  # onbetrouwbare (via retry hervatte) ronde → fout i.p.v. promoveren
-            await self._advance_rs_akkoord(job, stap)
-            return
-        job.state = JobState.rs_gegevens_runt if stap == "rs-gegevens" else JobState.rs_regels_runt
-        await self._save(job)
-        llm = await self._llm_for(job)
-        vorige = await self.store.lees_analyse(job.id, stap, ronde) or {}
-        if stap == "rs-gegevens":
-            rapport = await self.store.lees_rapport(job.id) or {}
-            context = self._rs_gegevens_context(rapport)
-        else:
-            context = await self._rs_regels_context(job)
-        fb = feedback.model_dump()
-
-        async def maak():
-            return await rs_steps.herzie(llm, stap, ronde + 1, context, vorige, fb)
-
-        await self._afronden_rs_ronde(job, stap, ronde + 1, maak)
-
-    async def _bouw_regelspraak(self, job: Job) -> None:
-        job.state = JobState.rs_bouwt
-        await self._save(job)
-        await self._set_fase(job, "regelspraak-bouwt")
-        n_gs = await self.store.hoogste_ronde(job.id, "rs-gegevens")
-        n_rg = await self.store.hoogste_ronde(job.id, "rs-regels")
-        gs = await self.store.lees_analyse(job.id, "rs-gegevens", n_gs) or {}
-        rg = await self.store.lees_analyse(job.id, "rs-regels", n_rg) or {}
-        model = {
-            "werkgebied": gs.get("werkgebied") or rg.get("werkgebied") or {},
-            "gegevensspraak": gs.get("gegevensspraak") or {},
-            "regels": rg.get("regels") or [],
-            "reviewlog_gegevensspraak": await self._rs_reviewlog(job, "rs-gegevens"),
-            "reviewlog_regels": await self._rs_reviewlog(job, "rs-regels"),
-            "validatiepunten": rg.get("validatiepunten") or [],
-            "reviewlog": {
-                "gegevensspraak": {"rondes": await self._rs_reviewlog_rondes(job, "rs-gegevens")},
-                "regels": {"rondes": await self._rs_reviewlog_rondes(job, "rs-regels")},
-            },
-        }
-        await self.store.schrijf_regelspraak(job.id, model)
-        job.state = JobState.rs_klaar
-        await self._save(job)
-        await self._set_fase(job, None)
-
-    async def _rs_reviewlog(self, job: Job, stap: str) -> str:
-        n = await self.store.hoogste_ronde(job.id, stap)
-        if not self._rs_review(job):
-            return f"Review overgeslagen (review:false); {n} ronde(n) autonoom gegenereerd."
-        if n <= 1:
-            return "1 ronde — direct akkoord, geen wijzigingen."
-        return f"{n} rondes — feedback per ronde verwerkt tot akkoord."
-
-    async def _rs_reviewlog_rondes(self, job: Job, stap: str) -> list[dict]:
-        rondes = await self.store.lees_alle_rondes(job.id, stap)
-        out = []
-        for nr in sorted(rondes, key=lambda x: int(x)):
-            fb = rondes[nr].feedback or {}
-            out.append({
-                "ronde": int(nr),
-                "items": fb.get("items") or {},
-                "algemeen": (fb.get("algemeen") or "").strip(),
-                "status": fb.get("status", ""),
-            })
-        return out
 
     # --- helpers ----------------------------------------------------------
 

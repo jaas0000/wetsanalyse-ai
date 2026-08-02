@@ -9,8 +9,6 @@ eerst een begrip voor wat de regel afleidt, dán de regel).
 
 from __future__ import annotations
 
-import re
-
 from ..llm.base import LLMClient, LLMResult
 from . import prompts
 
@@ -43,20 +41,6 @@ def _prov_basis(analyse: dict) -> dict:
         "versiedatum": b.get("versiedatum", ""),
         "bronreferentie": b.get("bronreferentie", ""),
     }
-
-
-def _bron_index(analyse: dict) -> list[dict]:
-    """Lichte bron-index (voor act-3 vindplaatsen): bron_id → label + identificatie."""
-    return [
-        {
-            "bron_id": b.get("bron_id", ""),
-            "label": b.get("label", ""),
-            "bwbId": b.get("bwbId", ""),
-            "artikel": b.get("artikel", ""),
-            "lid": b.get("lid"),
-        }
-        for b in (analyse.get("bronnen") or [])
-    ]
 
 
 def _merge_bron(bron_basis: dict, out: dict) -> dict:
@@ -109,18 +93,6 @@ def _merge_act2_werkgebied(context: dict, out: dict) -> dict:
     }
 
 
-def _merge_act3(context: dict, out: dict) -> dict:
-    """Werkgebied-breed act-3: gedeelde begrippen/afleidingsregels + een bron-index voor de
-    vindplaatsen. `context` is de act-2-aggregaat (vers) of de vorige act-3 (revise)."""
-    return {
-        "werkgebied": context.get("werkgebied", {}),
-        "bronnen": _bron_index(context),
-        "begrippen": out.get("begrippen", []),
-        "afleidingsregels": out.get("afleidingsregels", []),
-        "validatiepunten": out.get("validatiepunten", []),
-    }
-
-
 async def inventariseer_verwijzingen(llm: LLMClient, bron_basis: dict) -> LLMResult:
     """Fase 2a (per bron) — lichte LLM-stap die alleen de verwijzing-inventaris (+ `volgen`)
     oplevert. Geeft de volledige LLMResult terug zodat de orchestrator de tokens bij de act-2-ronde
@@ -143,92 +115,6 @@ async def genereer_act2_bron(
     return _merge_bron(bron_basis, res.data), _prov("2", ronde, res, phash, bron_basis)
 
 
-_BEGRIP_ID_RE = re.compile(r"^b(\d+)$")
-
-
-def _hernummer_nieuwe_begrippen(
-    begrippen: list[dict], nieuwe: list[dict], regels: list[dict],
-) -> list[dict]:
-    """Nummer de 3b-'nieuwe_begrippen' deterministisch door ná het hoogste bestaande b-nummer
-    en remap alle referenties (in de regels én in de nieuwe begrippen zelf) van het oude naar
-    het nieuwe id. Zo kan een 3b-id nooit botsen met een 3a-id."""
-    if not nieuwe:
-        return []
-    hoogste = 0
-    for b in begrippen:
-        m = _BEGRIP_ID_RE.match(b.get("id") or "")
-        if m:
-            hoogste = max(hoogste, int(m.group(1)))
-    mapping: dict[str, str] = {}
-    hernummerd: list[dict] = []
-    for nb in nieuwe:
-        hoogste += 1
-        nieuw_id = f"b{hoogste}"
-        oud = nb.get("id") or ""
-        if oud:
-            mapping[oud] = nieuw_id
-        hernummerd.append({**nb, "id": nieuw_id})
-
-    def _map(ref: str) -> str:
-        return mapping.get(ref, ref)
-
-    for nb in hernummerd:
-        nb["verwijst_naar_begrippen"] = [_map(x) for x in (nb.get("verwijst_naar_begrippen") or [])]
-        nb["relaties"] = [
-            {**rel, "doel_begrip": _map(rel["doel_begrip"])} if isinstance(rel, dict) and rel.get("doel_begrip") else rel
-            for rel in (nb.get("relaties") or [])
-        ]
-    for r in regels:
-        uitvoer = r.get("uitvoer")
-        if isinstance(uitvoer, dict) and uitvoer.get("begrip_id"):
-            uitvoer["begrip_id"] = _map(uitvoer["begrip_id"])
-        for item in (r.get("invoer") or []) + (r.get("parameters") or []):
-            if isinstance(item, dict) and item.get("begrip_id"):
-                item["begrip_id"] = _map(item["begrip_id"])
-        for vw in (r.get("voorwaarden") or []):
-            if isinstance(vw, dict):
-                vw["begrip_ids"] = [_map(x) for x in (vw.get("begrip_ids") or [])]
-    return hernummerd
-
-
-async def genereer_act3(
-    llm: LLMClient,
-    ronde: int,
-    context: dict,
-    *,
-    omschrijving: str = "",
-    analysefocus: str | None = None,
-    begrippenlijst: list[dict] | None = None,
-) -> tuple[dict, dict]:
-    """Werkgebied-brede act-3 over alle bronnen van de act-2-aggregaat `context` — twee LLM-stappen
-    binnen één ronde: 3a (begrippen) → 3b (regels met begrip-id's + evt. nieuwe_begrippen)."""
-    system, user, schema, phash_a = prompts.act3_begrippen_prompt(
-        context, omschrijving, analysefocus, begrippenlijst
-    )
-    res_a = await llm.complete(system, user, schema)
-    begrippen = list(res_a.data.get("begrippen") or [])
-
-    system, user, schema, phash_b = prompts.act3_regels_prompt(context, begrippen)
-    res_b = await llm.complete(system, user, schema)
-    regels = list(res_b.data.get("afleidingsregels") or [])
-    begrippen += _hernummer_nieuwe_begrippen(
-        begrippen, list(res_b.data.get("nieuwe_begrippen") or []), regels
-    )
-
-    out = {
-        "begrippen": begrippen,
-        "afleidingsregels": regels,
-        "validatiepunten": (
-            list(res_a.data.get("validatiepunten") or [])
-            + list(res_b.data.get("validatiepunten") or [])
-        ),
-    }
-    prov = _prov("3", ronde, res_b, prompts._hash(phash_a, phash_b), _prov_basis(context))
-    prov["tokens_in"] += res_a.tokens_in
-    prov["tokens_out"] += res_a.tokens_out
-    return _merge_act3(context, out), prov
-
-
 async def herzie(
     llm: LLMClient,
     activiteit: str,
@@ -236,18 +122,9 @@ async def herzie(
     ronde: int,
     vorige: dict,
     feedback: dict,
-    *,
-    omschrijving: str = "",
-    analysefocus: str | None = None,
-    begrippenlijst: list[dict] | None = None,
 ) -> tuple[dict, dict]:
-    system, user, schema, phash = prompts.revise_prompt(
-        activiteit, context, vorige, feedback,
-        omschrijving=omschrijving, analysefocus=analysefocus, begrippenlijst=begrippenlijst,
-    )
+    """Herzie activiteit 2 op basis van de review-feedback (sinds act 3 is verwijderd is dit de
+    enige herzie-tak)."""
+    system, user, schema, phash = prompts.revise_prompt(activiteit, context, vorige, feedback)
     res = await llm.complete(system, user, schema)
-    if activiteit == "2":
-        return _merge_act2_werkgebied(context, res.data), _prov("2", ronde, res, phash, _prov_basis(context))
-    # Act-3-revise: `context` is de goedgekeurde act-2-aggregaat — dat levert de bron-index
-    # (met versiedatum/bronreferentie) en het werkgebied voor de merge.
-    return _merge_act3(context, res.data), _prov("3", ronde, res, phash, _prov_basis(context))
+    return _merge_act2_werkgebied(context, res.data), _prov("2", ronde, res, phash, _prov_basis(context))

@@ -23,7 +23,7 @@ from .config import Settings
 import re
 
 from .contracts import (
-    Analyse2, Analyse3, BegripInvoer, BronInput, Feedback, Job, JobState, QUOTA_VRIJE_STATES,
+    Analyse2, BronInput, Feedback, Job, JobState, QUOTA_VRIJE_STATES,
     RUNNING_STATES, RondeProvenance,
 )
 from .jobstore import IdConflict
@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 _STATE_FIELDS = (
     "state", "scope", "current_activiteit", "current_ronde", "waarschuwingen",
     "error", "provenance", "bronnen", "review",
-    "model_profile", "analysefocus", "client_id", "regelspraak_review",
+    "model_profile", "analysefocus", "client_id",
 )
 
 
@@ -64,7 +64,6 @@ def _create_values(obj) -> dict:
     return {
         "naam": getattr(obj, "naam", None),
         "omschrijving": obj.omschrijving,
-        "begrippenlijst": [b.model_dump() for b in obj.begrippenlijst],
         **_state_values(obj),
     }
 
@@ -78,12 +77,11 @@ def _row_to_project(row) -> Project:
         omschrijving=m["omschrijving"] or "",
         bronnen=[BronInput(**b) for b in (m["bronnen"] or [])],
         analysefocus=m["analysefocus"] or "",
-        begrippenlijst=[BegripInvoer(**b) for b in (m.get("begrippenlijst") or [])],
         review=m["review"],
         model_profile=m["model_profile"] or "",
         client_id=m["client_id"] or "",
         state=JobState(m["state"]),
-        scope=m.get("scope") or "volledig",
+        scope=m.get("scope") or "act2",
         current_activiteit=m["current_activiteit"],
         current_ronde=m["current_ronde"] or 0,
         current_fase=m["current_fase"],
@@ -96,10 +94,8 @@ def _row_to_project(row) -> Project:
         created=db.aware(m["created"]),
         updated=db.aware(m["updated"]),
         # .get zodat een lichte projectie (list_projects(light=True), zonder de zware JSONB-kolommen)
-        # niet KeyErrort — het dashboard heeft rapport/regelspraak niet nodig.
+        # niet KeyErrort — het dashboard heeft het rapport niet nodig.
         rapport=m.get("rapport"),
-        regelspraak=m.get("regelspraak"),
-        regelspraak_review=m.get("regelspraak_review"),
     )
 
 
@@ -383,7 +379,7 @@ class PostgresStore:
         data = await self.lees_analyse(job_id, activiteit, ronde)
         if data is None:
             return None
-        return (Analyse2 if activiteit == "2" else Analyse3).model_validate(data)
+        return Analyse2.model_validate(data)
 
     async def lees_alle_rondes(self, job_id: str, activiteit: str) -> dict[str, RondeData]:
         async with db.get_engine().connect() as conn:
@@ -450,25 +446,6 @@ class PostgresStore:
         row = res.first()
         return row[0] if row is not None else None
 
-    # --- regelspraak-model (JSON-kolom op het project) ---
-
-    async def schrijf_regelspraak(self, job_id: str, model: dict) -> None:
-        async with db.get_engine().begin() as conn:
-            res = await conn.execute(
-                update(db.projects).where(db.projects.c.slug == job_id)
-                .values(regelspraak=model, updated=db.utcnow())
-            )
-        if res.rowcount == 0:
-            logger.warning("Regelspraak-write voor %s raakte geen rij — project verdwenen tijdens de run?", job_id)
-
-    async def lees_regelspraak(self, job_id: str) -> dict | None:
-        async with db.get_engine().connect() as conn:
-            res = await conn.execute(
-                select(db.projects.c.regelspraak).where(db.projects.c.slug == job_id)
-            )
-        row = res.first()
-        return row[0] if row is not None else None
-
     # --- project CRUD ---
 
     async def load_project(self, job_id: str) -> Project | None:
@@ -482,11 +459,11 @@ class PostgresStore:
         self, client_id: str | None = None, *, limit: int | None = None, offset: int = 0,
         light: bool = False,
     ) -> list[Project]:
-        # light=True laat de zware JSONB-kolommen (rapport/regelspraak) uit de SELECT — die
-        # deserialiseren is duur en het dashboard/de projectenlijst gebruiken ze niet. Het
-        # aggregate-SSE pollt dit elke ~5s per open dashboard, dus dat telt op.
+        # light=True laat de zware JSONB-kolom (rapport) uit de SELECT — die deserialiseren is duur
+        # en het dashboard/de projectenlijst gebruiken 'm niet. Het aggregate-SSE pollt dit elke
+        # ~5s per open dashboard, dus dat telt op.
         if light:
-            kolommen = [c for c in db.projects.c if c.name not in ("rapport", "regelspraak")]
+            kolommen = [c for c in db.projects.c if c.name != "rapport"]
             stmt = select(*kolommen)
         else:
             stmt = select(db.projects)

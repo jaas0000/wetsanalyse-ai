@@ -95,27 +95,9 @@ def rapport_naar_markdown(r: dict) -> str:
             L += ["", f"**Samenhang:** {b['samenhang']}"]
     L.append("")
 
-    L.append("## 3. Begrippen en afleidingsregels (gedeeld over het werkgebied)")
-    L.append("### Begrippen")
-    begrippen = sorted(r.get("begrippen", []),
-                       key=lambda b: jas_sorteersleutel(b.get("klasse", "")))
-    L += _tabel(
-        ["Id", "Naam", "Synoniemen", "Klasse", "Definitie", "Vindplaats"],
-        [[b.get("id", ""), b.get("naam", ""), ", ".join(b.get("synoniemen") or []),
-          b.get("klasse", ""), b.get("definitie", ""), _vindplaats(b.get("vindplaatsen"), bron_label)]
-         for b in begrippen],
-    )
-    L += ["", "### Afleidingsregels"]
-    L += _tabel(
-        ["Id", "Naam", "Type", "Formulering", "Vindplaats"],
-        [[a.get("id", ""), a.get("naam", ""), a.get("type", ""), a.get("formulering", ""),
-          _vindplaats(a.get("vindplaatsen"), bron_label)] for a in r.get("afleidingsregels", [])],
-    )
-    L.append("")
-
     L.append("## 4. Reviewlog en aandachtspunten")
     rl = r.get("reviewlog", {})
-    for act in ("activiteit2", "activiteit3"):
+    for act in ("activiteit2",):
         sv = (rl.get(act, {}) or {}).get("samenvatting", "")
         if sv:
             L.append(f"- **Reviewlog {act}:** {sv}")

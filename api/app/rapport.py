@@ -27,38 +27,28 @@ _laad_json = _build.laad_json
 def bouw_rapport(
     werk: Path,
     reviewlog_act2: str = "",
-    reviewlog_act3: str = "",
     aandachtspunten: str = "",
 ) -> dict:
-    """Combineer de hoogste ronde van act-2 en act-3 tot één rapport-dict."""
+    """Combineer de hoogste ronde van activiteit 2 tot één rapport-dict (act2-only)."""
     dir2 = werk / "activiteit-2"
-    dir3 = werk / "activiteit-3"
     ronde2 = laatste_ronde(dir2)
-    ronde3 = laatste_ronde(dir3)
     if ronde2 is None:
         raise ValueError(f"geen ronde gevonden in {dir2}")
-    if ronde3 is None:
-        raise ValueError(f"geen ronde gevonden in {dir3}")
 
     a2 = _laad_json(ronde2 / "analyse.json")
-    a3 = _laad_json(ronde3 / "analyse.json")
 
     werkgebied = dict(a2.get("werkgebied") or {})
     werkgebied.setdefault("analysefocus", a2.get("analysefocus", ""))
     return {
         "werkgebied": werkgebied,
         "bronnen": a2.get("bronnen", []),
-        "begrippen": a3.get("begrippen", []),
-        "afleidingsregels": a3.get("afleidingsregels", []),
-        "validatiepunten": a3.get("validatiepunten", []),
+        "begrippen": [],
+        "afleidingsregels": [],
+        "validatiepunten": [],
         "reviewlog": {
             "activiteit2": {
                 "samenvatting": reviewlog_act2.strip(),
                 "rondes": bouw_reviewlog_rondes(verzamel_rondes(dir2)),
-            },
-            "activiteit3": {
-                "samenvatting": reviewlog_act3.strip(),
-                "rondes": bouw_reviewlog_rondes(verzamel_rondes(dir3)),
             },
         },
         "aandachtspunten": aandachtspunten.strip(),
@@ -69,16 +59,12 @@ async def bouw_rapport_async(
     store: "JobStore",
     job_id: str,
     reviewlog_act2: str = "",
-    reviewlog_act3: str = "",
     aandachtspunten: str = "",
 ) -> dict:
-    """Rapportbouw direct uit de jobstore — gebruikt door de API-orchestrator."""
+    """Rapportbouw direct uit de jobstore — gebruikt door de API-orchestrator (act2-only)."""
     n2 = await store.hoogste_ronde(job_id, "2")
-    n3 = await store.hoogste_ronde(job_id, "3")
     a2 = await store.lees_analyse(job_id, "2", n2) or {}
-    a3 = await store.lees_analyse(job_id, "3", n3) or {}
     rondes2 = await store.lees_alle_rondes(job_id, "2")
-    rondes3 = await store.lees_alle_rondes(job_id, "3")
 
     def reviewlog_rondes(rondes: dict) -> list[dict]:
         # Zelfde ronde-vorm als de skill (bouw_reviewlog_rondes), incl. `status` — zo is een
@@ -93,12 +79,11 @@ async def bouw_rapport_async(
     return {
         "werkgebied": werkgebied,
         "bronnen": a2.get("bronnen", []),
-        "begrippen": a3.get("begrippen", []),
-        "afleidingsregels": a3.get("afleidingsregels", []),
-        "validatiepunten": a3.get("validatiepunten", []),
+        "begrippen": [],
+        "afleidingsregels": [],
+        "validatiepunten": [],
         "reviewlog": {
             "activiteit2": {"samenvatting": reviewlog_act2.strip(), "rondes": reviewlog_rondes(rondes2)},
-            "activiteit3": {"samenvatting": reviewlog_act3.strip(), "rondes": reviewlog_rondes(rondes3)},
         },
         "aandachtspunten": aandachtspunten.strip(),
     }

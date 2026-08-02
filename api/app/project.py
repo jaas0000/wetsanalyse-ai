@@ -13,7 +13,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from .contracts import BegripInvoer, BronInput, JobFout, JobState, RondeProvenance
+from .contracts import BronInput, JobFout, JobState, RondeProvenance
 
 
 def _utcnow() -> datetime:
@@ -32,16 +32,14 @@ class Project(BaseModel):
 
     bronnen: list[BronInput] = Field(default_factory=list)
     analysefocus: str = ""
-    # Aangeleverde bestaande begrippenlijst (suggestieve invoer voor activiteit 3).
-    begrippenlijst: list[BegripInvoer] = Field(default_factory=list)
     review: bool = True
     model_profile: str = ""
     client_id: str = ""
 
     state: JobState = JobState.queued
-    # "act2" = bewust afgerond zonder activiteit 3; terug naar "volledig" bij de on-demand act3-claim.
-    scope: Literal["volledig", "act2"] = "volledig"
-    current_activiteit: Literal["2", "3", "rs-gegevens", "rs-regels"] | None = None
+    # Sinds activiteit 3 is verwijderd eindigt elke analyse act2-only; veld blijft voor telemetrie.
+    scope: Literal["volledig", "act2"] = "act2"
+    current_activiteit: Literal["2"] | None = None
     current_ronde: int = 0
     # Observerend, voor het live dashboard: de fijnmazige fase BINNEN een runt/bouwt-state
     # (bijv. "llm-generatie", "verwijzingen-volgen"). Bewust géén state-machine-veld — alleen
@@ -64,10 +62,6 @@ class Project(BaseModel):
 
     rondes: dict[str, dict[str, RondeData]] = Field(default_factory=dict)
     rapport: dict | None = None
-    # RegelSpraak-vervolgfase: het eind-model.json (gevuld via store.schrijf_regelspraak) en of die
-    # fase met review-checkpoints draait (None = nog niet gestart / erft review).
-    regelspraak: dict | None = None
-    regelspraak_review: bool | None = None
 
     def touch(self) -> None:
         self.updated = _utcnow()
@@ -82,9 +76,7 @@ class Project(BaseModel):
             review=self.review,
             model_profile=self.model_profile,
             analysefocus=self.analysefocus,
-            begrippenlijst=self.begrippenlijst,
             client_id=self.client_id,
-            regelspraak_review=self.regelspraak_review,
             scope=self.scope,
             state=self.state,
             current_activiteit=self.current_activiteit,

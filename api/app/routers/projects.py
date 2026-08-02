@@ -27,7 +27,7 @@ from fastapi.responses import PlainTextResponse, StreamingResponse
 from ..auth import require_client
 from ..contracts import (
     ACTIVITEIT_CODES, CreateAccepted, Feedback, FeedbackAccepted, Job, JobState, JobSummary,
-    Rapport, RegelspraakModel, RegelspraakStart, REVIEW_STATES, TERMINAL_STATES, StartRequest,
+    Rapport, REVIEW_STATES, TERMINAL_STATES, StartRequest,
 )
 from ..deps import get_engine, get_store, schedule
 from ..jobstore import IdConflict, JobStore
@@ -201,9 +201,6 @@ async def geef_feedback(project_id: str, feedback: Feedback, client_id: str = De
         raise HTTPException(status_code=409, detail=f"Feedback alleen in review-state; nu: {job.state}")
     verwacht = {
         JobState.wacht_review_act2: "2",
-        JobState.wacht_review_act3: "3",
-        JobState.wacht_review_rs_gegevens: "rs-gegevens",
-        JobState.wacht_review_rs_regels: "rs-regels",
     }[job.state]
     if feedback.activiteit != verwacht:
         raise HTTPException(status_code=400, detail=f"Feedback voor activiteit {verwacht} verwacht")
@@ -257,105 +254,6 @@ async def project_ronde(
     if data is None:
         raise HTTPException(status_code=404, detail="Geen analyse voor deze ronde")
     return data
-
-
-# --- Activiteit 3 alsnog (on-demand op een act2-only-afgeronde analyse) -------
-
-@router.post("/{project_id}/act3", status_code=status.HTTP_202_ACCEPTED,
-             response_model=CreateAccepted)
-async def start_act3(project_id: str, client_id: str = Depends(rate_limited_client)):
-    """Voer activiteit 3 alsnog uit op een analyse die met "akkoord-afronden" na activiteit 2
-    is afgerond. Geen body: de review-instelling erft van de analyse zelf (`job.review`)."""
-    store = get_store()
-    p = await _project_or_404(store, project_id, client_id)
-    if p.state != JobState.klaar:
-        raise HTTPException(
-            status_code=409,
-            detail=f"Activiteit 3 start alleen vanuit een afgeronde analyse (klaar); nu: {p.state}",
-        )
-    if p.scope != "act2":
-        raise HTTPException(
-            status_code=409,
-            detail="Activiteit 3 is al uitgevoerd voor deze analyse.",
-        )
-    # Claim synchroon (klaar → act3_runt) vóór de 202 — zelfde motivatie als bij regelspraak.
-    engine = get_engine()
-    job = await engine.claim_act3(project_id)
-    if job is None:
-        raise HTTPException(
-            status_code=409,
-            detail="Activiteit 3 is al gestart of de analyse is niet meer `klaar`.",
-        )
-    schedule(engine.run_act3_fase(job))
-    return CreateAccepted(id=project_id, naam=p.naam, state=job.state)
-
-
-# --- RegelSpraak-vervolgfase (on-demand op een afgeronde analyse) -------------
-
-@router.post("/{project_id}/regelspraak", status_code=status.HTTP_202_ACCEPTED,
-             response_model=CreateAccepted)
-async def start_regelspraak(
-    project_id: str, body: RegelspraakStart | None = None,
-    client_id: str = Depends(rate_limited_client),
-):
-    store = get_store()
-    p = await _project_or_404(store, project_id, client_id)
-    if p.state != JobState.klaar:
-        raise HTTPException(
-            status_code=409,
-            detail=f"RegelSpraak start alleen vanuit een afgeronde analyse (klaar); nu: {p.state}",
-        )
-    if p.scope == "act2":
-        raise HTTPException(
-            status_code=409,
-            detail="Deze analyse is afgerond zonder activiteit 3 (geen begrippen/afleidingsregels "
-                   "om te formaliseren); voer eerst activiteit 3 uit.",
-        )
-    review = body.review if body is not None else None
-    # Claim synchroon (klaar → rs_gegevens_runt) vóór de 202: zo is de DB al niet-terminaal en kan
-    # de heropende events-stream niet meteen `done` krijgen; een verloren race (dubbele POST) geeft
-    # een eerlijke 409 i.p.v. een optimistische false-202.
-    engine = get_engine()
-    job = await engine.claim_regelspraak(project_id, review)
-    if job is None:
-        raise HTTPException(
-            status_code=409,
-            detail="RegelSpraak-fase is al gestart of de analyse is niet meer `klaar`.",
-        )
-    schedule(engine.run_regelspraak_fase(job))
-    return CreateAccepted(id=project_id, naam=p.naam, state=job.state)
-
-
-@router.get("/{project_id}/regelspraak", response_model=RegelspraakModel)
-async def project_regelspraak(project_id: str, client_id: str = Depends(require_client)):
-    store = get_store()
-    await _project_or_404(store, project_id, client_id)
-    data = await store.lees_regelspraak(project_id)
-    if data is None:
-        raise HTTPException(status_code=409, detail="RegelSpraak-model nog niet gereed")
-    return data
-
-
-@router.get("/{project_id}/regelspraak.rs", response_class=PlainTextResponse)
-async def project_regelspraak_rs(project_id: str, client_id: str = Depends(require_client)):
-    store = get_store()
-    await _project_or_404(store, project_id, client_id)
-    data = await store.lees_regelspraak(project_id)
-    if data is None:
-        raise HTTPException(status_code=409, detail="RegelSpraak-model nog niet gereed")
-    from ..engine.render_regelspraak import render_rs
-    return render_rs(data)
-
-
-@router.get("/{project_id}/regelspraak.md", response_class=PlainTextResponse)
-async def project_regelspraak_md(project_id: str, client_id: str = Depends(require_client)):
-    store = get_store()
-    await _project_or_404(store, project_id, client_id)
-    data = await store.lees_regelspraak(project_id)
-    if data is None:
-        raise HTTPException(status_code=409, detail="RegelSpraak-model nog niet gereed")
-    from ..engine.render_regelspraak import render_md
-    return render_md(data)
 
 
 @router.get("/{project_id}/events")

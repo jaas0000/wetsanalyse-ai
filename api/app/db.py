@@ -52,15 +52,12 @@ projects = Table(
     # Het werkgebied bevat meerdere bronnen: list[{bwbId, artikel, lid}] als JSON.
     Column("bronnen", _JSON, nullable=False, default=list),
     Column("analysefocus", Text, nullable=False, default=""),
-    # Aangeleverde bestaande begrippenlijst (suggestieve act-3-invoer): list[BegripInvoer] als JSON.
-    Column("begrippenlijst", _JSON, nullable=False, default=list),
     Column("review", Boolean, nullable=False, default=True),
     Column("model_profile", String(128), nullable=False, default=""),
     Column("client_id", String(128), nullable=False, default=""),
     Column("state", String(32), nullable=False),
-    # Analyse-omvang: "volledig" of "act2" (bewust afgerond zonder activiteit 3).
-    Column("scope", String(16), nullable=False, default="volledig"),
-    # Ruim genoeg voor de regelspraak-codes ("rs-gegevens"/"rs-regels") náást "2"/"3".
+    # Analyse-omvang: sinds activiteit 3 is verwijderd altijd "act2" (veld blijft voor telemetrie).
+    Column("scope", String(16), nullable=False, default="act2"),
     Column("current_activiteit", String(16), nullable=True),
     Column("current_ronde", Integer, nullable=False, default=0),
     Column("current_fase", String(64), nullable=True),
@@ -74,9 +71,6 @@ projects = Table(
     Column("created", _DT, nullable=False),
     Column("updated", _DT, nullable=False),
     Column("rapport", _JSON, nullable=True),
-    # RegelSpraak-vervolgfase: het eind-model.json + of die fase met review draait.
-    Column("regelspraak", _JSON, nullable=True),
-    Column("regelspraak_review", Boolean, nullable=True),
     # Hot-path indexen: list_projects filtert op client_id + sorteert op updated DESC;
     # reaper/quota scannen op state. Zonder deze is dat een seq scan zodra de tabel groeit.
     Index("ix_projects_client_id_updated", "client_id", "updated"),
@@ -306,25 +300,15 @@ async def reconcile_schema() -> None:
         for legacy in ("bwbId", "artikel", "lid"):
             if legacy in bestaande:
                 await conn.exec_driver_sql(f'ALTER TABLE projects DROP COLUMN "{legacy}"')
-        # RegelSpraak-vervolgfase: kolommen op een bestaande tabel idempotent toevoegen.
-        if "regelspraak" not in bestaande:
-            typ = "JSONB" if is_pg else "JSON"
-            await conn.exec_driver_sql(f"ALTER TABLE projects ADD COLUMN regelspraak {typ}")
-        if "regelspraak_review" not in bestaande:
-            await conn.exec_driver_sql("ALTER TABLE projects ADD COLUMN regelspraak_review BOOLEAN")
-        # Aangeleverde begrippenlijst: idempotent toevoegen; bestaande rijen = lege lijst.
-        if "begrippenlijst" not in bestaande:
-            typ = "JSONB" if is_pg else "JSON"
-            default = "'[]'::jsonb" if is_pg else "'[]'"
-            await conn.exec_driver_sql(
-                f"ALTER TABLE projects ADD COLUMN begrippenlijst {typ} NOT NULL DEFAULT {default}"
-            )
+        # NB: de act3/RegelSpraak-kolommen (regelspraak/regelspraak_review/begrippenlijst) worden niet
+        # meer aangemaakt of gebruikt. Bestaande prod-kolommen blijven verweesd staan — het droppen is
+        # een bewuste aparte migratie (niet stil hier), zodat bestaande DB's niet breken.
         # Analyse-omvang ("volledig"/"act2"): idempotent toevoegen; bestaande rijen = volledig.
         if "scope" not in bestaande:
             await conn.exec_driver_sql(
-                "ALTER TABLE projects ADD COLUMN scope VARCHAR(16) NOT NULL DEFAULT 'volledig'"
+                "ALTER TABLE projects ADD COLUMN scope VARCHAR(16) NOT NULL DEFAULT 'act2'"
             )
-        # current_activiteit/rondes.activiteit verbreed (rs-codes). Alleen op Postgres relevant —
+        # current_activiteit/rondes.activiteit verbreed. Alleen op Postgres relevant —
         # SQLite handhaaft de VARCHAR-lengte niet. **Echt idempotent**: alleen ALTER-en als de kolom
         # nog niet ≥16 is. Een onvoorwaardelijke ALTER TYPE botst met een view die van de kolom
         # afhangt (bv. Grafana's `dashboard_jobs`) → "cannot alter type of a column used by a view"

@@ -33,27 +33,6 @@ class Werkgebied(BaseModel):
     scoping: str = ""   # stap 1: overwogen hoofdstukken/artikelen, in/uit-scope + reden
 
 
-class Vindplaats(BaseModel):
-    """Absolute, cross-bron vindplaats: welke bron + (optioneel) welk lid."""
-
-    bron_id: str = ""
-    lid: str = ""
-
-
-class BronRef(BaseModel):
-    """Lichte bron-index (bron_id → leesbaar label) zodat act-3 zelfstandig leesbaar is.
-
-    Activiteit 3 draagt geen volledige bronnen, maar wel deze index, zodat de review-viewer
-    en de validatie een `vindplaatsen.bron_id` naar een leesbaar label kunnen herleiden.
-    """
-
-    bron_id: str = ""
-    label: str = ""
-    bwbId: str = ""
-    artikel: str = ""
-    lid: str | None = None
-
-
 # --- Activiteit 2 -------------------------------------------------------------
 
 class Lid(BaseModel):
@@ -123,96 +102,6 @@ class Analyse2(BaseModel):
     bronnen: list[Bron] = Field(default_factory=list)
 
 
-# --- Activiteit 3 -------------------------------------------------------------
-
-class BegripRelatie(BaseModel):
-    """Gestructureerd kenmerk/relatie van een begrip (methode: eigenschappen en relaties)."""
-
-    soort: str = ""            # relatie | kenmerk
-    beschrijving: str = ""
-    doel_begrip: str | None = None   # begrip-id bij soort=relatie, None bij soort=kenmerk
-
-
-class BegripHerkomst(BaseModel):
-    """Herkomst t.o.v. een aangeleverde begrippenlijst (suggestief hergebruik)."""
-
-    status: str = "nieuw"      # hergebruikt | aangepast | nieuw
-    aangeleverd_id: str = ""   # id in de aangeleverde lijst (ab1..), verplicht bij hergebruikt/aangepast
-    motivatie: str = ""        # verplicht bij aangepast: waarom is afgeweken
-
-
-class Begrip(BaseModel):
-    id: str
-    naam: str = ""                                         # de voorkeursterm (uniek per werkgebied)
-    synoniemen: list[str] = Field(default_factory=list)   # alternatieve termen voor hetzelfde begrip
-    klasse: str = ""
-    definitie: str = ""
-    is_interpretatie: bool = False   # true = (deels) eigen werkdefinitie i.p.v. letterlijke brondefinitie
-    grondformulering: str = ""                            # letterlijke wetformulering (homoniem-herleiding)
-    voorbeeld: str = ""
-    kenmerken: str = ""              # vrije toelichting; de structuur staat in `relaties`
-    relaties: list[BegripRelatie] = Field(default_factory=list)
-    vindplaatsen: list[Vindplaats] = Field(default_factory=list)
-    markering_ids: list[str] = Field(default_factory=list)  # act-2-markeringen waarop het begrip berust
-    verwijst_naar_begrippen: list[str] = Field(default_factory=list)  # begrip-id's in de omschrijving
-    bron_verwijzing: str = ""   # id van de verwijzing waarop het begrip steunt (bv. brondefinitie)
-    herkomst: BegripHerkomst | None = None   # alleen relevant bij een aangeleverde begrippenlijst
-    twijfel: str = ""
-
-
-class RegelUitvoer(BaseModel):
-    """Wat de regel afleidt — een begrip (methode: begrippen zijn de bouwstenen van regels)."""
-
-    begrip_id: str = ""
-    toelichting: str = ""
-
-
-class RegelInvoer(BaseModel):
-    begrip_id: str = ""
-    toelichting: str = ""
-
-
-class RegelParameter(BaseModel):
-    """Vaste waarde in een regel; `waarde` leeg = staat in een (nog niet geanalyseerde) delegatie."""
-
-    begrip_id: str = ""
-    waarde: str = ""
-    eenheid: str = ""
-    geldigheid: str = ""
-    vindplaats: Vindplaats = Field(default_factory=Vindplaats)
-    toelichting: str = ""
-
-
-class RegelVoorwaarde(BaseModel):
-    """Conditie in tekst; `verbinding` is de koppeling met de vórige voorwaarde (EN/OF, leeg=eerste)."""
-
-    tekst: str = ""
-    begrip_ids: list[str] = Field(default_factory=list)
-    verbinding: str = ""       # EN | OF | "" — negatie hoort in de tekst zelf
-
-
-class Afleidingsregel(BaseModel):
-    id: str
-    naam: str = ""
-    type: str = ""
-    uitvoer: RegelUitvoer = Field(default_factory=RegelUitvoer)   # begrip_id is verplicht (validatie)
-    invoer: list[RegelInvoer] = Field(default_factory=list)
-    parameters: list[RegelParameter] = Field(default_factory=list)
-    voorwaarden: list[RegelVoorwaarde] = Field(default_factory=list)
-    toelichting: str = ""
-    vindplaatsen: list[Vindplaats] = Field(default_factory=list)
-    markering_ids: list[str] = Field(default_factory=list)  # Afleidingsregel-markering(en) uit act 2
-    twijfel: str = ""
-
-
-class Analyse3(BaseModel):
-    werkgebied: Werkgebied = Field(default_factory=Werkgebied)
-    bronnen: list[BronRef] = Field(default_factory=list)   # lichte index voor vindplaats-labels
-    begrippen: list[Begrip] = Field(default_factory=list)
-    afleidingsregels: list[Afleidingsregel] = Field(default_factory=list)
-    validatiepunten: list[str] = Field(default_factory=list)
-
-
 # --- Feedback (door de API geschreven in wacht-op-review-*) -------------------
 
 class Feedback(BaseModel):
@@ -220,7 +109,7 @@ class Feedback(BaseModel):
     # de keuze is daarmee auditeerbaar in de rondes-tabel. Alleen geldig op activiteit "2",
     # zonder opmerkingen (wie nog wijzigingen heeft, rondt eerst een nieuwe ronde af).
     status: Literal["akkoord", "wijzigingen", "akkoord-afronden"]
-    activiteit: Literal["2", "3", "rs-gegevens", "rs-regels"]
+    activiteit: Literal["2"]
     items: dict[str, str] = Field(default_factory=dict)
     algemeen: str = Field(default="", max_length=5000)
 
@@ -258,34 +147,11 @@ class BronInput(BaseModel):
     lid: str | None = Field(default=None, max_length=16)
 
 
-class BegripInvoer(BaseModel):
-    """Eén begrip uit een aangeleverde (bestaande) begrippenlijst — suggestieve invoer voor act 3."""
-
-    id: str = Field(default="", max_length=32)          # bij ontbreken genummerd: ab1..abN
-    naam: str = Field(min_length=1, max_length=200)
-    synoniemen: list[str] = Field(default_factory=list, max_length=20)
-    definitie: str = Field(default="", max_length=2000)
-    klasse: str = Field(default="", max_length=64)
-    bron: str = Field(default="", max_length=200)       # herkomst van de lijst (bv. begrippenkader X)
-    toelichting: str = Field(default="", max_length=1000)
-
-    @field_validator("synoniemen")
-    @classmethod
-    def _begrens_synoniemen(cls, v: list[str]) -> list[str]:
-        for s in v:
-            if len(s) > 200:
-                raise ValueError("synoniem is te lang (max 200 tekens)")
-        return v
-
-
 class StartRequest(BaseModel):
     bronnen: list[BronInput] = Field(min_length=1, max_length=50)
     naam: str = Field(default="", max_length=200)           # werkgebied-naam
     omschrijving: str = Field(default="", max_length=2000)
     analysefocus: str | None = Field(default=None, max_length=2000)  # hoofdvraag
-    # Bestaande begrippenlijst (optioneel, suggestief): act 3 hergebruikt waar de betekenis past
-    # en registreert per begrip de herkomst (hergebruikt/aangepast/nieuw).
-    begrippenlijst: list[BegripInvoer] | None = Field(default=None, max_length=300)
     review: bool = True
     model_profile: str | None = Field(default=None, max_length=64)
 
@@ -296,43 +162,20 @@ class JobState(str, Enum):
     queued = "queued"
     act2_runt = "act2-runt"
     wacht_review_act2 = "wacht-op-review-act2"
-    act3_runt = "act3-runt"
-    wacht_review_act3 = "wacht-op-review-act3"
     bouwt = "bouwt"
     klaar = "klaar"
     fout = "fout"
-    # RegelSpraak — een on-demand vervolgfase op een afgeronde (`klaar`) analyse: eerst
-    # GegevensSpraak (objectmodel), dan de RegelSpraak-regels, elk met een eigen review-checkpoint.
-    rs_gegevens_runt = "rs-gegevens-runt"
-    wacht_review_rs_gegevens = "wacht-op-review-rs-gegevens"
-    rs_regels_runt = "rs-regels-runt"
-    wacht_review_rs_regels = "wacht-op-review-rs-regels"
-    rs_bouwt = "rs-bouwt"
-    rs_klaar = "rs-klaar"
 
 
-RUNNING_STATES = {
-    JobState.act2_runt, JobState.act3_runt, JobState.bouwt,
-    JobState.rs_gegevens_runt, JobState.rs_regels_runt, JobState.rs_bouwt,
-}
-REVIEW_STATES = {
-    JobState.wacht_review_act2, JobState.wacht_review_act3,
-    JobState.wacht_review_rs_gegevens, JobState.wacht_review_rs_regels,
-}
-# rs_klaar is terminaal: de regelspraak-fase is af. (De analyse zelf bereikte daarvóór `klaar`.)
-TERMINAL_STATES = {JobState.klaar, JobState.fout, JobState.rs_klaar}
+RUNNING_STATES = {JobState.act2_runt, JobState.bouwt}
+REVIEW_STATES = {JobState.wacht_review_act2}
+TERMINAL_STATES = {JobState.klaar, JobState.fout}
 
-# De RegelSpraak-vervolgfase draait on-demand op een al-afgeronde (`klaar`) analyse en is geen
-# nieuwe analyse-run. Deze states tellen daarom NIET mee in het max-actieve-jobs-quotum.
-RS_FASE_STATES = {
-    JobState.rs_gegevens_runt, JobState.wacht_review_rs_gegevens,
-    JobState.rs_regels_runt, JobState.wacht_review_rs_regels, JobState.rs_bouwt,
-}
-# States die niet meetellen als "lopende analyse" voor het quotum: terminaal óf rs-vervolgfase.
-QUOTA_VRIJE_STATES = TERMINAL_STATES | RS_FASE_STATES
+# States die niet meetellen als "lopende analyse" voor het quotum: terminaal.
+QUOTA_VRIJE_STATES = TERMINAL_STATES
 
 # De activiteit-codes die in de rondes-tabel/provenance/current_activiteit voorkomen.
-ACTIVITEIT_CODES = ("2", "3", "rs-gegevens", "rs-regels")
+ACTIVITEIT_CODES = ("2",)
 
 
 class FoutKlasse(str, Enum):
@@ -353,7 +196,7 @@ class JobFout(BaseModel):
 class RondeProvenance(BaseModel):
     """Audit per gegenereerde ronde (reproduceerbaarheid)."""
 
-    activiteit: Literal["2", "3", "rs-gegevens", "rs-regels"]
+    activiteit: Literal["2"]
     ronde: int
     model: str = ""
     provider: str = ""
@@ -380,15 +223,11 @@ class Job(BaseModel):
     review: bool = True
     model_profile: str = ""
     analysefocus: str = ""
-    # Aangeleverde bestaande begrippenlijst (suggestief; zie StartRequest.begrippenlijst).
-    begrippenlijst: list[BegripInvoer] = Field(default_factory=list)
     client_id: str = ""
-    # Of de regelspraak-fase met review-checkpoints draait. None = nog niet gestart / erft job.review.
-    regelspraak_review: bool | None = None
-    # "act2" = bewust afgerond zonder activiteit 3 (via akkoord-afronden); gaat terug naar
-    # "volledig" zodra activiteit 3 alsnog on-demand geclaimd wordt.
-    scope: Literal["volledig", "act2"] = "volledig"
-    current_activiteit: Literal["2", "3", "rs-gegevens", "rs-regels"] | None = None
+    # "act2" = bewust afgerond zonder activiteit 3 (via akkoord-afronden). Sinds activiteit 3 is
+    # verwijderd eindigt elke analyse act2-only; het veld blijft voor backward-compat/telemetrie.
+    scope: Literal["volledig", "act2"] = "act2"
+    current_activiteit: Literal["2"] | None = None
     current_ronde: int = 0
     waarschuwingen: list[str] = Field(default_factory=list)
     error: JobFout | None = None
@@ -441,25 +280,3 @@ class Rapport(BaseModel):
     validatiepunten: list = Field(default_factory=list)
     reviewlog: dict = Field(default_factory=dict)
     aandachtspunten: str = ""
-
-
-class RegelspraakStart(BaseModel):
-    """Optionele body bij het starten van de regelspraak-fase. review=None erft `Job.review`."""
-
-    review: bool | None = None
-
-
-class RegelspraakModel(BaseModel):
-    """Het regelspraak-model — GegevensSpraak (objectmodel) + RegelSpraak-regels, met herkomst
-    naar de wetsanalyse-begrippen/-regels. Eigen artefact náást het rapport (1-op-1 met de
-    regelspraak-skill `model.json`)."""
-
-    model_config = {"extra": "allow"}
-
-    werkgebied: dict = Field(default_factory=dict)
-    gegevensspraak: dict = Field(default_factory=dict)  # objecttypen, domeinen, parameters, feittypen, …
-    regels: list = Field(default_factory=list)
-    reviewlog_gegevensspraak: str = ""
-    reviewlog_regels: str = ""
-    validatiepunten: list = Field(default_factory=list)
-    reviewlog: dict = Field(default_factory=dict)
