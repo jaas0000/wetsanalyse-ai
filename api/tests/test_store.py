@@ -48,36 +48,19 @@ async def test_feedback_roundtrip(store):
     assert result.items == {"m1": "fout"}
 
 
-async def test_begrippenlijst_en_omschrijving_roundtrip(store):
-    """Create-time invoer (omschrijving + aangeleverde begrippenlijst) overleeft de
-    insert→load-roundtrip; save_job (state-writes) raakt ze daarna niet aan."""
-    from app.contracts import BegripInvoer
+async def test_omschrijving_roundtrip(store):
+    """Create-time invoer (omschrijving) overleeft de insert→load-roundtrip; save_job
+    (state-writes) raakt haar daarna niet aan."""
     job = Job(id="bl-art1", bronnen=[BronInput(bwbId="BWBR1", artikel="1")],
-              omschrijving="domeincontext",
-              begrippenlijst=[BegripInvoer(id="ab1", naam="belastingplichtige",
-                                           definitie="bestaande definitie")])
+              omschrijving="domeincontext")
     await store.insert_job(job)
     geladen = await store.load_job("bl-art1")
     assert geladen.omschrijving == "domeincontext"
-    assert geladen.begrippenlijst[0].id == "ab1"
-    assert geladen.begrippenlijst[0].definitie == "bestaande definitie"
 
     geladen.state = JobState.act2_runt
     await store.save_job(geladen)
     opnieuw = await store.load_job("bl-art1")
-    assert opnieuw.begrippenlijst[0].naam == "belastingplichtige"
     assert opnieuw.omschrijving == "domeincontext"
-
-
-async def test_reconcile_schema_voegt_begrippenlijst_toe(store):
-    """Idempotente migratie: een pre-upgrade schema zonder `begrippenlijst`-kolom krijgt hem
-    erbij; bestaande rijen lezen als lege lijst."""
-    async with db.get_engine().begin() as conn:
-        await conn.exec_driver_sql("ALTER TABLE projects DROP COLUMN begrippenlijst")
-    await db.reconcile_schema()
-    await db.reconcile_schema()  # idempotent — tweede run mag niet falen
-    await store.save_job(Job(id="mig-art1"))
-    assert (await store.load_job("mig-art1")).begrippenlijst == []
 
 
 async def test_postgresstore_voldoet_aan_jobstore(store):
@@ -161,7 +144,7 @@ async def test_lijst_verlopen_running(store):
     toekomst = datetime.now(timezone.utc) + timedelta(seconds=120)
     await store.save_job(Job(id="r-verlopen", state=JobState.act2_runt))
     await _set_lease("r-verlopen", "w", verleden)
-    await store.save_job(Job(id="r-vers", state=JobState.act3_runt))
+    await store.save_job(Job(id="r-vers", state=JobState.act2_runt))
     await _set_lease("r-vers", "w", toekomst)
     await store.save_job(Job(id="r-review", state=JobState.wacht_review_act2))
     await _set_lease("r-review", "w", verleden)

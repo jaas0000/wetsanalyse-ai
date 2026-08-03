@@ -103,9 +103,9 @@ async def test_integratie_analyse_legt_meerdere_calls_vast(engine, store):
     await engine.run_initial(job.id)
 
     rijen = await store.lijst_llm_calls(job.id)
-    # Minstens: act-2 inventaris + act-2 generatie + act-3 generatie.
-    assert len(rijen) >= 3
+    # Minstens: act-2 inventaris + act-2 generatie (act 3 is verwijderd).
+    assert len(rijen) >= 2
     activiteiten = {r["activiteit"] for r in rijen}
-    assert "2" in activiteiten and "3" in activiteiten
+    assert "2" in activiteiten
     assert any(r["fase"] == "inventaris" for r in rijen)
     assert all(r["system_prompt"] and r["user_prompt"] for r in rijen)

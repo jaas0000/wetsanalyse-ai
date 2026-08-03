@@ -31,24 +31,17 @@ def _rapport():
     return {
         "werkgebied": {"naam": "Invorderbaarheid"},
         "bronnen": [
-            {"bron_id": "br1", "label": "Leidraad Invordering 2008 art. 9.5"},
-            {"bron_id": "br2", "label": "Invorderingswet 1990 art. 9 lid 1"},
-        ],
-        "begrippen": [
-            {"id": "b1", "naam": "betalingstermijn", "vindplaatsen": [{"bron_id": "br1", "lid": "lid 1"}]},
-        ],
-        "afleidingsregels": [
-            {"id": "r1", "naam": "moment van invorderbaarheid",
-             "vindplaatsen": [{"bron_id": "br2", "lid": "lid 1"}]},
+            {"bron_id": "br1", "label": "Leidraad Invordering 2008 art. 9.5",
+             "leden": [{"lid": "1", "tekst": "De betalingstermijn bedraagt zes weken."}],
+             "markeringen": [{"id": "m1", "formulering": "betalingstermijn",
+                              "klasse": "Object", "vindplaats": "lid 1"}]},
         ],
     }
 
 
-def test_markdown_heeft_geen_dubbele_lid_prefix():
+def test_markdown_rendert_act2_rapport():
     md = rapport_naar_markdown(_rapport())
-    assert "lid lid" not in md
-    # Bron op artikel-niveau: lid wel aangeplakt.
-    assert "Leidraad Invordering 2008 art. 9.5 lid 1" in md
-    # Bron op lid-niveau: lid niet herhaald.
-    assert "Invorderingswet 1990 art. 9 lid 1 lid 1" not in md
-    assert "Invorderingswet 1990 art. 9 lid 1" in md
+    assert "# Wetsanalyse — Invorderbaarheid" in md
+    assert "betalingstermijn" in md
+    # Act2-only: geen begrippen-/afleidingsregels-secties meer.
+    assert "## 3." not in md

@@ -5,7 +5,7 @@ import pytest
 from sqlalchemy import update
 
 from app import db
-from app.contracts import BegripInvoer, BronInput, Feedback, Job, JobState, StartRequest
+from app.contracts import BronInput, Feedback, Job, JobState, StartRequest
 from app.engine.orchestrator import WetsanalyseEngine
 from app.wettenbank import WettenbankError
 
@@ -34,47 +34,15 @@ async def test_autonoom_loopt_door_tot_klaar(engine, store):
     rapport = await store.lees_rapport(job.id)
     assert rapport is not None
     assert rapport["bronnen"][0]["markeringen"][0]["klasse"] == "Rechtssubject"
-    assert rapport["begrippen"][0]["naam"] == "belastingplichtige"
-    assert len(job.provenance) == 2
+    # Sinds activiteit 3 is verwijderd eindigt de autonome run act2-only.
+    assert rapport["begrippen"] == []
+    assert len(job.provenance) == 1
     assert job.provenance[0].model == "fake-model"
-
-
-async def test_act3_twee_staps_hernummert_nieuwe_begrippen(engine, store):
-    """De 3b-'nieuwe_begrippen' worden deterministisch doorgenummerd (nb1 → b2) en alle
-    regel-referenties (uitvoer/invoer/voorwaarden) gaan mee naar het nieuwe id."""
-    job = await engine.create_job(_start_req(review=False), "test")
-    await engine.run_initial(job.id)
-
-    rapport = await store.lees_rapport(job.id)
-    assert [b["id"] for b in rapport["begrippen"]] == ["b1", "b2"]
-    assert rapport["begrippen"][1]["naam"] == "aangifteplicht"
-    assert rapport["begrippen"][1]["verwijst_naar_begrippen"] == ["b1"]
-    regel = rapport["afleidingsregels"][0]
-    assert regel["uitvoer"]["begrip_id"] == "b2"
-    assert regel["invoer"][0]["begrip_id"] == "b1"
-    assert regel["voorwaarden"][0]["begrip_ids"] == ["b1"]
-
-
-async def test_begrippenlijst_landt_in_prompt_en_herkomst(engine, store):
-    """Een aangeleverde begrippenlijst krijgt genormaliseerde id's (ab1..) en bereikt de
-    3a-prompt; de herkomst-registratie komt terug in het rapport."""
-    req = StartRequest(
-        bronnen=[BronInput(bwbId="BWBR9999999", artikel="1")], review=False,
-        begrippenlijst=[BegripInvoer(naam="belastingplichtige", definitie="bestaande definitie")],
-    )
-    job = await engine.create_job(req, "test")
-    assert job.begrippenlijst[0].id == "ab1"
-    await engine.run_initial(job.id)
-
-    rapport = await store.lees_rapport(job.id)
-    herkomst = rapport["begrippen"][0]["herkomst"]
-    assert herkomst["status"] == "hergebruikt"
-    assert herkomst["aangeleverd_id"] == "ab1"
 
 
 async def test_omschrijving_bereikt_werkgebied(engine, store):
     """De projectomschrijving wordt niet meer weggegooid: hij landt in het werkgebied-blok
-    (en daarmee in de act-3-prompt en het rapport)."""
+    (en daarmee in het rapport)."""
     req = StartRequest(
         bronnen=[BronInput(bwbId="BWBR9999999", artikel="1")], review=False,
         omschrijving="Domeincontext over aangifteplicht",
@@ -150,9 +118,7 @@ async def test_review_pauzeert_en_akkoord_vordert(engine, store):
     assert (await store.load_job(job.id)).state == JobState.wacht_review_act2
 
     await engine.apply_feedback(job.id, Feedback(status="akkoord", activiteit="2"))
-    assert (await store.load_job(job.id)).state == JobState.wacht_review_act3
-
-    await engine.apply_feedback(job.id, Feedback(status="akkoord", activiteit="3"))
+    # Sinds activiteit 3 is verwijderd rondt een act2-akkoord de analyse rechtstreeks af.
     assert (await store.load_job(job.id)).state == JobState.klaar
 
 
@@ -169,9 +135,9 @@ async def test_wijzigingen_maakt_nieuwe_ronde(engine, store):
     assert await store.hoogste_ronde(job.id, "2") == 2
 
 
-async def test_akkoord_afronden_stopt_na_act2(engine, store):
-    """"akkoord-afronden" in de act2-review rondt de analyse af zonder activiteit 3:
-    state klaar, scope act2, rapport zonder begrippen en zonder act3-reviewlog."""
+async def test_akkoord_afronden_rondt_af(engine, store):
+    """"akkoord-afronden" in de act2-review rondt de analyse af: state klaar, scope act2,
+    rapport met act2-inhoud en zonder begrippen/afleidingsregels."""
     job = await engine.create_job(_start_req(review=True), "test")
     await engine.run_initial(job.id)
     assert (await store.load_job(job.id)).state == JobState.wacht_review_act2
@@ -180,74 +146,16 @@ async def test_akkoord_afronden_stopt_na_act2(engine, store):
     job = await store.load_job(job.id)
     assert job.state == JobState.klaar
     assert job.scope == "act2"
-    assert await store.hoogste_ronde(job.id, "3") == 0
 
     rapport = await store.lees_rapport(job.id)
     assert rapport["bronnen"][0]["markeringen"]           # act2-inhoud is er
-    assert rapport["begrippen"] == []                     # geen act3-inhoud
+    assert rapport["begrippen"] == []
     assert rapport["afleidingsregels"] == []
-    assert rapport["reviewlog"]["activiteit3"]["samenvatting"] == ""
-
-
-async def test_act3_on_demand_maakt_analyse_volledig(engine, store):
-    """Na een act2-only-afronding voert run_act3 activiteit 3 alsnog uit: scope terug naar
-    volledig en het rapport wordt herbouwd mét begrippen."""
-    job = await engine.create_job(_start_req(review=True), "test")
-    await engine.run_initial(job.id)
-    await engine.apply_feedback(job.id, Feedback(status="akkoord-afronden", activiteit="2"))
-    assert (await store.load_job(job.id)).scope == "act2"
-
-    await engine.run_act3(job.id)
-    job = await store.load_job(job.id)
-    # job.review is True → act3 pauzeert eerst in review; akkoord rondt af.
-    assert job.state == JobState.wacht_review_act3
-    await engine.apply_feedback(job.id, Feedback(status="akkoord", activiteit="3"))
-
-    job = await store.load_job(job.id)
-    assert job.state == JobState.klaar
-    assert job.scope == "volledig"
-    assert await store.hoogste_ronde(job.id, "3") == 1
-    rapport = await store.lees_rapport(job.id)
-    assert rapport["begrippen"][0]["naam"] == "belastingplichtige"
-
-
-async def test_act3_claim_alleen_vanuit_klaar(engine, store):
-    """claim_act3 is een CAS op `klaar`: op een lopende/review-job geeft hij None."""
-    job = await engine.create_job(_start_req(review=True), "test")
-    await engine.run_initial(job.id)  # → wacht_review_act2
-    assert await engine.claim_act3(job.id) is None
-
-
-async def test_act3_gebruikt_hoogste_act2_ronde(engine, store, monkeypatch):
-    """De act3-input is de hóógste (goedgekeurde) act2-ronde, niet ronde 1 — anders zou
-    review-feedback op act2 genegeerd worden."""
-    from app.engine import steps
-
-    gezien: dict = {}
-    echte = steps.genereer_act3
-
-    async def capteer(llm, ronde, context, **kwargs):
-        gezien["context"] = context
-        return await echte(llm, ronde, context, **kwargs)
-
-    monkeypatch.setattr(steps, "genereer_act3", capteer)
-
-    job = await engine.create_job(_start_req(review=True), "test")
-    await engine.run_initial(job.id)
-    await engine.apply_feedback(
-        job.id, Feedback(status="wijzigingen", activiteit="2", items={"m1": "herzie"})
-    )
-    assert await store.hoogste_ronde(job.id, "2") == 2
-    await engine.apply_feedback(job.id, Feedback(status="akkoord", activiteit="2"))
-
-    ronde2 = await store.lees_analyse(job.id, "2", 2)
-    assert gezien["context"] == ronde2
+    assert "activiteit3" not in rapport["reviewlog"]
 
 
 def test_feedback_akkoord_afronden_validatie():
     """akkoord-afronden kan alleen op activiteit 2 en zonder opmerkingen."""
-    with pytest.raises(ValueError):
-        Feedback(status="akkoord-afronden", activiteit="3")
     with pytest.raises(ValueError):
         Feedback(status="akkoord-afronden", activiteit="2", items={"m1": "toch iets"})
     with pytest.raises(ValueError):
@@ -338,7 +246,7 @@ async def test_reaper_ruimt_verlopen_lease_op(engine, store):
     een verse lease blijft ongemoeid."""
     verleden = datetime.now(timezone.utc) - timedelta(seconds=1)
     toekomst = datetime.now(timezone.utc) + timedelta(seconds=120)
-    await store.save_job(Job(id="verweesd", state=JobState.act3_runt, current_activiteit="3"))
+    await store.save_job(Job(id="verweesd", state=JobState.act2_runt, current_activiteit="2"))
     await _set_lease("verweesd", "dode-worker", verleden)
     await store.save_job(Job(id="levend", state=JobState.act2_runt))
     await _set_lease("levend", "levende-worker", toekomst)
@@ -457,11 +365,17 @@ async def test_token_budget_stopt_job(settings, store):
             res = await super().complete(system, user, schema)
             return replace(res, tokens_out=1000)
 
+    # De budget-check vuurt aan het begin van een ronde op het reeds verbruikte totaal. Ronde 1
+    # (act 2) verbruikt >500 tokens; een revise-ronde (wijzigingen) ziet dat en stopt de job.
     settings.llm_token_budget = 500
     eng = WetsanalyseEngine(settings, store, TokenHungryLLM(), FakeWettenbank())
-    job = await eng.create_job(_start_req(review=False), "test")
+    job = await eng.create_job(_start_req(review=True), "test")
     await eng.run_initial(job.id)
+    assert (await store.load_job(job.id)).state == JobState.wacht_review_act2
 
+    await eng.apply_feedback(
+        job.id, Feedback(status="wijzigingen", activiteit="2", items={"m1": "herzie"})
+    )
     job = await store.load_job(job.id)
     assert job.state == JobState.fout
     assert job.error.klasse.value == "quota"
@@ -508,8 +422,8 @@ async def test_schema_waarschuwingen_blokkeren_niet(settings, store, monkeypatch
     job = await eng.create_job(_start_req(review=False), "test")
     await eng.run_initial(job.id)
 
-    # Verwijzing-inventaris (fase 2a) + act2 + act3a + act3b; geen extra hergeneratie.
-    assert llm.calls == 4
+    # Verwijzing-inventaris (fase 2a) + act2; geen extra hergeneratie.
+    assert llm.calls == 2
     job = await store.load_job(job.id)
     assert job.state == JobState.klaar
     assert "zachte waarschuwing" in job.waarschuwingen
@@ -606,8 +520,8 @@ async def test_create_job_uitputting_werpt_idconflict(engine, store, monkeypatch
 
 async def test_current_fase_sequentie(engine, store):
     """De fijnmazige fase-tikken vormen het contract dat het dashboard rendert: act2 (incl.
-    verwijzingen) → act3 (zonder verwijzingen) → rapport-bouw, eindigend op None. max_autocorrectie
-    is 0 in de testsettings, dus 'auto-correctie' komt hier niet voor."""
+    verwijzingen) → rapport-bouw, eindigend op None. max_autocorrectie is 0 in de testsettings,
+    dus 'auto-correctie' komt hier niet voor."""
     opgenomen: list[str | None] = []
 
     async def recorder(job_id, fase, owner):
@@ -621,7 +535,6 @@ async def test_current_fase_sequentie(engine, store):
     assert opgenomen == [
         "wettekst-ophalen", "verwijzingen-inventariseren", "verwijzingen-volgen", "llm-generatie",
         "brongetrouwheid-check", "schema-check", "analyse-wegschrijven",
-        "llm-generatie", "brongetrouwheid-check", "schema-check", "analyse-wegschrijven",
         "reviewlog", "aandachtspunten", "rapport-wegschrijven", None,
     ]
 

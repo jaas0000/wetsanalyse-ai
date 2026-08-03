@@ -83,78 +83,14 @@ async def test_feedback_buiten_review_409(client):
     assert r.status_code == 409
 
 
-async def test_regelspraak_serve_en_export(client):
-    """GET regelspraak-model + .rs/.md-export voor een project met een gebouwd model."""
-    from app.deps import get_store
-    model = {
-        "werkgebied": {"naam": "Testwerkgebied"},
-        "gegevensspraak": {"objecttypen": [
-            {"id": "ot1", "naam": "belastingplichtige",
-             "regelspraak_tekst": "Objecttype de belastingplichtige (bezield)"}
-        ]},
-        "regels": [{"id": "rs1", "naam": "R", "soort": "kenmerktoekenning",
-                    "regelspraak_tekst": "Regel R\n  geldig altijd\n    Een belastingplichtige is x."}],
-        "validatiepunten": [], "reviewlog": {},
-    }
-    await get_store().schrijf_regelspraak("klaar-art1", model)
-
-    r = await client.get("/v1/projects/klaar-art1/regelspraak")
-    assert r.status_code == 200 and r.json()["gegevensspraak"]["objecttypen"][0]["naam"] == "belastingplichtige"
-    rs = await client.get("/v1/projects/klaar-art1/regelspraak.rs")
-    assert rs.status_code == 200 and "Objecttype de belastingplichtige" in rs.text
-    md = await client.get("/v1/projects/klaar-art1/regelspraak.md")
-    assert md.status_code == 200 and "# RegelSpraak-specificatie" in md.text
-
-
-async def test_regelspraak_nog_niet_gereed_409(client):
-    assert (await client.get("/v1/projects/klaar-art1/regelspraak")).status_code == 409
-
-
-async def test_regelspraak_export_nog_niet_gereed_409(client):
-    """Ook de .rs/.md-export geeft een nette 409 (geen 500) als er nog geen model is."""
-    assert (await client.get("/v1/projects/klaar-art1/regelspraak.rs")).status_code == 409
-    assert (await client.get("/v1/projects/klaar-art1/regelspraak.md")).status_code == 409
-
-
-async def test_regelspraak_start_alleen_vanuit_klaar_409(client):
-    """Starten vanuit een niet-afgeronde analyse (queued) → 409."""
-    r = await client.post("/v1/projects/bwbr1-art1/regelspraak", json={"review": False})
-    assert r.status_code == 409
-
-
 async def test_rapport_nog_niet_gereed_409(client):
     assert (await client.get("/v1/projects/bwbr1-art1/rapport")).status_code == 409
 
 
-async def test_act3_en_regelspraak_scope_gates(client):
-    """On-demand act3 kan alleen op een act2-only-afgeronde analyse; regelspraak juist niet."""
-    from app.deps import get_store
-
-    # klaar + scope volledig → act3 is al uitgevoerd → 409.
-    r = await client.post("/v1/projects/klaar-art1/act3")
-    assert r.status_code == 409 and "al uitgevoerd" in r.json()["detail"]
-    # niet-klaar → 409.
-    assert (await client.post("/v1/projects/bwbr1-art1/act3")).status_code == 409
-
-    # Een act2-only-afgeronde analyse: regelspraak geweigerd, act3 gaat van start (202).
-    await get_store().save_job(
-        Job(id="act2-only", state=JobState.klaar, scope="act2",
-            bronnen=[], client_id="anonymous")
-    )
-    r = await client.post("/v1/projects/act2-only/regelspraak")
-    assert r.status_code == 409 and "activiteit 3" in r.json()["detail"]
-    r = await client.post("/v1/projects/act2-only/act3")
-    assert r.status_code == 202 and r.json()["state"] == "act3-runt"
-    # De 202 schedulet de act3-fase als achtergrondtaak; netjes afkappen zodat die niet
-    # ná de fixture-teardown nog de (dan gesloten) test-DB raakt.
-    from app.deps import drain_tasks
-    await drain_tasks()
-
-
 async def test_scope_in_lijst(client):
-    """JobSummary draagt de scope zodat lijst/dashboard act2-only kunnen kenmerken."""
+    """JobSummary draagt de scope (sinds act 3 weg is: altijd act2)."""
     per_id = {j["id"]: j for j in (await client.get("/v1/projects")).json()}
-    assert per_id["klaar-art1"]["scope"] == "volledig"
+    assert per_id["klaar-art1"]["scope"] in ("act2", "volledig")
 
 
 async def test_verwijderen_states(client):
@@ -182,25 +118,6 @@ async def test_input_limiet_422(client):
     r = await client.post(
         "/v1/projects", json={"artikel": "1", "bwbId": "BWBR1", "analysefocus": "x" * 3000}
     )
-    assert r.status_code == 422
-
-
-async def test_begrippenlijst_caps_422(client):
-    """De caps op de aangeleverde begrippenlijst (max 300 items, naam ≤200, definitie ≤2000)
-    worden door Pydantic geweigerd (422), vóór de engine wordt geraakt."""
-    bron = [{"bwbId": "BWBR1", "artikel": "1"}]
-    te_veel = [{"naam": f"begrip {i}"} for i in range(301)]
-    r = await client.post("/v1/projects", json={"bronnen": bron, "begrippenlijst": te_veel})
-    assert r.status_code == 422
-    r = await client.post("/v1/projects",
-                          json={"bronnen": bron, "begrippenlijst": [{"naam": "x" * 201}]})
-    assert r.status_code == 422
-    r = await client.post("/v1/projects",
-                          json={"bronnen": bron,
-                                "begrippenlijst": [{"naam": "ok", "definitie": "x" * 2001}]})
-    assert r.status_code == 422
-    # Een begrip zonder naam is ongeldig (naam is het enige verplichte veld).
-    r = await client.post("/v1/projects", json={"bronnen": bron, "begrippenlijst": [{"naam": ""}]})
     assert r.status_code == 422
 
 

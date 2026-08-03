@@ -110,39 +110,7 @@ async def test_met_retry_plafonneert_backoff(monkeypatch):
     assert all(s <= 12.5 for s in slaapjes)
 
 
-# --- #3 context-window: act-3-prompts + pre-flight token-guard ---
-
-def test_act3_prompts_dragen_ledentekst_en_markeringen():
-    """Act-3 krijgt bewust de volledige leden-tekst mee (definities dicht op de bron); het
-    context-window-risico wordt door de prompt-token-guard gevangen, niet door trimmen."""
-    from app.engine.prompts import act3_begrippen_prompt, act3_regels_prompt
-
-    context = {
-        "werkgebied": {"naam": "WG"},
-        "bronnen": [{
-            "bron_id": "br1", "label": "Wet X art. 1", "bwbId": "BWBR1", "artikel": "1",
-            "leden": [{"lid": "1", "tekst": "UNIEKE_LEDEN_TEKST_XYZ voedt de definities"}],
-            "markeringen": [
-                {"id": "m1", "bron_id": "br1", "formulering": "MARKERING_ABC",
-                 "klasse": "Rechtssubject", "vindplaats": "lid 1"},
-                {"id": "m2", "bron_id": "br1", "formulering": "REGEL_MARKERING_DEF",
-                 "klasse": "Afleidingsregel", "vindplaats": "lid 1"},
-            ],
-            "verwijzingen": [],
-        }],
-    }
-    _system, user, _schema, _h = act3_begrippen_prompt(context)
-    assert "UNIEKE_LEDEN_TEKST_XYZ" in user       # leden-tekst gaat mee
-    assert "MARKERING_ABC" in user                # markeringen blijven de basis
-    assert "br1" in user                          # bron-index aanwezig voor vindplaatsen
-
-    begrippen = [{"id": "b1", "naam": "x", "klasse": "Rechtssubject", "definitie": "d"}]
-    _system, user, _schema, _h = act3_regels_prompt(context, begrippen)
-    assert "UNIEKE_LEDEN_TEKST_XYZ" in user       # ook 3b ziet de wettekst
-    assert "REGEL_MARKERING_DEF" in user          # regel-relevante markering gaat mee
-    assert "MARKERING_ABC" not in user            # niet-regel-relevante klasse is eruit gefilterd
-    assert '"b1"' in user                         # de 3a-begrippen zijn de bouwstenen
-
+# --- #3 context-window: pre-flight token-guard ---
 
 def test_prompt_guard_werpt_bij_overschrijding():
     from app.llm.base import LlmConfig, PromptTooLargeError
@@ -341,16 +309,10 @@ def test_cache_tokens_leest_usage_defensief():
 def test_references_in_system_niet_in_user():
     """Caching-invariant: de (grote, stabiele) references staan in het cachebare system-blok,
     de volatile per-call data in de user-prompt."""
-    from app.engine.prompts import act2_prompt, act3_begrippen_prompt
+    from app.engine.prompts import act2_prompt
 
     basis = {"wet": "Wet X", "bwbId": "BWBR1", "artikel": "1",
              "leden": [{"lid": "1", "tekst": "de minister stelt vast"}]}
     system, user, _schema, _h = act2_prompt(basis, None)
     assert "JAS-klassen" in system and "verwijzingen volgen" in system
     assert "REFERENTIE" not in user
-
-    ctx = {"werkgebied": {"naam": "WG"}, "bronnen": [{"bron_id": "br1", "label": "L",
-            "markeringen": [], "verwijzingen": []}]}
-    system3, user3, _s3, _h3 = act3_begrippen_prompt(ctx)
-    assert "begrippen en afleidingsregels" in system3
-    assert "REFERENTIE" not in user3
