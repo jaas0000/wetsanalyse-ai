@@ -17,9 +17,15 @@ produceert, de mens beoordeelt en corrigeert; interpretatiekeuzes (incl. twijfel
 expliciet gemaakt in plaats van schijnzekerheid.
 
 > **Legacy / oorsprong.** Het project begon als een **interactieve Claude Code-skill** in de CLI
-> (`.claude/skills/wetsanalyse` + `regelspraak`). Dat skill-spoor bestaat nog en is de **gedeelde
+> (`.claude/skills/wetsanalyse`). Dat skill-spoor bestaat nog en is de **gedeelde
 > inhoudsbron** (`references/`/`scripts/`) die het platform op runtime hergebruikt — maar het is niet
-> langer de kern. De skill-werkstromen staan verderop (§*De wetsanalyse-skill* / *De regelspraak-skill*).
+> langer de kern. De skill-werkstroom staat verderop (§*De wetsanalyse-skill*).
+
+> **Scope nu: alleen activiteit 2.** Begrippen (activiteit 3) en de RegelSpraak-formaliseringsfase
+> zijn **verwijderd** uit de engine, de webapp en het skill-spoor — die worden later opnieuw
+> opgebouwd op een agentische basis. Het platform levert nu activiteit 2 (markeren + classificeren
+> in JAS-klassen); alle contracten/rapporten dragen `scope: "act2"`. graph-qa's begrip-definitie-QA
+> (`definitie`-specialist over de graaf) staat hier los van en blijft.
 
 ### Platform-componenten
 
@@ -28,16 +34,13 @@ expliciet gemaakt in plaats van schijnzekerheid.
    `CLAUDE.md` — lees die bij werk *in* de MCP.
 2. **`api/`** — headless FastAPI-backend (PostgreSQL-jobstore, per-client bearer-auth) die de
    JAS-werkstroom als async REST-API aanbiedt: analyses aanmaken/reviewen (een **werkgebied** met
-   meerdere bronnen), al ná activiteit 2 afronden (`scope: "act2"`) met act3 on-demand
-   (`POST /v1/projects/{id}/act3`), en de **RegelSpraak-formaliseringsfase** als on-demand vervolg
-   (`POST /v1/projects/{id}/regelspraak`). Bevat óók het **annotatie-domein** van de werkplek
+   meerdere bronnen) en afronden ná activiteit 2 (`scope: "act2"`). Bevat óók het **annotatie-domein** van de werkplek
    (`/v1/annotatie/*`: documenten/elementen/beslissingen + append-only auditlog). Het LLM wordt
    aangestuurd via **benoemde modelprofielen** (in de database, beheerbaar via `/v1/admin/profiles`;
    de env-`LLM_*`-waarden seeden alleen het eerste default-profiel). Eigen `CLAUDE.md` + `README.md`.
 3. **`frontend/`** — Next.js-webapp (BFF) bovenop de API, met twee gezichten. (a) De **analyse-webapp**:
-   analyses aanmaken (wet-dropdown met **artikel-autocomplete + lid-keuze**, en optioneel een
-   **bestaande begrippenlijst** plakken/uploaden als suggestieve act-3-invoer), de human-in-the-loop
-   review-lus, het rapport, de **RegelSpraak-fase** ("Naar RegelSpraak") en het **`/beheer`-scherm**
+   analyses aanmaken (wet-dropdown met **artikel-autocomplete + lid-keuze**), de human-in-the-loop
+   review-lus, het rapport, en het **`/beheer`-scherm**
    (modelprofielen, wet-catalogus, gebruikers, token-verbruik; achter een apart admin-token). (b) **De
    werkplek** (`/workbench`, de *Assistent-pagina*): één gespreksvenster voor **vragen én
    JAS-annotatie**, live tegen graph-qa. De hele webapp zit achter een **login met userid +
@@ -57,28 +60,17 @@ expliciet gemaakt in plaats van schijnzekerheid.
    Container Apps én een Portainer-stack (image `ghcr.io/palmw01/graph-qa`). Eigen `CLAUDE.md` + `README.md`.
 5. **`analyses/`** — output van het skill-spoor: per **werkgebied** (kennisdomein met **meerdere
    bronnen** — een bron = `bwbId`+`artikel`+`lid?`, niet één artikel) een map met het eindrapport en de
-   `werk/`-tussenbestanden, plus desgewenst een `regelspraak/`-submap met het RegelSpraak-`model.json`.
-   Activiteit 2 markeert per bron; activiteit 3 levert één gedeelde, ontdubbelde begrippenlijst over
-   alle bronnen. De map heet naar de werkgebied-naam (kebab-case); bij ontbreken valt ze terug op de
-   eerste bron (`<bwbid>-art<nr>[-lidN]`).
+   `werk/`-tussenbestanden. Activiteit 2 markeert per bron. De map heet naar de werkgebied-naam
+   (kebab-case); bij ontbreken valt ze terug op de eerste bron (`<bwbid>-art<nr>[-lidN]`).
 
 ### Legacy / oorsprong — het skill-spoor (gedeelde inhoudsbron)
 
 6. **`.claude/skills/wetsanalyse/`** — de inhoudelijke skill die de analyse **interactief in Claude
-   Code** uitvoert (activiteit 2: markeren + classificeren in JAS-klassen; activiteit 3 **twee-staps**:
-   3a begrippen → 3b regels met de begrippen als bouwstenen via begrip-id's) en een `rapport.json`
-   oplevert (HTML-viewer; Markdown als export). De skill *gebruikt* de MCP als bron. Een afleidingsregel
-   wordt **geannoteerd** met begrip-id's (uitvoer/invoer/parameters/voorwaarden per `begrip_id`, plus
-   vindplaats en `markering_ids`), niet uitgeschreven in een (pseudo)regeltaal — die uitvoerbare
-   formulering is de taak van de regelspraak-skill, zodat er één bron van waarheid voor de regel is.
-7. **`.claude/skills/regelspraak/`** — de **vervolgskill** die de geduide afleidingsregels en begrippen
-   formaliseert naar een uitvoerbare specificatie in **RegelSpraak + GegevensSpraak** (Belastingdienst/
-   ALEF). Leest een afgerond `rapport.json` (via `scripts/ingest_rapport.py`) of werkt standalone vanaf
-   wettekst, bouwt het objectmodel en de regels in twee stappen met elk een review-checkpoint, en levert
-   een `model.json` (HTML-viewer; `.rs`/Markdown als export).
+   Code** uitvoert (activiteit 2: markeren + classificeren in JAS-klassen) en een `rapport.json`
+   oplevert (HTML-viewer; Markdown als export). De skill *gebruikt* de MCP als bron.
 
-Beide skills leveren de `references/`/`scripts/` die **óók het platform** (de API-engine) op runtime
-gebruikt: één inhoudelijke bron van waarheid voor de JAS-methode en RegelSpraak. graph-qa staat hier
+De skill levert de `references/`/`scripts/` die **óók het platform** (de API-engine) op runtime
+gebruikt: één inhoudelijke bron van waarheid voor de JAS-methode. graph-qa staat hier
 los van — dat werkt op de GraphDB-kennisgraaf met zijn eigen toollaag en prompts.
 
 ## De onderdelen hangen via paden samen
@@ -100,9 +92,9 @@ zijn **projectrelatieve paden**, zodat de map portabel is tussen machines/OS'en:
 - `.claude/settings.json` → **gedeeld en gecommit**: bevat een `PreToolUse`-hook die
   `scripts/write_guard.py` aanroept bij elke Write/Edit-tool. De guard beschermt beide sporen:
   hij blokkeert schrijven naar `analyses/**/werk/**/feedback.json` (uitsluitend de review-server
-  schrijft dat) en het overschrijven van een `analyse.json`/`model.json` in `werk/` zodra de
+  schrijft dat) en het overschrijven van een `analyse.json` in `werk/` zodra de
   ronde **voltooid** is — d.w.z. zodra `feedback.json` in de ronde-map bestaat (gereviewde
-  rondes — wetsanalyse én regelspraak — zijn immutabel; correcties vóór de review mogen wél).
+  rondes zijn immutabel; correcties vóór de review mogen wél).
 - `.claude/settings.local.json` → `enabledMcpjsonServers` (bv. `["wettenbank", "grafana"]`) plus een
   **machine-lokale** allowlist en de tokens (`WETTENBANK_TOKEN`, `WETSANALYSE_ADMIN_TOKEN`,
   `GRAFANA_TOKEN`). Dit bestand is **gitignored** (`.gitignore`), dus het reist niet mee en is per definitie
@@ -147,19 +139,14 @@ kernstructuur die meerdere bestanden raakt:
   natuurlijke-taalverwijzingen herkent de skill zelf), classificeren naar functie en volgens
   beleid volgen (diepte-cap 1 + relevantie-gate; delegaties bounded). Ze worden vastgelegd als
   `verwijzingen`-array in `analyse.json` (aparte as náást de markeringen) en horen bij het
-  activiteit-2 checkpoint; begrippen koppelen via `bron_verwijzing` aan een definitie-verwijzing.
-- **Activiteit 2 → checkpoint → Activiteit 3 (3a begrippen → 3b regels) → checkpoint →
-  rapport.** De analist kan bij het act-2-checkpoint ook kiezen voor *afronden zonder
-  activiteit 3* (in het dienst-spoor: feedback-status `akkoord-afronden` → `scope: "act2"`;
-  activiteit 3 kan later alsnog). Na elke activiteit
+  activiteit-2 checkpoint.
+- **Activiteit 2 → checkpoint → rapport.** Na activiteit 2
   is er een **iteratief human-in-the-loop review**: de skill schrijft
-  `werk/activiteit-{2,3}/ronde-{N}/analyse.json`, draait eerst `scripts/validate_analyse.py`
-  als mechanische pre-check (ongeldige JAS-klassen, ontbrekende id's e.d.; bij activiteit 3
-  met `--act2` voor de dekkingscheck markering → begrip en desgewenst `--begrippenlijst`
-  voor de herkomst-checks; exit 2 blokkeert
+  `werk/activiteit-2/ronde-{N}/analyse.json`, draait eerst `scripts/validate_analyse.py`
+  als mechanische pre-check (ongeldige JAS-klassen, ontbrekende id's e.d.; exit 2 blokkeert
   tot correctie), start daarna `scripts/review_server.py` (lokale webpagina op poort 3118,
   alleen stdlib; vanaf ronde 2 met `--ronde N --vorige <ronde-N-1>`), pauzeert, en verwerkt
-  daarna `werk/activiteit-{2,3}/ronde-{N}/feedback.json`. Is er feedback, dan schrijft de
+  daarna `werk/activiteit-2/ronde-{N}/feedback.json`. Is er feedback, dan schrijft de
   skill een volgende ronde en herhaalt — tot de analist akkoord is zonder opmerkingen
   (veiligheidscap: max. 6 rondes). De skill gaat **niet** zelf door zonder bevestiging van
   de analist. De datacontracten en de lus staan in `references/review-checkpoints.md`.
@@ -175,44 +162,13 @@ kernstructuur die meerdere bestanden raakt:
   `scripts/render_rapport.py` blijft beschikbaar als standalone MD-generator maar maakt geen
   deel meer uit van de normale skill-flow.
 
-Inhoudelijke regels die je moet kennen voordat je classificeert of begrippen opstelt:
-`references/jas-klassen-referentie.md` (de dertien JAS-klassen — verzin er geen),
-`references/begrippen-en-afleidingsregels-opstellen.md` (act 3 is twee-staps: eerst begrippen,
-dán regels met de begrippen als bouwstenen via begrip-id's; werkgebied-breed hergebruik en
-ontdubbeling — homoniemen splitsen, synoniemen samenvoegen; begrippen dragen
-`is_interpretatie`/`relaties`/`markering_ids` en — bij een aangeleverde bestaande
-begrippenlijst (`werk/begrippenlijst.json`, suggestief) — een `herkomst`
-(hergebruikt/aangepast/nieuw); een afleidingsregel wordt **geannoteerd**,
-niet uitgeschreven — geen pseudo-`formulering`) en `references/verwijzingen-volgen.md`
+Inhoudelijke regels die je moet kennen voordat je classificeert:
+`references/jas-klassen-referentie.md` (de dertien JAS-klassen — verzin er geen) en
+`references/verwijzingen-volgen.md`
 (het volg-beleid voor cross-referenties: functies, diepte/relevantie-grens, bounded delegaties;
 een gevolgde delegatie/definitie kan promoveren tot een eigen bron in het werkgebied). Het
 datacontract van `analyse.json`/`rapport.json` (werkgebied + bronnen) staat in
 `references/review-checkpoints.md`.
-
-## De regelspraak-skill: van geduide regel naar uitvoerbare specificatie
-
-De skill (`.claude/skills/regelspraak/SKILL.md`) formaliseert een afgeronde wetsanalyse naar
-**GegevensSpraak** (objectmodel: objecttypen, attributen, kenmerken, domeinen, parameters,
-feittypen/rollen) en **RegelSpraak-regels** (RegelSpraak-spec v2.3.0). De kernstructuur:
-
-- **Stap 1 — basis.** Bij voorkeur vanuit een wetsanalyse-`rapport.json`: draai
-  `scripts/ingest_rapport.py` (deterministisch; behoudt de herkomst-id's `b*`/`r*`/`v*`) naar
-  `regelspraak/werk/ingest.json` i.p.v. het rapport handmatig over te nemen. Zonder rapport werkt de
-  skill standalone vanaf wettekst via de MCP.
-- **Stap 2 (GegevensSpraak) → checkpoint → Stap 3 (regels) → checkpoint → model.** Dezelfde iteratieve
-  human-in-the-loop lus als wetsanalyse: `validate_regelspraak.py` als pre-check, `review_server.py`
-  op poort **3120** (vanaf ronde 2 met `--ronde N --vorige …`), feedback verwerken in een nieuwe ronde
-  (cap 6). `build_regelspraak.py` combineert de hoogste rondes tot één `model.json` (+ `.rs`/`.md`-export)
-  en `rapport_server.py` toont het op poort **3121**. Sla de reviews alleen over met
-  `REGELSPRAAK_NO_REVIEW=1` (evals).
-- Elke declaratie en regel draagt een **`herkomst`** naar het bron-begrip/de bron-afleidingsregel
-  (en daarmee naar artikel + lid). Gebruik uitsluitend echte RegelSpraak/GegevensSpraak-taalpatronen
-  uit `references/` (`gegevensspraak-referentie.md`, `regels-en-resultaat-referentie.md`,
-  `expressies-en-operatoren-referentie.md`, `vertaalpatronen.md` [JAS→RegelSpraak-brug],
-  `review-checkpoints.md`). Verzin geen syntax; wat er niet in staat, wordt een validatiepunt.
-
-Het dienst-spoor biedt dezelfde fase als on-demand API-stap (`POST /v1/projects/{id}/regelspraak`),
-zie `api/CLAUDE.md`.
 
 Komt een analyse onbetrouwbaar uit (verzonnen tekst, niet-bestaande klasse, overgeslagen
 review, niet-convergerende lus — géén gewone review-feedback), dan is
@@ -237,13 +193,11 @@ AVG-redactie, dashboard/alerting) staat in **`docs/observability.md`**.
 
 ## Skills
 
-De wetsanalyse-skill staat in `.claude/skills/wetsanalyse/`; de vervolgskill regelspraak (formaliseren
-naar RegelSpraak/GegevensSpraak) in `.claude/skills/regelspraak/`.
+De wetsanalyse-skill staat in `.claude/skills/wetsanalyse/`.
 
 ## Referentiedocumentatie
 
 `docs/` bevat de methodische onderbouwing (niet code): `docs/wetsanalyse/handleiding.pages.md`,
 `docs/wetsanalyse/leidraad.pages.md`, `docs/wetsanalyse/wetsanalyse-boek.md` en
-`docs/wetsanalyse/wetsanalyse-rijk/` (hoofdstukken over JAS en het kader), plus de
-RegelSpraak-specificaties in `docs/regelspraak/`. Raadpleeg deze bij inhoudelijke vragen over de
-methode; de skill-`references/` zijn de operationele samenvatting daarvan.
+`docs/wetsanalyse/wetsanalyse-rijk/` (hoofdstukken over JAS en het kader). Raadpleeg deze bij
+inhoudelijke vragen over de methode; de skill-`references/` zijn de operationele samenvatting daarvan.

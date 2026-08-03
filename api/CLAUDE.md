@@ -15,57 +15,27 @@ state + telemetrie en het `rapport` (JSONB-kolom); de immutabele analyse-rondes 
 aparte `rondes`-tabel. De API schrijft *niet* naar de `analyses/<id>/werk/`-disk; de
 disk-interoperabiliteit met de lokale skill staat op de roadmap, niet in de huidige flow.
 
-**Act2-only afronden + act3 on-demand (gebouwd).** Bij het act-2-checkpoint accepteert `feedback`
-naast `akkoord`/`wijzigingen` ook **`akkoord-afronden`** (alleen op activiteit 2, zonder
-opmerkingen): de analyse gaat dan rechtstreeks naar `klaar` met **`scope: "act2"`** — een rapport
-zonder begrippen/afleidingsregels. `POST /v1/projects/{id}/act3` voert activiteit 3 later alsnog
-uit: `claim_act3` (`klaar → act3_runt`, scope terug naar `"volledig"`) → `run_act3_fase`, waarna
-het rapport langs het normale pad wordt herbouwd. De RegelSpraak-fase is op zo'n act2-only-analyse
-geblokkeerd (409 "voer eerst activiteit 3 uit").
-
-**RegelSpraak-vervolgfase (gebouwd).** Naast de JAS-analyse kent een project een **on-demand**
-formaliseringsfase naar RegelSpraak/GegevensSpraak (de skill `regelspraak`). `POST /v1/projects/{id}/regelspraak`
-(alleen vanuit `klaar` met `scope: "volledig"`; optioneel body `{review}`) start `WetsanalyseEngine.run_regelspraak`: claim
-`klaar → rs_gegevens_runt`, dan twee stappen met elk een review-checkpoint
-(`rs-gegevens` → `wacht-op-review-rs-gegevens` → `rs-regels` → `wacht-op-review-rs-regels` → `rs_bouwt`
-→ `rs_klaar`). De stappen leven in `engine/regelspraak_prompts.py` + `engine/regelspraak_steps.py` (zelfde
-patroon als `prompts.py`/`steps.py`; references uit `.claude/skills/regelspraak/references/`), de validatie
-in `validation.regelspraak_schema_check`/`regelspraak_brongetrouwheid_check` (herkomst is hard). De
-ingest-context (`_rs_gegevens_context`) trimt het rapport tot werkgebied + begrippen +
-afleidingsregels + per bron de brondefinities én de via `markering_ids` gerefereerde markeringen
-(`gekoppelde_markeringen`) — zelfde trim als de skill-ingest; de koppeling regel ↔ declaratie loopt
-op **begrip-id**, niet op naam. Het
-resultaat is een **eigen artefact** `projects.regelspraak` (JSONB, naast `rapport`), uitleesbaar via
-`GET /v1/projects/{id}/regelspraak` (+ `.rs`/`.md`-export via `engine/render_regelspraak.py`). De rondes
-delen de `rondes`-tabel met activiteit-codes `rs-gegevens`/`rs-regels`. `feedback` en `retry` kennen de
-rs-states; `current_activiteit` draagt de rs-code zodat retry de fase herkent.
+**Scope: alleen activiteit 2.** Begrippen (activiteit 3) en de RegelSpraak-formaliseringsfase zijn
+**verwijderd** — ze worden later opnieuw opgebouwd op een agentische basis. Elke analyse eindigt
+act2-only. Bij het act-2-checkpoint accepteert `feedback` naast `wijzigingen` een **`akkoord`** (zonder
+opmerkingen): de analyse gaat dan naar `klaar` met **`scope: "act2"`** — een rapport met de markeringen
+en verwijzingen, zonder begrippen/afleidingsregels.
 
 **De analyse-eenheid is het werkgebied (kennisdomein), niet één artikel.** Een project draagt een
 `bronnen`-lijst (`StartRequest.bronnen[]`; elke bron = `bwbId`+`artikel`+`lid?`) — opgeslagen als
 `projects.bronnen` JSON-kolom (vervangt de oude scalar `bwbId/artikel/lid`). De orchestrator haalt in
 `_fase_start` per bron de tekst op en genereert **activiteit 2 per bron** (geaggregeerd in
-`Analyse2.bronnen[]`); **activiteit 3 is werkgebied-breed én twee-staps binnen één ronde** —
-stap 3a genereert de gedeelde, ontdubbelde `begrippen`, stap 3b bouwt de `afleidingsregels`
-**met die begrippen als bouwstenen** (uitvoer/invoer/parameters/voorwaarden verwijzen per
-`begrip_id`; ontbrekende bouwstenen komen als `nieuwe_begrippen` terug en worden in de merge
-deterministisch doorgenummerd — `steps.genereer_act3`). Beide stappen tellen als één ronde met
-één review-checkpoint. Een optioneel aangeleverde **begrippenlijst**
-(`StartRequest.begrippenlijst`, suggestief) voedt 3a; elk begrip registreert dan zijn `herkomst`
-(hergebruikt/aangepast/nieuw). Eén bron is het
-triviale geval; het rapport heeft de vorm `{werkgebied, bronnen[], begrippen, afleidingsregels, …}`.
+`Analyse2.bronnen[]`). Eén bron is het triviale geval; het rapport heeft de vorm
+`{werkgebied, bronnen[], …}`.
 
 ## Architectuur (app/)
 
 - `config.py` — env-config + projectpaden (PROJECT_ROOT = repo-root).
 - `contracts.py` — Pydantic-modellen (1-op-1 met `references/review-checkpoints.md`) + `Job`/state machine.
-  Het act-3-contract is **begrip-id-gebouwd**: `Afleidingsregel` draagt `uitvoer{begrip_id,toelichting}`,
-  `invoer[]`, `parameters[]` (waarde/eenheid/geldigheid/vindplaats) en `voorwaarden[]`
-  (tekst/begrip_ids/verbinding EN|OF); `Begrip` draagt `is_interpretatie`, `relaties`,
-  `markering_ids` (koppeling naar act-2) en `herkomst`. `StartRequest.begrippenlijst` accepteert
-  max 300 `BegripInvoer`-items (suggestieve bestaande begrippenlijst); `Job` draagt
-  `omschrijving`/`scope`/`begrippenlijst`.
-  `JobSummary` draagt ook de observerende `current_fase`(`_sinds`) + telemetrie, zodat het dashboard al
-  bij de eerste render compleet is zonder per-job na te laden.
+  Act2-only: `JobState` kent `queued`/`act2_runt`/`wacht_review_act2`/`bouwt`/`klaar`/`fout`;
+  `Job` draagt `omschrijving`/`scope` (altijd `"act2"`). `JobSummary` draagt ook de observerende
+  `current_fase`(`_sinds`) + telemetrie, zodat het dashboard al bij de eerste render compleet is
+  zonder per-job na te laden.
 - `auth.py` — per-client bearer-tokens (erft het MCP-patroon; fail-closed; constant-tijd).
   `require_admin` is een aparte, altijd-verplichte bearer voor `/v1/admin/*` (LLM-beheer +
   gebruikersbeheer). `require_admin` is **async** en accepteert twee bronnen: de statische
@@ -92,7 +62,9 @@ triviale geval; het rapport heeft de vorm `{werkgebied, bronnen[], begrippen, af
   `llm_profiles`, `wet_catalogus`, `users`, `app_settings`, `llm_calls`). Portable types
   (`JSON`→`JSONB` op Postgres, `JSON` op SQLite-tests), tz-aware datetimes (`aware()` normaliseert
   het naïeve SQLite-resultaat naar UTC). `reconcile_schema()` voegt nieuwe kolommen idempotent toe
-  bij de start (o.a. `scope` en `begrippenlijst` op `projects`).
+  bij de start (o.a. `scope` op `projects`). De act3/regelspraak-kolommen
+  (`begrippenlijst`/`regelspraak`/`regelspraak_review`) worden niet meer geschreven of gelezen; het
+  daadwerkelijk droppen van de live kolommen is een aparte, bewuste migratie.
 - `jobstore.py` — `JobStore`-Protocol (opslag-abstractie) + `IdConflict`. `postgres_store.py` —
   de SQLAlchemy/PostgreSQL-implementatie: gerichte kolom-writes, **ronde-immutabiliteit**, client-scoping,
   en de **state-CAS** (`claim`/`verleng_lease`/`lijst_verlopen_running`/`markeer_lease_loze_running`) via
@@ -107,13 +79,11 @@ triviale geval; het rapport heeft de vorm `{werkgebied, bronnen[], begrippen, af
   `brongetrouwheid-check`). Dit is **geen** state-machine-veld: het staat los van de state-CAS en heeft
   geen control-flow-effect; bij review/terminal/fout gaat het op `None`.
 - `wettenbank.py` — MCP-client; lege/fout-respons → `WettenbankError` (nooit doorgaan met lege context).
-- `validation.py` — **schema** (skill-`check_activiteit_2/3`: FOUTEN blokkeren — auto-correctie,
+- `validation.py` — **schema** (skill-`check_activiteit_2`: FOUTEN blokkeren — auto-correctie,
   anders `fout`, ook in `review:false`; WAARSCHUWINGEN reizen mee als context) vs **hard**
   (brongetrouwheid: citaat letterlijk in leden-tekst na normalisatie, `vindplaats`/`bronreferentie`
-  verplicht). Voor act 3 krijgt `schema_check` context mee: de goedgekeurde act-2 activeert de
-  dekkings- en markering-id-checks, de aangeleverde begrippenlijst de herkomst-checks. Meldingen
-  die de harde check al dekt (citaat/vindplaats) worden uit de skill-fouten/-waarschuwingen
-  gefilterd, zodat per concern één — de genormaliseerde — melding overblijft.
+  verplicht). Meldingen die de harde check al dekt (citaat/vindplaats) worden uit de
+  skill-fouten/-waarschuwingen gefilterd, zodat per concern één — de genormaliseerde — melding overblijft.
 - `ratelimit.py` — in-process per-client rate limit (dependency) + `QuotaExceeded` (beleidsgrenzen).
 - `llm/` — `LLMClient`-protocol + LiteLLM-implementatie (provider = config; output-strategie + parse).
   `throttle.py` — proces-globale **concurrency-rem** (semafoor) op gelijktijdige LLM-calls
@@ -133,18 +103,11 @@ triviale geval; het rapport heeft de vorm `{werkgebied, bronnen[], begrippen, af
   **Activiteit 2 is twee-fase** voor de cross-referenties: een verwijzing-inventaris
   (`steps.inventariseer_verwijzingen` / `prompts.act2_inventaris_prompt`) → begrensde fetch-lus
   (`orchestrator._volg_verwijzingen` + `wettenbank.parse_jci`) → de volledige act-2 met de
-  opgehaalde verwezen tekst als context (zie §Roadmap → Cross-referenties).
-  **Activiteit 3 is twee-staps** binnen één ronde: `prompts.act3_begrippen_prompt` (3a) →
-  `prompts.act3_regels_prompt` (3b, met de 3a-begrippen als bouwstenen); `steps.genereer_act3`
-  nummert `nieuwe_begrippen` deterministisch door en remapt de regel-referenties. Beide
-  act-3-prompts dragen de volledige leden-tekst plus de omschrijving/analysefocus/begrippenlijst
-  (als onbetrouwbare data geframed). De orchestrator kent daarnaast `claim_act3`/`run_act3_fase`
-  (act3 on-demand op een act2-only-`klaar`). `_set_fase()` schrijft
+  opgehaalde verwezen tekst als context (zie §Roadmap → Cross-referenties). `_set_fase()` schrijft
   best-effort de observerende `current_fase` weg op breekpunten in `_genereer()`/`_bouw_rapport()`
   (geen control-flow-effect; faalt stil) en wist 'm bij review/terminal/fout.
 - `routers/projects.py` + `main.py` — de kanonieke resource onder **`/v1/projects`** (client-gescopet,
-  `response_model`s, paginatie, SSE), incl. `POST /{id}/act3` (activiteit 3 on-demand; 409 als de
-  analyse niet act2-only-`klaar` is), `/health` (liveness), `/ready` (alleen booleans). De per-project
+  `response_model`s, paginatie, SSE), incl. `/health` (liveness), `/ready` (alleen booleans). De per-project
   SSE (`/{id}/events`) is verrijkt met `current_fase`; daarnaast is er een **aggregate-stream**
   `GET /v1/projects/events` (client-gescopet, één diff-emit per gewijzigd project + `removed`-events)
   die het live dashboard én de projectenlijst voedt. Die route is **bewust vóór `/{project_id}`**
@@ -204,12 +167,12 @@ onvoorwaardelijk spans/metrics maken. De `otel`-extra zit in de productie-image 
 ## Garanties (niet aan tornen)
 
 - HARD brongetrouwheid faalt → job naar `fout`, **ook in `review:false`**. Nooit stil `klaar`.
-- Schema-FOUTEN (ongeldige JAS-klasse, dangling `begrip_id`, …) blokkeren eveneens: eerst
+- Schema-FOUTEN (ongeldige JAS-klasse, ontbrekende markering-id, …) blokkeren eveneens: eerst
   auto-correctie, blijven ze staan → `fout` (gelijke handhaving met het skill-spoor, waar
   `validate_analyse.py` met exit 2 blokkeert). Waarschuwingen blokkeren niet.
 - Auto-correctie is **geen ronde**: her-genereren binnen één ronde vóór het wegschrijven.
-- Feedback alleen via de API en alleen in een `wacht-op-review-*`-state (anders 409);
-  `akkoord-afronden` alleen op activiteit 2 en zonder opmerkingen (contract-validatie).
+- Feedback alleen via de API en alleen in de `wacht-op-review-act2`-state (anders 409);
+  `akkoord` zonder opmerkingen rondt de analyse af.
 - Brongetrouwe velden (`leden`, `bronreferentie`, `versiedatum`, `pad`) komen **uit de MCP**, niet uit het LLM.
 
 ## Lokaal draaien
@@ -400,13 +363,13 @@ zodat aanvaller-gekozen sleutels via de publieke login-route het geheugen niet v
 client → 429), `WETSANALYSE_LLM_TOKEN_BUDGET` (token-plafond per analyse → job naar `fout`,
 `FoutKlasse.quota`), `WETSANALYSE_LLM_MAX_CONCURRENCY` (globaal plafond op gelijktijdige LLM-calls,
 default 4 — de echte rem tegen provider-rate-limits), `WETSANALYSE_LLM_TIMEOUT_S` (harde wandklok-
-timeout per LLM-call, **default 300**; 0 = uit — een hele act-2/act-3-ronde kan bij een traag
+timeout per LLM-call, **default 300**; 0 = uit — een hele act-2-ronde kan bij een traag
 provider-model >2 min duren, vandaar ruimer dan de oude 120; veilig t.o.v. de lease omdat de
 heartbeat die mid-call ververst), `WETSANALYSE_LLM_MAX_PROMPT_TOKENS` (harde cap op prompt-tokens
 per call; 0 = auto-afleiden uit het model, onbekend model → geen limiet — bij overschrijding faalt
-de call met een duidelijke `PromptTooLargeError` i.p.v. een rauwe 400; act-3 stuurt bewust de
-volledige leden-tekst mee zodat definities dicht op de bron blijven — deze token-guard is de
-bewaking van dat contextrisico),
+de call met een duidelijke `PromptTooLargeError` i.p.v. een rauwe 400; act-2 stuurt bewust de
+volledige leden-tekst plus de opgehaalde verwezen tekst mee, dus deze token-guard bewaakt dat
+contextrisico),
 `WETSANALYSE_MAX_VERWIJZING_FETCHES` (cap op het aantal
 verwezen artikelen dat per analyse wordt opgehaald in de cross-referentie-fetch-lus, default 6;
 0 = niet volgen), `WETSANALYSE_LLM_PROMPT_CACHING` (prompt caching aan/uit, **default 1/aan**;
@@ -441,9 +404,8 @@ begrensde deterministische fetch-lus (`orchestrator._volg_verwijzingen`, diepte 
 `WETSANALYSE_MAX_VERWIJZING_FETCHES`, gefaalde fetch degradeert stil), waarna het LLM in act-2b
 `betekenis`/`status` brongetrouw invult met de opgehaalde tekst. `wettenbank.parse_jci` stuurt de
 fetch; de MCP-getagde verwijzingen (per lid) voeden de inventaris. Het rapport draagt een
-`verwijzingen`-array; begrippen kunnen via `bron_verwijzing` op een definitie-verwijzing steunen.
-Diepere navolging (verwezen artikelen vól door de JAS-werkstroom halen i.p.v. alleen de tekst
-meenemen) blijft toekomstwerk.
+`verwijzingen`-array. Diepere navolging (verwezen artikelen vól door de JAS-werkstroom halen i.p.v.
+alleen de tekst meenemen) blijft toekomstwerk.
 
 De **webapp** is inmiddels gebouwd: zie `frontend/` (Next.js BFF) — analyses aanmaken, reviewen, en
 de LLM-modelprofielen beheren via `/beheer`.
