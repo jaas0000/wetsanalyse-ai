@@ -8,12 +8,22 @@ een zelfstandige, Dockeriseerbare dienst die je via HTTP (Postman/Swagger) bevra
 
 ## Dragend principe
 
-De **orchestrator bezit de review-lus en de state**; het **LLM doet per stap één begrensde taak**
-("geef JSON conform schema"). **Stap 1 (ophalen) is deterministisch via de MCP** — geen LLM-tool-
-calling. De **jobstore is PostgreSQL** (SQLAlchemy async/asyncpg): één `projects`-rij per analyse met de
+De **orchestrator bezit de review-lus, de state en de harde gate**; de **generatie is agentisch**.
+De **jobstore is PostgreSQL** (SQLAlchemy async/asyncpg): één `projects`-rij per analyse met de
 state + telemetrie en het `rapport` (JSONB-kolom); de immutabele analyse-rondes + feedback staan in een
 aparte `rondes`-tabel. De API schrijft *niet* naar de `analyses/<id>/werk/`-disk; de
 disk-interoperabiliteit met de lokale skill staat op de roadmap, niet in de huidige flow.
+
+**Act-2-motor (twee, via `WETSANALYSE_ACT2_ENGINE`).** Standaard **`agent`**: een agent⇄tools-loop op
+de job-modelprofiel-LLM met **GraphDB als bron** — de agent haalt de bepaling (leden-tekst =
+brongetrouw corpus) uit de graaf, volgt betekenisbepalende verwijzingen via een graaf-tool, en levert
+markeringen + verwijzingen in (`engine/agent_workers.py` + `graphdb.py`/`graph_queries.py`/
+`graph_source.py`; tool-calling in `llm/litellm_client.run_tools`). Rollback **`deterministic`**: de
+oude wettenbank-MCP-pijplijn (LLM doet per stap één begrensde JSON-taak; ophalen deterministisch via de
+MCP). **Beide delen dezelfde harde gate** (brongetrouwheid + JAS-schema → `fout`, ook `review:false`),
+review-lus, ronde-immutabiliteit en rapportvorm; alleen de generatie-binnenkant verschilt. Bij
+`POST /v1/projects` doet de agent-motor een **dekkings-preflight** (`graph_source.is_gedekt`): staat een
+bron niet in de graaf, dan faalt de create helder (400) i.p.v. later stil leeg.
 
 **Scope: alleen activiteit 2.** Begrippen (activiteit 3) en de RegelSpraak-formaliseringsfase zijn
 **verwijderd** — ze worden later opnieuw opgebouwd op een agentische basis. Elke analyse eindigt
@@ -78,7 +88,14 @@ en verwijzingen, zonder begrippen/afleidingsregels.
   functiestap binnen een `*-runt`/`bouwt`-state tonen (bv. `llm-generatie`, `verwijzingen-volgen`,
   `brongetrouwheid-check`). Dit is **geen** state-machine-veld: het staat los van de state-CAS en heeft
   geen control-flow-effect; bij review/terminal/fout gaat het op `None`.
-- `wettenbank.py` — MCP-client; lege/fout-respons → `WettenbankError` (nooit doorgaan met lege context).
+- `wettenbank.py` — wettenbank-MCP-client; lege/fout-respons → `WettenbankError`. Bron voor de
+  **deterministische** (rollback-)motor én voor de formulier-catalogus/structuur/artikelen
+  (`wet_info.py`/`routers/catalog.py`/`wetten.py`) — niet voor de agentische act-2-generatie.
+- `graphdb.py` — async GraphDB-MCP-client (read-only SPARQL; `GraphDBError` met `klasse`); bron voor de
+  **agentische** motor. `graph_queries.py` — SPARQL-bouwers + TSV-parser (gedupliceerd van graph-qa;
+  keuze: API-native, geen gedeeld pakket). `graph_source.py` — `haal_bron_basis()` (brongetrouwe
+  bron-basis uit de graaf, zelfde vorm als `wettenbank.map_artikel_naar_bron_basis`) + `is_gedekt()`
+  (dekkings-preflight).
 - `validation.py` — **schema** (skill-`check_activiteit_2`: FOUTEN blokkeren — auto-correctie,
   anders `fout`, ook in `review:false`; WAARSCHUWINGEN reizen mee als context) vs **hard**
   (brongetrouwheid: citaat letterlijk in leden-tekst na normalisatie, `vindplaats`/`bronreferentie`
@@ -86,26 +103,30 @@ en verwijzingen, zonder begrippen/afleidingsregels.
   skill-fouten/-waarschuwingen gefilterd, zodat per concern één — de genormaliseerde — melding overblijft.
 - `ratelimit.py` — in-process per-client rate limit (dependency) + `QuotaExceeded` (beleidsgrenzen).
 - `llm/` — `LLMClient`-protocol + LiteLLM-implementatie (provider = config; output-strategie + parse).
-  `throttle.py` — proces-globale **concurrency-rem** (semafoor) op gelijktijdige LLM-calls
-  (`WETSANALYSE_LLM_MAX_CONCURRENCY`), tegen zelf-veroorzaakte rate-limits; ingesteld in de lifespan.
-  `capture.py` — **LLM-call-capture**: een `CapturingLLMClient`-decorator die élke `complete()`
-  (incl. auto-correctie-herhalingen, de verwijzing-inventaris en gefaalde calls) best-effort vastlegt
+  Naast single-shot `complete()` is er **`run_tools()`**: een begrensde agent⇄tools-loop
+  (`litellm.acompletion(tools=, tool_choice="auto")`) die het model tools laat kiezen — de basis van de
+  agentische act-2-motor. `throttle.py` — proces-globale **concurrency-rem** (semafoor) op gelijktijdige
+  LLM-calls (`WETSANALYSE_LLM_MAX_CONCURRENCY`), tegen zelf-veroorzaakte rate-limits; ingesteld in de lifespan.
+  `capture.py` — **LLM-call-capture**: een `CapturingLLMClient`-decorator die élke `complete()`/`run_tools()`
+  (incl. auto-correctie-herhalingen en gefaalde calls) best-effort vastlegt
   in `llm_calls` (system/user-prompt + ruwe respons + metadata) wanneer de runtime-toggle
   `capture_llm_calls` aan staat. De call-context (project/activiteit/ronde/poging/fase) komt uit een
   `ContextVar` die de orchestrator rond elke generatie zet; `_llm_for` wrapt de client. Capture is
   **default uit** en mag de analyse nooit breken. De toggle leeft in `app_settings.py` (key/value met
   korte TTL-cache) en is beheerbaar via `/v1/admin/settings` + het /beheer-scherm. Inzien per analyse:
   `GET /v1/admin/projects/{slug}/llm-calls`.
-- `engine/` — `prompts.py` (references verbatim + canonieke JAS-lijst uit validation), `steps.py`
-  (LLM-stap + merge met brongetrouwe MCP-basis), `retry.py` (bounded backoff op transiënte
-  LLM/MCP-fouten; honoreert **`Retry-After`** bij een 429, met plafond + jitter), `orchestrator.py`
-  (state machine, auto-correctie, 6-rondencap, startup-reconciliatie, retry, quota/budget-checks).
-  **Activiteit 2 is twee-fase** voor de cross-referenties: een verwijzing-inventaris
-  (`steps.inventariseer_verwijzingen` / `prompts.act2_inventaris_prompt`) → begrensde fetch-lus
-  (`orchestrator._volg_verwijzingen` + `wettenbank.parse_jci`) → de volledige act-2 met de
-  opgehaalde verwezen tekst als context (zie §Roadmap → Cross-referenties). `_set_fase()` schrijft
-  best-effort de observerende `current_fase` weg op breekpunten in `_genereer()`/`_bouw_rapport()`
-  (geen control-flow-effect; faalt stil) en wist 'm bij review/terminal/fout.
+- `engine/` — `agent_workers.py` (de **agentische** act-2-worker: `genereer_act2_bron_agentisch` per
+  bron via `run_tools` + de graaf-tools `haal_verwijzing`/`lever_analyse`; drop-in voor
+  `steps.genereer_act2_bron` — zelfde merge/provenance, zodat de harde gate ongewijzigd blijft),
+  `prompts.py` (references verbatim + canonieke JAS-lijst uit validation; hergebruikt door de agent-worker),
+  `steps.py` (de **deterministische** LLM-stap + merge met brongetrouwe basis), `retry.py` (bounded backoff
+  op transiënte LLM/MCP/GraphDB-fouten; honoreert **`Retry-After`**, met plafond + jitter),
+  `orchestrator.py` (state machine, auto-correctie, 6-rondencap, startup-reconciliatie, retry,
+  quota/budget-checks). In agent-modus haalt `_fase_start` de bron uit GraphDB en draait
+  `_genereer_act2_vers_agentisch`; de agent volgt zelf betekenisbepalende verwijzingen (begrensd door
+  `WETSANALYSE_MAX_VERWIJZING_FETCHES`). De deterministische tak (`_genereer_act2_vers`) houdt de
+  twee-fase inventaris/`_volg_verwijzingen`-flow. `_set_fase()` schrijft best-effort de observerende
+  `current_fase` weg op breekpunten (geen control-flow-effect; faalt stil) en wist 'm bij review/terminal/fout.
 - `routers/projects.py` + `main.py` — de kanonieke resource onder **`/v1/projects`** (client-gescopet,
   `response_model`s, paginatie, SSE), incl. `/health` (liveness), `/ready` (alleen booleans). De per-project
   SSE (`/{id}/events`) is verrijkt met `current_fase`; daarnaast is er een **aggregate-stream**
@@ -201,6 +222,8 @@ LLM_MODEL=claude-sonnet-4-6
 LLM_API_BASE=https://<resource-naam>.services.ai.azure.com   # geen /models achteraan
 LLM_API_KEY_FILE=secrets/llm_api_key
 WETTENBANK_TOKEN_FILE=secrets/wettenbank_token
+GRAPHDB_TOKEN_FILE=secrets/graphdb_token            # agentische act-2-motor (bron = GraphDB)
+GRAPHDB_MCP_URL=https://graphdb-mcp.ipalm.nl/mcp    # GraphDB-MCP-endpoint (repo: GRAPHDB_REPOSITORY_ID=inning)
 WETSANALYSE_API_TOKENS_FILE=secrets/api_tokens
 WETSANALYSE_ADMIN_TOKENS=admin:<zelfgekozen-admin-token>
 LLM_CONFIG_SECRET=<fernet-key>   # nodig om API-keys via de admin-UI op te slaan
@@ -306,6 +329,9 @@ sudo mkdir -p "$SECRETS_DIR"
 echo -n "<llm-api-key>"      | sudo tee "$SECRETS_DIR/llm_api_key"      > /dev/null
 echo -n "<wettenbank-token>" | sudo tee "$SECRETS_DIR/wettenbank_token"  > /dev/null
 echo -n "id1:tok1,id2:tok2"  | sudo tee "$SECRETS_DIR/api_tokens"        > /dev/null
+# GraphDB-token: verplicht voor de agentische act-2-motor (WETSANALYSE_ACT2_ENGINE=agent).
+# De GraphDB-REST staat open/writable, dus dit is de enige poort — zet ook GRAPHDB_MCP_URL.
+echo -n "<graphdb-token>"    | sudo tee "$SECRETS_DIR/graphdb_token"     > /dev/null
 
 # Admin-laag (LLM-modelprofielen): aparte admin-tokens + Fernet-master-key voor key-versleuteling.
 echo -n "admin:adm-tok"                                   | sudo tee "$SECRETS_DIR/admin_tokens"      > /dev/null

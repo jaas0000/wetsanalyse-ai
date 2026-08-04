@@ -34,7 +34,10 @@ expliciet gemaakt in plaats van schijnzekerheid.
    `CLAUDE.md` — lees die bij werk *in* de MCP.
 2. **`api/`** — headless FastAPI-backend (PostgreSQL-jobstore, per-client bearer-auth) die de
    JAS-werkstroom als async REST-API aanbiedt: analyses aanmaken/reviewen (een **werkgebied** met
-   meerdere bronnen) en afronden ná activiteit 2 (`scope: "act2"`). Bevat óók het **annotatie-domein** van de werkplek
+   meerdere bronnen) en afronden ná activiteit 2 (`scope: "act2"`). De act-2-**generatie is agentisch**
+   (agent⇄tools op **GraphDB**, standaard; de oude wettenbank-MCP-pijplijn blijft als rollback via
+   `WETSANALYSE_ACT2_ENGINE`), met een behouden **harde gate** (brongetrouwheid + JAS-schema → `fout`).
+   Bevat óók het **annotatie-domein** van de werkplek
    (`/v1/annotatie/*`: documenten/elementen/beslissingen + append-only auditlog). Het LLM wordt
    aangestuurd via **benoemde modelprofielen** (in de database, beheerbaar via `/v1/admin/profiles`;
    de env-`LLM_*`-waarden seeden alleen het eerste default-profiel). Eigen `CLAUDE.md` + `README.md`.
