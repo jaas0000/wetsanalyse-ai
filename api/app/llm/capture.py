@@ -18,7 +18,7 @@ import logging
 
 from ..app_settings import capture_enabled
 from ..jobstore import JobStore
-from .base import LLMClient, LLMResult
+from .base import LLMClient, LLMResult, ToolExecutor
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +56,17 @@ class CapturingLLMClient:
         try:
             res = await self._inner.complete(system, user, schema)
         except Exception as e:  # noqa: BLE001 — leg de gefaalde call vast en geef de fout door
+            await self._leg_vast(system, user, res=None, ok=False, error=repr(e))
+            raise
+        await self._leg_vast(system, user, res=res, ok=True, error=None)
+        return res
+
+    async def run_tools(
+        self, system: str, user: str, tools: list[dict], execute: ToolExecutor, *, max_iters: int = 12,
+    ) -> LLMResult:
+        try:
+            res = await self._inner.run_tools(system, user, tools, execute, max_iters=max_iters)
+        except Exception as e:  # noqa: BLE001
             await self._leg_vast(system, user, res=None, ok=False, error=repr(e))
             raise
         await self._leg_vast(system, user, res=res, ok=True, error=None)

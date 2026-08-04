@@ -8,10 +8,15 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Protocol, runtime_checkable
 
 _FENCE = re.compile(r"^\s*```(?:json)?\s*|\s*```\s*$", re.IGNORECASE)
+
+# Een tool-executor: (naam, argumenten) -> resultaattekst. De agent-worker levert deze; de
+# LLM-laag roept 'm aan voor elke tool-call die het model kiest.
+ToolExecutor = Callable[[str, dict], Awaitable[str]]
 
 
 @dataclass
@@ -71,6 +76,20 @@ class PromptTooLargeError(LLMError):
 class LLMClient(Protocol):
     async def complete(self, system: str, user: str, schema: dict | None = None) -> LLMResult:
         """Genereer JSON conform `schema`. Werpt LLMError bij onparseerbaar resultaat."""
+        ...
+
+    async def run_tools(
+        self,
+        system: str,
+        user: str,
+        tools: list[dict],
+        execute: ToolExecutor,
+        *,
+        max_iters: int = 12,
+    ) -> LLMResult:
+        """Draai een begrensde agent⇄tools-loop: het model kiest tools, `execute` voert ze uit en
+        het resultaat gaat terug tot het model een eindantwoord geeft (of `max_iters` bereikt is).
+        `LLMResult.ruwe_tekst` is de eindtekst; `tokens_in/out` sommeren alle beurten."""
         ...
 
 
