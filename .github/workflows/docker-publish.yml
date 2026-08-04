@@ -144,22 +144,12 @@ jobs:
           severity: CRITICAL
           exit-code: "1"
 
-      - name: Resolve deploy target (branch → env)
-        id: env
-        if: ${{ (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/release/acceptance') && env.AZURE_CLIENT_ID != '' && env.AZURE_CLIENT_SECRET != '' }}
-        run: |
-          if [ "${{ github.ref }}" = "refs/heads/release/acceptance" ]; then
-            echo "rg=rg-wetsanalyse-acc"       >> "$GITHUB_OUTPUT"
-            echo "app=wetsanalyse-acc-mcp"     >> "$GITHUB_OUTPUT"
-          else
-            echo "rg=rg-wetsanalyse"           >> "$GITHUB_OUTPUT"
-            echo "app=wetsanalyse-mcp"         >> "$GITHUB_OUTPUT"
-          fi
-
       - name: Azure Container App update (MCP)
         if: ${{ (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/release/acceptance') && env.AZURE_CLIENT_ID != '' && env.AZURE_CLIENT_SECRET != '' }}
         env:
           IMAGE_DIGEST_REF: ${{ env.IMAGE }}@${{ steps.build.outputs.digest }}
+          APP: ${{ github.ref == 'refs/heads/release/acceptance' && 'wetsanalyse-acc-mcp' || 'wetsanalyse-mcp' }}
+          RG:  ${{ github.ref == 'refs/heads/release/acceptance' && 'rg-wetsanalyse-acc'  || 'rg-wetsanalyse'  }}
         run: |
           az login --service-principal \
             --username "$AZURE_CLIENT_ID" \
@@ -167,6 +157,6 @@ jobs:
             --tenant "$AZURE_TENANT_ID"
           az account set --subscription "$AZURE_SUBSCRIPTION_ID"
           az containerapp update \
-            --name "${{ steps.env.outputs.app }}" \
-            --resource-group "${{ steps.env.outputs.rg }}" \
+            --name "$APP" \
+            --resource-group "$RG" \
             --image "$IMAGE_DIGEST_REF"

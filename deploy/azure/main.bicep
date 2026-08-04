@@ -13,8 +13,8 @@ param location string = resourceGroup().location
 @description('Naam-prefix voor alle resources.')
 param appName string = 'wetsanalyse'
 
-@description('Env-naam voor OTel deployment.environment en app-side env-checks (dev | acc).')
-param envName string = 'dev'
+@description('Env-naam voor OTel deployment.environment en app-side env-checks (dev | acc). Verplicht — geen default zodat een acc-deploy nooit stil DEPLOY_ENV=dev stampt.')
+param envName string
 
 @description('PostgreSQL-servernaam (moet globaal uniek zijn in Azure).')
 param dbServerName string = '${appName}-db'

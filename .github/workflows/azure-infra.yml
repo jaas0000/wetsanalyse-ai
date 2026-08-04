@@ -45,33 +45,14 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Resolve deploy target (branch/dispatch → env)
-        id: env
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            ENV_NAME="${{ inputs.env_name }}"
-          elif [ "${{ github.ref }}" = "refs/heads/release/acceptance" ]; then
-            ENV_NAME=acc
-          else
-            ENV_NAME=dev
-          fi
-          if [ "$ENV_NAME" = "acc" ]; then
-            APP=wetsanalyse-acc
-            RG=rg-wetsanalyse-acc
-          else
-            APP=wetsanalyse
-            RG=rg-wetsanalyse
-          fi
-          echo "env_name=$ENV_NAME" >> "$GITHUB_OUTPUT"
-          echo "app_name=$APP"      >> "$GITHUB_OUTPUT"
-          echo "rg=$RG"             >> "$GITHUB_OUTPUT"
-
       - name: Azure infra-deployment (Bicep)
         if: ${{ env.AZURE_CLIENT_ID != ''
             && env.AZURE_CLIENT_SECRET != ''
             && env.AZURE_AI_KEY != ''
             && env.GRAPHDB_TOKEN != ''
             && env.LLM_API_BASE != '' }}
+        env:
+          ENV_NAME: ${{ github.event_name == 'workflow_dispatch' && inputs.env_name || (github.ref == 'refs/heads/release/acceptance' && 'acc' || 'dev') }}
         run: |
           az login --service-principal \
             --username "$AZURE_CLIENT_ID" \
@@ -81,8 +62,6 @@ jobs:
           python3 deploy/azure/gen-deploy.py \
             --llm-api-base "$LLM_API_BASE" \
             --graphdb-token "$GRAPHDB_TOKEN" \
-            --app-name "${{ steps.env.outputs.app_name }}" \
-            --resource-group "${{ steps.env.outputs.rg }}" \
-            --env-name "${{ steps.env.outputs.env_name }}" \
+            --env-name "$ENV_NAME" \
             --location "${AZURE_LOCATION:-northeurope}" \
             --run
