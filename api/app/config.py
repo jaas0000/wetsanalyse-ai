@@ -61,11 +61,24 @@ class Settings:
             self.admin_tokens[token.strip()] = admin_id.strip()
 
         # --- Wettenbank-MCP (intern netwerk in productie) ---
+        # Blijft de bron voor de formulier-catalogus/structuur/artikelen (wet_info/catalog/wetten);
+        # NIET meer voor de act-2-generatie (die haalt bron + verwijzingen uit GraphDB, zie hieronder).
         self.mcp_url = os.environ.get(
             "WETTENBANK_MCP_URL", "https://wettenbank-mcp.ipalm.nl/mcp"
         )
         self.mcp_token = _read_secret("WETTENBANK_TOKEN")
         self.mcp_timeout_s = float(os.environ.get("WETTENBANK_MCP_TIMEOUT", "30"))
+
+        # --- GraphDB-MCP (bron voor de agentische act-2-generatie: leden-tekst = brongetrouw corpus,
+        # jci/bronreferentie, regeling-metadata en verwijzingen). De token is verplicht om te genereren;
+        # de GraphDB-REST staat open/writable, dus dit is de enige poort (spiegelt graph-qa). ---
+        self.graphdb_mcp_url = os.environ.get(
+            "GRAPHDB_MCP_URL", "https://graphdb-mcp.ipalm.nl/mcp"
+        )
+        self.graphdb_token = _read_secret("GRAPHDB_TOKEN")
+        self.graphdb_repository_id = os.environ.get("GRAPHDB_REPOSITORY_ID", "inning")
+        self.graphdb_sparql_tool = os.environ.get("GRAPHDB_SPARQL_TOOL", "sparql_query")
+        self.graphdb_timeout_s = float(os.environ.get("GRAPHDB_MCP_TIMEOUT", "60"))
 
         # --- LLM-adapter ---
         # Endpointtype bepaalt provider-prefix/auth (zie Fase 0): azure_ai (Foundry/MaaS) vs azure (OpenAI).
