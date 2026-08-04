@@ -40,7 +40,12 @@ RUN apt-get update \
     && apt-get upgrade -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
-RUN pip install --no-cache-dir --upgrade 'pip>=26.1' 'setuptools>=83.0.0'
+RUN pip install --no-cache-dir --upgrade 'pip>=26.1' 'setuptools>=83.0.0' \
+ && rm -f /usr/local/lib/python3.14/site-packages/pip/_vendor/bom.cdx.json
+# ↑ pip 26.x bakt een CycloneDX-SBOM van zijn vendored deps mee (msgpack 1.1.2,
+# setuptools 70.3.0, …). Trivy pikt die op als "third-party SBOM" en rapporteert
+# die versies als kwetsbaar — ook al is de echte image al gepatcht. Verwijderen
+# sluit de valse alerts (#100/#101/#102) zonder pip-functionaliteit te breken.
 
 WORKDIR /app/api
 
