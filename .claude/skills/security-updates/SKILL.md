@@ -28,10 +28,12 @@ base-image-pin, `.github/workflows/*.yml` SHA-pins). Zonder discipline mis je
 alerts, bump je in het verkeerde bestand, of merge je een PR die stil de build
 breekt.
 
-De skill is **guided, niet volautomatisch**. Mechanische patch/minor bumps
-loopt hij in één ronde af; semver-majors of alerts die code-migratie vergen
-(zoals de mcp v2-migratie) stopt hij vóór de commit voor akkoord van de
-gebruiker.
+De skill is **gestroomlijnd voor mechanisch, guided voor risk**. Mechanische
+patch/minor bumps loopt hij end-to-end af (bump → verify → commit → push →
+PR → self-merge → sync fork → close superseded PRs); semver-majors of alerts
+die code-migratie vergen (zoals de mcp v2-migratie) stopt hij vóór de bump
+voor akkoord van de gebruiker. Zie
+[[feedback-zelf-mergen-bij-mechanisch]] voor waar de grens ligt.
 
 Twee harde invarianten:
 
@@ -169,43 +171,84 @@ Nederlands, actief, geen marketing-taal. CVE's noemen waar relevant. **Nooit
 `.env`/secrets/lokale-config-dirs** stagen — controleer `git status` na
 `git add` en gebruik expliciete paden i.p.v. `git add -A`.
 
-### Stap 6 — Pushen + PR
+### Stap 6 — Afronden (push → PR → merge → sync → close)
+
+Voor **mechanische** batches loop je stap 6-9 in één keer door zonder halt.
+Alleen bij *risk-items* (majors) pauzeer je vóór merge voor user-akkoord —
+zie [[feedback-zelf-mergen-bij-mechanisch]] voor de precieze grens.
+
+#### 6a — Push + PR aanmaken
 
 ```bash
-git push --force-with-lease origin general-fixes         # nooit --force zonder lease
+git push --force-with-lease origin <branch>         # nooit --force zonder lease
 FORK_OWNER=${FORK_REPO%%/*}
 gh pr create --repo $UPSTREAM_REPO \
-  --head $FORK_OWNER:general-fixes --base master \
+  --head $FORK_OWNER:<branch> --base master \
   --title "..." --body "..."
 ```
 
 Body volgt het formaat in `references/pr-template.md`.
 
-Als deze push een bestaande commit op de fork-branch overschrijft
-(force-push), maak dan **eerst** een backup-tag:
+Overschrijft de push een bestaande commit op de fork-branch (force-push)?
+Maak dan **eerst** een backup-tag:
 `git push origin <oude-sha>:refs/tags/backup/<naam>`.
 
-### Stap 7 — Superseded Dependabot-PR's closen
-
-Als een handmatige bump een openstaande Dependabot-PR vervangt (bv. omdat je
-de bump combineerde met een code-migratie of via overrides breder oploste),
-close 'm met een comment die naar de handmatige commit verwijst:
+#### 6b — Checks afwachten + mergen (self-merge bij mechanisch)
 
 ```bash
-gh pr close <nr> --repo $FORK_REPO -c "Vervangen door <sha> (<korte reden>)."
+PR_NR=$(gh pr view --json number -q .number)
+gh pr view $PR_NR --repo $UPSTREAM_REPO --json mergeable,mergeStateStatus,statusCheckRollup
 ```
 
-### Stap 8 — Fork-master syncen (optioneel)
+Wacht tot `mergeable=MERGEABLE` + `state=CLEAN` + geen pending/failing
+checks. Bij mechanische bump self-mergen:
 
-Na merge van de PR op upstream/master:
+```bash
+gh pr merge $PR_NR --repo $UPSTREAM_REPO --squash --delete-branch=false
+```
+
+Squash — dat matcht de repo-conventie (zie `git log --oneline` op
+upstream/master).
+
+**Stop vóór merge en vraag akkoord wanneer:**
+- Er staat een risk-item in de PR (major, breaking change, code-migratie).
+- Checks tonen onverklaarde failures.
+- De PR heeft `mergeable=CONFLICTING` — rebase eerst.
+- De user heeft in deze sessie expliciet gezegd "niet mergen".
+
+#### 6c — Fork-master syncen
 
 ```bash
 gh repo sync $FORK_REPO -b master
+git fetch origin upstream --prune
 ```
 
 Divergeert de fork-master? Zoek eerst met patch-id welke commits echt
 uniek zijn (zie `references/fork-sync.md`); tag ze desnoods als backup vóór
 een `--force`-sync.
+
+#### 6d — Superseded Dependabot-PR's closen
+
+Als jouw bump openstaande Dependabot-PR's op de fork vervangt (via
+`overrides`, of doordat je meerdere Dependabot-PR's in één commit
+combineerde), close ze met een comment die naar de gemergde commit
+verwijst:
+
+```bash
+for pr in <nr1> <nr2> ...; do
+  gh pr close $pr --repo $FORK_REPO -c "Vervangen door <sha> op upstream (<korte reden>)."
+done
+```
+
+Verifieer dat er geen mechanische Dependabot-PR's op de fork blijven
+hangen die je zojuist hebt opgelost.
+
+### Stap 7 — Rapporteren
+
+Eén samenvatting aan de user met:
+- Welke PR's zijn gemerged (met SHA op upstream/master)
+- Hoeveel Dependabot-alerts sluiten (verwacht)
+- Welke overblijvende Dependabot-PR's zijn en waarom je ze hebt overgeslagen (per stuk, kort)
 
 ## Escape hatches
 
