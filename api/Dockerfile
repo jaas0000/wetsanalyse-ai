@@ -23,6 +23,12 @@ WORKDIR /app/api
 COPY api/pyproject.toml api/uv.lock /app/api/
 RUN uv sync --extra llm --extra otel --frozen
 
+# uv laat een gebundelde setuptools 70.3.0 in de .venv achter; Trivy scant die venv
+# (de runtime-pip-bump raakt alleen /usr/local/lib, niet /app/api/.venv). Overschrijf
+# 'm binnen de venv — dekt CVE-2025-47273 (HIGH, Path Traversal) én CVE-2026-59890
+# (MEDIUM, MANIFEST.in bypass via Unicode-normalisatie).
+RUN uv pip install --python /app/api/.venv/bin/python --no-cache-dir 'setuptools>=83.0.0'
+
 # ── Runtime ───────────────────────────────────────────────────────────────────
 # Schone base, identiek aan de builder → de venv-symlinks naar /usr/local/bin/python
 # blijven geldig. Geen uv meer; systeem-pip naar een gepatchte versie (BIO2 / ISO 27002).
@@ -34,7 +40,7 @@ RUN apt-get update \
     && apt-get upgrade -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
-RUN pip install --no-cache-dir --upgrade 'pip>=26.1' 'setuptools>=78.1.1'
+RUN pip install --no-cache-dir --upgrade 'pip>=26.1' 'setuptools>=83.0.0'
 
 WORKDIR /app/api
 
