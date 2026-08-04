@@ -98,7 +98,11 @@ jobs:
             BUILD_TIME=${{ steps.buildtime.outputs.ts }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          sbom: true
+          # sbom: false — BuildKit hangt anders een attestation-manifest aan de push
+          # met een SBOM die Trivy prefereert boven het echte filesystem, en die SBOM
+          # rapporteert stale versies (bv. setuptools 70.3.0 terwijl de image 83.0.0
+          # heeft). Zonder attestation scant Trivy de image-layers direct.
+          sbom: false
           provenance: mode=max
 
       # ── Image-scan (BIO2 / ISO 27002:2022 §8.8) ───────────────────────────────
