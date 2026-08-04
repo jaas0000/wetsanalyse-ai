@@ -4,13 +4,20 @@
 Gebruik:
     python3 deploy/azure/gen-deploy.py "<azure-ai-key>" \\
         --llm-api-base https://<resource>.services.ai.azure.com \\
-        [--resource-group rg-wetsanalyse] \\
+        --resource-group rg-wetsanalyse \\
+        --app-name wetsanalyse \\
+        [--env-name dev|acc] \\
         [--location westeurope] \\
         [--run]
 
 Vereisten:
     - az (Azure CLI) geïnstalleerd en ingelogd: az login
-    - Resource group bestaat: az group create -n rg-wetsanalyse -l westeurope
+    - Resource group bestaat: az group create -n <rg> -l westeurope
+
+`--resource-group` en `--app-name` zijn expliciet om te voorkomen dat een
+dev-run per ongeluk naar een verkeerde env deployt. `--env-name` bepaalt
+de `DEPLOY_ENV` env-var in de containers (OTel + app-side env-checks) en
+default naar `dev`.
 """
 import argparse
 import base64
@@ -39,9 +46,13 @@ def main() -> None:
                    help="Bearer-token voor de GraphDB-MCP (of via GRAPHDB_TOKEN env). Nodig voor graph-qa.")
     p.add_argument("--graphdb-mcp-url", default=os.environ.get("GRAPHDB_MCP_URL", "https://graphdb-mcp.ipalm.nl/mcp"),
                    help="GraphDB-MCP-URL voor graph-qa. Fase 1: de huidige publieke MCP (default).")
-    p.add_argument("--resource-group", default="rg-wetsanalyse")
+    p.add_argument("--resource-group", required=True,
+                   help="Doel-RG (bijv. rg-wetsanalyse of rg-wetsanalyse-acc). Verplicht om een dev-run niet stil naar acc te sturen.")
     p.add_argument("--location",      default="westeurope")
-    p.add_argument("--app-name",      default="wetsanalyse")
+    p.add_argument("--app-name",      required=True,
+                   help="Naam-prefix voor alle resources (bijv. wetsanalyse of wetsanalyse-acc).")
+    p.add_argument("--env-name",      default="dev",
+                   help="Env-label voor DEPLOY_ENV in de containers (dev | acc). Default: dev.")
     p.add_argument("--db-server-name", default=None)
     p.add_argument("--params-file",   default=str(DEFAULT_PARAMS))
     p.add_argument("--run",           action="store_true",
@@ -68,6 +79,7 @@ def main() -> None:
         "parameters": {
             "location":           {"value": args.location},
             "appName":            {"value": args.app_name},
+            "envName":            {"value": args.env_name},
             "dbServerName":       {"value": db_server},
             "llmModel":           {"value": args.llm_model},
             "llmApiBase":         {"value": args.llm_api_base},
