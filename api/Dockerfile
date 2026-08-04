@@ -5,12 +5,12 @@
 # ── Builder ───────────────────────────────────────────────────────────────────
 # uv leeft alléén in deze stage: het bouwt de .venv en blijft daarna buiten de
 # runtime-image (anders scant Trivy de uv-binary en z'n gebundelde crates mee).
-FROM python:3.12-slim@sha256:d764629ce0ddd8c71fd371e9901efb324a95789d2315a47db7e4d27e78f1b0e9 AS builder
+FROM python:3.14-slim@sha256:cea0e6040540fb2b965b6e7fb5ffa00871e632eef63719f0ea54bca189ce14a6 AS builder
 
 COPY --from=ghcr.io/astral-sh/uv:0.11@sha256:ff07b86af50d4d9391d9daf4ff89ce427bc544f9aae87057e69a1cc0aa369946 /uv /bin/uv
 
 # Forceer de systeem-Python van de base-image: dan symlinkt de .venv naar
-# /usr/local/bin/python3.12 — een pad dat óók in de identieke runtime-stage bestaat.
+# /usr/local/bin/python3.14 — een pad dat óók in de identieke runtime-stage bestaat.
 # Zonder dit zou uv een eigen "managed" Python kunnen downloaden en breekt de COPY.
 ENV UV_PYTHON_PREFERENCE=only-system
 
@@ -26,7 +26,7 @@ RUN uv sync --extra llm --extra otel --frozen
 # ── Runtime ───────────────────────────────────────────────────────────────────
 # Schone base, identiek aan de builder → de venv-symlinks naar /usr/local/bin/python
 # blijven geldig. Geen uv meer; systeem-pip naar een gepatchte versie (BIO2 / ISO 27002).
-FROM python:3.12-slim@sha256:d764629ce0ddd8c71fd371e9901efb324a95789d2315a47db7e4d27e78f1b0e9 AS runtime
+FROM python:3.14-slim@sha256:cea0e6040540fb2b965b6e7fb5ffa00871e632eef63719f0ea54bca189ce14a6 AS runtime
 
 # OS-pakketten patchen (BIO2 / ISO 27002:2022 §8.8), spiegelt de MCP-/frontend-image.
 # De base-image loopt soms achter op Debian-security-updates (o.a. liblzma5, CVE-2026-34743).
