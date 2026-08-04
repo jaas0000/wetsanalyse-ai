@@ -21,7 +21,7 @@ dependencies = [
 [project.optional-dependencies]
 # LiteLLM (LLM-adapter) en mcp (MCP-client) zijn alleen nodig voor de engine.
 # Beide worden lazy geïmporteerd, zodat de tests zonder deze (zwaardere) dependencies draaien.
-llm = ["litellm>=1.94.1", "mcp>=1.28.0"]
+llm = ["litellm>=1.94.1", "mcp>=2.0.0"]
 # OpenTelemetry (traces/metrics/logs). Optioneel: alleen nodig als OTEL_EXPORTER_OTLP_ENDPOINT
 # gezet is; zonder deze extra draait de app met alleen gestructureerde JSON-logging.
 otel = [

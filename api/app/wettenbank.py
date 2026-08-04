@@ -58,13 +58,18 @@ class WettenbankClient:
     async def _call(self, tool: str, args: dict) -> dict:
         # Lazy import: de mcp-client is alleen nodig bij echt ophalen, niet in elke testopzet.
         from mcp import ClientSession
-        from mcp.client.streamable_http import streamablehttp_client
+        from mcp.client.streamable_http import streamable_http_client
+        from mcp.shared._httpx_utils import create_mcp_http_client
 
         headers = {"Authorization": f"Bearer {self.token}"} if self.token else None
-        async with streamablehttp_client(self.url, headers=headers) as (read, write, _):
-            async with ClientSession(read, write) as session:
-                await session.initialize()
-                result = await session.call_tool(tool, args)
+        # mcp v2: streamable_http_client neemt geen `headers=` meer; auth loopt via een
+        # user-supplied httpx-client. Die entering doen we zelf (streamable_http_client
+        # beheert de lifecycle niet als je hem meegeeft) — anders lekken connections.
+        async with create_mcp_http_client(headers=headers) as http_client:
+            async with streamable_http_client(self.url, http_client=http_client) as (read, write):
+                async with ClientSession(read, write) as session:
+                    await session.initialize()
+                    result = await session.call_tool(tool, args)
         # Parse ná het sluiten van de sessie: zo wordt een WettenbankError niet in de
         # anyio-TaskGroup verpakt en propageert de nette melding (bv. "fetch failed").
         return self._parse(tool, result)
@@ -75,7 +80,7 @@ class WettenbankClient:
         teksten = [getattr(b, "text", "") for b in blocks if getattr(b, "type", "") == "text"]
         if not teksten:
             raise WettenbankError(f"MCP gaf geen tekst terug voor {tool}")
-        if getattr(result, "isError", False):
+        if getattr(result, "is_error", False):
             # De MCP-server stuurt de fout als JSON-payload {"fout", "foutCode"?, "klasse"?};
             # de klasse best-effort meenemen zodat retry/routers client-fouten herkennen.
             klasse = None

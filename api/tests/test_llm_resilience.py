@@ -237,7 +237,7 @@ def test_parse_zet_foutklasse_op_wettenbank_error():
             self.text = text
 
     class Result:
-        isError = True
+        is_error = True
 
         def __init__(self, text: str) -> None:
             self.content = [Block(text)]
