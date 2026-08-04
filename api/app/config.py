@@ -135,6 +135,10 @@ class Settings:
         self.build_time = os.environ.get("BUILD_TIME", "")
 
         # --- Engine ---
+        # Act-2-generatiemotor: "agent" = agentisch op GraphDB (job-modelprofiel-LLM + graaf-tools,
+        # standaard); "deterministic" = de oude wettenbank-MCP-pijplijn (rollback). De harde gate
+        # (brongetrouwheid + JAS-schema) en de review-lus zijn in beide identiek.
+        self.act2_engine = os.environ.get("WETSANALYSE_ACT2_ENGINE", "agent").strip().lower()
         self.max_rondes = int(os.environ.get("WETSANALYSE_MAX_RONDES", "6"))
         self.max_autocorrectie = int(os.environ.get("WETSANALYSE_MAX_AUTOCORRECTIE", "1"))
         # Bounded retry op transiënte LLM/MCP-fouten (429/5xx/timeout) vóór terminale `fout`.

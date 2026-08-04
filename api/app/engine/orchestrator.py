@@ -36,7 +36,9 @@ from ..jobstore import IdConflict, JobStore
 from ..rapport import bouw_rapport_async
 from ..validation import brongetrouwheid_check, schema_check
 from ..wettenbank import WettenbankClient, WettenbankError, map_artikel_naar_bron_basis, parse_jci
-from . import prompts, steps
+from ..graphdb import GraphDBClient, GraphDBError
+from .. import graph_source
+from . import agent_workers, prompts, steps
 from .retry import met_retry
 
 logger = logging.getLogger(__name__)
@@ -80,13 +82,18 @@ class LeaseVerloren(Exception):
 
 
 class WetsanalyseEngine:
-    def __init__(self, settings: Settings, store: JobStore, llm: LLMClient | None, wb: WettenbankClient) -> None:
+    def __init__(
+        self, settings: Settings, store: JobStore, llm: LLMClient | None, wb: WettenbankClient,
+        graph: GraphDBClient | None = None,
+    ) -> None:
         self.s = settings
         self.store = store
         # Een geïnjecteerde client (tests/eval) overschrijft profiel-resolutie; in productie is
         # dit None en bouwt de engine per analyse een client uit het profiel van de job.
         self._llm_override = llm
         self.wb = wb
+        # GraphDB-bron voor de agentische act-2-motor. Geïnjecteerd (test/eval) of lazy uit settings.
+        self._graph = graph
         # Per-proces id: identificeert deze worker als eigenaar van een geclaimde job. Eén engine
         # per proces (deps.get_engine is @lru_cache), dus dit id is stabiel binnen de worker.
         self.owner = uuid4().hex
@@ -100,12 +107,32 @@ class WetsanalyseEngine:
             inner = build_llm_client(cfg)
         return CapturingLLMClient(inner, self.store)
 
+    def graph(self) -> GraphDBClient:
+        """De GraphDB-client (geïnjecteerd of lazy uit settings). Alleen voor de agentische motor."""
+        if self._graph is None:
+            self._graph = GraphDBClient(self.s)
+        return self._graph
+
+    async def _preflight_dekking(self, req: StartRequest) -> None:
+        """Dekkings-preflight (alleen agentische motor): faal helder als een bron niet in de graaf
+        staat, i.p.v. later stil een lege analyse te produceren."""
+        if self.s.act2_engine != "agent":
+            return
+        graph = self.graph()
+        for b in req.bronnen:
+            if not await graph_source.is_gedekt(graph, b.bwbId, b.artikel):
+                raise ValueError(
+                    f"Bron {b.bwbId} art. {b.artikel} staat niet in de kennisgraaf (of de graaf is "
+                    "onbereikbaar). Importeer de regeling of controleer bwbId/artikel."
+                )
+
     # --- publieke API -----------------------------------------------------
 
     async def create_project(self, req: StartRequest, client_id: str):
         """Maak een Project (werkgebied met ≥1 bron) aan zonder de analyse te starten."""
         from ..project import Project as ProjectDoc
         self._valideer_bronnen(req)
+        await self._preflight_dekking(req)
         if req.model_profile:
             await profiles.ensure_exists(req.model_profile)
         # Begrensde retry: twee gelijktijdige identieke POSTs kunnen dezelfde vrije slug zien;
@@ -131,6 +158,7 @@ class WetsanalyseEngine:
 
     async def create_job(self, req: StartRequest, client_id: str) -> Job:
         self._valideer_bronnen(req)
+        await self._preflight_dekking(req)
         if req.model_profile:
             await profiles.ensure_exists(req.model_profile)
         # Begrensde retry tegen de gelijktijdige-aanmaak-race (zie create_project). insert_job
@@ -267,13 +295,61 @@ class WetsanalyseEngine:
         job.state = JobState.act2_runt
         await self._save(job)
         await self._set_fase(job, "wettekst-ophalen")
-        # Haal per bron de letterlijke tekst op (deterministisch, via de MCP). Eén bron met een
-        # MCP-mis laat de hele job falen (brongetrouwheid) — geen stille lege context.
-        bron_bases: list[dict] = []
+        if self.s.act2_engine == "agent":
+            # Bron uit GraphDB: leden-tekst = brongetrouw corpus. Lege leden laat de bron falen
+            # (brongetrouwheid) — geen stille lege context (spiegelt de MCP-mis hieronder).
+            graph = self.graph()
+            bron_bases = []
+            for i, b in enumerate(job.bronnen, 1):
+                basis = await self._met_retry(
+                    lambda b=b, i=i: graph_source.haal_bron_basis(graph, f"br{i}", b.bwbId, b.artikel, b.lid)
+                )
+                if not basis.get("leden"):
+                    raise GraphDBError(
+                        f"Geen tekst in de kennisgraaf voor {b.bwbId} art. {b.artikel}"
+                        + (f" lid {b.lid}" if b.lid else "") + " — bron niet geïmporteerd?",
+                        klasse="permanent",
+                    )
+                bron_bases.append(basis)
+            await self._genereer_act2_vers_agentisch(job, 1, bron_bases)
+            return
+        # Deterministische rollback-motor: haal per bron de tekst via de wettenbank-MCP op. Eén bron
+        # met een MCP-mis laat de hele job falen (brongetrouwheid) — geen stille lege context.
+        bron_bases = []
         for i, b in enumerate(job.bronnen, 1):
             data = await self._met_retry(lambda b=b: self.wb.artikel(b.bwbId, b.artikel, b.lid))
             bron_bases.append(map_artikel_naar_bron_basis(data, f"br{i}", b.lid))
         await self._genereer_act2_vers(job, 1, bron_bases)
+
+    async def _genereer_act2_vers_agentisch(self, job: Job, ronde: int, bron_bases: list[dict]) -> None:
+        """Verse act-2 via de agent⇄tools-loop per bron (GraphDB-bron + verwijzingen volgen in de
+        graaf), samengevoegd tot één werkgebied-aggregaat. De harde gate in `_afronden_ronde` blijft."""
+        llm = await self._llm_for(job)
+        graph = self.graph()
+
+        async def maak():
+            bronnen, tin, tout, prov0 = [], 0, 0, None
+            with gebruik_context(project_slug=job.id, activiteit="2", ronde=ronde, fase="agent-generatie"):
+                for bb in bron_bases:
+                    await self._set_fase(job, "agent-markeren")
+                    bron_dict, prov = await agent_workers.genereer_act2_bron_agentisch(
+                        llm, graph, bb, ronde, job.analysefocus or None,
+                        max_verwijzing_fetches=self.s.max_verwijzing_fetches,
+                    )
+                    bronnen.append(bron_dict)
+                    tin += prov["tokens_in"]
+                    tout += prov["tokens_out"]
+                    prov0 = prov0 or prov
+            analyse = {
+                "werkgebied": self._werkgebied(job),
+                "analysefocus": job.analysefocus or "",
+                "bronnen": bronnen,
+            }
+            prov = dict(prov0 or {})
+            prov["tokens_in"], prov["tokens_out"] = tin, tout
+            return analyse, prov
+
+        await self._afronden_ronde(job, "2", ronde, maak)
 
     async def _fase_feedback(self, job: Job, activiteit: str, ronde: int, feedback) -> None:
         # Elke afronding van activiteit 2 (akkoord, akkoord-afronden of ronde-cap) leidt sinds het
@@ -609,6 +685,13 @@ class WetsanalyseEngine:
                 fout_klasse = "mcp"
                 span.record_exception(e)
                 logger.warning("Job %s faalt op %s (MCP): %s", job.id, stap, e)
+                await self._fail(job, stap, FoutKlasse.mcp, str(e))
+            except GraphDBError as e:
+                # GraphDB-meldingen zijn door onze eigen laag geformuleerd (geen tekst in de graaf,
+                # graaf onbereikbaar) — veilig om aan de client te tonen, net als WettenbankError.
+                fout_klasse = "mcp"
+                span.record_exception(e)
+                logger.warning("Job %s faalt op %s (GraphDB): %s", job.id, stap, e)
                 await self._fail(job, stap, FoutKlasse.mcp, str(e))
             except LLMError as e:
                 # LLMError-meldingen zijn door onze eigen adapter geformuleerd (JSON-reparatie,

@@ -195,6 +195,10 @@ def settings(tmp_path) -> Settings:
     s.max_autocorrectie = 0
     s.max_rondes = 6
     s.transient_max_retries = 0  # geen backoff-slaap in tests
+    # De brede engine-/durability-suite draait op de deterministische (wettenbank-MCP) motor, die als
+    # rollback ondersteund blijft. De agentische GraphDB-motor heeft een eigen e2e-suite
+    # (test_agent_engine.py) die 'm expliciet aanzet met een FakeGraph + agent-LLM.
+    s.act2_engine = "deterministic"
     return s
 
 

@@ -26,7 +26,15 @@ _UPDATE_RE = re.compile(
 
 
 class GraphDBError(RuntimeError):
-    """GraphDB-ophalen mislukte — de act-2-generatie moet stoppen, niet stil doorgaan."""
+    """GraphDB-ophalen mislukte — de act-2-generatie moet stoppen, niet stil doorgaan.
+
+    `klasse` (mirror van WettenbankError) laat retry permanente fouten (bv. bron niet in de graaf)
+    onderscheiden van tijdelijke haperingen; None = transportfout (transiënt, mag geretryed worden).
+    """
+
+    def __init__(self, message: str, *, klasse: str | None = None) -> None:
+        super().__init__(message)
+        self.klasse = klasse
 
 
 def _diepste_fout(e: BaseException) -> BaseException:

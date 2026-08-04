@@ -32,10 +32,11 @@ _TRANSIENTE_STATUS = {429, 500, 502, 503, 504}
 
 def is_transient(e: BaseException) -> bool:
     from ..wettenbank import WettenbankError
+    from ..graphdb import GraphDBError
 
-    if isinstance(e, WettenbankError):
-        # Client-/permanente MCP-fouten (bv. niet-bestaand artikel of onbekende wet) worden
-        # niet beter van herhalen; alleen zonder of met transiënte klasse retryen.
+    if isinstance(e, (WettenbankError, GraphDBError)):
+        # Client-/permanente fouten (bv. niet-bestaand artikel, bron niet in de graaf) worden niet
+        # beter van herhalen; alleen zonder of met een transiënte klasse retryen.
         return getattr(e, "klasse", None) not in {"client", "permanent"}
     if type(e).__name__ in _TRANSIENTE_LLM_NAMEN:
         return True
