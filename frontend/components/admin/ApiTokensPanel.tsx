@@ -88,7 +88,7 @@ export function ApiTokensPanel() {
             (bijv. als lokale env-var voor de MCP); intrekken kan hieronder.
           </p>
           <ButtonRow align="start" className="mt-2">
-            <Button size="sm" variant="secondary" onClick={() => navigator.clipboard?.writeText(nieuw.token)}>
+            <Button size="sm" variant="secondary" onClick={() => navigator.clipboard?.writeText(nieuw.token).catch(() => {})}>
               Kopiëren
             </Button>
             <Button size="sm" variant="ghost" onClick={() => setNieuw(null)}>
