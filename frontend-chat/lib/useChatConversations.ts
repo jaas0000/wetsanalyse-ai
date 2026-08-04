@@ -34,7 +34,9 @@ function useDebouncedSave(delay = 500) {
 }
 
 function uid() {
-  return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  // crypto.randomUUID gebruikt de OS-CSPRNG (WebCrypto); voorkomt voorspelbare
+  // conv-id's die door Math.random ontstonden (CodeQL js/insecure-randomness).
+  return `${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
 }
 
 function titleFromQuestion(q: string): string {

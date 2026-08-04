@@ -11,8 +11,9 @@ export async function handleZoek(args, signaal) {
     if (!parsed.success)
         throw new ClientInputError(formatteerZodFout(parsed.error));
     const { titel, rechtsgebied, ministerie, regelingsoort, maxResultaten, peildatum } = parsed.data;
-    // Escape dubbele quotes in zoekwaarden zodat een titel met " de CQL-query niet breekt.
-    const cql = (s) => s.replace(/"/g, '\\"');
+    // Escape backslashes en dubbele quotes zodat een titel met " of \ de CQL-query niet breekt.
+    // Backslash eerst; anders wordt de introducer die we net toevoegen zelf ook geëscaped.
+    const cql = (s) => s.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
     const queryDelen = [];
     if (titel) {
         // 'any' is OR-per-woord: "Wet milieubeheer" matcht dan elke wet met "wet" in de

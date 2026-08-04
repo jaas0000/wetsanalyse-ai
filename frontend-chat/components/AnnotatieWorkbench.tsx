@@ -103,7 +103,9 @@ function escHtml(s: string) {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 function escAttr(s: string) {
-  return s.replace(/"/g, "&quot;").replace(/&/g, "&amp;");
+  // & eerst; anders wordt de & uit de zojuist ingevoegde &quot; opnieuw geëscaped
+  // tot &amp;quot; (CodeQL js/double-escaping).
+  return s.replace(/&/g, "&amp;").replace(/"/g, "&quot;");
 }
 
 interface Props {

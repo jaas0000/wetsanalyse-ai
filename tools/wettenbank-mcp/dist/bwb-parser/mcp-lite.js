@@ -309,9 +309,10 @@ function renderLijstItems(items, diepte) {
 /**
  * Rendert een NormalizedTable naar een GitHub-flavored Markdown tabel.
  */
-/** Maakt celtekst veilig voor een Markdown-tabel: pipes escapen, regeleindes → spatie. */
+/** Maakt celtekst veilig voor een Markdown-tabel: backslashes + pipes escapen, regeleindes → spatie.
+ *  Backslash eerst; anders wordt de introducer die we voor de pipe toevoegen zelf ook geëscaped. */
 function escapeCelTekst(s) {
-    return s.replace(/\|/g, "\\|").replace(/\s*\n\s*/g, " ");
+    return s.replace(/\\/g, "\\\\").replace(/\|/g, "\\|").replace(/\s*\n\s*/g, " ");
 }
 function renderTableToMarkdown(table) {
     const lines = [];

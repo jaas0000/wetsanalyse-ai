@@ -19,12 +19,20 @@ export function bouwTermPatroon(zoekterm) {
 // Operatoren worden case-insensitief en op woordgrenzen herkend, zodat zowel
 // "uitstel EN belasting" als "uitstel en belasting" werkt en "ENERGIE" níét als
 // operator telt. EN/AND betekenen EN; OF/OR betekenen OF.
-const EN_OPERATOR = /\s+(?:EN|AND)\s+/i;
-const SPLIT_EN = /\s+(?:EN|AND)\s+/gi;
-const SPLIT_OF = /\s+(?:OF|OR)\s+/gi;
+//
+// We normaliseren whitespace vóór het splitsen (één spatie tussen tokens) en
+// splitsen dan op vaste ` EN ` / ` AND ` / ` OF ` / ` OR `-strings. Zo vervangen we
+// de eerdere `\s+(?:EN|AND)\s+`-patronen die op input met veel opeenvolgende
+// whitespace kwadratisch konden backtracken (CodeQL js/polynomial-redos).
+const EN_OPERATOR = / (?:EN|AND) /i;
+const SPLIT_EN = / (?:EN|AND) /gi;
+const SPLIT_OF = / (?:OF|OR) /gi;
 export function parseZoekterm(zoekterm) {
-    const operator = EN_OPERATOR.test(zoekterm) ? "EN" : "OF";
-    const delen = zoekterm
+    // `\s+` in één patroon is lineair (geen twee variable-width kwantoren naast
+    // elkaar), dus deze normalisatie is zelf niet ReDoS-gevoelig.
+    const genormaliseerd = zoekterm.replace(/\s+/g, " ").trim();
+    const operator = EN_OPERATOR.test(genormaliseerd) ? "EN" : "OF";
+    const delen = genormaliseerd
         .split(operator === "EN" ? SPLIT_EN : SPLIT_OF)
         .map((p) => p.trim())
         // Weiger lege deeltermen en bare wildcards (zouden overal/leeg matchen).

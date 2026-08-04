@@ -19,8 +19,9 @@ export async function handleZoek(args: unknown, signaal?: AbortSignal): Promise<
 
   const { titel, rechtsgebied, ministerie, regelingsoort, maxResultaten, peildatum } = parsed.data;
 
-  // Escape dubbele quotes in zoekwaarden zodat een titel met " de CQL-query niet breekt.
-  const cql = (s: string) => s.replace(/"/g, '\\"');
+  // Escape backslashes en dubbele quotes zodat een titel met " of \ de CQL-query niet breekt.
+  // Backslash eerst; anders wordt de introducer die we net toevoegen zelf ook geëscaped.
+  const cql = (s: string) => s.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 
   const queryDelen: string[] = [];
   if (titel) {

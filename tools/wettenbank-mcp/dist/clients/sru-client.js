@@ -27,8 +27,12 @@ export function isVertrouwdeRepoUrl(url) {
 }
 // ── Helpers ──────────────────────────────────────────────────────────────────
 export function stripXml(xml) {
+    // `[^<>]*` (i.p.v. `[^>]+`) staat `<` niet toe binnen de match, dus op input als
+    // "<<<<<..." doet de regex-engine géén kwadratisch backtracking meer: bij elke
+    // startpositie faalt de match direct zonder alternatieven te proberen.
+    // CodeQL js/polynomial-redos.
     return xml
-        .replace(/<[^>]+>/g, " ")
+        .replace(/<[^<>]*>/g, " ")
         .replace(/\s+/g, " ")
         .trim();
 }
