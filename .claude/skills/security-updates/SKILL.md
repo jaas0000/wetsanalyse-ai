@@ -1,15 +1,15 @@
 ---
 name: security-updates
 description: >-
-  Verwerkt open Dependabot- en code-scanning-alerts van wetsanalyse-ai
-  gestructureerd: alerts ophalen uit de fork (jaas0000), groeperen per risico
+  Verwerkt open Dependabot- en code-scanning-alerts gestructureerd: alerts
+  ophalen bij de git-remote waar Dependabot draait, groeperen per risico
   (mechanische patch/minor vs semver-major met breaking changes), de juiste
   bump per ecosystem toepassen (npm-overrides, uv-lock, docker-base, github-
   actions-pin), verifiëren met de projectspecifieke testsuite, committen met
-  het gedocumenteerde `fix(security):`-formaat, PR openen tegen upstream/master
-  (palmw01), en superseded Dependabot-PR's netjes closen. Gebruik deze skill
-  zodra de gebruiker security-updates, kwetsbaarheden, Dependabot-alerts of
-  CVE's wil verwerken — ook bij vragen als "los de dep-vulns op", "bump alle
+  het `fix(security):`-formaat, PR openen tegen de authoritative master, en
+  superseded Dependabot-PR's netjes closen. Gebruik deze skill zodra de
+  gebruiker security-updates, kwetsbaarheden, Dependabot-alerts of CVE's
+  wil verwerken — ook bij vragen als "los de dep-vulns op", "bump alle
   security-alerts", "wat staat er open in Dependabot", "kunnen we de HIGH's
   fixen". Trigger óók bij twijfel: dit is de aangewezen werkwijze voor
   security-work in dit project. Werkt guided, niet volautomatisch — bij een
@@ -35,19 +35,48 @@ gebruiker.
 
 Twee harde invarianten:
 
-- **Fork is de bron van alerts.** Dependabot alerts staan aan op
-  `jaas0000/wetsanalyse-ai`, niet op `palmw01/wetsanalyse-ai` (waar de user
-  geen admin heeft). Bevraag altijd `origin` (jaas0000).
+- **Alerts bevraag je op de remote waar Dependabot draait.** In een
+  fork-workflow is dat vaak niet de authoritative master. Zie
+  `references/fork-sync.md` voor hoe je de juiste remote bepaalt — check
+  altijd het [[project-wetsanalyse-repo-access]]-memory voor de actuele
+  eigenaars-split in dit project.
 - **Nooit committen met falende tests.** De verificatie-mix per project
   (build + audit + testsuite) is een harde blok, geen suggestie. Zie
   `references/verificatie-checklist.md`.
+
+## Terminologie
+
+Overal in deze skill gebruikt:
+
+- **`fork-remote`** — de git-remote van de fork waar de user admin heeft;
+  daar draait Dependabot en daar staan de branches/PR's. Meestal `origin`.
+- **`upstream-remote`** — de git-remote van de authoritative master; daar
+  worden PR's op gemerged. Meestal `upstream`.
+
+Bepaal ze via:
+
+```bash
+git remote get-url origin      # fork
+git remote get-url upstream    # authoritative
+```
+
+Zet ze bovenaan je shell-sessie:
+
+```bash
+FORK_REPO=$(git remote get-url origin   | sed 's|.*[:/]\([^/]*/[^/]*\)\.git|\1|')
+UPSTREAM_REPO=$(git remote get-url upstream | sed 's|.*[:/]\([^/]*/[^/]*\)\.git|\1|')
+```
+
+Verifieer met `echo $FORK_REPO $UPSTREAM_REPO` — verwacht `<owner>/<repo>`
+voor beide, met verschillende owners.
 
 ## Werkstroom
 
 ### Stap 0 — Startvoorwaarden
 
-Werk vanuit een branch die op `upstream/master` is gebaseerd (niet
-`origin/master` — die loopt achter). Standaard: `general-fixes`.
+Werk vanuit een branch die op `upstream/master` is gebaseerd (niet de
+fork-master — die kan achterlopen). Standaardnaam varieert per taak; voor
+Dependabot-verwerking is `general-fixes` de plek van keuze:
 
 ```bash
 git fetch origin upstream --prune
@@ -55,15 +84,19 @@ git checkout general-fixes
 git rebase upstream/master            # backup-tag eerst als de branch commits heeft
 ```
 
-De projectroot is `wetsanalyse-ai/`; blijf daar staan i.v.m. de write-guard
+De projectroot is de repo-root; blijf daar staan i.v.m. eventuele write-guards
 (zie root-`CLAUDE.md`).
 
 ### Stap 1 — Alerts ophalen en groeperen
 
 ```bash
-gh api repos/jaas0000/wetsanalyse-ai/dependabot/alerts?state=open --paginate
-gh api repos/palmw01/wetsanalyse-ai/code-scanning/alerts?state=open --paginate
+gh api repos/$FORK_REPO/dependabot/alerts?state=open --paginate
+gh api repos/$UPSTREAM_REPO/code-scanning/alerts?state=open --paginate
 ```
+
+Als de fork-remote geen Dependabot-alerts toont (403 / "disabled for this
+repository"), vraag de user of ze het aanzetten — nooit stil doorwerken
+zonder alerts. Zie [[feedback-vraag-bij-ontbrekende-toegang]].
 
 De **code-scanning-alerts** overlappen vaak met Dependabot (Trivy scant
 dezelfde `.venv`/dep-tree). Alleen alerts die *niet* al door een Dependabot-fix
@@ -81,6 +114,9 @@ Voor elke unieke bump:
 - **Semver-major** of **advisory noemt breaking changes/migration** → *risico*.
   Skill toont de changelog/upgrade-guide-samenvatting en wacht op akkoord
   vóór de bump.
+- **Groep-PR met meerdere majors verpakt** (bv. Dependabot's dev-dep-groep
+  die eslint + tailwind + typescript in één keer een major bumpt) → *risico*
+  ongeacht dev-only-status; behandel per package.
 - **Alert alleen in `.venv/` / installed-image, manifest is al ok** → *skip
   met notitie*. De volgende CI-image-build sluit 'm vanzelf (bv. msgpack/
   setuptools met een `>=`-pin die al voldoet).
@@ -112,12 +148,12 @@ verwacht.
 
 Eén commit voor de mechanische groep, aparte commits voor elke risico-bump
 die code-changes meebracht. Formaat volgt de conventie in de repo
-(voorbeeld: commit 30446fb voor mcp v2, of 1927f78 voor de laatste batch):
+(zie `git log --grep=security` voor recente voorbeelden):
 
 ```
 fix(security): korte samenvatting
 
-Bumps voor de open Dependabot alerts op de fork (jaas0000):
+Bumps voor de open Dependabot alerts op de fork:
 
 - <manifest>: <pkg> <van> -> <naar> (<severity>: <CVE-summary>)
 - ...
@@ -126,49 +162,48 @@ Ook <eventuele extra fixes uit hetzelfde thema>.
 
 Getest: <projecten die getest zijn> — <resultaat>.
 
-Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>
+Co-Authored-By: Claude <model> <noreply@anthropic.com>
 ```
 
 Nederlands, actief, geen marketing-taal. CVE's noemen waar relevant. **Nooit
-`.env`/secrets/`deploy/compose/`** stagen — controleer `git status` na
+`.env`/secrets/lokale-config-dirs** stagen — controleer `git status` na
 `git add` en gebruik expliciete paden i.p.v. `git add -A`.
 
 ### Stap 6 — Pushen + PR
 
 ```bash
 git push --force-with-lease origin general-fixes         # nooit --force zonder lease
-gh pr create --repo palmw01/wetsanalyse-ai \
-  --head jaas0000:general-fixes --base master \
+FORK_OWNER=${FORK_REPO%%/*}
+gh pr create --repo $UPSTREAM_REPO \
+  --head $FORK_OWNER:general-fixes --base master \
   --title "..." --body "..."
 ```
 
 Body volgt het formaat in `references/pr-template.md`.
 
-Als deze push een bestaande commit op `origin/general-fixes` overschrijft
+Als deze push een bestaande commit op de fork-branch overschrijft
 (force-push), maak dan **eerst** een backup-tag:
 `git push origin <oude-sha>:refs/tags/backup/<naam>`.
 
 ### Stap 7 — Superseded Dependabot-PR's closen
 
 Als een handmatige bump een openstaande Dependabot-PR vervangt (bv. omdat je
-de bump combineerde met een code-migratie), close 'm met een comment die
-naar de handmatige commit verwijst:
+de bump combineerde met een code-migratie of via overrides breder oploste),
+close 'm met een comment die naar de handmatige commit verwijst:
 
 ```bash
-gh pr close <nr> -c "Vervangen door <sha> (<korte reden>)."
+gh pr close <nr> --repo $FORK_REPO -c "Vervangen door <sha> (<korte reden>)."
 ```
-
-Voorbeeld: commit `30446fb` verving `#239` (mcp version-only bump).
 
 ### Stap 8 — Fork-master syncen (optioneel)
 
-Na merge van de PR op `palmw01/master`:
+Na merge van de PR op upstream/master:
 
 ```bash
-gh repo sync jaas0000/wetsanalyse-ai -b master
+gh repo sync $FORK_REPO -b master
 ```
 
-Divergeert `jaas0000/master`? Zoek eerst met patch-id welke commits echt
+Divergeert de fork-master? Zoek eerst met patch-id welke commits echt
 uniek zijn (zie `references/fork-sync.md`); tag ze desnoods als backup vóór
 een `--force`-sync.
 
