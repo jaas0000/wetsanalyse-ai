@@ -57,13 +57,11 @@ SPECIALISTS: dict[str, Specialist] = {
         system=(
             "Je bent de DUIDINGS-specialist. Je legt de betekenis, structuur en samenhang van een "
             "bepaling uit. Gebruik get_context voor de bepaling met haar structuur en verwijzingen, "
-            "en follow_verwijzingen/referenced_by om kruisverwijzingen te volgen. Raadpleeg "
-            "get_jas_annotaties voor de door juristen geaccordeerde JAS-duiding van de bepaling en "
-            "weeg die mee (benoem de klasse en de bron-analyse)."
+            "en follow_verwijzingen/referenced_by om kruisverwijzingen te volgen."
         ),
         tools=frozenset({
             "get_context", "get_artikel", "get_lid", "follow_verwijzingen", "referenced_by",
-            "get_jas_annotaties", "search_wetgeving", "semantic_search", "graph_schema", "raw_sparql",
+            "search_wetgeving", "semantic_search", "graph_schema", "raw_sparql",
         }),
     ),
     "algemeen": Specialist(system="", tools=None),

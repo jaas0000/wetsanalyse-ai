@@ -8,7 +8,7 @@ from fakes import FakeGraph, make_settings
 EXPECTED = {
     "search_wetgeving", "semantic_search", "get_artikel", "get_lid", "get_bepaling", "list_regelingen",
     "get_regeling_info", "follow_verwijzingen", "referenced_by", "get_context",
-    "resolve_begrip", "get_jas_annotaties", "graph_schema", "raw_sparql",
+    "resolve_begrip", "graph_schema", "raw_sparql",
 }
 
 
@@ -22,7 +22,7 @@ def test_schemas_compleet_en_welgevormd():
 
 
 def test_anthropic_schemas_filter():
-    assert len(tools.anthropic_schemas()) == 14
+    assert len(tools.anthropic_schemas()) == 13
     subset = tools.anthropic_schemas(only={"get_artikel", "search_wetgeving"})
     assert {t["name"] for t in subset} == {"get_artikel", "search_wetgeving"}
 

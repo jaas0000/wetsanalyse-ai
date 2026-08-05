@@ -67,7 +67,7 @@ compileert de graaf en levert het SSE-event-contract.
 
 ### Toollaag & queries
 
-- **`tools/__init__.py`** — `TOOLS` (12 declaraties met JSON-schema + handler), `anthropic_schemas(only=)`
+- **`tools/__init__.py`** — `TOOLS` (13 declaraties met JSON-schema + handler), `anthropic_schemas(only=)`
   (model-facing subset) en `dispatch()` (voert de handler uit; vangt `ValueError`/`MCPError`/`KeyError`
   als tekst i.p.v. te crashen). Een tool met `needs_settings` krijgt `settings` mee (bv. `semantic_search`).
 - **`graph/queries.py`** — de SPARQL-bouwers (o.a. `context()` = de GraphRAG-UNION). **`graph/schema.py`** —
