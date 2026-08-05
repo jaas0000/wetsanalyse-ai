@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
-import { LinkButton } from "@/components/ui/Button";
 import { wisDisclaimer } from "@/lib/api";
 
 /** Wis het disclaimer-akkoord en log dan pas uit (gedeelde-machine-hygiëne). Zonder het wissen
@@ -18,14 +17,13 @@ async function uitloggen(): Promise<void> {
 type NavItem = { href: string; label: string; adminOnly?: boolean };
 
 const ITEMS: NavItem[] = [
-  { href: "/", label: "Projecten" },
-  { href: "/workbench", label: "Assistent" },
+  { href: "/workbench", label: "Werkruimte" },
   { href: "/account", label: "Account" },
   { href: "/beheer", label: "Beheer", adminOnly: true },
 ];
 
 function isActive(pathname: string, href: string): boolean {
-  return href === "/" ? pathname === "/" : pathname.startsWith(href);
+  return pathname.startsWith(href);
 }
 
 function NavItem({
@@ -90,9 +88,6 @@ export function SiteNav() {
             active={isActive(pathname, item.href)}
           />
         ))}
-        <LinkButton href="/nieuw" size="sm" className="ml-2">
-          Nieuwe analyse
-        </LinkButton>
         <span className="ml-3 hidden max-w-[12rem] truncate text-xs text-faint lg:inline" title={session.user.email ?? ""}>
           {session.user.userid ?? session.user.email}
         </span>
@@ -146,9 +141,6 @@ export function SiteNav() {
               block
             />
           ))}
-          <LinkButton href="/nieuw" className="mt-1 w-full" onClick={() => setOpen(false)}>
-            Nieuwe analyse
-          </LinkButton>
           <button
             type="button"
             onClick={() => {
