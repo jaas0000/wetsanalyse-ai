@@ -185,9 +185,8 @@ frontend → API → MCP/graph-qa. Een **optionele verzamelstack staat in `deplo
 OTel-Collector (met **spanmetrics/servicegraph-connectors** die topologie-edges uit de traces
 afleiden) + Tempo + Loki + Prometheus, plus **Alloy** dat de stdout-logs van frontend en MCP
 naar Loki shipt, **twee kant-en-klare Grafana-dashboards** (`grafana-dashboard-wetsanalyse.json` =
-trends; `grafana-dashboard-topologie.json` = *"systeemtopologie"*: de live keten die oplicht +
-de per-analyse jobs-tabel die het opgeheven frontend-`/dashboard` vervangt, via de read-only
-jobstore-datasource `wa-postgres`) en **alerting** (`alerting/`, Grafana-contactpunt). Je koppelt 'm aan je bestaande Grafana; laat het endpoint
+trends; `grafana-dashboard-topologie.json` = *"systeemtopologie"*: de live keten die oplicht op basis
+van de trace-servicegraph) en **alerting** (`alerting/`, Grafana-contactpunt). Je koppelt 'm aan je bestaande Grafana; laat het endpoint
 leeg om alles ongewijzigd met alléén JSON-logs te draaien. De volledige uitleg (env-vars, logschema,
 AVG-redactie, dashboard/alerting) staat in **`docs/observability.md`**.
 

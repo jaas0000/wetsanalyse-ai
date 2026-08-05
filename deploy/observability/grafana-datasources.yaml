@@ -50,20 +50,3 @@ datasources:
         spanStartTimeShift: -1h
         spanEndTimeShift: 1h
         filterByTraceID: true
-  # Read-only jobstore-view voor de live jobs-tabel op het systeemtopologie-dashboard (vervangt het
-  # frontend-/dashboard). Verbindt als de rol `grafana_ro` en ziet ALLEEN de view `dashboard_jobs`
-  # (zie deploy/postgres/grafana-readonly.sql) — nooit users/tokens/keys/prompts.
-  # Het wachtwoord komt uit een env-var op de Grafana-container (GRAFANA_WA_PG_PASSWORD), niet uit de
-  # repo. Zet die gelijk aan het host-secret grafana_pg_password (zie het SQL-bestand).
-  - name: Jobstore (wetsanalyse)
-    uid: wa-postgres
-    type: postgres
-    access: proxy
-    url: postgres:5432
-    user: grafana_ro
-    jsonData:
-      database: wetsanalyse
-      sslmode: disable
-      postgresVersion: 1600
-    secureJsonData:
-      password: $GRAFANA_WA_PG_PASSWORD

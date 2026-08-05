@@ -58,13 +58,11 @@ Twee manieren (zie `grafana-datasources.yaml` voor de exacte waarden):
 
 ## 4. Verifiëren
 
-Draai een analyse en een chat in de webapp, dan in Grafana → **Explore**:
+Doe een chat en een keuzelijst-/structuur-ophaal in de webapp, dan in Grafana → **Explore**:
 - **Tempo**: één trace `frontend → API → MCP` (gedeelde `trace_id`), plus de keten `frontend → graph-qa`.
 - **Loki**: de gecorreleerde logregels (filter op `trace_id`); via de derived field spring je door naar
   de trace in Tempo.
-- **Prometheus**: `wetsanalyse_fase_duur_ms_milliseconds_*` (histogram; de OTLP→Prometheus-export
-  plakt de unit-suffix erachter), `wetsanalyse_fase_fouten_total`, `wetsanalyse_llm_tokens_total`,
-  `wettenbank_cache_toegang_total` (label `resultaat=hit|miss`) en de auto-http-metrics
+- **Prometheus**: `wettenbank_cache_toegang_total` (label `resultaat=hit|miss`) en de auto-http-metrics
   (`http_server_duration_milliseconds_*`). Services onderscheiden via label `exported_job`.
   Uit de connectors: `traces_service_graph_request_total` (labels `client`/`server`/`connection_type`)
   en `traces_spanmetrics_calls_total`/`_duration_*` (labels `service_name`/`span_name`). Let op: de
@@ -94,9 +92,9 @@ observability = *trends/analytics*. Metrics staan zo op één plek, zonder dupli
   jobs-stats) die het opgeheven frontend-`/dashboard` vervangt. Geen trend-panels — die staan in het
   observability-dashboard (dashboardlink bovenin).
 - `grafana-dashboard-wetsanalyse.json` — *"Wetsanalyse — observability"* (**trends/analytics**):
-  engine-fase-duur/-fouten (met `$stap`-filter), LLM-tokens, MCP-cache, HTTP (request-rate/latency-p95
-  met threshold-lijnen/foutrate + 5xx-foutratio), **scrape-health** (targets up/down) en de **overheid.nl-
-  dependency** (SRU-latency p95 + request-rate), plus logs en traces.
+  MCP-cache, HTTP (request-rate/latency-p95 met threshold-lijnen/foutrate + 5xx-foutratio),
+  **scrape-health** (targets up/down) en de **overheid.nl-dependency** (SRU-latency p95 + request-rate),
+  plus logs en traces.
 
 Importeren:
 
@@ -106,32 +104,12 @@ Importeren:
   "overwrite": true}`.
 
 Vereist de datasource-uid's **`wa-prometheus`**, **`wa-loki`**, **`wa-tempo`** (zoals in
-`grafana-datasources.yaml`) en een map met uid `wetsanalyse`. Het systeemtopologie-dashboard gebruikt
-daarnaast **`wa-postgres`** voor de live analyses-tabel (zie sectie 9); zonder die datasource werken
-alle andere panels gewoon, alleen de jobs-tabel/tellers blijven leeg.
+`grafana-datasources.yaml`) en een map met uid `wetsanalyse`.
 
 > **Systeemtopologie afronden.** De Canvas is bewust een startpunt: doorloopt/lichthoogte fijn je het
 > makkelijkst interactief bij (*Edit → Canvas*). De node-queries voor frontend/Postgres/graph-qa/overheid.nl
-> leunen op de service-graph-metrics — draai eerst een analyse + chat zodat de connectors data hebben,
-> en verifieer dan de labelwaarden (`client`/`server`) in *Explore* voordat je ze vastzet.
-
-## 9. Live analyses-tabel (read-only jobstore-datasource)
-
-Het systeemtopologie-dashboard toont een live tabel van alle analyses (state, fijnmazige fase,
-tijd-in-fase, tokens, fout) rechtstreeks uit de PostgreSQL-jobstore — de vervanger van het opgeheven
-frontend-`/dashboard`. Eenmalige inrichting:
-
-1. **Read-only rol + view** (`deploy/postgres/grafana-readonly.sql`): maakt de rol `grafana_ro` en de
-   smalle view `dashboard_jobs`. Grafana krijgt **alleen** SELECT op die view — nooit op `projects`
-   zelf, `users`, `api_tokens` of LLM-keys. Draai het script eenmalig als DB-owner (zie de kop van het
-   SQL-bestand voor het exacte `docker exec … psql`-commando en het wachtwoord-secret).
-2. **Datasource** `wa-postgres` (in `grafana-datasources.yaml` én `provision-grafana.sh`): verbindt als
-   `grafana_ro`. Het wachtwoord komt uit de env-var **`GRAFANA_WA_PG_PASSWORD`** op de Grafana-container
-   (bij provisioning: het gelijknamige host-secret) — niet uit de repo. Ontbreekt de env-var, dan slaat
-   `provision-grafana.sh` deze datasource over.
-
-> De tabel is **cross-client** (toont álle analyses van alle clients) — bewust, want Grafana staat
-> achter admin-toegang. De interactieve review/retry-acties blijven in de webapp; Grafana is read-only.
+> leunen op de service-graph-metrics — draai eerst een chat/keuzelijst-ophaal zodat de connectors data
+> hebben, en verifieer dan de labelwaarden (`client`/`server`) in *Explore* voordat je ze vastzet.
 
 ## 6. Frontend/MCP-logs naar Loki (Alloy)
 
@@ -148,7 +126,7 @@ niet — die komt al via OTLP, dus geen dubbeling), zet `service_name` op de con
 ## 7. Alerting
 
 `alerting/` bevat de definities (reproduceerbaar; de live-bron is de Grafana-provisioning-API):
-- `alert-rules.json` — 4 regels in groep `wetsanalyse-1m` (map "Wetsanalyse"): fase-fouten, HTTP 5xx,
+- `alert-rules.json` — 3 regels in groep `wetsanalyse-1m` (map "Wetsanalyse"): HTTP 5xx,
   latency p95 > 5s, telemetrie-backend down (`up{job="otel-collector"}==0`). De regels dragen **geen
   eigen contactpunt** en volgen het **default notification-beleid** van je Grafana — richt daar je
   gewenste ontvanger in (e-mail, Slack, …).

@@ -48,15 +48,6 @@ upsert_datasource wa-prometheus '{"name":"Prometheus (wetsanalyse)","uid":"wa-pr
 upsert_datasource wa-tempo '{"name":"Tempo (wetsanalyse)","uid":"wa-tempo","type":"tempo","access":"proxy","url":"http://tempo:3200","isDefault":false,"jsonData":{"serviceMap":{"datasourceUid":"wa-prometheus"},"nodeGraph":{"enabled":true},"tracesToLogsV2":{"datasourceUid":"wa-loki","spanStartTimeShift":"-1h","spanEndTimeShift":"1h","filterByTraceID":true}}}'
 upsert_datasource wa-loki '{"name":"Loki (wetsanalyse)","uid":"wa-loki","type":"loki","access":"proxy","url":"http://loki:3100","isDefault":false,"jsonData":{"derivedFields":[{"name":"TraceID","matcherType":"label","matcherRegex":"trace_id","datasourceUid":"wa-tempo","url":"${__value.raw}"}]}}'
 
-# Read-only jobstore-view voor de live jobs-tabel op het systeemtopologie-dashboard. Alleen provisionen als het
-# wachtwoord is meegegeven (env GRAFANA_WA_PG_PASSWORD = het host-secret grafana_pg_password). De rol
-# grafana_ro + de view dashboard_jobs komen uit deploy/postgres/grafana-readonly.sql (eenmalig draaien).
-if [ -n "${GRAFANA_WA_PG_PASSWORD:-}" ]; then
-  upsert_datasource wa-postgres "{\"name\":\"Jobstore (wetsanalyse)\",\"uid\":\"wa-postgres\",\"type\":\"postgres\",\"access\":\"proxy\",\"url\":\"postgres:5432\",\"user\":\"grafana_ro\",\"isDefault\":false,\"jsonData\":{\"database\":\"wetsanalyse\",\"sslmode\":\"disable\",\"postgresVersion\":1600},\"secureJsonData\":{\"password\":\"${GRAFANA_WA_PG_PASSWORD}\"}}"
-else
-  echo "  datasource wa-postgres: OVERGESLAGEN (zet GRAFANA_WA_PG_PASSWORD om de jobs-tabel te voeden)"
-fi
-
 echo "== map 'Wetsanalyse' =="
 curl -fsS -X POST "${AUTH[@]}" -d '{"uid":"wetsanalyse","title":"Wetsanalyse"}' "${GRAFANA_URL}/api/folders" >/dev/null 2>&1 \
   && echo "  map aangemaakt" || echo "  map bestond al"

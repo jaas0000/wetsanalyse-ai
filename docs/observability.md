@@ -11,7 +11,7 @@ ongewijzigd met alléén gestructureerde JSON-logging (nul overhead, geen gedrag
 
 | Component | Logging | Traces | Metrics |
 |-----------|---------|--------|---------|
-| **API** (`api/`, FastAPI) | JSON-`dictConfig`, request-id-middleware, access-log | FastAPI-requests, httpx (MCP+n8n), DB, per-fase job-spans | fase-duur, fase-fouten per klasse, LLM-tokens |
+| **API** (`api/`, FastAPI) | JSON-`dictConfig`, request-id-middleware, access-log | FastAPI-requests, httpx (MCP), DB | http-server-latency, request-count/foutrate (auto) |
 | **Frontend** (`frontend/`, Next.js) | server-side JSON naar stdout in de BFF-lagen | `@vercel/otel`: route handlers + uitgaande `fetch` (traceparent) | request-count/latency (auto) |
 | **MCP** (`tools/wettenbank-mcp/`) | bestaande JSON-stderr-logger, nu met trace-velden | `/mcp`-requests (http) + SRU/repository-fetches (undici) | http-server-latency, upstream-fetch-duur, cache hit/miss |
 | **Chatbot-hop** | API `/v1/chat` + BFF-route (geen inhoud/secret) | span `chat.n8n` + traceparent naar n8n | — |
@@ -109,13 +109,11 @@ De stack bevat bovendien:
   systeemtopologie. Niet-geïnstrumenteerde afhankelijkheden (LLM, n8n, overheid.nl, Postgres)
   verschijnen als virtuele peer-node. Configuratie: `connectors:` in `otel-collector-config.yaml`.
 - **Dashboards** (map "Wetsanalyse") — `grafana-dashboard-wetsanalyse.json` (*"observability"*:
-  engine-fase-duur/-fouten, LLM-tokens, MCP-cache, HTTP-verkeer, logs, traces) én
+  MCP-cache, HTTP-verkeer, scrape-health, overheid.nl-dependency, logs, traces) én
   `grafana-dashboard-topologie.json` (*"systeemtopologie"*: de live keten die oplicht in een
-  Canvas-plaat, de automatische Node Graph, een trace-waterfall + logs om één executie te volgen, en
-  de live analyses-tabel die het opgeheven frontend-`/dashboard` vervangt — die laatste via de
-  read-only datasource `wa-postgres` op de jobstore, zie `deploy/postgres/grafana-readonly.sql`).
+  Canvas-plaat, de automatische Node Graph, en een trace-waterfall + logs om één executie te volgen).
   Importeren via de UI, `provision-grafana.sh` (beide) of `POST /api/dashboards/db`.
-- **Alerting** — `alerting/` (contactpunt + regels: fase-fouten, HTTP 5xx, latency p95, backend down;
+- **Alerting** — `alerting/` (contactpunt + regels: HTTP 5xx, latency p95, backend down;
   routeren naar een webhook, bv. n8n) met een idempotent `apply.sh`.
 
 Wie liever een all-in-één demo-image draait (inclusief Grafana) kan `grafana/otel-lgtm` gebruiken;
@@ -136,16 +134,14 @@ eerlijker en eenduidiger.
 ## Verifiëren
 
 - **No-op-gating**: start zonder endpoint → alles draait, alleen JSON-logs.
-- **Trace-correlatie**: maak een analyse aan via de frontend → één trace omspant frontend → API →
-  MCP; job-spans per orchestrator-stap. De chatbel → frontend → API → n8n-POST.
+- **Trace-correlatie**: vraag in de werkplek een keuzelijst/structuur op → één trace omspant frontend
+  → API → MCP. De werkplek-chat loopt frontend → graph-qa (SSE).
 - **Geen lek**: `grep` de logoutput op `bearer`/`secret`/de chat-`secret`-waarde → leeg.
 
 ### Metric- en labelnamen (zoals ze in Prometheus/Loki landen)
 
 De OTLP→Prometheus-export voegt unit-/type-suffixen toe; onthoud dit bij het bouwen van queries:
 
-- `wetsanalyse_fase_duur_ms_milliseconds_{bucket,count,sum}` — histogram, label **`stap`**.
-- `wetsanalyse_llm_tokens_total`, `wetsanalyse_fase_fouten_total` (labels `stap`, `klasse`) — counters.
 - `wettenbank_cache_toegang_total` — counter, label **`resultaat`** (`hit`/`miss`).
 - Auto-HTTP: `http_server_duration_milliseconds_*` (labels `http_method`/`http_status_code`/`http_target`).
   Let op: `http_client_*` draagt **géén** host/target-label — per-bestemming-edges komen uit de
