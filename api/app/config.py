@@ -79,6 +79,13 @@ class Settings:
         self.graphdb_repository_id = os.environ.get("GRAPHDB_REPOSITORY_ID", "inning")
         self.graphdb_sparql_tool = os.environ.get("GRAPHDB_SPARQL_TOOL", "sparql_query")
         self.graphdb_timeout_s = float(os.environ.get("GRAPHDB_MCP_TIMEOUT", "60"))
+        # --- GraphDB SPARQL-UPDATE (promotie: geaccordeerde act-2-annotaties → JAS-annotatielaag).
+        # APART schrijf-token (least privilege; los van het lees-token) + een SPARQL-UPDATE-endpoint
+        # op de GraphDB-REST (`…/repositories/<id>/statements`). Leeg = promotie uit (fail-closed).
+        self.graphdb_write_token = _read_secret("GRAPHDB_WRITE_TOKEN")
+        self.graphdb_update_url = os.environ.get("GRAPHDB_UPDATE_URL", "")
+        # Named-graph-prefix voor de JAS-annotatielaag; één named graph per analyse (idempotente replace).
+        self.jas_graph_prefix = os.environ.get("JAS_GRAPH_PREFIX", "https://ipalm.nl/jas/")
 
         # --- LLM-adapter ---
         # Endpointtype bepaalt provider-prefix/auth (zie Fase 0): azure_ai (Foundry/MaaS) vs azure (OpenAI).

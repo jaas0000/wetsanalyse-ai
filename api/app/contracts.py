@@ -268,6 +268,15 @@ class FeedbackAccepted(BaseModel):
     ronde: int
 
 
+class PromotieResultaat(BaseModel):
+    """Uitkomst van een JAS-promotie (act-2-analyse → JAS-annotatielaag in GraphDB, Fase 2/WS4)."""
+
+    graph_iri: str
+    aantal: int
+    klassen: dict[str, int] = Field(default_factory=dict)
+    gepromoveerd_op: str
+
+
 class Rapport(BaseModel):
     """Het werkgebied-analyserapport — de primaire bron, gepresenteerd via de HTML-viewer/Markdown."""
 

@@ -76,11 +76,20 @@ def get_graphdb():
 
 
 @lru_cache
+def get_graph_write():
+    from .graph_write import GraphDBWriteClient
+    return GraphDBWriteClient(get_settings())
+
+
+@lru_cache
 def get_engine():
     from .engine.orchestrator import WetsanalyseEngine
 
     settings = get_settings()
     # Geen vaste LLM-client meer: de engine resolveert per analyse het modelprofiel (uit de store) en
     # bouwt de adapter dan pas. Zo pakt het runtime-beheer (admin-UI) wijzigingen direct op.
-    # GraphDB-client = bron voor de agentische act-2-motor (wettenbank blijft voor catalog/structuur).
-    return WetsanalyseEngine(settings, get_store(), None, get_wettenbank(), get_graphdb())
+    # GraphDB-client = bron voor de agentische act-2-motor (wettenbank blijft voor catalog/structuur);
+    # de schrijfclient = JAS-promotie (Fase 2 / WS4).
+    return WetsanalyseEngine(
+        settings, get_store(), None, get_wettenbank(), get_graphdb(), get_graph_write()
+    )

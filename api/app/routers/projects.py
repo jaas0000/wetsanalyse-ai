@@ -27,9 +27,10 @@ from fastapi.responses import PlainTextResponse, StreamingResponse
 from ..auth import require_client
 from ..contracts import (
     ACTIVITEIT_CODES, CreateAccepted, Feedback, FeedbackAccepted, Job, JobState, JobSummary,
-    Rapport, REVIEW_STATES, TERMINAL_STATES, StartRequest,
+    PromotieResultaat, Rapport, REVIEW_STATES, TERMINAL_STATES, StartRequest,
 )
 from ..deps import get_engine, get_store, schedule
+from ..graph_write import GraphWriteError
 from ..jobstore import IdConflict, JobStore
 from ..ratelimit import QuotaExceeded, rate_limited_client
 
@@ -217,6 +218,23 @@ async def retry_project(project_id: str, client_id: str = Depends(rate_limited_c
         raise HTTPException(status_code=409, detail=f"Retry alleen vanuit fout; nu: {p.state}")
     schedule(get_engine().retry(project_id))
     return CreateAccepted(id=project_id, naam=p.naam, state=JobState.queued)
+
+
+@router.post("/{project_id}/promoveer", response_model=PromotieResultaat)
+async def promoveer_project(project_id: str, client_id: str = Depends(rate_limited_client)):
+    """Promoveer een geaccordeerde act-2-analyse naar de JAS-annotatielaag in GraphDB (idempotent).
+    Synchroon: één begrensde graaf-write, geen LLM. 409 buiten `klaar`; 503 als promotie niet
+    geconfigureerd is (geen schrijf-token/endpoint)."""
+    store = get_store()
+    p = await _project_or_404(store, project_id, client_id)
+    if p.state != JobState.klaar:
+        raise HTTPException(status_code=409, detail=f"Promoveren alleen vanuit klaar; nu: {p.state}")
+    try:
+        return await get_engine().promoveer(project_id)
+    except GraphWriteError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e))
 
 
 @router.get("/{project_id}/rapport", response_model=Rapport)

@@ -87,6 +87,18 @@ async def test_rapport_nog_niet_gereed_409(client):
     assert (await client.get("/v1/projects/bwbr1-art1/rapport")).status_code == 409
 
 
+async def test_promoveer_niet_klaar_409(client):
+    """Promoveren mag alleen vanuit `klaar` — een queued analyse geeft 409 (vóór de graaf-write)."""
+    r = await client.post("/v1/projects/bwbr1-art1/promoveer")
+    assert r.status_code == 409
+
+
+async def test_promoveer_andermans_404(client):
+    """Promoveren van andermans analyse lekt niet — 404."""
+    r = await client.post("/v1/projects/andermans-art1/promoveer")
+    assert r.status_code == 404
+
+
 async def test_scope_in_lijst(client):
     """JobSummary draagt de scope (sinds act 3 weg is: altijd act2)."""
     per_id = {j["id"]: j for j in (await client.get("/v1/projects")).json()}

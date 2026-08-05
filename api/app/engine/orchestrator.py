@@ -37,7 +37,8 @@ from ..rapport import bouw_rapport_async
 from ..validation import brongetrouwheid_check, schema_check
 from ..wettenbank import WettenbankClient, WettenbankError, map_artikel_naar_bron_basis, parse_jci
 from ..graphdb import GraphDBClient, GraphDBError
-from .. import graph_source
+from .. import graph_source, graph_write
+from ..graph_write import GraphWritePort
 from . import agent_workers, prompts, steps
 from .retry import met_retry
 
@@ -84,7 +85,7 @@ class LeaseVerloren(Exception):
 class WetsanalyseEngine:
     def __init__(
         self, settings: Settings, store: JobStore, llm: LLMClient | None, wb: WettenbankClient,
-        graph: GraphDBClient | None = None,
+        graph: GraphDBClient | None = None, graph_write_port: GraphWritePort | None = None,
     ) -> None:
         self.s = settings
         self.store = store
@@ -94,6 +95,8 @@ class WetsanalyseEngine:
         self.wb = wb
         # GraphDB-bron voor de agentische act-2-motor. Geïnjecteerd (test/eval) of lazy uit settings.
         self._graph = graph
+        # Schrijfpoort voor de JAS-promotie (Fase 2 / WS4). Geïnjecteerd (test) of lazy uit settings.
+        self._graph_write = graph_write_port
         # Per-proces id: identificeert deze worker als eigenaar van een geclaimde job. Eén engine
         # per proces (deps.get_engine is @lru_cache), dus dit id is stabiel binnen de worker.
         self.owner = uuid4().hex
@@ -112,6 +115,22 @@ class WetsanalyseEngine:
         if self._graph is None:
             self._graph = GraphDBClient(self.s)
         return self._graph
+
+    def graph_write_port(self) -> GraphWritePort:
+        """De JAS-schrijfpoort (geïnjecteerd of lazy uit settings)."""
+        if self._graph_write is None:
+            self._graph_write = graph_write.GraphDBWriteClient(self.s)
+        return self._graph_write
+
+    async def promoveer(self, project_id: str) -> dict:
+        """Promoveer de geaccordeerde act-2-analyse naar de JAS-annotatielaag in GraphDB (idempotent,
+        named-graph-per-analyse). De aanroeper (router) heeft eigenaarschap + `klaar`-state al gecheckt."""
+        rapport = await self.store.lees_rapport(project_id)
+        if not rapport:
+            raise ValueError("Rapport nog niet gereed — promoveren kan alleen op een afgeronde analyse.")
+        return await graph_write.promoveer(
+            self.graph_write_port(), rapport, project_id, prefix=self.s.jas_graph_prefix
+        )
 
     async def _preflight_dekking(self, req: StartRequest) -> None:
         """Dekkings-preflight (alleen agentische motor): faal helder als een bron niet in de graaf
