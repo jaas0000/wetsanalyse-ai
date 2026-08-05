@@ -4,7 +4,7 @@
  *
  * Ontsluit de bestaande admin-API van de Wetsanalyse-webapp (`/v1/admin/*`) als agent-tools, zodat
  * een MCP-client (Claude Code) de productie-app kan configureren: modelprofielen, wet-catalogus,
- * runtime-settings (chat/capture), gebruikers, token-verbruik en de genereerbare API-tokens (read).
+ * gebruikers en de genereerbare API-tokens (read).
  *
  * Config via env (nooit in de repo):
  *   WETSANALYSE_ADMIN_API_URL   — basis-URL van de API, bv. https://wetsanalyse-api.ipalm.nl
@@ -63,7 +63,7 @@ const TOOLS = [
     // — modelprofielen —
     {
         name: "list_profiles",
-        description: "Lijst de LLM-modelprofielen (incl. verbruik per profiel).",
+        description: "Lijst de LLM-modelprofielen.",
         input: S({}),
         run: () => apiFetch("GET", "/v1/admin/profiles"),
     },
@@ -138,24 +138,6 @@ const TOOLS = [
             return { ok: true };
         },
     },
-    // — runtime-instellingen —
-    {
-        name: "get_settings",
-        description: "Lees de runtime-instellingen (LLM-call-capture-toggle + chatbot-config; secret nooit).",
-        input: S({}),
-        run: () => apiFetch("GET", "/v1/admin/settings"),
-    },
-    {
-        name: "set_settings",
-        description: "Werk runtime-instellingen bij (partieel). chat_secret is write-only.",
-        input: S({
-            capture_llm_calls: z.boolean().optional(),
-            chat_enabled: z.boolean().optional(),
-            chat_webhook_url: z.string().optional(),
-            chat_secret: z.string().optional(),
-        }),
-        run: (body) => apiFetch("PUT", "/v1/admin/settings", body),
-    },
     // — gebruikers —
     {
         name: "list_users",
@@ -175,13 +157,7 @@ const TOOLS = [
         input: S({ userid: z.string(), role: z.enum(["analist", "beheerder"]).optional(), active: z.boolean().optional() }),
         run: ({ userid, ...body }) => apiFetch("PATCH", `/v1/admin/users/${seg(userid)}`, body),
     },
-    // — verbruik + tokens (read) —
-    {
-        name: "get_usage",
-        description: "Token-verbruik (aggregatie over de analyses).",
-        input: S({ group_by: z.string().optional() }),
-        run: (a) => apiFetch("GET", `/v1/admin/usage?group_by=${seg(a.group_by ?? "model")}`),
-    },
+    // — API-tokens (read) —
     {
         name: "list_api_tokens",
         description: "Lijst de genereerbare API-tokens (alleen metadata; nooit het token zelf).",

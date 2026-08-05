@@ -2,8 +2,8 @@
 
 Een **stdio-MCP-server** die de bestaande admin-API van de Wetsanalyse-webapp (`/v1/admin/*`) als
 agent-tools ontsluit, zodat een MCP-client (Claude Code) de app kan configureren: modelprofielen,
-wet-catalogus, runtime-settings (LLM-call-capture), gebruikers, token-verbruik en de genereerbare
-API-tokens (read). Het *wrapt* de admin-API — er is geen tweede configuratie-API.
+wet-catalogus, gebruikers en de genereerbare API-tokens (read). Het *wrapt* de admin-API — er is geen
+tweede configuratie-API.
 
 Draait **lokaal** (op jouw machine) wanneer je Claude Code draait en praat over HTTPS met de API met
 een admin-token. Het is dus sessie-tooling, geen standing verbinding. Logs (JSON) gaan naar stderr;
@@ -12,8 +12,8 @@ het token wordt nooit gelogd.
 ## Tools
 
 `list_profiles`, `get_profile`, `upsert_profile`, `set_default_profile`, `test_profile`,
-`delete_profile`, `list_wetten`, `upsert_wet`, `resolve_wet`, `delete_wet`, `get_settings`,
-`set_settings`, `list_users`, `create_user`, `patch_user`, `get_usage`, `list_api_tokens`.
+`delete_profile`, `list_wetten`, `upsert_wet`, `resolve_wet`, `delete_wet`, `list_users`,
+`create_user`, `patch_user`, `list_api_tokens`.
 
 (Genereren/intrekken van API-tokens zit bewust **niet** in de MCP — dat blijft de `/beheer`-UI, om de
 blast-radius klein te houden.)
