@@ -19,7 +19,7 @@ databron. Het geheel draait op Azure Container Apps én op zelf-gehoste Portaine
 | Onderdeel | Map | Wat het doet |
 |-----------|-----|--------------|
 | **wettenbank-MCP** | `tools/wettenbank-mcp/` | MCP-server (TypeScript) die actuele wettekst ophaalt via de publieke SRU-API van `overheid.nl`. De databron voor het hele platform. |
-| **wetsanalyse-API** | `api/` | Headless FastAPI-backend met de JAS-werkstroom (**activiteit 2**) als async REST-API (`POST /v1/projects` → polling/SSE), PostgreSQL-jobstore en per-client bearer-auth. De act-2-generatie is **agentisch op GraphDB** (agent⇄tools; de wettenbank-MCP-pijplijn blijft als rollback). Ook het annotatie-domein van de werkplek (`/v1/annotatie/*`). Stuurt het LLM aan via beheerbare modelprofielen. |
+| **wetsanalyse-API** | `api/` | Headless FastAPI-backend voor de werkplek: het **JAS-annotatiedomein** (`/v1/annotatie/*`), **login + gebruikersbeheer** (identiteitsbron van de webapp), **LLM-modelprofielbeheer** en de **wet-/profiel-keuzelijsten**. PostgreSQL-opslag, per-client bearer-auth. *(De oude `/v1/projects`-analyse-pijplijn is verwijderd.)* |
 | **frontend + werkplek** | `frontend/` | Next.js-webapp (BFF). De app **is de werkplek** (`/workbench`, de *Assistent-pagina*): één chat-achtig gespreksvenster voor **vragen én JAS-annotatie**, live tegen graph-qa. Plus een uitgekleed **`/beheer`** (modelprofielen, gebruikers, API-tokens). Achter een **login** (userid + wachtwoord, rollen, optionele 2FA). Vormgegeven volgens de **Rijkshuisstijl** (Belastingdienst-stijlvak). |
 | **graph-qa — de Juridische Assistent** | `tools/graph-qa/` | De eigen QA/annotatie-agent: beantwoordt vragen over wet- en regelgeving door de BWB-**kennisgraaf** (GraphDB via MCP) te bevragen, brongetrouw onderbouwd. Eén **unified LangGraph-agent** met een supervisor die per vraag kiest tussen de antwoord-worker (specialisten definitie/duiding/algemeen) en de annotatie-worker (ophaal → annoteer → Critic). Endpoints `POST /v1/chat` (SSE) + `GET /v1/artikel`. |
 | **observability** | `deploy/observability/` | Optionele verzamelstack (OTel-Collector + Tempo + Loki + Prometheus + Alloy) met kant-en-klare Grafana-dashboards en alerting. Alle onderdelen zijn geïnstrumenteerd (JSON-logs + OpenTelemetry); koppel de stack aan je bestaande Grafana. |
@@ -55,13 +55,12 @@ id's, letterlijke citaten).
 
 ## Het platform gebruiken (API + webapp)
 
-- **`api/`** — headless FastAPI-backend met de JAS-werkstroom (**activiteit 2**) als async REST-API
-  (`POST /v1/projects` → polling/SSE), PostgreSQL als jobstore, en per-client bearer-auth. De
-  act-2-generatie is **agentisch op GraphDB** (agent⇄tools op de job-modelprofiel-LLM; de
-  wettenbank-MCP-pijplijn blijft als rollback via `WETSANALYSE_ACT2_ENGINE`), met een behouden harde gate
-  (brongetrouwheid + JAS-schema). Een analyse rondt act2-only af (`scope: "act2"`). Daarnaast bedient de
-  API de **werkplek** met het annotatie-domein (`/v1/annotatie/*`). Begrippen (activiteit 3) en
-  RegelSpraak zijn verwijderd en worden later op een agentische basis herbouwd. Zie
+- **`api/`** — headless FastAPI-backend voor de werkplek: het **JAS-annotatiedomein**
+  (`/v1/annotatie/*`: documenten/elementen/beslissingen + append-only auditlog), **login +
+  gebruikersbeheer** (de API is de identiteitsbron van de webapp), het **LLM-modelprofielbeheer** en de
+  **wet-/profiel-keuzelijsten**. PostgreSQL als opslag, per-client bearer-auth. De oude
+  `/v1/projects`-analyse-pijplijn (generatie-engine, GraphDB-bron, review-lus, rapport) is **verwijderd**
+  nadat de webapp erop uit ging; herbouw van een agentische analyse-flow gebeurt later, elders. Zie
   [`api/README.md`](api/README.md) en [`api/CLAUDE.md`](api/CLAUDE.md).
 - **`frontend/`** — Next.js-webapp (BFF). De app **is de werkplek** (`/workbench`, de *Assistent-pagina*):
   één chat-achtig gespreksvenster voor **vragen én JAS-annotatie**, dat live met graph-qa
@@ -79,11 +78,11 @@ gebruikers voegt een beheerder toe via `/beheer`. **2FA (TOTP)** is optioneel en
 `/account`. Achter een reverse proxy moet `AUTH_URL` op de publieke origin staan; zie
 [`frontend/README.md`](frontend/README.md).
 
-**LLM-beheer.** Welk taalmodel de analyses gebruiken, leeft in **benoemde modelprofielen** in
-PostgreSQL — runtime te beheren via het **`/beheer`-scherm** in de webapp (of `GET/PUT /v1/admin/profiles`),
-zonder redeploy. Je kiest provider/model/endpoint/temperatuur, slaat de API-key versleuteld op
-(write-only, nooit teruggegeven), markeert een default en test de verbinding. De env-`LLM_*`-waarden
-seeden alleen het eerste default-profiel.
+**LLM-beheer.** Taalmodellen leven als **benoemde modelprofielen** in PostgreSQL — runtime te beheren
+via het **`/beheer`-scherm** in de webapp (of `GET/PUT /v1/admin/profiles`), zonder redeploy. Je kiest
+provider/model/endpoint/temperatuur, slaat de API-key versleuteld op (write-only, nooit teruggegeven),
+markeert een default en test de verbinding. De env-`LLM_*`-waarden seeden alleen het eerste
+default-profiel. (De QA/annotatie-agent `graph-qa` draait als aparte dienst met een eigen LLM-config.)
 
 **Deployment.** Het platform draait op **Azure Container Apps** (`deploy/azure/`: Postgres, wettenbank-mcp,
 api, graph-qa, frontend) én als **zelf-gehoste Portainer-stacks** achter Nginx Proxy Manager; CI bouwt de

@@ -32,25 +32,22 @@ expliciet gemaakt in plaats van schijnzekerheid.
 1. **`tools/wettenbank-mcp/`** — een MCP-server (TypeScript) die de actuele wettekst ophaalt via de
    publieke SRU-API van `overheid.nl`. Dit is de databron. Heeft een eigen, gedetailleerde
    `CLAUDE.md` — lees die bij werk *in* de MCP.
-2. **`api/`** — headless FastAPI-backend (PostgreSQL-jobstore, per-client bearer-auth) die de
-   JAS-werkstroom als async REST-API aanbiedt: analyses aanmaken/reviewen (een **werkgebied** met
-   meerdere bronnen) en afronden ná activiteit 2 (`scope: "act2"`). De act-2-**generatie is agentisch**
-   (agent⇄tools op **GraphDB**, standaard; de oude wettenbank-MCP-pijplijn blijft als rollback via
-   `WETSANALYSE_ACT2_ENGINE`), met een behouden **harde gate** (brongetrouwheid + JAS-schema → `fout`).
-   Bevat óók het **annotatie-domein** van de werkplek
-   (`/v1/annotatie/*`: documenten/elementen/beslissingen + append-only auditlog). Het LLM wordt
-   aangestuurd via **benoemde modelprofielen** (in de database, beheerbaar via `/v1/admin/profiles`;
-   de env-`LLM_*`-waarden seeden alleen het eerste default-profiel). Eigen `CLAUDE.md` + `README.md`.
-3. **`frontend/`** — Next.js-webapp (BFF) bovenop de API, met twee gezichten. (a) De **analyse-webapp**:
-   analyses aanmaken (wet-dropdown met **artikel-autocomplete + lid-keuze**), de human-in-the-loop
-   review-lus, het rapport, en het **`/beheer`-scherm**
-   (modelprofielen, wet-catalogus, gebruikers, token-verbruik; achter een apart admin-token). (b) **De
-   werkplek** (`/workbench`, de *Assistent-pagina*): één gespreksvenster voor **vragen én
-   JAS-annotatie**, live tegen graph-qa. De hele webapp zit achter een **login met userid +
-   wachtwoord** (Auth.js; e-mail verplicht/uniek maar geen inlog-identiteit; de API is de
-   identiteitsbron; rollen `beheerder`/`analist`; eenmalige eerste-beheerder-registratie via `/setup`;
-   optionele TOTP-2FA via `/account`). De UI volgt de **Rijkshuisstijl** (Belastingdienst-stijlvak:
-   lintblauw, Fira-fonts, het officiële Belastingdienst-logo en JAS-klassekleuren uit
+2. **`api/`** — headless FastAPI-backend (PostgreSQL-opslag, per-client bearer-auth) voor de werkplek.
+   Bedient het **annotatie-domein** (`/v1/annotatie/*`: documenten/elementen/beslissingen + append-only
+   auditlog), het **login-/gebruikersbeheer** (de API is de identiteitsbron van de webapp), het
+   **LLM-modelprofielbeheer** (`/v1/admin/*`; de env-`LLM_*`-waarden seeden alleen het eerste
+   default-profiel) en de **wet-/profiel-keuzelijsten** (`/v1/wetten`, `/v1/profiles`). De oude
+   `/v1/projects`-analyse-pijplijn (generatie-engine, GraphDB-bron, review-lus, rapport, JAS-promotie)
+   is **verwijderd** nadat de webapp erop uit ging. Eigen `CLAUDE.md` + `README.md`.
+3. **`frontend/`** — Next.js-webapp (BFF) bovenop de API. De app **is de werkplek** (`/workbench`, de
+   *Assistent-pagina*): één chat-achtig gespreksvenster voor **vragen én JAS-annotatie**, live tegen
+   graph-qa (SSE); de home leidt daarheen door. Daarnaast een uitgekleed **`/beheer`-scherm**
+   (modelprofielen, gebruikers, API-tokens; achter een apart admin-token). De analyse-webapp (analyses
+   aanmaken/reviewen/rapporteren) is **uit de frontend verwijderd**. De hele webapp zit achter een
+   **login met userid + wachtwoord** (Auth.js; e-mail verplicht/uniek maar geen inlog-identiteit; de
+   API is de identiteitsbron; rollen `beheerder`/`analist`; eenmalige eerste-beheerder-registratie via
+   `/setup`; optionele TOTP-2FA via `/account`). De UI volgt de **Rijkshuisstijl** (Belastingdienst-
+   stijlvak: lintblauw, Fira-fonts, het officiële Belastingdienst-logo en JAS-klassekleuren uit
    `docs/wetsanalyse/wa-table.png`). Eigen `CLAUDE.md` + `README.md`.
 4. **`tools/graph-qa/`** — de eigen **QA/annotatie-agent** ("de Juridische Assistent") die vragen over
    wet- en regelgeving beantwoordt door de BWB-**kennisgraaf** (GraphDB via MCP) te bevragen en het

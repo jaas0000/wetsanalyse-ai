@@ -6,7 +6,8 @@ tegen de graph-qa-agent (login/beheer lopen via de [Wetsanalyse-API](../api)). D
 
 > **De analyse-webapp is verwijderd.** Analyses aanmaken/reviewen/rapporteren zit niet meer in de
 > frontend; alleen de werkplek + login + een uitgekleed `/beheer` (modelprofielen, gebruikers,
-> API-tokens) blijft. De api-`/v1/projects`-backend bestaat nog headless.
+> API-tokens) blijft. Ook de api-`/v1/projects`-backend is verwijderd — de API bedient nu het
+> annotatie-domein, login/beheer en de wet-/profiel-keuzelijsten.
 
 **De werkplek** (`/workbench`, de *Assistent-pagina*): één gespreksvenster met **twee
 werkwijzen** — **vragen** aan de Juridische Assistent (brongetrouwe Q&A over de kennisgraaf) en

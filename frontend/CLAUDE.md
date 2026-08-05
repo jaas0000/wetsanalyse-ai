@@ -7,9 +7,9 @@ home (`/`) leidt daarheen door.
 
 > **Scope: chat-werkruimte.** De analyse-webapp (analyses aanmaken, projectenlijst, review-lus,
 > rapport) is **uit de frontend verwijderd**; alleen de werkplek + login + een uitgekleed `/beheer`
-> (modelprofielen, gebruikers, API-tokens) blijft. De api-`/v1/projects`-analyse-backend bestaat nog
-> **headless** (niet meer via de webapp ontsloten). Begrippen (activiteit 3) en RegelSpraak zijn eerder
-> al verwijderd.
+> (modelprofielen, gebruikers, API-tokens) blijft. De api-`/v1/projects`-analyse-backend is inmiddels
+> **óók verwijderd** (de API bedient nu het annotatie-domein, login/beheer en de keuzelijsten).
+> Begrippen (activiteit 3) en RegelSpraak zijn eerder al verwijderd.
 Lees ook de projectroot-`CLAUDE.md` en `../api/CLAUDE.md` — de API is de bron van waarheid voor de
 datacontracten en de state machine; deze app is een **dunne, server-getokende schil** eroverheen.
 Operationele details (lokaal draaien, env-vars, deployment) staan in de `README.md`; dit bestand
