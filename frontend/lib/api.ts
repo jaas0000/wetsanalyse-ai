@@ -2,38 +2,20 @@
 // de BFF-laag injecteert het token server-side. Hier dus geen Authorization-header.
 
 import type {
-  Analyse2,
   ApiError,
   ApiTokenCreated,
   ApiTokenOut,
-  AppSettings,
-  ArtikelInfo,
-  CreateAccepted,
-  LlmCall,
-  Feedback,
-  FeedbackAccepted,
-  Job,
-  JobSummary,
   LlmProfileIn,
   LlmProfileOut,
   LoginVerifyResult,
   MeAccount,
-  ProfileChoice,
-  Rapport,
   Role,
-  SettingsUpdate,
-  StartRequest,
   TempPassword,
   TestResult,
   TotpBegin,
-  UsageReport,
   UserCreated,
   UserOut,
   WetChoice,
-  WetIn,
-  WetOut,
-  WetResolveResult,
-  WetStructuur,
 } from "./types";
 import type {
   AgentDoel,
@@ -74,90 +56,17 @@ function veiligJson(s: string): { answer?: string; detail?: string } | null {
   }
 }
 
-export async function createProject(body: StartRequest): Promise<CreateAccepted> {
-  const res = await fetch("/api/projects", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  return json<CreateAccepted>(res);
-}
-
-export async function listProjects(): Promise<JobSummary[]> {
-  const res = await fetch("/api/projects", { cache: "no-store" });
-  return json<JobSummary[]>(res);
-}
-
-export async function getProject(id: string): Promise<Job> {
-  const res = await fetch(`/api/projects/${pathSegment(id)}`, { cache: "no-store" });
-  return json<Job>(res);
-}
-
-export async function deleteProject(id: string): Promise<void> {
-  const res = await fetch(`/api/projects/${pathSegment(id)}`, { method: "DELETE" });
-  if (!res.ok) throw await parseError(res);
-}
-
-export async function sendFeedback(id: string, body: Feedback): Promise<FeedbackAccepted> {
-  const res = await fetch(`/api/projects/${pathSegment(id)}/feedback`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  return json<FeedbackAccepted>(res);
-}
-
-export async function retryProject(id: string): Promise<CreateAccepted> {
-  const res = await fetch(`/api/projects/${pathSegment(id)}/retry`, { method: "POST" });
-  return json<CreateAccepted>(res);
-}
-
-export async function getRapport(id: string): Promise<Rapport> {
-  const res = await fetch(`/api/projects/${pathSegment(id)}/rapport`, { cache: "no-store" });
-  return json<Rapport>(res);
-}
-
-export async function getRonde(
-  id: string,
-  act: "2",
-  n: number,
-): Promise<Analyse2> {
-  const res = await fetch(`/api/projects/${pathSegment(id)}/ronde/${act}/${n}`, { cache: "no-store" });
-  return json<Analyse2>(res);
-}
-
 export function isApiError(e: unknown): e is ApiError {
   return typeof e === "object" && e !== null && "status" in e && "detail" in e;
 }
 
-/** Keuzelijst modelprofielen (niet-admin) — live opgehaald zodat wijzigingen direct meekomen. */
-export async function listModelProfiles(): Promise<ProfileChoice[]> {
-  const res = await fetch("/api/profiles", { cache: "no-store" });
-  return json<ProfileChoice[]>(res);
-}
-
-/** Keuzelijst wetten (niet-admin) voor de dropdown in het analyseformulier. */
+/** Keuzelijst wetten (client-auth) — de werkplek kiest hieruit een bepaling om te annoteren. */
 export async function listWetten(): Promise<WetChoice[]> {
   const res = await fetch("/api/wetten", { cache: "no-store" });
   return json<WetChoice[]>(res);
 }
 
-/** Afgeplatte artikellijst van een wet — voedt de artikel-combobox (API cachet per uur). */
-export async function getWetStructuur(bwbId: string): Promise<WetStructuur> {
-  const res = await fetch(`/api/wetten/${pathSegment(bwbId)}/structuur`, { cache: "no-store" });
-  return json<WetStructuur>(res);
-}
-
-/** Ledeninfo + opschrift/snippet van één artikel — voedt de lid-keuzelijst. */
-export async function getArtikelInfo(bwbId: string, artikel: string): Promise<ArtikelInfo> {
-  const res = await fetch(
-    `/api/wetten/${pathSegment(bwbId)}/artikelen/${pathSegment(artikel)}`,
-    { cache: "no-store" },
-  );
-  return json<ArtikelInfo>(res);
-}
-
-// --- Admin: LLM-modelprofielen + verbruik -----------------------------------
+// --- Admin: LLM-modelprofielen ----------------------------------------------
 
 export async function listProfiles(): Promise<LlmProfileOut[]> {
   const res = await fetch("/api/admin/profiles", { cache: "no-store" });
@@ -186,37 +95,6 @@ export async function setDefaultProfile(name: string): Promise<LlmProfileOut> {
 export async function testProfile(name: string): Promise<TestResult> {
   const res = await fetch(`/api/admin/profiles/${encodeURIComponent(name)}/test`, { method: "POST" });
   return json<TestResult>(res);
-}
-
-export async function getUsage(groupBy = "model"): Promise<UsageReport> {
-  const res = await fetch(`/api/admin/usage?group_by=${encodeURIComponent(groupBy)}`, { cache: "no-store" });
-  return json<UsageReport>(res);
-}
-
-// --- Admin: wet-catalogus ---------------------------------------------------
-
-export async function listWetCatalog(): Promise<WetOut[]> {
-  const res = await fetch("/api/admin/wetten", { cache: "no-store" });
-  return json<WetOut[]>(res);
-}
-
-export async function saveWet(bwbId: string, body: WetIn): Promise<WetOut> {
-  const res = await fetch(`/api/admin/wetten/${encodeURIComponent(bwbId)}`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  return json<WetOut>(res);
-}
-
-export async function deleteWet(bwbId: string): Promise<void> {
-  const res = await fetch(`/api/admin/wetten/${encodeURIComponent(bwbId)}`, { method: "DELETE" });
-  if (!res.ok) throw await parseError(res);
-}
-
-export async function resolveWetNaam(bwbId: string): Promise<WetResolveResult> {
-  const res = await fetch(`/api/admin/wetten/${encodeURIComponent(bwbId)}/resolve`, { method: "POST" });
-  return json<WetResolveResult>(res);
 }
 
 // --- Admin: gebruikers ------------------------------------------------------
@@ -363,34 +241,6 @@ export async function changePassword(current: string, nieuw: string): Promise<vo
     body: JSON.stringify({ current, new: nieuw }),
   });
   if (!res.ok) throw await parseError(res);
-}
-
-// --- runtime-instellingen + LLM-call-capture (admin) ------------------------
-
-export async function getSettings(): Promise<AppSettings> {
-  const res = await fetch("/api/admin/settings", { cache: "no-store" });
-  return json<AppSettings>(res);
-}
-
-/** Partiële update van de runtime-instellingen (capture-toggle en/of chat-config). */
-export async function updateSettings(patch: SettingsUpdate): Promise<AppSettings> {
-  const res = await fetch("/api/admin/settings", {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(patch),
-  });
-  return json<AppSettings>(res);
-}
-
-export function setCaptureLlmCalls(aan: boolean): Promise<AppSettings> {
-  return updateSettings({ capture_llm_calls: aan });
-}
-
-export async function getLlmCalls(projectId: string): Promise<LlmCall[]> {
-  const res = await fetch(`/api/admin/projects/${encodeURIComponent(projectId)}/llm-calls`, {
-    cache: "no-store",
-  });
-  return json<LlmCall[]>(res);
 }
 
 // --- Annotatie-workbench -----------------------------------------------------
