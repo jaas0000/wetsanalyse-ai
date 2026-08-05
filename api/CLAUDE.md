@@ -12,8 +12,8 @@ Na de pivot naar de chat-werkruimte bedient de API vier dingen:
    + append-only auditlog. De agent stelt voor, de mens beslist; de API bewaart de review-state.
 2. **Login + gebruikersbeheer** (`/v1/auth/*` + `/v1/admin/users`): de API is de identiteitsbron van
    de webapp (userid + wachtwoord, rollen, optionele TOTP-2FA).
-3. **LLM-modelprofielbeheer** (`/v1/admin/profiles`) + de **wet-catalogus** (`/v1/admin/wetten`).
-4. **Keuzelijsten** voor de UI (`/v1/profiles`, `/v1/wetten`, wet-structuur/artikelen).
+3. **LLM-modelprofielbeheer** (`/v1/admin/profiles`).
+4. De **profiel-keuzelijst** voor de UI (`/v1/profiles`).
 
 > **De analyse-pijplijn is verwijderd.** De oude `/v1/projects`-werkstroom (analyses aanmaken/
 > reviewen/rapporteren), de act-2-generatie-engine (orchestrator, agent⇄tools-worker, GraphDB-bron,
@@ -22,11 +22,16 @@ Na de pivot naar de chat-werkruimte bedient de API vier dingen:
 > dienst** (`tools/graph-qa/`) met een eigen toollaag en LLM-config; de werkplek praat er direct mee
 > (SSE) en is hier niet gewijzigd. Herbouw van een agentische analyse-flow gebeurt later, elders.
 
+> **Geen wettenbank-MCP meer.** De werkplek haalt wettekst uit de graaf (graph-qa `GET /v1/artikel`),
+> dus de wet-keuzelijst, de structuur/artikel-lookups en de wet-catalogus zijn uit de API verwijderd
+> (met `wettenbank.py`/`wet_info.py`/`wetten.py`/`wet_catalog.py`). De wettenbank-MCP-service blijft
+> bestaan als databron voor het skill-spoor en de graaf-ingestie — niet als API-afhankelijkheid.
+
 ## Architectuur (app/)
 
 - `config.py` — env-config + projectpaden (PROJECT_ROOT = repo-root).
 - `auth.py` — per-client bearer-tokens (erft het MCP-patroon; fail-closed; constant-tijd).
-  `require_admin` is een aparte, altijd-verplichte bearer voor `/v1/admin/*` (LLM-/catalogus-/
+  `require_admin` is een aparte, altijd-verplichte bearer voor `/v1/admin/*` (LLM-/
   gebruikersbeheer). `require_admin` is **async** en accepteert twee bronnen: de statische
   env-admin-tokens (`WETSANALYSE_ADMIN_TOKENS`) én **genereerbare DB-tokens** (`api_tokens.py`,
   beheerd via `/beheer` → API-tokens). Die tokens staan **alleen als sha256-hash** in de
@@ -47,7 +52,7 @@ Na de pivot naar de chat-werkruimte bedient de API vier dingen:
   `LLM_CONFIG_SECRET(_FILE)`). De profielen worden beheerd via `/beheer` en gevalideerd met de
   verbindingstest; de QA-agent (graph-qa) heeft een eigen LLM-config en wordt er niet door aangestuurd.
 - `db.py` — async SQLAlchemy-Core laag: engine-beheer + de tabeldefinities (`llm_profiles`,
-  `wet_catalogus`, `users`, `api_tokens`, `annotatie_documenten`, `annotatie_audit`). Portable types
+  `users`, `api_tokens`, `annotatie_documenten`, `annotatie_audit`). Portable types
   (`JSON`→`JSONB` op Postgres, `JSON` op SQLite-tests), tz-aware datetimes. `create_all` maakt
   ontbrekende tabellen idempotent aan bij de start; `reconcile_schema()` voegt nieuwe kolommen
   idempotent toe.
@@ -59,12 +64,6 @@ Na de pivot naar de chat-werkruimte bedient de API vier dingen:
   brongetrouwheid-/schema-helpers. Het annotatiedomein valideert de klasse van een voorgesteld element
   hiertegen.
 - `ratelimit.py` — in-process per-client rate limit (dependency) + `QuotaExceeded`.
-- `wettenbank.py` — wettenbank-MCP-client; lege/fout-respons → `WettenbankError`. Bron voor de
-  **wet-keuzelijst/structuur** (`wet_info.py`/`routers/catalog.py`/`wetten.py`) en de admin-
-  `resolve`-actie (officiële citeertitel).
-- `wet_catalog.py` — `WetCatalogus`-domeinmodel (BWB-id + leesbare naam). `wetten.py` — service
-  eroverheen: CRUD + `resolve_naam` (officiële citeertitel via `wettenbank_structuur`). De catalogus is
-  een **gemak voor de UI-dropdown, niet dwingend**; een willekeurige BWB-id blijft geldig.
 - `annotatie_contracts.py` — Pydantic-modellen + enums (`AnnotatieDocument`, `AnnotatieElement` met
   `lifecycle`/`beslissingen`/`alternatieven`/`aandacht`/`diff`, `Beslissing`, `AuditRecord`,
   `ReviewReason`). `annotatie_store.py` — `AnnotatieStore` (aparte store op dezelfde engine).
@@ -74,12 +73,10 @@ Na de pivot naar de chat-werkruimte bedient de API vier dingen:
   edit/reject vereisen `review_reason`; edit berekent een `diff`) → `GET audit`. Elke actie schrijft
   één auditregel. **Geen graaf-mutatie** vanuit dit domein.
 - `routers/admin.py` — **`/v1/admin/*`** achter `require_admin`: modelprofielen-CRUD (write-only
-  API-key, `api_key_set` nooit de key zelf), default zetten, verbinding testen; de wet-catalogus
-  (`/wetten` CRUD + `/wetten/{bwbId}/resolve`); het gebruikersbeheer (`/users` CRUD, de laatste
-  actieve beheerder is beschermd); en de genereerbare API-tokens (`/api-tokens`).
-- `routers/catalog.py` — de niet-admin keuzelijsten: `GET /v1/profiles` (alleen naam + default) en
-  `GET /v1/wetten`, plus de twee structuur-endpoints `GET /v1/wetten/{bwbId}/structuur` en
-  `GET /v1/wetten/{bwbId}/artikelen/{artikel}`, gevoed door `wet_info.py` (TTL-cache over de MCP).
+  API-key, `api_key_set` nooit de key zelf), default zetten, verbinding testen; het gebruikersbeheer
+  (`/users` CRUD, de laatste actieve beheerder is beschermd); en de genereerbare API-tokens
+  (`/api-tokens`).
+- `routers/catalog.py` — de niet-admin keuzelijst: `GET /v1/profiles` (alleen naam + default).
 - `main.py` — routers + `/health` (liveness) + `/ready` (alleen booleans). De lifespan doet DB-init
   (met bounded connect-retry bij cold start), profiel-seeding en het instellen van de LLM-throttle.
 
@@ -102,8 +99,8 @@ loggen. Zie `docs/observability.md`.
 - **Append-only auditlog.** Elke annotatie-actie schrijft één auditregel; de tijdlijn is `ORDER BY id`.
 - **JAS-klassen zijn canoniek.** Een voorgesteld element wordt gevalideerd tegen
   `validation.GELDIGE_JAS_KLASSEN` — verzin er geen bij.
-- **Secrets zijn bestanden.** Alle secrets (admin-tokens, client-tokens, DB-credentials, Fernet-key,
-  wettenbank-token) staan als bestanden op de host (`*_FILE`-patroon) — nooit als plain env var.
+- **Secrets zijn bestanden.** Alle secrets (admin-tokens, client-tokens, DB-credentials, Fernet-key)
+  staan als bestanden op de host (`*_FILE`-patroon) — nooit als plain env var.
 
 ## Lokaal draaien
 
@@ -114,7 +111,6 @@ Maak `api/secrets/` aan (gitignored) en vul:
 ```powershell
 # Vanuit de projectroot:
 mkdir api\secrets
-[IO.File]::WriteAllText("$PWD\api\secrets\wettenbank_token", "<wettenbank-token>")   # wet-keuzelijst/structuur
 [IO.File]::WriteAllText("$PWD\api\secrets\api_tokens",       "lokaal:<zelfgekozen-token>")
 # LLM-beheer (admin) — optioneel lokaal:
 [IO.File]::WriteAllText("$PWD\api\secrets\admin_tokens",      "admin:<zelfgekozen-admin-token>")
@@ -132,7 +128,6 @@ LLM_PROVIDER=azure_ai
 LLM_MODEL=claude-sonnet-4-6
 LLM_API_BASE=https://<resource-naam>.services.ai.azure.com   # geen /models achteraan
 LLM_API_KEY_FILE=secrets/llm_api_key
-WETTENBANK_TOKEN_FILE=secrets/wettenbank_token       # wet-keuzelijst/structuur
 WETSANALYSE_API_TOKENS_FILE=secrets/api_tokens
 WETSANALYSE_ADMIN_TOKENS=admin:<zelfgekozen-admin-token>
 LLM_CONFIG_SECRET=<fernet-key>   # nodig om API-keys via de admin-UI op te slaan
@@ -190,7 +185,6 @@ SECRETS_DIR=/volume1/docker/wetsanalyse-api/secrets
 sudo mkdir -p "$SECRETS_DIR"
 
 echo -n "<llm-api-key>"      | sudo tee "$SECRETS_DIR/llm_api_key"      > /dev/null  # verbindingstest/seed
-echo -n "<wettenbank-token>" | sudo tee "$SECRETS_DIR/wettenbank_token" > /dev/null  # wet-keuzelijst/structuur
 echo -n "id1:tok1,id2:tok2"  | sudo tee "$SECRETS_DIR/api_tokens"        > /dev/null
 
 # Admin-laag: aparte admin-tokens + Fernet-master-key voor key-versleuteling.

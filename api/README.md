@@ -3,22 +3,22 @@
 Headless HTTP-backend voor de **Wetsanalyse-werkplek** — een kerncomponent van het agent-platform,
 onder de [frontend](../frontend). De API bedient het **JAS-annotatiedomein** van de werkplek
 (documenten/elementen/beslissingen + append-only auditlog), het **login-/gebruikersbeheer** (de API is
-de identiteitsbron), het **LLM-modelprofielbeheer** en de **wet-/profiel-keuzelijsten**.
+de identiteitsbron), het **LLM-modelprofielbeheer** en de **profiel-keuzelijst**.
 
 > **De analyse-pijplijn is verwijderd.** De oude `/v1/projects`-werkstroom (analyses aanmaken/reviewen/
 > rapporteren, de act-2-generatie-engine, GraphDB-bron en JAS-promotie) zat niet langer achter een UI en
 > is uit de API gehaald. Wat blijft is wat de werkplek + login + `/beheer` nodig hebben. De
 > brongetrouwe QA/annotatie-agent zelf is een **aparte dienst** (`tools/graph-qa/`) waar de werkplek
-> direct mee praat (SSE); die is hier niet gewijzigd.
+> direct mee praat (SSE); die is hier niet gewijzigd. De werkplek haalt wettekst uit de graaf (graph-qa
+> `GET /v1/artikel`), dus de wet-keuzelijst/-catalogus en de wettenbank-MCP zitten niet meer in de API.
 
 ## Hoe het past in het project
 
 | Onderdeel | Rol |
 |-----------|-----|
-| **graph-qa** | De Juridische Assistent — beantwoordt vragen en stelt JAS-annotaties voor; de werkplek praat er direct mee. Eigen LLM-config. |
-| **wettenbank-MCP** | Databron voor de wet-/profiel-keuzelijst (catalogus + structuur/artikelen achter het analyseformulier van weleer; nu de wet-dropdown). |
-| **wetsanalyse-api** *(deze map)* | HTTP-harness — annotatiedomein, login, LLM-/gebruikersbeheer, keuzelijsten. |
-| **PostgreSQL** | Opslag — annotatie-documenten + auditlog, modelprofielen, wet-catalogus, gebruikers, API-tokens. |
+| **graph-qa** | De Juridische Assistent — beantwoordt vragen, stelt JAS-annotaties voor en levert de wettekst (uit de graaf); de werkplek praat er direct mee. Eigen LLM-config. |
+| **wetsanalyse-api** *(deze map)* | HTTP-harness — annotatiedomein, login, LLM-/gebruikersbeheer, profiel-keuzelijst. |
+| **PostgreSQL** | Opslag — annotatie-documenten + auditlog, modelprofielen, gebruikers, API-tokens. |
 
 ## Endpoints
 
@@ -39,9 +39,6 @@ Alle endpoints zijn client-gescopet en versioneerd onder `/v1`.
 | Methode | Pad | Wat het doet |
 |---------|-----|--------------|
 | `GET` | `/v1/profiles` | Keuzelijst modelprofielen (alleen naam + default) |
-| `GET` | `/v1/wetten` | Keuzelijst wetten (BWB-id + naam) voor de dropdown |
-| `GET` | `/v1/wetten/{bwbId}/structuur` | Afgeplatte artikellijst van een wet |
-| `GET` | `/v1/wetten/{bwbId}/artikelen/{artikel}` | Leden + opschrift + tekstsnippet van één artikel |
 | `GET` | `/health` | Liveness check |
 | `GET` | `/ready` | Readiness check (booleans: auth, LLM, MCP, database geconfigureerd) |
 
@@ -54,10 +51,6 @@ Alle endpoints zijn client-gescopet en versioneerd onder `/v1`.
 | `DELETE` | `/v1/admin/profiles/{name}` | Verwijder (niet de default) |
 | `POST` | `/v1/admin/profiles/{name}/default` | Markeer als default |
 | `POST` | `/v1/admin/profiles/{name}/test` | Test de verbinding (kleine LLM-call) |
-| `GET` | `/v1/admin/wetten` | Lijst wet-catalogus (BWB-id + naam) |
-| `PUT` | `/v1/admin/wetten/{bwbId}` | Maak/werk catalogus-item bij |
-| `DELETE` | `/v1/admin/wetten/{bwbId}` | Verwijder catalogus-item |
-| `POST` | `/v1/admin/wetten/{bwbId}/resolve` | Stel de officiële citeertitel voor via de MCP |
 | `GET` | `/v1/admin/users` | Lijst login-accounts (userid, e-mail, rol, 2FA-aan, actief) |
 | `POST` | `/v1/admin/users` | Maak een account (geeft eenmalig een tijdelijk wachtwoord) |
 | `PATCH` | `/v1/admin/users/{userid}` | Wijzig rol/actief (laatste actieve beheerder beschermd) |
@@ -94,7 +87,6 @@ LLM-config — deze profielen sturen die agent niet aan.)
 ```powershell
 # 1. Secrets aanmaken in api\secrets\ (gitignored)
 mkdir api\secrets
-[IO.File]::WriteAllText("$PWD\api\secrets\wettenbank_token", "<wettenbank-token>")  # wet-keuzelijst/structuur
 [IO.File]::WriteAllText("$PWD\api\secrets\api_tokens",       "lokaal:<token>")
 # Voor het LLM-beheer (/v1/admin/*) — optioneel lokaal:
 [IO.File]::WriteAllText("$PWD\api\secrets\admin_tokens",      "admin:<admin-token>")

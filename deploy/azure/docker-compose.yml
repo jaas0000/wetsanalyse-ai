@@ -65,7 +65,6 @@ services:
       LLM_MODEL:                     ${LLM_MODEL:-claude-sonnet-4-6}
       LLM_API_BASE:                  ${LLM_API_BASE}
       LLM_API_KEY_FILE:              /run/secrets/llm_api_key
-      WETTENBANK_MCP_URL:            http://wettenbank-mcp:3000/mcp
       WETSANALYSE_AUTH_REQUIRED:     "1"
       WETSANALYSE_API_TOKENS_FILE:   /run/secrets/api_tokens
       WETSANALYSE_ADMIN_TOKENS_FILE: /run/secrets/admin_tokens
@@ -84,8 +83,6 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      wettenbank-mcp:
-        condition: service_started
     healthcheck:
       test: ["CMD-SHELL", "python3 -c 'import urllib.request,sys; sys.exit(0 if urllib.request.urlopen(\"http://127.0.0.1:3000/health\").status==200 else 1)'"]
       interval: 30s

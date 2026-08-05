@@ -8,7 +8,7 @@ home (`/`) leidt daarheen door.
 > **Scope: chat-werkruimte.** De analyse-webapp (analyses aanmaken, projectenlijst, review-lus,
 > rapport) is **uit de frontend verwijderd**; alleen de werkplek + login + een uitgekleed `/beheer`
 > (modelprofielen, gebruikers, API-tokens) blijft. De api-`/v1/projects`-analyse-backend is inmiddels
-> **óók verwijderd** (de API bedient nu het annotatie-domein, login/beheer en de keuzelijsten).
+> **óók verwijderd** (de API bedient nu het annotatie-domein, login/beheer en de profiel-keuzelijst).
 > Begrippen (activiteit 3) en RegelSpraak zijn eerder al verwijderd.
 Lees ook de projectroot-`CLAUDE.md` en `../api/CLAUDE.md` — de API is de bron van waarheid voor de
 datacontracten en de state machine; deze app is een **dunne, server-getokende schil** eroverheen.
@@ -153,11 +153,11 @@ tokens/secrets/inhoud loggen. In de vitest-node-omgeving wordt `server-only` ges
   (`POST/PUT/PATCH/DELETE` op `/api/*`, incl. de publieke `/api/login-verify`): een meegestuurde
   vreemde Origin → 403; zonder Origin-header valt het terug op `SameSite=Lax`. De cookie-flags
   (`httpOnly`/`sameSite=lax`/`secure`) staan expliciet in `authConfig` vastgelegd.
-- **Geen dwingende wet-lijst in de UI.** De wet-dropdown (`/api/wetten`) die de werkplek gebruikt is
-  een gemak — is de catalogus leeg, dan val je terug op vrije BWB-id-invoer. De API/agent blijft elke
-  geldige BWB-id accepteren.
+- **Geen keuzemenu's — het is chat op de graaf.** De werkplek kiest geen wet uit een lijst: je stelt
+  je vraag/annotatie-opdracht en de agent vindt de bepaling in de graaf (het `doel`-event levert
+  `bwbId`/`artikel`/`citeertitel`). Er is dus geen wet-dropdown of wet-catalogus meer.
 - **Huisstijl via tokens, niet hardcoded.** Kleur en typografie lopen via de tokens in
-  `app/globals.css` + `tailwind.config.ts` (en `lib/jas.ts`/`lib/states.ts` voor de badges) — strooi
+  `app/globals.css` + `tailwind.config.ts` (en `lib/jas.ts` voor de JAS-badges) — strooi
   geen losse hex-waarden door componenten. Het officiële logo-asset (`public/belastingdienst-logo.svg`)
   blijft ongewijzigd; de JAS-klassekleuren komen exact uit `docs/wa-table.png`.
 

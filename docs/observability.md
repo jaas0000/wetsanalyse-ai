@@ -11,7 +11,7 @@ ongewijzigd met alléén gestructureerde JSON-logging (nul overhead, geen gedrag
 
 | Component | Logging | Traces | Metrics |
 |-----------|---------|--------|---------|
-| **API** (`api/`, FastAPI) | JSON-`dictConfig`, request-id-middleware, access-log | FastAPI-requests, httpx (MCP), DB | http-server-latency, request-count/foutrate (auto) |
+| **API** (`api/`, FastAPI) | JSON-`dictConfig`, request-id-middleware, access-log | FastAPI-requests, DB | http-server-latency, request-count/foutrate (auto) |
 | **Frontend** (`frontend/`, Next.js) | server-side JSON naar stdout in de BFF-lagen | `@vercel/otel`: route handlers + uitgaande `fetch` (traceparent) | request-count/latency (auto) |
 | **MCP** (`tools/wettenbank-mcp/`) | bestaande JSON-stderr-logger, nu met trace-velden | `/mcp`-requests (http) + SRU/repository-fetches (undici) | http-server-latency, upstream-fetch-duur, cache hit/miss |
 | **Chatbot-hop** | API `/v1/chat` + BFF-route (geen inhoud/secret) | span `chat.n8n` + traceparent naar n8n | — |

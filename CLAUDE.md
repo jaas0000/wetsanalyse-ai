@@ -7,8 +7,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Een **agent-platform** voor **Wetsanalyse**: het gestructureerd, brongetrouw en traceerbaar duiden
 van Nederlandse wet- en regelgeving volgens de methode Wetsanalyse (Ausems, Bulles & Lokin) en het
 Juridisch Analyseschema (JAS). De kern is een gedeployde dienst — de **wetsanalyse-API**, de
-**webapp met de werkplek**, de eigen **QA/annotatie-agent (`tools/graph-qa/`, "de Juridische
-Assistent")** en de **wettenbank-MCP** als databron — die draait op Azure Container Apps én Portainer.
+**webapp met de werkplek** en de eigen **QA/annotatie-agent (`tools/graph-qa/`, "de Juridische
+Assistent")** op de **BWB-kennisgraaf** — die draait op Azure Container Apps én Portainer. De
+**wettenbank-MCP** (live wettekst) is de databron voor het skill-spoor en de graaf-ingestie, niet
+meer voor de werkplek-runtime.
 
 Brongetrouwheid is niet onderhandelbaar: werk alleen met letterlijk opgehaalde wettekst, citeer
 letterlijk, en houd elke markering/begrip/regel/annotatie herleidbaar naar artikel + lid +
@@ -30,13 +32,14 @@ expliciet gemaakt in plaats van schijnzekerheid.
 ### Platform-componenten
 
 1. **`tools/wettenbank-mcp/`** — een MCP-server (TypeScript) die de actuele wettekst ophaalt via de
-   publieke SRU-API van `overheid.nl`. Dit is de databron. Heeft een eigen, gedetailleerde
-   `CLAUDE.md` — lees die bij werk *in* de MCP.
+   publieke SRU-API van `overheid.nl`. Databron voor het (legacy) skill-spoor en de graaf-ingestie;
+   de deployte werkplek werkt op de graaf (via graph-qa) en raakt deze MCP niet. Heeft een eigen,
+   gedetailleerde `CLAUDE.md` — lees die bij werk *in* de MCP.
 2. **`api/`** — headless FastAPI-backend (PostgreSQL-opslag, per-client bearer-auth) voor de werkplek.
    Bedient het **annotatie-domein** (`/v1/annotatie/*`: documenten/elementen/beslissingen + append-only
    auditlog), het **login-/gebruikersbeheer** (de API is de identiteitsbron van de webapp), het
    **LLM-modelprofielbeheer** (`/v1/admin/*`; de env-`LLM_*`-waarden seeden alleen het eerste
-   default-profiel) en de **wet-/profiel-keuzelijsten** (`/v1/wetten`, `/v1/profiles`). De oude
+   default-profiel) en de **profiel-keuzelijst** (`/v1/profiles`). De oude
    `/v1/projects`-analyse-pijplijn (generatie-engine, GraphDB-bron, review-lus, rapport, JAS-promotie)
    is **verwijderd** nadat de webapp erop uit ging. Eigen `CLAUDE.md` + `README.md`.
 3. **`frontend/`** — Next.js-webapp (BFF) bovenop de API. De app **is de werkplek** (`/workbench`, de

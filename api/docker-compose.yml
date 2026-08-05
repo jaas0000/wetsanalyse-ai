@@ -15,7 +15,7 @@
 #
 # Secrets leven als bestanden op de host in SECRETS_DIR en worden via *_FILE-variabelen
 # doorgegeven (nooit als plain env var in de container of Portainer-UI):
-#   llm_api_key, wettenbank_token, api_tokens, database_url,
+#   llm_api_key, api_tokens, database_url,
 #   postgres_user, postgres_password,
 #   admin_tokens (bearer voor /v1/admin/*), llm_config_secret (Fernet-key voor API-key-opslag).
 # Zie api/CLAUDE.md §"Secrets op de host" voor provisioning. De `database_url`-secret heeft de
@@ -37,8 +37,6 @@ services:
       WETSANALYSE_API_TOKENS_FILE: /run/secrets/api_tokens
       WETSANALYSE_AUTH_REQUIRED: "1"
       WETSANALYSE_ADMIN_TOKENS_FILE: /run/secrets/admin_tokens
-      WETTENBANK_MCP_URL: "http://wettenbank-mcp:3000/mcp"
-      WETTENBANK_TOKEN_FILE: /run/secrets/wettenbank_token
       LLM_PROVIDER: ${LLM_PROVIDER:-azure_ai}
       LLM_MODEL: ${LLM_MODEL:?zet LLM_MODEL in de stack-omgeving}
       LLM_API_BASE: ${LLM_API_BASE:-}

@@ -10,16 +10,18 @@ uitvoering (bijvoorbeeld bij de Belastingdienst) te verantwoorden zijn. Het plat
 De kern is interpretatiekeuzes — inclusief twijfel en aannames — zichtbaar maken in plaats van
 schijnzekerheid te produceren.
 
-De draaiende kern is een gedeployde dienst: de **wetsanalyse-API**, de **webapp met de werkplek**, de
-eigen **QA/annotatie-agent (graph-qa, "de Juridische Assistent")** en de **wettenbank-MCP** als
-databron. Het geheel draait op Azure Container Apps én op zelf-gehoste Portainer-stacks.
+De draaiende kern is een gedeployde dienst: de **wetsanalyse-API**, de **webapp met de werkplek** en de
+eigen **QA/annotatie-agent (graph-qa, "de Juridische Assistent")** die op de **BWB-kennisgraaf** (GraphDB)
+werkt. De **wettenbank-MCP** (live wettekst uit overheid.nl) voedt het (legacy) skill-spoor en de
+graaf-ingestie, maar zit niet meer in de runtime van de werkplek. Het geheel draait op Azure Container
+Apps én op zelf-gehoste Portainer-stacks.
 
 ## Onderdelen
 
 | Onderdeel | Map | Wat het doet |
 |-----------|-----|--------------|
-| **wettenbank-MCP** | `tools/wettenbank-mcp/` | MCP-server (TypeScript) die actuele wettekst ophaalt via de publieke SRU-API van `overheid.nl`. De databron voor het hele platform. |
-| **wetsanalyse-API** | `api/` | Headless FastAPI-backend voor de werkplek: het **JAS-annotatiedomein** (`/v1/annotatie/*`), **login + gebruikersbeheer** (identiteitsbron van de webapp), **LLM-modelprofielbeheer** en de **wet-/profiel-keuzelijsten**. PostgreSQL-opslag, per-client bearer-auth. *(De oude `/v1/projects`-analyse-pijplijn is verwijderd.)* |
+| **wettenbank-MCP** | `tools/wettenbank-mcp/` | MCP-server (TypeScript) die actuele wettekst ophaalt via de publieke SRU-API van `overheid.nl`. Databron voor het (legacy) skill-spoor en de graaf-ingestie — niet meer voor de werkplek-runtime. |
+| **wetsanalyse-API** | `api/` | Headless FastAPI-backend voor de werkplek: het **JAS-annotatiedomein** (`/v1/annotatie/*`), **login + gebruikersbeheer** (identiteitsbron van de webapp), **LLM-modelprofielbeheer** en de **profiel-keuzelijst**. PostgreSQL-opslag, per-client bearer-auth. *(De oude `/v1/projects`-analyse-pijplijn is verwijderd.)* |
 | **frontend + werkplek** | `frontend/` | Next.js-webapp (BFF). De app **is de werkplek** (`/workbench`, de *Assistent-pagina*): één chat-achtig gespreksvenster voor **vragen én JAS-annotatie**, live tegen graph-qa. Plus een uitgekleed **`/beheer`** (modelprofielen, gebruikers, API-tokens). Achter een **login** (userid + wachtwoord, rollen, optionele 2FA). Vormgegeven volgens de **Rijkshuisstijl** (Belastingdienst-stijlvak). |
 | **graph-qa — de Juridische Assistent** | `tools/graph-qa/` | De eigen QA/annotatie-agent: beantwoordt vragen over wet- en regelgeving door de BWB-**kennisgraaf** (GraphDB via MCP) te bevragen, brongetrouw onderbouwd. Eén **unified LangGraph-agent** met een supervisor die per vraag kiest tussen de antwoord-worker (specialisten definitie/duiding/algemeen) en de annotatie-worker (ophaal → annoteer → Critic). Endpoints `POST /v1/chat` (SSE) + `GET /v1/artikel`. |
 | **observability** | `deploy/observability/` | Optionele verzamelstack (OTel-Collector + Tempo + Loki + Prometheus + Alloy) met kant-en-klare Grafana-dashboards en alerting. Alle onderdelen zijn geïnstrumenteerd (JSON-logs + OpenTelemetry); koppel de stack aan je bestaande Grafana. |
@@ -58,7 +60,7 @@ id's, letterlijke citaten).
 - **`api/`** — headless FastAPI-backend voor de werkplek: het **JAS-annotatiedomein**
   (`/v1/annotatie/*`: documenten/elementen/beslissingen + append-only auditlog), **login +
   gebruikersbeheer** (de API is de identiteitsbron van de webapp), het **LLM-modelprofielbeheer** en de
-  **wet-/profiel-keuzelijsten**. PostgreSQL als opslag, per-client bearer-auth. De oude
+  **profiel-keuzelijst** (`/v1/profiles`). PostgreSQL als opslag, per-client bearer-auth. De oude
   `/v1/projects`-analyse-pijplijn (generatie-engine, GraphDB-bron, review-lus, rapport) is **verwijderd**
   nadat de webapp erop uit ging; herbouw van een agentische analyse-flow gebeurt later, elders. Zie
   [`api/README.md`](api/README.md) en [`api/CLAUDE.md`](api/CLAUDE.md).
