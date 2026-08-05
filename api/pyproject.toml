@@ -5,7 +5,7 @@ description = "Deployable API-backend voor de Wetsanalyse (JAS) — orchestreert
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.141.1",
-    "uvicorn>=0.52.0",
+    "uvicorn>=0.52.1",
     "pydantic>=2.7",
     "httpx>=0.27",
     "sqlalchemy[asyncio]>=2.0.51",
