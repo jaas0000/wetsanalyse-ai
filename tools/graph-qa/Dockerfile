@@ -5,8 +5,11 @@ WORKDIR /app
 # Runtime-deps (base uit pyproject.toml + de 'otel'-extra, zodat OTel werkt zodra
 # OTEL_EXPORTER_OTLP_ENDPOINT gezet is; zonder die packages degradeert observability naar alleen
 # JSON-logs zónder trace_id). Pip eerst upgraden zodat de base-image-pip (met bekende CVE's) niet in
-# de image achterblijft — Trivy scant 'm anders als alert.
+# de image achterblijft, en zijn vendored bom.cdx.json meteen weg: pip 26.x bakt een CycloneDX-SBOM
+# van zijn eigen vendored deps mee die Trivy als package-inventaris leest en los van de echt
+# geïnstalleerde versies als kwetsbaar rapporteert — zelfde fix als api/Dockerfile (#100/#101/#102).
 RUN pip install --no-cache-dir --upgrade pip 'setuptools>=83.0.0' \
+ && rm -f /usr/local/lib/python3.14/site-packages/pip/_vendor/bom.cdx.json \
  && pip install --no-cache-dir \
     anthropic \
     fastapi \
