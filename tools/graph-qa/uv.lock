@@ -267,7 +267,7 @@ requires-dist = [
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8" },
     { name = "python-dotenv", specifier = ">=1.0.0" },
     { name = "sse-starlette", specifier = ">=3.4.6" },
-    { name = "uvicorn", extras = ["standard"], specifier = ">=0.52.0" },
+    { name = "uvicorn", extras = ["standard"], specifier = ">=0.52.1" },
 ]
 provides-extras = ["dev", "otel"]
 
