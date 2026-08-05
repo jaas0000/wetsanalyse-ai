@@ -1,12 +1,12 @@
 """Async SQLAlchemy-Core laag: engine-beheer + tabeldefinities.
 
-De datalaag is bewust **Core** (geen ORM): alle SQL is geïsoleerd in de store en de service-
-modules (profiles/wetten/usage), de domeinmodellen blijven plain Pydantic. De types zijn
-portable — `JSON` wordt `JSONB` op PostgreSQL en gewone `JSON` op SQLite, zodat de unit-tests
-op een in-memory SQLite draaien en productie op PostgreSQL (CloudNativePG).
+De datalaag is bewust **Core** (geen ORM): alle SQL is geïsoleerd in de service-modules
+(profiles/wetten/users/api_tokens/annotatie_store), de domeinmodellen blijven plain Pydantic. De
+types zijn portable — `JSON` wordt `JSONB` op PostgreSQL en gewone `JSON` op SQLite, zodat de
+unit-tests op een in-memory SQLite draaien en productie op PostgreSQL (CloudNativePG).
 
-De engine wordt lui geïnitialiseerd (lifespan in productie, fixture in tests) zodat de store
-zonder verbinding importeerbaar blijft.
+De engine wordt lui geïnitialiseerd (lifespan in productie, fixture in tests) zodat de modules
+zonder verbinding importeerbaar blijven.
 """
 
 from __future__ import annotations
@@ -22,11 +22,9 @@ from sqlalchemy import (
     Index,
     Integer,
     MetaData,
-    PrimaryKeyConstraint,
     String,
     Table,
     Text,
-    inspect,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
@@ -40,54 +38,10 @@ _DT = DateTime(timezone=True)
 
 metadata = MetaData()
 
-# Eén rij per analyse-project: state-machine-velden (typed) + JSON voor de samengestelde velden.
-# rondes/feedback staan in een aparte tabel (ronde-immutabiliteit, gerichte writes); het
-# eindrapport zit als JSON-kolom op het project.
-projects = Table(
-    "projects",
-    metadata,
-    Column("slug", String(255), primary_key=True),
-    Column("naam", Text, nullable=False, default=""),
-    Column("omschrijving", Text, nullable=False, default=""),
-    # Het werkgebied bevat meerdere bronnen: list[{bwbId, artikel, lid}] als JSON.
-    Column("bronnen", _JSON, nullable=False, default=list),
-    Column("analysefocus", Text, nullable=False, default=""),
-    Column("review", Boolean, nullable=False, default=True),
-    Column("model_profile", String(128), nullable=False, default=""),
-    Column("client_id", String(128), nullable=False, default=""),
-    Column("state", String(32), nullable=False),
-    # Analyse-omvang: sinds activiteit 3 is verwijderd altijd "act2" (veld blijft voor telemetrie).
-    Column("scope", String(16), nullable=False, default="act2"),
-    Column("current_activiteit", String(16), nullable=True),
-    Column("current_ronde", Integer, nullable=False, default=0),
-    Column("current_fase", String(64), nullable=True),
-    Column("current_fase_sinds", _DT, nullable=True),
-    Column("waarschuwingen", _JSON, nullable=False, default=list),
-    Column("error", _JSON, nullable=True),
-    Column("provenance", _JSON, nullable=False, default=list),
-    # Concurrency-claim: alleen door claim()/verleng_lease() beheerd (nooit via save_job).
-    Column("owner", String(128), nullable=True),
-    Column("lease_until", _DT, nullable=True),
-    Column("created", _DT, nullable=False),
-    Column("updated", _DT, nullable=False),
-    Column("rapport", _JSON, nullable=True),
-    # Hot-path indexen: list_projects filtert op client_id + sorteert op updated DESC;
-    # reaper/quota scannen op state. Zonder deze is dat een seq scan zodra de tabel groeit.
-    Index("ix_projects_client_id_updated", "client_id", "updated"),
-    Index("ix_projects_state", "state"),
-)
-
-# Immutabele analyse-ronde per (project, activiteit, ronde) + de bijbehorende review-feedback.
-rondes = Table(
-    "rondes",
-    metadata,
-    Column("project_slug", String(255), nullable=False),
-    Column("activiteit", String(16), nullable=False),
-    Column("ronde", Integer, nullable=False),
-    Column("analyse", _JSON, nullable=False, default=dict),
-    Column("feedback", _JSON, nullable=True),
-    PrimaryKeyConstraint("project_slug", "activiteit", "ronde"),
-)
+# NB: de analyse-pijplijn is verwijderd. De bijbehorende tabellen (`projects`, `rondes`, `llm_calls`,
+# `app_settings`) worden niet meer gedefinieerd of aangemaakt; op een bestaande productie-DB blijven ze
+# verweesd staan (samen met een eventuele Grafana-view erop) — het daadwerkelijk droppen is een
+# aparte, bewuste migratie, niet iets dat hier stil bij de start gebeurt.
 
 llm_profiles = Table(
     "llm_profiles",
@@ -152,46 +106,9 @@ api_tokens = Table(
     Column("last_used", _DT, nullable=True),
 )
 
-# Generieke runtime-config (key/value) — beheerbaar via /v1/admin/settings + /beheer. Eerste
-# sleutel: `capture_llm_calls` (bool). Bewust een aparte, kleine tabel zodat een toggle de hot
-# projects-rij niet raakt en latere instellingen er zonder migratie bij kunnen.
-app_settings = Table(
-    "app_settings",
-    metadata,
-    Column("key", String(64), primary_key=True),
-    Column("value", _JSON, nullable=True),
-    Column("updated", _DT, nullable=False),
-)
-
-# Eén rij per feitelijke LLM-call (incl. auto-correctie-herhalingen, de verwijzing-inventaris en
-# gefaalde pogingen). Legt de letterlijke prompt + ruwe respons vast voor prompt-/gedragsanalyse.
-# Apart van `rondes` (die alleen het uiteindelijke ronde-resultaat bewaart) en standaard leeg —
-# capture staat default uit (app_settings.capture_llm_calls).
-llm_calls = Table(
-    "llm_calls",
-    metadata,
-    Column("id", Integer, primary_key=True, autoincrement=True),
-    Column("project_slug", String(255), nullable=False),
-    Column("activiteit", String(16), nullable=False, default=""),
-    Column("ronde", Integer, nullable=False, default=0),
-    Column("poging", Integer, nullable=False, default=1),
-    Column("fase", String(32), nullable=False, default=""),
-    Column("model", String(128), nullable=False, default=""),
-    Column("provider", String(64), nullable=False, default=""),
-    Column("system_prompt", Text, nullable=False, default=""),
-    Column("user_prompt", Text, nullable=False, default=""),
-    Column("response_text", Text, nullable=False, default=""),
-    Column("tokens_in", Integer, nullable=False, default=0),
-    Column("tokens_out", Integer, nullable=False, default=0),
-    Column("ok", Boolean, nullable=False, default=True),
-    Column("error", Text, nullable=True),
-    Column("tijdstip", _DT, nullable=False),
-    Index("ix_llm_calls_project_slug_id", "project_slug", "id"),
-)
-
 # --- Annotatie-domein (wetsanalyse-workbench) ---------------------------------
-# Vers domein, los van de analyse-tabellen. Eén rij per bron-document; de elementen (met hun
-# review-levenscyclus + beslissingen) staan als JSON — het document draagt de HUIDIGE staat.
+# Eén rij per bron-document; de elementen (met hun review-levenscyclus + beslissingen) staan als
+# JSON — het document draagt de HUIDIGE staat.
 annotatie_documenten = Table(
     "annotatie_documenten",
     metadata,
@@ -264,80 +181,11 @@ async def dispose_engine() -> None:
 
 
 async def create_all() -> None:
-    """Maak de tabellen aan (tests + beproevingsfase; productie kan dit later via Alembic doen)."""
+    """Maak de tabellen aan (tests + beproevingsfase; productie kan dit later via Alembic doen).
+    Idempotent: alleen ONTBREKENDE tabellen worden aangemaakt. De kept-tabellen dragen hun volledige
+    schema in de definities hierboven, dus er is geen aparte kolom-migratiestap meer nodig."""
     async with get_engine().begin() as conn:
         await conn.run_sync(metadata.create_all)
-
-
-async def reconcile_schema() -> None:
-    """Idempotente schema-bijwerking voor de werkgebied/bronnen-overgang.
-
-    `create_all` maakt alleen ONTBREKENDE tabellen; het migreert geen kolommen van een
-    bestaande tabel. De `projects`-tabel ging van scalar `bwbId/artikel/lid` naar één
-    `bronnen` JSON-kolom. Bij een bestaande tabel (zonder Alembic) brengen we het schema hier
-    in lijn: voeg `bronnen` toe en laat de legacy-kolommen vallen. Veilig, want er is geen
-    data om te bewaren; op een verse DB (kolom al aanwezig) is dit een no-op."""
-    engine = get_engine()
-
-    def _kolommen(sync_conn):
-        insp = inspect(sync_conn)
-        if not insp.has_table("projects"):
-            return None
-        return {c["name"] for c in insp.get_columns("projects")}
-
-    async with engine.begin() as conn:
-        bestaande = await conn.run_sync(_kolommen)
-        if bestaande is None:
-            return  # tabel bestaat (nog) niet; create_all maakt 'm met het juiste schema
-        is_pg = engine.url.get_backend_name() == "postgresql"
-        if "bronnen" not in bestaande:
-            typ = "JSONB" if is_pg else "JSON"
-            default = "'[]'::jsonb" if is_pg else "'[]'"
-            await conn.exec_driver_sql(
-                f"ALTER TABLE projects ADD COLUMN bronnen {typ} NOT NULL DEFAULT {default}"
-            )
-        # Legacy scalar-kolommen opruimen (case-sensitief → quoten).
-        for legacy in ("bwbId", "artikel", "lid"):
-            if legacy in bestaande:
-                await conn.exec_driver_sql(f'ALTER TABLE projects DROP COLUMN "{legacy}"')
-        # NB: de act3/RegelSpraak-kolommen (regelspraak/regelspraak_review/begrippenlijst) worden niet
-        # meer aangemaakt of gebruikt. Bestaande prod-kolommen blijven verweesd staan — het droppen is
-        # een bewuste aparte migratie (niet stil hier), zodat bestaande DB's niet breken.
-        # Analyse-omvang ("volledig"/"act2"): idempotent toevoegen; bestaande rijen = volledig.
-        if "scope" not in bestaande:
-            await conn.exec_driver_sql(
-                "ALTER TABLE projects ADD COLUMN scope VARCHAR(16) NOT NULL DEFAULT 'act2'"
-            )
-        # current_activiteit/rondes.activiteit verbreed. Alleen op Postgres relevant —
-        # SQLite handhaaft de VARCHAR-lengte niet. **Echt idempotent**: alleen ALTER-en als de kolom
-        # nog niet ≥16 is. Een onvoorwaardelijke ALTER TYPE botst met een view die van de kolom
-        # afhangt (bv. Grafana's `dashboard_jobs`) → "cannot alter type of a column used by a view"
-        # → startup-crash. Skippen zodra de breedte al klopt vermijdt die view-afhankelijkheid.
-        if is_pg:
-            async def _verbreed_indien_nodig(tabel: str, kolom: str) -> None:
-                res = await conn.exec_driver_sql(
-                    "SELECT character_maximum_length FROM information_schema.columns "
-                    f"WHERE table_name = '{tabel}' AND column_name = '{kolom}'"
-                )
-                rij = res.first()
-                huidige = rij[0] if rij else None
-                if huidige is not None and huidige < 16:
-                    await conn.exec_driver_sql(
-                        f"ALTER TABLE {tabel} ALTER COLUMN {kolom} TYPE VARCHAR(16)"
-                    )
-
-            await _verbreed_indien_nodig("projects", "current_activiteit")
-            await _verbreed_indien_nodig("rondes", "activiteit")
-        # Hot-path indexen op een bestaande tabel: create_all maakt indexen alleen mee bij een
-        # verse tabel, dus voor een bestaande prod-DB hier idempotent toevoegen. IF NOT EXISTS
-        # werkt op zowel PostgreSQL als SQLite, dus ook veilig ná create_all in de tests.
-        await conn.exec_driver_sql(
-            "CREATE INDEX IF NOT EXISTS ix_projects_client_id_updated "
-            "ON projects (client_id, updated)"
-        )
-        await conn.exec_driver_sql(
-            "CREATE INDEX IF NOT EXISTS ix_projects_state ON projects (state)"
-        )
 
 
 def aware(dt: datetime | None) -> datetime | None:

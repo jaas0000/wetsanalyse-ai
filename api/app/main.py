@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 
 async def _init_db_met_retry() -> None:
-    """Verbind met de DB en zet/lijn het schema uit, met **bounded retry**. Postgres draait als
+    """Verbind met de DB en maak de tabellen aan, met **bounded retry**. Postgres draait als
     aparte stack (geen cross-stack `depends_on`), dus bij een cold start kan de DB nog niet klaar zijn
     wanneer de API opstart — dan retrye we i.p.v. crash-loopen. Knoppen: `WETSANALYSE_DB_CONNECT_RETRIES`
     (default 30) en `WETSANALYSE_DB_CONNECT_BACKOFF` (seconden, default 2) → ~60s venster."""
@@ -35,7 +35,6 @@ async def _init_db_met_retry() -> None:
     for poging in range(1, pogingen + 1):
         try:
             await db.create_all()
-            await db.reconcile_schema()
             if poging > 1:
                 logger.info("DB-verbinding gelukt na %d pogingen", poging)
             return
@@ -60,8 +59,8 @@ async def lifespan(app: FastAPI):
     # Async SQLAlchemy-engine + tabellen. In productie zou een migratietool (Alembic) het schema
     # beheren; voor de beproevingsfase volstaat create_all (idempotent: alleen ontbrekende tabellen).
     db.init_engine(settings.database_url)
-    # create_all + reconcile_schema (idempotent) met bounded retry — vangt een nog-niet-klare DB bij
-    # cold start op (postgres is een aparte stack zonder cross-stack depends_on).
+    # create_all (idempotent) met bounded retry — vangt een nog-niet-klare DB bij cold start op
+    # (postgres is een aparte stack zonder cross-stack depends_on).
     await _init_db_met_retry()
     try:
         from . import profiles

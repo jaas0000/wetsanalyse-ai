@@ -1,223 +1,6 @@
-// Domeintypes — handmatig afgeleid van het API-contract (api/app/contracts.py).
+// Domeintypes — handmatig afgeleid van het API-contract (api/app/*.py).
 // Dit bestand is de bron-van-waarheid voor de frontend; zie README (gen:types) voor
 // een optioneel hulpmiddel om ze tegen /openapi.json te controleren.
-
-export type JobState =
-  | "queued"
-  | "act2-runt"
-  | "wacht-op-review-act2"
-  | "bouwt"
-  | "klaar"
-  | "fout";
-
-export type Activiteit = "2";
-
-export type FoutKlasse = "mcp" | "llm" | "validatie" | "intern" | "quota";
-
-// --- Requests ---------------------------------------------------------------
-
-/** Eén bron-keuze (wet+artikel+lid) bij het aanmaken van een werkgebied-analyse. */
-export interface BronInput {
-  bwbId?: string | null;
-  artikel: string;
-  lid?: string | null;
-}
-
-export interface StartRequest {
-  bronnen: BronInput[];
-  naam?: string;
-  omschrijving?: string;
-  analysefocus?: string | null; // hoofdvraag
-  review: boolean;
-  model_profile?: string | null;
-}
-
-export interface Feedback {
-  // "akkoord-afronden" = akkoord op activiteit 2 én de analyse daar afronden;
-  // alleen geldig zonder opmerkingen.
-  status: "akkoord" | "wijzigingen" | "akkoord-afronden";
-  activiteit: Activiteit;
-  items: Record<string, string>;
-  algemeen: string;
-}
-
-// Analyse-omvang: sinds activiteit 3 is verwijderd altijd "act2" (veld blijft voor telemetrie).
-export type Scope = "volledig" | "act2";
-
-// --- Responses --------------------------------------------------------------
-
-export interface CreateAccepted {
-  id: string;
-  naam: string;
-  state: JobState;
-}
-
-export interface FeedbackAccepted {
-  id: string;
-  state: JobState;
-  ronde: number;
-}
-
-export interface JobSummary {
-  id: string;
-  naam: string;
-  state: JobState;
-  bronnen: BronInput[];
-  updated: string;
-  // Verrijking voor de eerste (SSR-)render van het dashboard; daarna live via de aggregate-SSE.
-  current_fase: string | null;
-  model_profile: string;
-  scope: Scope;
-  tokens_in: number;
-  tokens_out: number;
-}
-
-export interface JobFout {
-  stap: string;
-  ronde: number | null;
-  klasse: FoutKlasse;
-  bericht: string;
-}
-
-export interface RondeProvenance {
-  activiteit: Activiteit;
-  ronde: number;
-  model: string;
-  provider: string;
-  output_strategie: string;
-  referentie_hash: string;
-  prompt_hash: string;
-  mcp_bwbid: string;
-  mcp_versiedatum: string;
-  mcp_bronreferentie: string;
-  tokens_in: number;
-  tokens_out: number;
-  tijdstip: string;
-}
-
-export interface Job {
-  id: string;
-  state: JobState;
-  naam: string;
-  omschrijving: string;
-  bronnen: BronInput[];
-  review: boolean;
-  model_profile: string;
-  analysefocus: string;
-  client_id: string;
-  scope: Scope;
-  current_activiteit: Activiteit | null;
-  current_ronde: number;
-  waarschuwingen: string[];
-  error: JobFout | null;
-  provenance: RondeProvenance[];
-  created: string;
-  updated: string;
-}
-
-// --- Analyse-artefacten (per ronde) -----------------------------------------
-
-/** Het werkgebied (kennisdomein) — de afbakening waarbinnen de analyse plaatsvindt. */
-export interface Werkgebied {
-  naam: string;
-  hoofdvraag: string;
-  omschrijving: string;
-  scoping: string;
-  analysefocus?: string;
-}
-
-/** Absolute, cross-bron vindplaats. */
-export interface Vindplaats {
-  bron_id: string;
-  lid: string;
-}
-
-export interface Lid {
-  lid: string;
-  tekst: string;
-  bronreferentie: string;
-}
-
-export interface Markering {
-  id: string;
-  bron_id: string;
-  formulering: string;
-  klasse: string;
-  vindplaats: string; // lid-relatief binnen de bron
-  toelichting: string;
-  twijfel: string;
-}
-
-export interface VerwijzingDoel {
-  label: string;
-  target: string;
-  bwbId: string;
-}
-
-export interface Verwijzing {
-  id: string;
-  bron_id: string;
-  bron_lid: string;
-  soort: string; // intref | extref | natuurlijk
-  functie: string; // definitie | schakel | delegatie | intra-artikel | informatief
-  doel: VerwijzingDoel;
-  status: string; // opgehaald | gevolgd | gesignaleerd | buiten-scope-diepte
-  betekenis: string;
-  volgen?: boolean;
-}
-
-/** Eén bron in het werkgebied: een (bwbId, artikel, lid?)-eenheid met haar act-2-uitkomst. */
-export interface Bron {
-  bron_id: string;
-  label: string;
-  wet: string;
-  bwbId: string;
-  artikel: string;
-  lid: string | null;
-  versiedatum: string;
-  bronreferentie: string;
-  type: string;
-  pad: string;
-  reikwijdte: string;
-  geraadpleegde: string;
-  leden: Lid[];
-  markeringen: Markering[];
-  verwijzingen: Verwijzing[];
-  samenhang: string;
-}
-
-export interface Analyse2 {
-  werkgebied: Werkgebied;
-  analysefocus: string;
-  bronnen: Bron[];
-}
-
-// --- Rapport ----------------------------------------------------------------
-
-export interface ReviewRonde {
-  ronde: number;
-  items: Record<string, string>;
-  algemeen: string;
-  // Feedback-status van de ronde ("akkoord" | "wijzigingen" | "akkoord-afronden");
-  // ontbreekt bij een ronde zonder feedback.
-  status?: string;
-}
-
-export interface ReviewActiviteit {
-  samenvatting: string;
-  rondes: ReviewRonde[];
-}
-
-export interface Reviewlog {
-  activiteit2?: ReviewActiviteit;
-}
-
-export interface Rapport {
-  werkgebied: Werkgebied;
-  bronnen: Bron[];
-  reviewlog: Reviewlog;
-  aandachtspunten: string;
-}
 
 // --- Catalogus (niet-admin): keuzelijsten -----------------------------------
 
@@ -231,49 +14,7 @@ export interface WetChoice {
   naam: string;
 }
 
-// Wetsstructuur + artikelinfo voor het analyseformulier (artikel-autocomplete, lid-keuze).
-// Gespiegeld van WetStructuurOut/ArtikelInfoOut in api/app/routers/catalog.py.
-export interface ArtikelChoice {
-  artikel: string;
-  pad: string;
-}
-
-export interface WetStructuur {
-  bwbId: string;
-  citeertitel: string;
-  versiedatum: string;
-  artikelen: ArtikelChoice[];
-}
-
-export interface ArtikelInfo {
-  bwbId: string;
-  artikel: string;
-  citeertitel: string;
-  opschrift: string;
-  pad: string;
-  leden: string[];
-  leden_teksten?: { lid: string; tekst: string }[];
-  snippet: string;
-}
-
-// --- Admin: wet-catalogus ---------------------------------------------------
-
-export interface WetIn {
-  naam: string;
-}
-
-export interface WetOut {
-  bwbId: string;
-  naam: string;
-  updated_by: string;
-  updated: string;
-}
-
-export interface WetResolveResult {
-  naam: string;
-}
-
-// --- Admin: LLM-modelprofielen + verbruik -----------------------------------
+// --- Admin: LLM-modelprofielen ----------------------------------------------
 
 export interface LlmProfileIn {
   provider?: string;
@@ -285,14 +26,6 @@ export interface LlmProfileIn {
   /** Write-only: leeg laten = bestaande key ongewijzigd. */
   api_key?: string;
   is_default?: boolean;
-}
-
-export interface UsageRow {
-  sleutel: string;
-  tokens_in: number;
-  tokens_out: number;
-  rondes: number;
-  analyses: number;
 }
 
 export interface LlmProfileOut {
@@ -307,7 +40,6 @@ export interface LlmProfileOut {
   api_key_set: boolean;
   updated_by: string;
   updated: string;
-  verbruik: UsageRow | null;
 }
 
 export interface TestResult {
@@ -316,43 +48,6 @@ export interface TestResult {
   tokens_in: number;
   tokens_out: number;
   detail: string;
-}
-
-export interface UsageReport {
-  group_by: string;
-  rows: UsageRow[];
-  totaal: { tokens_in: number; tokens_out: number; rondes: number; analyses: number };
-}
-
-// --- SSE --------------------------------------------------------------------
-
-export interface SSEUpdate {
-  state: JobState;
-  current_activiteit: Activiteit | null;
-  current_ronde: number;
-  current_fase: string | null;
-}
-
-/**
- * Eén project-momentopname uit de geaggregeerde dashboard-SSE (`/api/projects/events`).
- * Spiegelt `_dashboard_payload` in api/app/routers/projects.py.
- */
-export interface DashboardUpdate {
-  id: string;
-  naam: string;
-  bronnen: BronInput[];
-  state: JobState;
-  scope: Scope;
-  current_activiteit: Activiteit | null;
-  current_ronde: number;
-  current_fase: string | null;
-  current_fase_sinds: string | null;
-  created: string;
-  updated: string;
-  model_profile: string;
-  tokens_in: number;
-  tokens_out: number;
-  error: { stap: string; klasse: FoutKlasse; bericht: string } | null;
 }
 
 // --- Auth: accounts + rollen ------------------------------------------------
@@ -416,36 +111,6 @@ export interface LoginVerifyResult {
   userid: string;
   email: string;
   role: Role | "";
-}
-
-// --- runtime-instellingen + LLM-call-capture --------------------------------
-
-export interface AppSettings {
-  capture_llm_calls: boolean;
-}
-
-/** Partiële update van de runtime-instellingen (alleen meegestuurde velden wijzigen). */
-export interface SettingsUpdate {
-  capture_llm_calls?: boolean;
-}
-
-export interface LlmCall {
-  id: number;
-  project_slug: string;
-  activiteit: string;
-  ronde: number;
-  poging: number;
-  fase: string;
-  model: string;
-  provider: string;
-  system_prompt: string;
-  user_prompt: string;
-  response_text: string;
-  tokens_in: number;
-  tokens_out: number;
-  ok: boolean;
-  error: string | null;
-  tijdstip: string;
 }
 
 // --- API-fout doorgegeven door de BFF ---------------------------------------

@@ -60,22 +60,17 @@ export async function proxy(path: string, init: ProxyInit = {}): Promise<Respons
     duur_ms: Math.round(performance.now() - start),
   });
 
-  // Stream de body door en kopieer relevante headers.
+  // Stream de body door en kopieer relevante headers (status + headers ongewijzigd).
   const headers = new Headers();
   for (const h of PASS_THROUGH_HEADERS) {
     const v = upstream.headers.get(h);
-    if (v) headers.set(h, h === "location" ? rewriteLocation(v) : v);
+    if (v) headers.set(h, v);
   }
   const buf = await upstream.arrayBuffer();
   return new Response(buf.byteLength ? buf : null, {
     status: upstream.status,
     headers,
   });
-}
-
-/** Vertaal een upstream Location (/v1/projects/{id}) naar de eigen BFF-route. */
-export function rewriteLocation(loc: string): string {
-  return loc.replace(/^.*\/v1\/projects\//, "/api/projects/");
 }
 
 /** Helper om de JSON-body van een inkomend request door te sturen. */

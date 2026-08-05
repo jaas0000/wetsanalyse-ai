@@ -22,10 +22,8 @@
 # vorm postgresql+asyncpg://<user>:<pass>@postgres:5432/wetsanalyse en gebruikt dezelfde
 # credentials als postgres_user/postgres_password.
 
-# Horizontaal schaalbaar: het concurrency-model is een atomaire state-CAS (geen in-process lock),
-# dus `deploy.replicas > 1` is veilig. Elke replica/worker krijgt een eigen owner-id; een lease +
-# reaper ruimt jobs van een gecrashte replica op. Stel evt. WETSANALYSE_LEASE_S /
-# WETSANALYSE_REAPER_INTERVAL_S in.
+# Horizontaal schaalbaar: de request-afhandeling is stateless (de opslag is de gedeelde
+# PostgreSQL), dus `deploy.replicas > 1` en `--workers > 1` zijn veilig.
 services:
   wetsanalyse-api:
     # CI deployt op digest (WETSANALYSE_API_IMAGE=…@sha256:…) zodat exact de gebouwde/gescande image

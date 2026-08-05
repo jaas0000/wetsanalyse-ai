@@ -1,6 +1,6 @@
 import type { DocumentStatus } from "./types";
 
-// Presentatie-helpers voor de annotatie-workbench (vgl. lib/states.ts voor de analyse-jobs).
+// Presentatie-helpers voor de annotatie-workbench (statuslabels/kleuren).
 
 export const DOCUMENT_STATUS_LABEL: Record<DocumentStatus, string> = {
   in_review: "In behandeling",

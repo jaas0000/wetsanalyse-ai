@@ -6,9 +6,13 @@ from __future__ import annotations
 
 import logging
 from functools import lru_cache
+from typing import TYPE_CHECKING
 
 from .config import get_settings
 from .wettenbank import WettenbankClient
+
+if TYPE_CHECKING:
+    from .annotatie_store import AnnotatieStore
 
 logger = logging.getLogger(__name__)
 
