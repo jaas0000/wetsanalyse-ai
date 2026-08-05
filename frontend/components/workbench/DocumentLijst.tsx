@@ -2,7 +2,7 @@
 
 import { Button } from "@/components/ui/Button";
 import { DOCUMENT_STATUS_LABEL, DOCUMENT_STATUS_STYLE } from "@/lib/annotatie";
-import type { DocumentSamenvatting, WetChoice } from "@/lib/types";
+import type { DocumentSamenvatting } from "@/lib/types";
 
 const badge =
   "inline-flex shrink-0 items-center rounded-full border px-2 py-0.5 text-[11px] font-medium";
@@ -17,7 +17,6 @@ function korteDatum(iso?: string | null): string {
 
 interface Props {
   documenten: DocumentSamenvatting[];
-  wetten: WetChoice[];
   activeSlug?: string;
   onOpen: (slug: string) => void;
   onNew: () => void;
@@ -25,9 +24,9 @@ interface Props {
 }
 
 /** Linker kolom van de workbench: al je annotatie-documenten, klik om te heropenen/verder te
- *  reviewen. De persistente staat (elementen + beslissingen) komt uit de api. */
-export function DocumentLijst({ documenten, wetten, activeSlug, onOpen, onNew, onVerwijder }: Props) {
-  const naam = (bwbId: string) => wetten.find((w) => w.bwbId === bwbId)?.naam || bwbId;
+ *  reviewen. De persistente staat (elementen + beslissingen) komt uit de api. De leesbare naam
+ *  (`werkgebied`) zet de werkplek bij het aanmaken uit de citeertitel die de agent teruggeeft. */
+export function DocumentLijst({ documenten, activeSlug, onOpen, onNew, onVerwijder }: Props) {
   const gesorteerd = [...documenten].sort((a, b) =>
     (b.updated ?? "").localeCompare(a.updated ?? ""),
   );
@@ -57,7 +56,7 @@ export function DocumentLijst({ documenten, wetten, activeSlug, onOpen, onNew, o
                   className="block w-full text-left"
                 >
                   <span className="text-sm font-medium text-ink">
-                    {naam(d.bwbId)} — art. {d.artikel}
+                    {d.werkgebied || d.bwbId} — art. {d.artikel}
                     {d.lid ? ` lid ${d.lid}` : ""}
                   </span>
                   <span className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">

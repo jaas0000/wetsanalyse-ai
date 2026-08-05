@@ -14,7 +14,6 @@ import {
   haalDocument,
   isApiError,
   lijstDocumenten,
-  listWetten,
   maakDocument,
   verwijderDocument,
   zetElementen,
@@ -28,7 +27,6 @@ import type {
   GraafArtikel,
   OntbrekendItem,
   VoorstelElement,
-  WetChoice,
 } from "@/lib/types";
 import { jasStyle } from "@/lib/jas";
 import { wettenOverheidHref } from "@/lib/url";
@@ -66,7 +64,6 @@ function ledenVan(info: GraafArtikel): string[] {
 }
 
 export function WerkplekClient() {
-  const [wetten, setWetten] = useState<WetChoice[]>([]);
   const [documenten, setDocumenten] = useState<DocumentSamenvatting[]>([]);
   const [items, setItems] = useState<Item[]>([]);
   const [docs, setDocs] = useState<Record<string, AnnotatieDocument>>({});
@@ -83,7 +80,6 @@ export function WerkplekClient() {
 
   useEffect(() => {
     sessieRef.current = sessie();
-    listWetten().then(setWetten).catch(() => setWetten([]));
     verversLijst();
   }, []);
 
@@ -193,7 +189,12 @@ export function WerkplekClient() {
               leden_teksten: doel.leden_teksten,
             }
           : await haalArtikelGraaf(doel.bwbId, doel.artikel, doel.lid);
-        const document = await maakDocument({ bwbId: doel.bwbId, artikel: doel.artikel, lid: doel.lid || null });
+        const document = await maakDocument({
+          bwbId: doel.bwbId,
+          artikel: doel.artikel,
+          lid: doel.lid || null,
+          werkgebied: doel.citeertitel || "",
+        });
         const bijgewerkt = await zetElementen(document.slug, els);
         setDocs((m) => ({ ...m, [bijgewerkt.slug]: bijgewerkt }));
         setInfos((m) => ({ ...m, [bijgewerkt.slug]: graaf }));
@@ -274,7 +275,6 @@ export function WerkplekClient() {
       <div className="hidden min-h-0 overflow-y-auto lg:block">
         <DocumentLijst
           documenten={documenten}
-          wetten={wetten}
           onOpen={openDocument}
           onNew={() => setItems([])}
           onVerwijder={verwijder}
@@ -299,7 +299,6 @@ export function WerkplekClient() {
             </div>
             <DocumentLijst
               documenten={documenten}
-              wetten={wetten}
               onOpen={(slug) => {
                 setMenuOpen(false);
                 void openDocument(slug);

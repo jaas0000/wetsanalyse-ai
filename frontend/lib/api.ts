@@ -15,7 +15,6 @@ import type {
   TotpBegin,
   UserCreated,
   UserOut,
-  WetChoice,
 } from "./types";
 import type {
   AgentDoel,
@@ -58,12 +57,6 @@ function veiligJson(s: string): { answer?: string; detail?: string } | null {
 
 export function isApiError(e: unknown): e is ApiError {
   return typeof e === "object" && e !== null && "status" in e && "detail" in e;
-}
-
-/** Keuzelijst wetten (client-auth) — de werkplek kiest hieruit een bepaling om te annoteren. */
-export async function listWetten(): Promise<WetChoice[]> {
-  const res = await fetch("/api/wetten", { cache: "no-store" });
-  return json<WetChoice[]>(res);
 }
 
 // --- Admin: LLM-modelprofielen ----------------------------------------------

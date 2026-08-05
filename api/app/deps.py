@@ -1,15 +1,12 @@
-"""Dependency-wiring. Sinds het verwijderen van de analyse-pijplijn (`/v1/projects`) bedient de
-API nog het annotatie-domein van de werkplek, het LLM-beheer en de wet-keuzelijst — de wettenbank-
-client (catalog/structuur) en de annotatie-store zijn de enige gewirede afhankelijkheden."""
+"""Dependency-wiring. De API bedient het annotatie-domein van de werkplek, het login-/
+gebruikersbeheer en het LLM-modelprofielbeheer; de annotatie-store is de enige gewirede
+afhankelijkheid (de werkplek haalt wettekst rechtstreeks uit de graaf via graph-qa)."""
 
 from __future__ import annotations
 
 import logging
 from functools import lru_cache
 from typing import TYPE_CHECKING
-
-from .config import get_settings
-from .wettenbank import WettenbankClient
 
 if TYPE_CHECKING:
     from .annotatie_store import AnnotatieStore
@@ -22,8 +19,3 @@ def get_annotatie_store() -> "AnnotatieStore":
     from .annotatie_store import AnnotatieStore
 
     return AnnotatieStore()
-
-
-@lru_cache
-def get_wettenbank() -> WettenbankClient:
-    return WettenbankClient(get_settings())

@@ -114,7 +114,6 @@ async def ready():
     # Alleen booleans — geen interne URL's/hostnamen lekken aan een ongeauthenticeerd endpoint.
     return {
         "auth_geconfigureerd": bool(s.client_tokens) or not s.auth_required,
-        "mcp_geconfigureerd": bool(s.mcp_url),
         "llm_model_gezet": bool(s.llm_model),
         "database_geconfigureerd": bool(s.database_url),
     }

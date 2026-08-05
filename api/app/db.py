@@ -1,7 +1,7 @@
 """Async SQLAlchemy-Core laag: engine-beheer + tabeldefinities.
 
 De datalaag is bewust **Core** (geen ORM): alle SQL is geïsoleerd in de service-modules
-(profiles/wetten/users/api_tokens/annotatie_store), de domeinmodellen blijven plain Pydantic. De
+(profiles/users/api_tokens/annotatie_store), de domeinmodellen blijven plain Pydantic. De
 types zijn portable — `JSON` wordt `JSONB` op PostgreSQL en gewone `JSON` op SQLite, zodat de
 unit-tests op een in-memory SQLite draaien en productie op PostgreSQL (CloudNativePG).
 
@@ -38,10 +38,10 @@ _DT = DateTime(timezone=True)
 
 metadata = MetaData()
 
-# NB: de analyse-pijplijn is verwijderd. De bijbehorende tabellen (`projects`, `rondes`, `llm_calls`,
-# `app_settings`) worden niet meer gedefinieerd of aangemaakt; op een bestaande productie-DB blijven ze
-# verweesd staan (samen met een eventuele Grafana-view erop) — het daadwerkelijk droppen is een
-# aparte, bewuste migratie, niet iets dat hier stil bij de start gebeurt.
+# NB: de analyse-pijplijn en de wet-catalogus zijn verwijderd. De bijbehorende tabellen (`projects`,
+# `rondes`, `llm_calls`, `app_settings`, `wet_catalogus`) worden niet meer gedefinieerd of aangemaakt;
+# op een bestaande productie-DB blijven ze verweesd staan (samen met een eventuele Grafana-view erop)
+# — het daadwerkelijk droppen is een aparte, bewuste migratie, niet iets dat hier stil bij de start gebeurt.
 
 llm_profiles = Table(
     "llm_profiles",
@@ -55,16 +55,6 @@ llm_profiles = Table(
     Column("temperature", Float, nullable=False, default=0.0),
     Column("enc_api_key", Text, nullable=True),
     Column("is_default", Boolean, nullable=False, default=False),
-    Column("updated_by", String(128), nullable=False, default=""),
-    Column("created", _DT, nullable=False),
-    Column("updated", _DT, nullable=False),
-)
-
-wet_catalogus = Table(
-    "wet_catalogus",
-    metadata,
-    Column("bwbId", String(64), primary_key=True),
-    Column("naam", Text, nullable=False, default=""),
     Column("updated_by", String(128), nullable=False, default=""),
     Column("created", _DT, nullable=False),
     Column("updated", _DT, nullable=False),

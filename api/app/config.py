@@ -59,14 +59,6 @@ class Settings:
             admin_id, token = part.split(":", 1)
             self.admin_tokens[token.strip()] = admin_id.strip()
 
-        # --- Wettenbank-MCP (intern netwerk in productie) ---
-        # Bron voor de wet-/profiel-keuzelijst en de structuur/artikelen (wet_info/catalog/wetten).
-        self.mcp_url = os.environ.get(
-            "WETTENBANK_MCP_URL", "https://wettenbank-mcp.ipalm.nl/mcp"
-        )
-        self.mcp_token = _read_secret("WETTENBANK_TOKEN")
-        self.mcp_timeout_s = float(os.environ.get("WETTENBANK_MCP_TIMEOUT", "30"))
-
         # --- LLM-adapter ---
         # Endpointtype bepaalt provider-prefix/auth (zie Fase 0): azure_ai (Foundry/MaaS) vs azure (OpenAI).
         self.llm_provider = os.environ.get("LLM_PROVIDER", "azure_ai")

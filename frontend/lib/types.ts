@@ -9,11 +9,6 @@ export interface ProfileChoice {
   is_default: boolean;
 }
 
-export interface WetChoice {
-  bwbId: string;
-  naam: string;
-}
-
 // --- Admin: LLM-modelprofielen ----------------------------------------------
 
 export interface LlmProfileIn {

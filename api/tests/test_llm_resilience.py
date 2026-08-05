@@ -61,39 +61,7 @@ def test_prompt_guard_laat_klein_door_en_noop_zonder_limiet():
     )
 
 
-# --- #3 MCP-foutklasse op de wettenbank-error ---
-
-def test_parse_zet_foutklasse_op_wettenbank_error():
-    """De MCP stuurt de fout als JSON {"fout","foutCode","klasse"} in het text-block;
-    _parse moet de klasse op de exceptie zetten (best-effort: geen JSON → None)."""
-    import json
-
-    from app.wettenbank import WettenbankClient, WettenbankError
-
-    class Block:
-        type = "text"
-
-        def __init__(self, text: str) -> None:
-            self.text = text
-
-    class Result:
-        isError = True
-
-        def __init__(self, text: str) -> None:
-            self.content = [Block(text)]
-
-    payload = json.dumps({"fout": "Artikel 999 niet gevonden", "foutCode": "ARTIKEL_NIET_GEVONDEN", "klasse": "client"})
-    with pytest.raises(WettenbankError) as ei:
-        WettenbankClient._parse("wettenbank_artikel", Result(payload))
-    assert ei.value.klasse == "client"
-    assert "Artikel 999 niet gevonden" in str(ei.value)
-
-    with pytest.raises(WettenbankError) as ei:
-        WettenbankClient._parse("wettenbank_artikel", Result("kale foutmelding, geen JSON"))
-    assert ei.value.klasse is None
-
-
-# --- #4 repareer-retry binnen één complete()-call: usage telt beide beurten ---
+# --- #3 repareer-retry binnen één complete()-call: usage telt beide beurten ---
 
 async def test_repair_retry_telt_usage_van_beide_calls(monkeypatch):
     """Faalt de eerste generatie op JSON en herstelt de repareer-retry het, dan telt de
