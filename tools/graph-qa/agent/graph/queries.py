@@ -177,6 +177,22 @@ def referenced_by(bwb_id: str, artikel: str) -> str:
 }} ORDER BY ?citeertitel"""
 
 
+def get_jas_annotaties(bwb_id: str, artikel: str, lid: str | None = None) -> str:
+    """De geaccordeerde JAS-annotaties (Fase 2-promotielaag) voor een bepaling, over alle named
+    graphs. Matcht op de `jas:bwbId`/`jas:artikel`(/`jas:lid`)-literals (robuust, ook voor decimale
+    nummers zoals '9.1'). Zie docs/wetsanalyse-workbench/jas-annotatie-ontologie.md."""
+    lid_block = f"    ?a jas:lid {_lit(str(lid))} .\n" if lid and str(lid).strip() else ""
+    return ("PREFIX jas: <https://ipalm.nl/ns/jas#>\n" + PREFIXES +
+            f"""SELECT ?a ?klasse ?formulering ?vindplaats ?uitAnalyse WHERE {{
+  GRAPH ?g {{
+    ?a a jas:Annotatie ; jas:bwbId {_lit(_bwb(bwb_id))} ; jas:artikel {_lit(str(artikel))} ;
+       jas:klasse ?klasse ; jas:formulering ?formulering .
+    OPTIONAL {{ ?a jas:vindplaats ?vindplaats }}
+    OPTIONAL {{ ?a jas:uitAnalyse ?uitAnalyse }}
+{lid_block}  }}
+}} ORDER BY ?a""")
+
+
 def resolve_begrip(term: str) -> str:
     return PREFIXES + f"""SELECT DISTINCT ?concept ?label ?related WHERE {{
   ?concept a skos:Concept .

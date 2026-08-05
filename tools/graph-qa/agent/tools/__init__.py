@@ -83,6 +83,10 @@ def _h_resolve_begrip(g: GraphPort, a: dict[str, Any]) -> str:
     return g.sparql(queries.resolve_begrip(a["term"]))
 
 
+def _h_jas_annotaties(g: GraphPort, a: dict[str, Any]) -> str:
+    return g.sparql(queries.get_jas_annotaties(a["bwb_id"], a["artikel"], a.get("lid")))
+
+
 def _h_schema(g: GraphPort, a: dict[str, Any]) -> str:
     return schema.graph_schema(g)
 
@@ -229,6 +233,20 @@ TOOLS: list[dict[str, Any]] = [
         ),
         "input_schema": _obj({"term": {"type": "string", "description": "Begrip of deel ervan."}}, ["term"]),
         "handler": _h_resolve_begrip,
+    },
+    {
+        "name": "get_jas_annotaties",
+        "description": (
+            "Haal de geaccordeerde JAS-annotaties (activiteit 2: gemarkeerde formuleringen met hun "
+            "JAS-klasse) voor een bepaling op — de door juristen gevalideerde duiding uit eerdere "
+            "wetsanalyses. Gebruik dit bij duidings-/classificatievragen om die menselijke duiding "
+            "mee te wegen; geeft per treffer klasse, formulering, vindplaats en de bron-analyse."
+        ),
+        "input_schema": _obj(
+            {"bwb_id": _BWB, "artikel": _ART, "lid": {"type": "string", "description": "Optioneel lidnummer."}},
+            ["bwb_id", "artikel"],
+        ),
+        "handler": _h_jas_annotaties,
     },
     {
         "name": "graph_schema",
