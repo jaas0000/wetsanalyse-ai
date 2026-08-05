@@ -1,9 +1,11 @@
 # wetsanalyse-api
 
 Headless HTTP-backend die de wetsanalyse (JAS) als REST-API aanbiedt — de kern van het agent-platform,
-onder de webapp (analyse-webapp + werkplek). De inhoudelijke werkstroom — wettekst ophalen via de
-wettenbank-MCP, activiteit 2 (markeren & classificeren) en activiteit 3 (begrippen & afleidingsregels)
-— deelt de `references/`/`scripts/` met de (legacy) Claude Code-skill als gemeenschappelijke inhoudsbron.
+onder de webapp (analyse-webapp + werkplek). De inhoudelijke werkstroom is **activiteit 2** (markeren &
+classificeren in JAS-klassen) en deelt de `references/`/`scripts/` met de (legacy) Claude Code-skill als
+gemeenschappelijke inhoudsbron. De act-2-generatie is **agentisch op GraphDB** (agent⇄tools op de
+job-modelprofiel-LLM; de wettenbank-MCP-pijplijn blijft als rollback). Begrippen (activiteit 3) en
+RegelSpraak zijn verwijderd en worden later op een agentische basis herbouwd.
 
 Geschikt als backend voor de webapp, voor geautomatiseerde verwerking en voor integratie met andere
 systemen.
@@ -12,10 +14,10 @@ systemen.
 
 | Onderdeel | Rol |
 |-----------|-----|
-| **wettenbank-MCP** | Databron — haalt actuele wettekst op; wordt intern aangeroepen door de API |
+| **GraphDB-MCP** | Databron voor de agentische act-2-motor — leden-tekst (brongetrouw corpus), jci, verwijzingen |
+| **wettenbank-MCP** | Databron voor de deterministische rollback-motor + de formulier-catalogus/structuur |
 | **wetsanalyse-skill** | Inhoudelijke referentie — de API hergebruikt exact dezelfde `references/` en `scripts/` |
-| **regelspraak-skill** | Inhoudelijke referentie voor de RegelSpraak-vervolgfase — de API leest dezelfde `references/` |
-| **wetsanalyse-api** *(deze map)* | HTTP-harness — biedt de werkstroom (incl. RegelSpraak-fase) aan als async REST-API |
+| **wetsanalyse-api** *(deze map)* | HTTP-harness — biedt de act-2-werkstroom aan als async REST-API |
 | **PostgreSQL** | Jobstore — `projects`-rij per analyse (state + telemetrie + rapport) + aparte `rondes`-tabel |
 
 ## Endpoints
@@ -29,17 +31,12 @@ Alle analyse-endpoints zijn client-gescopet (alleen je eigen analyses) en versio
 | `GET` | `/v1/projects/{id}` | Status en voortgang van een job (incl. fijnmazige `current_fase`) |
 | `GET` | `/v1/projects/events` | Aggregate SSE-stream over **al** je analyses (diff-emit + `removed`) — voedt het dashboard |
 | `DELETE` | `/v1/projects/{id}` | Verwijder (terminal, `wacht-op-review-*` of `queued`; runt → 409) |
-| `POST` | `/v1/projects/{id}/feedback` | Geef reviewfeedback (alleen in `wacht-op-review-*`; status `akkoord`, `wijzigingen` of `akkoord-afronden` — dat laatste rondt af zonder act. 3) |
-| `POST` | `/v1/projects/{id}/act3` | Voer activiteit 3 alsnog uit op een act2-only-afgeronde analyse (`scope: "act2"`; alleen vanuit `klaar`) |
+| `POST` | `/v1/projects/{id}/feedback` | Geef reviewfeedback (alleen in `wacht-op-review-act2`; status `akkoord` of `wijzigingen` — `akkoord` zonder opmerkingen rondt de analyse act2-only af) |
 | `POST` | `/v1/projects/{id}/retry` | Herstart een job in `fout`-state |
 | `GET` | `/v1/projects/{id}/rapport` | Volledig rapport als JSON |
 | `GET` | `/v1/projects/{id}/rapport.md` | Rapport als Markdown |
-| `GET` | `/v1/projects/{id}/ronde/{act}/{n}` | Analyse-JSON van één ronde (`act` = `2`/`3`/`rs-gegevens`/`rs-regels`) |
-| `POST` | `/v1/projects/{id}/regelspraak` | Start de RegelSpraak-formaliseringsfase (alleen vanuit `klaar`; body `{review?}`) |
-| `GET` | `/v1/projects/{id}/regelspraak` | RegelSpraak-model (GegevensSpraak + regels) als JSON |
-| `GET` | `/v1/projects/{id}/regelspraak.rs` | RegelSpraak-tekstexport (.rs) |
-| `GET` | `/v1/projects/{id}/regelspraak.md` | RegelSpraak-model als Markdown |
-| `GET` | `/v1/projects/{id}/events` | SSE state-updates (max 10 min) |
+| `GET` | `/v1/projects/{id}/ronde/{act}/{n}` | Analyse-JSON van één ronde (`act` = `2`) |
+| `GET` | `/v1/projects/{id}/events` | SSE state-updates (max 10 min; incl. live agent-`current_fase`) |
 | `GET` | `/v1/profiles` | Keuzelijst modelprofielen (alleen naam + default; client-auth, geen geheimen) |
 | `GET` | `/v1/wetten` | Keuzelijst wetten (BWB-id + naam; client-auth) voor de dropdown |
 | `GET` | `/v1/wetten/{bwbId}/structuur` | Afgeplatte artikellijst van een wet (voedt de artikel-autocomplete in het formulier) |
@@ -112,9 +109,6 @@ POST /v1/projects
   "naam": "Inkomensafhankelijke bijdrage Zvw",
   "omschrijving": "Domeincontext bij dit werkgebied",
   "analysefocus": "Berekenen van de inkomensafhankelijke bijdrage Zvw",
-  "begrippenlijst": [
-    { "naam": "belastingplichtige", "definitie": "bestaande definitie uit het begrippenkader" }
-  ],
   "review": false
 }
 ```
@@ -122,83 +116,34 @@ POST /v1/projects
 `bronnen` bevat minstens één bron; `bwbId` is per bron verplicht in v1 (wet-only resolutie via
 zoekterm staat op de roadmap), `lid` is optioneel. Eén bron is het triviale geval. `review: false`
 slaat de human-in-the-loop checkpoints over — uitsluitend voor geautomatiseerde verwerking. Gebruik
-`review: true` (default) voor een volwaardige analyse met reviewrondes. Activiteit 2 wordt per bron
-uitgevoerd (markeringen/verwijzingen, geaggregeerd in `bronnen[]`); activiteit 3 is **werkgebied-breed**
-en **twee-staps** binnen één ronde (3a begrippen → 3b regels): één gedeelde, ontdubbelde
-begrippenlijst + afleidingsregels die met **begrip-id's** naar die begrippen verwijzen
-(uitvoer/invoer/parameters/voorwaarden), met cross-bron `vindplaatsen`.
+`review: true` (default) voor een volwaardige analyse met reviewrondes. **Scope: alleen activiteit 2**
+(markeren + classificeren in JAS-klassen); begrippen (activiteit 3) en RegelSpraak zijn verwijderd en
+worden later op een agentische basis herbouwd. Activiteit 2 wordt per bron uitgevoerd
+(markeringen/verwijzingen, geaggregeerd in `bronnen[]`).
 
-**Bestaande begrippenlijst (optioneel).** `begrippenlijst` (max 300 items; alleen `naam` verplicht,
-verder `id`/`synoniemen`/`definitie`/`klasse`/`bron`/`toelichting`) is **suggestieve** invoer voor
-activiteit 3: de analyse hergebruikt een aangeleverd begrip waar de betekenis past en registreert
-per begrip de `herkomst` (`hergebruikt`/`aangepast`/`nieuw`, met motivatie bij afwijken). De
-wettekst blijft leidend. Volledig voorbeeld van één item (alle velden):
-
-```json
-{
-  "begrippenlijst": [
-    {
-      "id": "ab1",
-      "naam": "belastingplichtige",
-      "synoniemen": ["plichtige", "aangifteplichtige"],
-      "definitie": "degene die op grond van de wet gehouden is aangifte te doen",
-      "klasse": "Rechtssubject",
-      "bron": "Begrippenkader Heffing, versie 2025",
-      "toelichting": "voorkeursterm binnen het domein Heffing"
-    },
-    { "naam": "bijdrage-inkomen" }
-  ]
-}
-```
-
-`id` mag weg — ontbrekende id's worden doorgenummerd als `ab1..abN`; de act-3-uitkomst verwijst
-er met `herkomst.aangeleverd_id` naar terug. `klasse` is desgewenst een van de dertien
-JAS-klassen. Caps: naam ≤ 200 tekens, definitie ≤ 2000, max 20 synoniemen.
-
-**Cross-referenties.** Activiteit 2 is twee-fase: eerst een lichte *verwijzing-inventaris* (per
-verwijzing een functie + `volgen`-vlag), dan een begrensde deterministische fetch-lus die de
-te-volgen verwezen artikelen via de MCP ophaalt (diepte 1, cap `WETSANALYSE_MAX_VERWIJZING_FETCHES`,
-default 6; een gefaalde fetch degradeert stil en laat de job nooit falen), waarna het LLM de
-`betekenis`/`status` brongetrouw invult met de opgehaalde tekst. Het rapport draagt een
-`verwijzingen`-array; begrippen kunnen via `bron_verwijzing` op een definitie-verwijzing steunen.
+**Act-2-motor.** Standaard **agentisch** (`WETSANALYSE_ACT2_ENGINE=agent`): een agent⇄tools-loop op
+de job-modelprofiel-LLM met **GraphDB** als bron — de agent haalt de bepaling (leden-tekst =
+brongetrouw corpus) uit de graaf, volgt betekenisbepalende verwijzingen via een graaf-tool (diepte 1,
+cap `WETSANALYSE_MAX_VERWIJZING_FETCHES`, default 6) en levert markeringen + verwijzingen in. Bij
+`POST /v1/projects` doet de agent-motor een **dekkings-preflight**: staat een bron niet in de graaf,
+dan faalt de create helder (`400`). De rollback-motor `deterministic` gebruikt de wettenbank-MCP
+(twee-fase: verwijzing-inventaris → begrensde fetch-lus → brongetrouwe act-2). **Beide delen dezelfde
+harde gate** (brongetrouwheid + JAS-schema → `fout`, ook `review:false`), review-lus, ronde-
+immutabiliteit en rapportvorm. Het rapport draagt een `verwijzingen`-array náást de markeringen.
 
 Grenzen: per-client rate limit en een max aantal gelijktijdige analyses (beide → `429`), een
 optioneel LLM-token-budget per analyse, en een globale rem op gelijktijdige LLM-calls
 (`WETSANALYSE_LLM_MAX_CONCURRENCY`) tegen provider-rate-limits — een 429 wordt geretryed met respect
 voor de `Retry-After`-header. Per-call wandklok-timeout via `WETSANALYSE_LLM_TIMEOUT_S` (default 300;
-een hele ronde kan bij een traag model >2 min duren). Context-window: act-3 stuurt bewust de
-volledige leden-tekst mee (definities dicht op de bron); `WETSANALYSE_LLM_MAX_PROMPT_TOKENS` capt de
+een hele ronde kan bij een traag model >2 min duren). `WETSANALYSE_LLM_MAX_PROMPT_TOKENS` capt de
 prompt (0 = auto uit het model) → duidelijke `PromptTooLargeError` i.p.v. een rauwe 400. Zie
 `CLAUDE.md` §Misbruik-/kostenbeheersing.
 
-Job-states: `queued` → `act2-runt` → `wacht-op-review-act2` → `act3-runt` →
-`wacht-op-review-act3` → `klaar` (of `fout` bij elke stap). Bij het act-2-checkpoint kan de
-analist ook **afronden zonder activiteit 3**: feedback-status `akkoord-afronden` (alleen op
-activiteit 2, zonder opmerkingen) gaat rechtstreeks naar `klaar` met `scope: "act2"` — een rapport
-zonder begrippen/afleidingsregels. `POST /v1/projects/{id}/act3` claimt zo'n analyse later alsnog
-(`klaar` → `act3-runt`, scope terug naar `volledig`) en herbouwt het rapport mét begrippen. Binnen
-een `*-runt`/`bouwt`-state geeft
-een **observerend** `current_fase`-veld de fijnmazige functiestap (bv. `llm-generatie`,
-`verwijzingen-volgen`, `brongetrouwheid-check`) — los van de state-machine, puur voor live voortgang.
-
-## RegelSpraak-formalisering (on-demand vervolgfase)
-
-Op een afgeronde analyse zet `POST /v1/projects/{id}/regelspraak` (alleen vanuit `klaar` én met een
-volledige analyse — op een act2-only-analyse (`scope: "act2"`) volgt 409 "voer eerst activiteit 3
-uit"; optionele
-body `{ "review": true|false }`, default erft `review` van de analyse) de geduide begrippen en
-afleidingsregels om naar **GegevensSpraak** (objectmodel) + **RegelSpraak-regels** (RegelSpraak-spec
-v2.3.0). Eigen state-machine, voortbouwend op `klaar`:
-
-`klaar` → `rs-gegevens-runt` → `wacht-op-review-rs-gegevens` → `rs-regels-runt` →
-`wacht-op-review-rs-regels` → `rs-bouwt` → `rs-klaar`.
-
-Twee review-checkpoints (GegevensSpraak en regels) werken net als act-2/3: feedback via
-`POST …/feedback` met `activiteit` = `rs-gegevens` of `rs-regels`, herziene rondes onder dezelfde
-`rondes`-tabel. Het resultaat is een **eigen artefact** (`GET …/regelspraak`, met `.rs`/`.md`-export),
-náást het rapport. Elke declaratie/regel draagt een `herkomst` naar het bron-begrip/de bron-regel
-(herleidbaarheid is hard). De engine leest de regelspraak-`references/` uit
-`.claude/skills/regelspraak/`; bij `fout` herstelt `retry` binnen de regelspraak-fase.
+Job-states: `queued` → `act2-runt` → `wacht-op-review-act2` → `bouwt` → `klaar` (of `fout` bij elke
+stap). Bij het act-2-checkpoint rondt feedback-status `akkoord` zonder opmerkingen de analyse af naar
+`klaar` met `scope: "act2"`. Binnen een `*-runt`/`bouwt`-state geeft een **observerend**
+`current_fase`-veld de fijnmazige functiestap (bv. `agent-markeren`, `verwijzingen-volgen`,
+`brongetrouwheid-check`) — los van de state-machine, puur voor live voortgang.
 
 ## Snel starten (lokaal)
 
@@ -207,6 +152,7 @@ náást het rapport. Elke declaratie/regel draagt een `herkomst` naar het bron-b
 mkdir api\secrets
 [IO.File]::WriteAllText("$PWD\api\secrets\llm_api_key",     "<azure-ai-foundry-key>")
 [IO.File]::WriteAllText("$PWD\api\secrets\wettenbank_token", "<wettenbank-token>")
+[IO.File]::WriteAllText("$PWD\api\secrets\graphdb_token",    "<graphdb-token>")   # agentische act-2-motor
 [IO.File]::WriteAllText("$PWD\api\secrets\api_tokens",       "lokaal:<token>")
 # Voor het LLM-beheer (/v1/admin/*) — optioneel lokaal:
 [IO.File]::WriteAllText("$PWD\api\secrets\admin_tokens",      "admin:<admin-token>")

@@ -19,13 +19,13 @@ databron. Het geheel draait op Azure Container Apps én op zelf-gehoste Portaine
 | Onderdeel | Map | Wat het doet |
 |-----------|-----|--------------|
 | **wettenbank-MCP** | `tools/wettenbank-mcp/` | MCP-server (TypeScript) die actuele wettekst ophaalt via de publieke SRU-API van `overheid.nl`. De databron voor het hele platform. |
-| **wetsanalyse-API** | `api/` | Headless FastAPI-backend met de JAS-werkstroom als async REST-API (`POST /v1/projects` → polling/SSE), PostgreSQL-jobstore en per-client bearer-auth. Ook de RegelSpraak-formaliseringsfase (`POST /v1/projects/{id}/regelspraak`) en het annotatie-domein van de werkplek (`/v1/annotatie/*`). Stuurt het LLM aan via beheerbare modelprofielen. |
-| **frontend + werkplek** | `frontend/` | Next.js-webapp (BFF). Twee gezichten: de **analyse-webapp** (analyse aanmaken, review-lus, rapport, RegelSpraak-fase, `/beheer`) en **de werkplek** (`/workbench`, de *Assistent-pagina*) — één gespreksvenster voor **vragen én JAS-annotatie**, live tegen graph-qa. Achter een **login** (userid + wachtwoord, rollen, optionele 2FA). Vormgegeven volgens de **Rijkshuisstijl** (Belastingdienst-stijlvak). |
+| **wetsanalyse-API** | `api/` | Headless FastAPI-backend met de JAS-werkstroom (**activiteit 2**) als async REST-API (`POST /v1/projects` → polling/SSE), PostgreSQL-jobstore en per-client bearer-auth. De act-2-generatie is **agentisch op GraphDB** (agent⇄tools; de wettenbank-MCP-pijplijn blijft als rollback). Ook het annotatie-domein van de werkplek (`/v1/annotatie/*`). Stuurt het LLM aan via beheerbare modelprofielen. |
+| **frontend + werkplek** | `frontend/` | Next.js-webapp (BFF). Twee gezichten: de **analyse-webapp** (analyse aanmaken, live agent-voortgang, review-lus, rapport, `/beheer`) en **de werkplek** (`/workbench`, de *Assistent-pagina*) — één gespreksvenster voor **vragen én JAS-annotatie**, live tegen graph-qa. Achter een **login** (userid + wachtwoord, rollen, optionele 2FA). Vormgegeven volgens de **Rijkshuisstijl** (Belastingdienst-stijlvak). |
 | **graph-qa — de Juridische Assistent** | `tools/graph-qa/` | De eigen QA/annotatie-agent: beantwoordt vragen over wet- en regelgeving door de BWB-**kennisgraaf** (GraphDB via MCP) te bevragen, brongetrouw onderbouwd. Eén **unified LangGraph-agent** met een supervisor die per vraag kiest tussen de antwoord-worker (specialisten definitie/duiding/algemeen) en de annotatie-worker (ophaal → annoteer → Critic). Endpoints `POST /v1/chat` (SSE) + `GET /v1/artikel`. |
 | **observability** | `deploy/observability/` | Optionele verzamelstack (OTel-Collector + Tempo + Loki + Prometheus + Alloy) met kant-en-klare Grafana-dashboards en alerting. Alle onderdelen zijn geïnstrumenteerd (JSON-logs + OpenTelemetry); koppel de stack aan je bestaande Grafana. |
-| **skills (legacy/oorsprong)** | `.claude/skills/` | De **interactieve Claude Code-skills** `wetsanalyse` (activiteit 2 + 3 → `rapport.json`) en `regelspraak` (→ RegelSpraak/GegevensSpraak `model.json`). Het oorspronkelijke spoor; nog bruikbaar in de CLI en tegelijk de **gedeelde inhoudsbron** (`references/`/`scripts/`) die de API-engine op runtime hergebruikt. |
-| **analyses** | `analyses/` | Output van het skill-spoor: per werkgebied een eindrapport plus `werk/`-tussenbestanden (en desgewenst een `regelspraak/`-submap met het RegelSpraak-`model.json`). |
-| **docs** | `docs/` | Methodische onderbouwing (handleiding, leidraad, het boek, JAS-kader, RegelSpraak-spec) + `observability.md`. |
+| **skill (legacy/oorsprong)** | `.claude/skills/` | De **interactieve Claude Code-skill** `wetsanalyse` (activiteit 2 → `rapport.json`). Het oorspronkelijke spoor; nog bruikbaar in de CLI en tegelijk de **gedeelde inhoudsbron** (`references/`/`scripts/`) die de API-engine op runtime hergebruikt. |
+| **analyses** | `analyses/` | Output van het skill-spoor: per werkgebied een eindrapport plus `werk/`-tussenbestanden. |
+| **docs** | `docs/` | Methodische onderbouwing (handleiding, leidraad, het boek, JAS-kader) + `observability.md`. |
 
 ## De methode in het kort
 
@@ -40,20 +40,13 @@ bronreferentie (jci-uri) — en volgt de JAS-werkstroom:
    relevantie-gate) — zodat brondefinities en afwijkende hoofdregels brongetrouw meewegen.
 2. **Activiteit 2 — markeren & classificeren**: relevante wetsformuleringen markeren en elk een
    van de dertien JAS-klassen geven (rechtssubject, rechtsbetrekking, voorwaarde, afleidingsregel, …).
-3. **Activiteit 3 — betekenis vaststellen**: eerst de begrippen (3a: definitie, voorbeeld,
-   relaties, gekoppeld aan de activiteit-2-markeringen waarop ze berusten), daarna de
-   afleidingsregels (3b: beslis-, reken- en specialisatieregels) — met de begrippen als
-   **bouwstenen**: uitvoer, invoer, parameters en voorwaarden verwijzen per begrip-id. Een
-   afleidingsregel wordt *geannoteerd*; de uitvoerbare formulering volgt pas in de RegelSpraak-stap,
-   zodat er één bron van waarheid voor de regel is. Desgewenst kan al ná activiteit 2 worden
-   afgerond en activiteit 3 later alsnog draaien.
-4. **Rapport** — `rapport.json` als primaire bron, gepresenteerd via een HTML-viewer met bewerkbare
-   §4-velden en een Markdown-export.
-5. **RegelSpraak (optioneel vervolg)** — het rapport wordt geformaliseerd naar GegevensSpraak +
-   RegelSpraak-regels, opnieuw met twee review-checkpoints, en levert een `model.json` (+ `.rs`/
-   Markdown-export).
+3. **Rapport** — `rapport.json` als primaire bron, gepresenteerd via een HTML-viewer met bewerkbare
+   §3-velden (reviewlog + aandachtspunten) en een Markdown-export.
 
-Na activiteit 2 én na activiteit 3 is er een **iteratief human-in-the-loop review-checkpoint**: de
+> **Scope: alleen activiteit 2.** Begrippen (activiteit 3) en de RegelSpraak-formaliseringsfase zijn uit
+> het platform verwijderd en worden later op een **agentische** basis herbouwd.
+
+Na activiteit 2 is er een **iteratief human-in-the-loop review-checkpoint**: de
 analist valideert de tussenresultaten per onderdeel en geeft feedback; het herziene resultaat volgt in
 een nieuwe ronde — met per item de vorige versie en de eerder gegeven feedback ernaast — tot de
 analist akkoord is (met een veiligheidscap op het aantal rondes). Elke ronde wordt bewaard voor een
@@ -62,19 +55,20 @@ id's, letterlijke citaten).
 
 ## Het platform gebruiken (API + webapp)
 
-- **`api/`** — headless FastAPI-backend met de JAS-werkstroom als async REST-API
-  (`POST /v1/projects` → polling/SSE), PostgreSQL als jobstore, en per-client bearer-auth. Een analyse
-  kan ook al na activiteit 2 worden afgerond (`scope: "act2"`); activiteit 3 volgt dan desgewenst later
-  via `POST /v1/projects/{id}/act3`. Op een afgeronde analyse start `POST /v1/projects/{id}/regelspraak`
-  de RegelSpraak-formaliseringsfase. Daarnaast bedient de API de **werkplek** met het annotatie-domein
-  (`/v1/annotatie/*`). Zie [`api/README.md`](api/README.md) en [`api/CLAUDE.md`](api/CLAUDE.md).
+- **`api/`** — headless FastAPI-backend met de JAS-werkstroom (**activiteit 2**) als async REST-API
+  (`POST /v1/projects` → polling/SSE), PostgreSQL als jobstore, en per-client bearer-auth. De
+  act-2-generatie is **agentisch op GraphDB** (agent⇄tools op de job-modelprofiel-LLM; de
+  wettenbank-MCP-pijplijn blijft als rollback via `WETSANALYSE_ACT2_ENGINE`), met een behouden harde gate
+  (brongetrouwheid + JAS-schema). Een analyse rondt act2-only af (`scope: "act2"`). Daarnaast bedient de
+  API de **werkplek** met het annotatie-domein (`/v1/annotatie/*`). Begrippen (activiteit 3) en
+  RegelSpraak zijn verwijderd en worden later op een agentische basis herbouwd. Zie
+  [`api/README.md`](api/README.md) en [`api/CLAUDE.md`](api/CLAUDE.md).
 - **`frontend/`** — Next.js-webapp (BFF). De **analyse-webapp**: analyses aanmaken (wet-dropdown met
-  **artikel-autocomplete + lid-keuze**, en optioneel een **bestaande begrippenlijst** plakken/uploaden
-  als suggestieve act-3-invoer), voortgang volgen, de review-lus, het rapport, en de **RegelSpraak-fase**
-  ("Naar RegelSpraak"). **De werkplek** (`/workbench`): één Assistent-pagina voor **vragen én
-  JAS-annotatie**, die live met graph-qa (`POST /v1/chat`, SSE) en met de API (`/v1/annotatie/*` voor de
-  persistente state) praat. Het live overzicht van álle analyses draait in het Grafana-dashboard
-  *"Wetsanalyse — systeemtopologie"* (`deploy/observability/`). Zie [`frontend/README.md`](frontend/README.md).
+  **artikel-autocomplete + lid-keuze**), live agent-voortgang volgen, de review-lus en het rapport.
+  **De werkplek** (`/workbench`): één Assistent-pagina voor **vragen én JAS-annotatie**, die live met
+  graph-qa (`POST /v1/chat`, SSE) en met de API (`/v1/annotatie/*` voor de persistente state) praat. Het
+  live overzicht van álle analyses draait in het Grafana-dashboard *"Wetsanalyse — systeemtopologie"*
+  (`deploy/observability/`). Zie [`frontend/README.md`](frontend/README.md).
 
 **Login & toegang.** De hele webapp zit achter een login met **userid + wachtwoord** (Auth.js; de API
 is de identiteitsbron). E-mail wordt bij het aanmaken verplicht/uniek geregistreerd maar is geen
@@ -109,10 +103,10 @@ claude mcp list                        # verwacht: wettenbank → ✓ Connected 
 ```
 
 Vraag daarna in Claude Code om een wetsanalyse (bijvoorbeeld *"doe een wetsanalyse van artikel 9 lid 1
-Invorderingswet 1990"*); de skill haalt de tekst zelf op, doorloopt de werkstroom met review-checkpoints
-en levert een `rapport.json` (HTML-viewer + Markdown-export). Wil je de uitkomst formaliseren, vraag dan
-om *"zet deze wetsanalyse om naar RegelSpraak"*. Zie [`CLAUDE.md`](CLAUDE.md) voor de projectstructuur en
-de skill-`references/` voor de inhoudelijke regels (o.a. de JAS-klassen).
+Invorderingswet 1990"*); de skill haalt de tekst zelf op, doorloopt de activiteit-2-werkstroom met een
+review-checkpoint en levert een `rapport.json` (HTML-viewer + Markdown-export). Zie
+[`CLAUDE.md`](CLAUDE.md) voor de projectstructuur en de skill-`references/` voor de inhoudelijke regels
+(o.a. de JAS-klassen).
 
 > **Lokaal draaien (fallback).** Wil je de MCP-server zelf draaien i.p.v. de remote endpoint, bouw hem dan
 > en zet `.mcp.json` op het stdio-alternatief (zie `tools/wettenbank-mcp/CLAUDE.md`): `cd tools/wettenbank-mcp

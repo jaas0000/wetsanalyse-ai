@@ -1,11 +1,15 @@
 # CLAUDE.md — wetsanalyse-frontend
 
 Next.js (App Router) + TypeScript-webapp bovenop de [wetsanalyse-API](../api) én de graph-qa-agent.
-Twee gezichten: (a) de **analyse-webapp** — analyse aanmaken, live voortgang (SSE), de
-human-in-the-loop review-lus, het eindrapport, de **RegelSpraak-formaliseringsfase** (starten + model
-bekijken/downloaden), en een `/beheer`-scherm voor LLM-modelprofielen, de wet-catalogus en
-token-verbruik — en (b) **de werkplek** (`/workbench`, de *Assistent-pagina*): één gespreksvenster voor
-**vragen én JAS-annotatie**, live tegen graph-qa (§*Werkplek*).
+Twee gezichten: (a) de **analyse-webapp** — analyse aanmaken, live voortgang (SSE; incl. het live
+agent-redeneren van de agentische act-2-motor via `current_fase`), de human-in-the-loop review-lus,
+het eindrapport, en een `/beheer`-scherm voor LLM-modelprofielen, de wet-catalogus en token-verbruik —
+en (b) **de werkplek** (`/workbench`, de *Assistent-pagina*): één gespreksvenster voor **vragen én
+JAS-annotatie**, live tegen graph-qa (§*Werkplek*).
+
+> **Scope: alleen activiteit 2.** Begrippen (activiteit 3) en de RegelSpraak-formaliseringsfase zijn
+> uit de frontend **verwijderd** (worden later op een agentische basis herbouwd). Elke analyse eindigt
+> act2-only (`scope: "act2"`); het rapport toont markeringen + verwijzingen.
 Lees ook de projectroot-`CLAUDE.md` en `../api/CLAUDE.md` — de API is de bron van waarheid voor de
 datacontracten en de state machine; deze app is een **dunne, server-getokende schil** eroverheen.
 Operationele details (lokaal draaien, env-vars, deployment) staan in de `README.md`; dit bestand
@@ -56,21 +60,15 @@ De **harde scheidingslijn**: alles met een token is server-only.
   `openapi-typescript http://localhost:3000/openapi.json` — zie de README). `lib/states.ts` /
   `lib/jas.ts` / `lib/fasen.ts` zijn afgeleide presentatie-helpers (macro-statuslabels,
   JAS-klasse-weergave, en het fijnmazige **fase**-vocabulaire dat 1-op-1 de orchestrator-fasen
-  spiegelt — verzin daar geen fasen bij; brongetrouw geldt ook in de UI). **De analyse-eenheid is
-  het werkgebied met meerdere bronnen:** een analyse draagt `bronnen[]` (wet+artikel+lid),
-  activiteit 2 rendert per bron, activiteit 3 is werkgebied-breed met cross-bron `vindplaatsen`.
-  Het act-3-contract is **begrip-id-gebouwd** (`RegelUitvoer`/`RegelInvoer`/`RegelParameter`/
-  `RegelVoorwaarde`, `BegripRelatie`/`BegripHerkomst`) en `StartRequest.begrippenlijst` draagt een
-  optionele aangeleverde begrippenlijst (`BegripInvoer[]`).
+  spiegelt — verzin daar geen fasen bij; brongetrouw geldt ook in de UI. `lib/fasen.ts` dekt beide
+  act-2-motoren: de agentische (`agent-markeren`/`verwijzingen-volgen`) en de deterministische rollback
+  (`verwijzingen-inventariseren`/`llm-generatie`)). **De analyse-eenheid is het werkgebied met meerdere
+  bronnen:** een analyse draagt `bronnen[]` (wet+artikel+lid), activiteit 2 rendert per bron.
   `lib/bronnen.ts` centraliseert de bron-labels, de `vindplaatsen`-weergave en de wet-afleiding;
-  `lib/begrippen.ts` centraliseert de **begrip-graaf-weergave** (id→naam, herkomst-label,
-  regelvelden als begripnamen) voor `ReviewPanel`/`RapportView`;
-  het analyseformulier (`ProjectForm`/`lib/projectForm.ts`) heeft herhaalbare bron-rijen, een
+  het analyseformulier (`ProjectForm`/`lib/projectForm.ts`) heeft herhaalbare bron-rijen en een
   **artikel-combobox met autocomplete + lid-keuzelijst** (wetsstructuur via `lib/useWetStructuur.ts`
   + `lib/artikelFilter.ts` + `components/ui/Combobox.tsx`; degradeert naar vrije invoer als de
-  lookup faalt) en een inklapbaar blok **"Bestaande begrippenlijst (optioneel)"** (plak/upload;
-  client-side parser `parseBegrippenlijst` in `lib/projectForm.ts` — JSON, CSV met kopregel, of
-  `naam; definitie`-regels).
+  lookup faalt).
 - `app/**/page.tsx` (Server Components) — data ophalen via `lib/server.ts`; interactie delegeren naar
   een `*Client.tsx` Client Component (bv. `app/projecten/[id]/ProjectClient.tsx`). `app/page.tsx`
   (home) rendert server-side de projectlijst en delegeert naar `ProjectenLijstClient` — live via
@@ -90,21 +88,11 @@ De **harde scheidingslijn**: alles met een token is server-only.
   renderen puur in `RapportView.tsx` (Verwijzingen-sectie) en `ReviewPanel.tsx` (scope-feedback per
   verwijzing, via het bestaande per-id-feedbackmechanisme) uit de bestaande `/rapport`- en
   `/ronde`-data — er is **geen nieuwe BFF-route** voor nodig.
-- **Act2-only afronden + act3 on-demand.** `ReviewPanel.tsx` biedt bij activiteit 2 de knop
-  **"Akkoord — afronden zonder act. 3"** (feedback-status `akkoord-afronden`; alleen geldig op
-  activiteit 2 zonder opmerkingen — het API-contract valideert dat). De analyse krijgt dan
-  `scope: "act2"` (`Scope`-type in `lib/types.ts`). Op zo'n act2-only rapport toont `ProjectClient.tsx` de knop **"Activiteit 3
-  uitvoeren"** (`startAct3` in `lib/api.ts` → BFF-route `app/api/projects/[id]/act3/route.ts`),
-  waarna de SSE-stream heropent.
-- **RegelSpraak-vervolgfase.** Op een afgeronde analyse (`klaar`) toont `ProjectClient.tsx` een knop
-  **"Naar RegelSpraak"** (`startRegelspraak`); daarna heropent het de SSE-stream (`streamGen`) omdat
-  `klaar` terminaal is. De rs-states (`rs-gegevens-runt`/`wacht-op-review-rs-gegevens`/`rs-regels-runt`/
-  `wacht-op-review-rs-regels`/`rs-bouwt`/`rs-klaar`) staan in `lib/states.ts` + `lib/fasen.ts`; de
-  `reviewActiviteit`-helper mapt de rs-review-states op `rs-gegevens`/`rs-regels`, zodat `ReviewPanel.tsx`
-  ze met hetzelfde feedbackmechanisme afhandelt. Bij `rs-klaar` toont `components/RegelspraakView.tsx`
-  het model (GegevensSpraak + regels, met herkomst en `.rs`/`.md`-download). BFF-routes:
-  `app/api/projects/[id]/regelspraak{,-rs,-md}/route.ts`. De RegelSpraak-modeltypes staan in
-  `lib/types.ts` (`RegelspraakModel`, `GegevensSpraak`, …) — afgeleid van het API-contract.
+- **Act2-only afronden.** `ReviewPanel.tsx` biedt bij activiteit 2 één **"Akkoord — afronden"**-knop
+  (feedback-status `akkoord`, zonder opmerkingen — het API-contract valideert dat). De analyse gaat
+  dan naar `klaar` met `scope: "act2"` (`Scope`-type in `lib/types.ts`); `ProjectClient.tsx` toont het
+  act2-rapport. Begrippen (activiteit 3) en de RegelSpraak-vervolgfase zijn uit de webapp verwijderd —
+  geen "Activiteit 3 uitvoeren"/"Naar RegelSpraak"-knoppen, geen `RegelspraakView`/act3-BFF-routes meer.
 - **Vormgeving (Rijkshuisstijl, Belastingdienst-stijlvak)** — alle design tokens centraal:
   CSS-variabelen in `app/globals.css` → Tailwind in `tailwind.config.ts` (lintblauw `#154273` +
   hemelblauw `#007bc7` op wit, Fira Sans/Mono als vrij alternatief voor Rijksoverheid Sans,

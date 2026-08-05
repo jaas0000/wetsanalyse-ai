@@ -1,18 +1,14 @@
 # Wetsanalyse-frontend
 
-Next.js (App Router) + TypeScript-frontend voor de [Wetsanalyse-API](../api). Ontsluit de hele
-JAS-workflow in de browser: analyse aanmaken, live voortgang, de human-in-the-loop review-lus en
-het eindrapport — inclusief de **cross-referenties** (een Verwijzingen-sectie in het rapport, per
-functie met status en `wetten.overheid.nl`-links, en per-verwijzing scope-feedback in de
-activiteit-2 review). Bij het activiteit-2-checkpoint kan de analist ook **"Akkoord — afronden
-zonder act. 3"** kiezen (`scope: "act2"`): de analyse gaat direct naar het rapport zonder
-begrippen; op zo'n rapport verschijnt later de knop **"Activiteit 3 uitvoeren"** om act 3 alsnog
-te draaien.
+Next.js (App Router) + TypeScript-frontend voor de [Wetsanalyse-API](../api). Ontsluit de
+JAS-workflow (**activiteit 2**) in de browser: analyse aanmaken, live agent-voortgang, de
+human-in-the-loop review-lus en het eindrapport — inclusief de **cross-referenties** (een
+Verwijzingen-sectie in het rapport, per functie met status en `wetten.overheid.nl`-links, en
+per-verwijzing scope-feedback in de review). Bij het review-checkpoint rondt de analist met
+**"Akkoord — afronden"** de analyse act2-only af (`scope: "act2"`).
 
-Op een afgeronde analyse kun je met **"Naar RegelSpraak"** de formaliseringsfase starten: dezelfde
-twee-checkpoint review-lus (GegevensSpraak-objectmodel en RegelSpraak-regels), waarna een eigen
-**RegelSpraak-weergave** het model toont (met herkomst per declaratie/regel) en een `.rs`/`.md`-download
-biedt.
+> Begrippen (activiteit 3) en de RegelSpraak-fase zijn uit de webapp verwijderd en worden later op een
+> agentische basis herbouwd.
 
 Daarnaast is er **de werkplek** (`/workbench`, de *Assistent-pagina*): één gespreksvenster met **twee
 werkwijzen** — **vragen** aan de Juridische Assistent (brongetrouwe Q&A over de kennisgraaf) en
@@ -36,28 +32,11 @@ kies je zowel het modelprofiel als de wet uit een dropdown die live wordt opgeha
 wijzigingen in de draaiende app direct meekomen; na de wet-keuze wordt **artikel** een combobox
 met autocomplete op de echte wetsstructuur en **lid** een keuzelijst met de echte leden (plus een
 bevestigingsregel met opschrift en tekstsnippet). De dropdowns zijn een gemak: is de catalogus
-leeg of faalt de structuur-lookup, dan val je terug op vrije invoer. Optioneel plak of upload je
-een **bestaande begrippenlijst** (JSON, CSV met kopregel, of `naam; definitie`-regels) als
-suggestieve invoer voor activiteit 3 — de analyse registreert dan per begrip de herkomst
-(hergebruikt/aangepast/nieuw). De JSON-vorm (alleen `naam` verplicht; een kale array mag ook):
+leeg of faalt de structuur-lookup, dan val je terug op vrije invoer.
 
-```json
-{
-  "begrippen": [
-    {
-      "naam": "belastingplichtige",
-      "synoniemen": ["plichtige"],
-      "definitie": "degene die op grond van de wet gehouden is aangifte te doen",
-      "klasse": "Rechtssubject",
-      "bron": "Begrippenkader Heffing, versie 2025"
-    },
-    { "naam": "bijdrage-inkomen" }
-  ]
-}
-```
-
-Het beheer loopt via aparte `/api/admin/*`-routes met een
-**apart admin-token** (zie hieronder).
+De analyse dekt **activiteit 2** (markeren + classificeren in JAS-klassen); begrippen (activiteit 3)
+en de RegelSpraak-fase zijn uit de webapp verwijderd en worden later op een agentische basis herbouwd.
+Het beheer loopt via aparte `/api/admin/*`-routes met een **apart admin-token** (zie hieronder).
 
 ## Architectuur — BFF met server-side token
 
