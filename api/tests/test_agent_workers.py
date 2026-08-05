@@ -88,3 +88,20 @@ async def test_worker_fallback_op_losse_json():
     llm = FallbackLLM(json.dumps(_PAYLOAD))
     bron, _ = await aw.genereer_act2_bron_agentisch(llm, FakeGraph(), basis, 1, None, max_verwijzing_fetches=6)
     assert bron["markeringen"][0]["formulering"] == "De belastingplichtige"
+
+
+async def test_worker_emit_stuurt_typed_events():
+    basis = await _basis()
+    llm = FakeAgentLLM(_PAYLOAD, follow=("BWBR0000001", "2"))
+    events: list[tuple[str, dict]] = []
+
+    async def emit(ev, data):
+        events.append((ev, data))
+
+    await aw.genereer_act2_bron_agentisch(
+        llm, FakeGraph(), basis, 1, None, max_verwijzing_fetches=6, emit=emit
+    )
+    soorten = [e for e, _ in events]
+    assert "status" in soorten          # agent-markeren gestart
+    assert "reason" in soorten          # verwijzing volgen (tool-narratie)
+    assert "element" in soorten         # per markering één element-event

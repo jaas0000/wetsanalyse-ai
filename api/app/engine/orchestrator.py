@@ -327,6 +327,16 @@ class WetsanalyseEngine:
         llm = await self._llm_for(job)
         graph = self.graph()
 
+        async def emit(ev: str, data: dict) -> None:
+            # Live agent-voortgang → de observerende `current_fase` (owner-fenced, best-effort). De
+            # per-project SSE surfaced dit; de fase-strings blijven het vaste vocabulaire van fasen.ts.
+            if ev == "reason":
+                await self._set_fase(job, "verwijzingen-volgen")
+            elif ev == "status":
+                fase = data.get("fase")
+                if fase:
+                    await self._set_fase(job, fase)
+
         async def maak():
             bronnen, tin, tout, prov0 = [], 0, 0, None
             with gebruik_context(project_slug=job.id, activiteit="2", ronde=ronde, fase="agent-generatie"):
@@ -334,7 +344,7 @@ class WetsanalyseEngine:
                     await self._set_fase(job, "agent-markeren")
                     bron_dict, prov = await agent_workers.genereer_act2_bron_agentisch(
                         llm, graph, bb, ronde, job.analysefocus or None,
-                        max_verwijzing_fetches=self.s.max_verwijzing_fetches,
+                        max_verwijzing_fetches=self.s.max_verwijzing_fetches, emit=emit,
                     )
                     bronnen.append(bron_dict)
                     tin += prov["tokens_in"]

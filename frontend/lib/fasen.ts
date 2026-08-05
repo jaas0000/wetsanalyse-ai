@@ -8,6 +8,7 @@ export const FASE_LABEL: Record<string, string> = {
   "wettekst-ophalen": "Wettekst ophalen",
   "verwijzingen-inventariseren": "Verwijzingen inventariseren",
   "verwijzingen-volgen": "Verwijzingen volgen",
+  "agent-markeren": "Agent markeert & classificeert",
   "llm-generatie": "LLM-generatie",
   "auto-correctie": "Auto-correctie",
   "brongetrouwheid-check": "Brongetrouwheid-check",
@@ -18,11 +19,14 @@ export const FASE_LABEL: Record<string, string> = {
   "rapport-wegschrijven": "Rapport wegschrijven",
 };
 
-// Activiteit 2 is twee-fase (incl. verwijzingen).
+// Activiteit 2 (incl. verwijzingen). Superset van beide motoren: de agentische motor
+// (WETSANALYSE_ACT2_ENGINE=agent) tikt `agent-markeren` + `verwijzingen-volgen`; de deterministische
+// rollback tikt `verwijzingen-inventariseren`/`llm-generatie`. Alleen de actieve fase licht op.
 const ACT2_FASEN = [
   "wettekst-ophalen",
   "verwijzingen-inventariseren",
   "verwijzingen-volgen",
+  "agent-markeren",
   "llm-generatie",
   "auto-correctie",
   "brongetrouwheid-check",
