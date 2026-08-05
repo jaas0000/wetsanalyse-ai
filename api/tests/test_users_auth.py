@@ -297,9 +297,7 @@ async def client(monkeypatch):
         WETSANALYSE_AUTH_REQUIRED="0",
     )
     from app import db, ratelimit
-    from app.deps import get_store
 
-    get_store.cache_clear()
     ratelimit.reset()
     db.init_engine("sqlite+aiosqlite://")
     await db.create_all()
@@ -308,7 +306,6 @@ async def client(monkeypatch):
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         yield ac
 
-    get_store.cache_clear()
     await db.dispose_engine()
 
 

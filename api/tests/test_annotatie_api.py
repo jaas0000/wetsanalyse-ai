@@ -15,10 +15,9 @@ async def client(monkeypatch):
     from app.annotatie_contracts import AnnotatieDocument
     from app.annotatie_store import AnnotatieStore
     from app.config import get_settings
-    from app.deps import get_annotatie_store, get_store
+    from app.deps import get_annotatie_store
 
     get_settings.cache_clear()
-    get_store.cache_clear()
     get_annotatie_store.cache_clear()
     ratelimit.reset()
 
@@ -35,7 +34,6 @@ async def client(monkeypatch):
         yield ac
 
     get_settings.cache_clear()
-    get_store.cache_clear()
     get_annotatie_store.cache_clear()
     await db.dispose_engine()
 

@@ -91,9 +91,8 @@ async def client(monkeypatch):
 
     from app import db, ratelimit
     from app.config import get_settings
-    from app.deps import get_store, get_wettenbank
+    from app.deps import get_wettenbank
     get_settings.cache_clear()
-    get_store.cache_clear()
     get_wettenbank.cache_clear()
     ratelimit.reset()
     wet_info._wis_cache()
@@ -110,7 +109,6 @@ async def client(monkeypatch):
 
     app.dependency_overrides.pop(get_wettenbank, None)
     get_settings.cache_clear()
-    get_store.cache_clear()
     get_wettenbank.cache_clear()
     wet_info._wis_cache()
     await db.dispose_engine()

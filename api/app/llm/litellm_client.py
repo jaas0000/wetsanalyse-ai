@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import json
 
-from .base import LlmConfig, LLMError, LLMResult, PromptTooLargeError, ToolExecutor, parse_json_strict
+from .base import LlmConfig, LLMError, LLMResult, PromptTooLargeError, parse_json_strict
 from .throttle import llm_slot
 
 _REPAREER = (
@@ -173,94 +173,6 @@ class LiteLLMClient:
             ruwe_tekst=tekst,
         )
 
-
-    async def run_tools(
-        self,
-        system: str,
-        user: str,
-        tools: list[dict],
-        execute: ToolExecutor,
-        *,
-        max_iters: int = 12,
-    ) -> LLMResult:
-        import litellm
-
-        messages: list[dict] = [
-            self._system_message(system),
-            {"role": "user", "content": user},
-        ]
-        self._guard_prompt(messages)
-
-        tokens_in = tokens_out = cache_read = cache_write = 0
-        eind_tekst = ""
-        model_naam = self.c.model
-        try:
-            async with llm_slot():
-                for _ in range(max(1, max_iters)):
-                    resp = await litellm.acompletion(
-                        model=self._model_ref(), messages=messages,
-                        tools=tools, tool_choice="auto", **self._kwargs(),
-                    )
-                    msg = resp.choices[0].message
-                    usage = getattr(resp, "usage", None)
-                    tokens_in += getattr(usage, "prompt_tokens", 0) or 0
-                    tokens_out += getattr(usage, "completion_tokens", 0) or 0
-                    cr, cw = self._cache_tokens(usage)
-                    cache_read += cr
-                    cache_write += cw
-                    model_naam = getattr(resp, "model", model_naam) or model_naam
-
-                    tool_calls = getattr(msg, "tool_calls", None) or []
-                    if not tool_calls:
-                        eind_tekst = msg.content or ""
-                        break
-                    # Voeg het assistant-bericht (mét tool_calls) toe, daarna elk tool-resultaat.
-                    messages.append(_bericht_dict(msg))
-                    for tc in tool_calls:
-                        naam = tc.function.name
-                        try:
-                            args = json.loads(tc.function.arguments or "{}")
-                        except json.JSONDecodeError:
-                            args = {}
-                        resultaat = await execute(naam, args if isinstance(args, dict) else {})
-                        messages.append({
-                            "role": "tool", "tool_call_id": tc.id,
-                            "name": naam, "content": str(resultaat),
-                        })
-                    self._guard_prompt(messages)
-        except Exception as e:  # noqa: BLE001
-            if type(e).__name__ == "ContextWindowExceededError":
-                raise PromptTooLargeError(
-                    f"Context window overschreden voor model {self.c.model}; verklein het werkgebied "
-                    "(minder bronnen) of kies een modelprofiel met een groter context window."
-                ) from e
-            raise
-
-        return LLMResult(
-            data={}, model=model_naam, provider=self.c.provider,
-            output_strategie=self.c.output_strategy,
-            tokens_in=tokens_in, tokens_out=tokens_out,
-            cache_read_in=cache_read, cache_write_in=cache_write,
-            ruwe_tekst=eind_tekst,
-        )
-
-
-def _bericht_dict(msg) -> dict:
-    """Serialiseer een provider-assistant-bericht (mét tool_calls) naar een dict dat we
-    terug in `messages` kunnen voeden. LiteLLM-berichten dragen `model_dump()`; anders bouwen
-    we het handmatig op."""
-    dump = getattr(msg, "model_dump", None)
-    if callable(dump):
-        d = dump()
-        d.pop("function_call", None)  # legacy-veld dat sommige providers weigeren
-        return d
-    tool_calls = []
-    for tc in getattr(msg, "tool_calls", None) or []:
-        tool_calls.append({
-            "id": tc.id, "type": "function",
-            "function": {"name": tc.function.name, "arguments": tc.function.arguments},
-        })
-    return {"role": "assistant", "content": msg.content or "", "tool_calls": tool_calls}
 
 
 def build_llm_client(config: LlmConfig):

@@ -1,16 +1,16 @@
-"""Admin-resource (gemount onder /v1/admin) — LLM-modelprofielen beheren + token-verbruik.
+"""Admin-resource (gemount onder /v1/admin) — LLM-modelprofielen, wet-catalogus, gebruikers en
+genereerbare API-tokens beheren.
 
 Alles achter `require_admin` (aparte admin-bearer, fail-closed). De plaintext-API-key komt
 NOOIT terug in een respons: clients zien alleen `api_key_set`. Het schrijven van een key
 vereist een geconfigureerde master key (LLM_CONFIG_SECRET); ontbreekt die → 400.
 
 PUT    /v1/admin/profiles/{name}          — maak/werk profiel bij (api_key write-only)
-GET    /v1/admin/profiles                 — lijst (incl. verbruik per profiel)
+GET    /v1/admin/profiles                 — lijst
 GET    /v1/admin/profiles/{name}          — één profiel
 DELETE /v1/admin/profiles/{name}          — verwijder (niet de default)
 POST   /v1/admin/profiles/{name}/default  — markeer als default
 POST   /v1/admin/profiles/{name}/test     — test de verbinding (kleine LLM-call)
-GET    /v1/admin/usage                    — token-verbruik (aggregatie over provenance)
 
 PUT    /v1/admin/wetten/{bwbId}           — maak/werk wet-catalogus-item bij (BWB-id + naam)
 GET    /v1/admin/wetten                   — lijst catalogus-items
@@ -22,13 +22,11 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
-from .. import api_tokens, app_settings, profiles, usage, users, wetten
+from .. import api_tokens, profiles, users, wetten
 from ..auth import require_admin
-from ..deps import get_store
-from ..jobstore import JobStore
 from ..llm.litellm_client import build_llm_client
 from ..llm_profile import LlmProfile
 from ..ratelimit import rate_limited_admin_test
@@ -67,7 +65,6 @@ class ProfileOut(BaseModel):
     api_key_set: bool
     updated_by: str = ""
     updated: str = ""
-    verbruik: dict | None = None
 
 
 class TestResult(BaseModel):
@@ -78,7 +75,7 @@ class TestResult(BaseModel):
     detail: str = ""
 
 
-def _to_out(p: LlmProfile, verbruik: dict | None = None) -> ProfileOut:
+def _to_out(p: LlmProfile) -> ProfileOut:
     return ProfileOut(
         name=p.name,
         provider=p.provider,
@@ -91,7 +88,6 @@ def _to_out(p: LlmProfile, verbruik: dict | None = None) -> ProfileOut:
         api_key_set=bool(p.enc_api_key),
         updated_by=p.updated_by,
         updated=p.updated.isoformat(),
-        verbruik=verbruik,
     )
 
 
@@ -99,9 +95,7 @@ def _to_out(p: LlmProfile, verbruik: dict | None = None) -> ProfileOut:
 
 @router.get("/profiles", response_model=list[ProfileOut])
 async def lijst_profielen():
-    items = await profiles.list_profiles()
-    verbruik = await usage.usage_per_profiel()
-    return [_to_out(p, verbruik.get(p.name)) for p in items]
+    return [_to_out(p) for p in await profiles.list_profiles()]
 
 
 @router.get("/profiles/{name}", response_model=ProfileOut)
@@ -183,20 +177,6 @@ async def test_profiel(name: str):
             detail="Verbinding met de modelprovider mislukt — zie het server-log voor details.",
         )
     return TestResult(ok=True, model=res.model, tokens_in=res.tokens_in, tokens_out=res.tokens_out)
-
-
-# --- verbruik ------------------------------------------------------------------
-
-@router.get("/usage")
-async def token_verbruik(
-    group_by: str = Query("model"),
-    van: str | None = Query(None),
-    tot: str | None = Query(None),
-):
-    try:
-        return await usage.usage_report(group_by=group_by, van=van, tot=tot)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
 
 
 # --- wet-catalogus -------------------------------------------------------------
@@ -386,70 +366,3 @@ async def trek_api_token_in(token_id: str, admin_id: str = Depends(require_admin
     logger.info("API-token ingetrokken", extra={
         "categorie": "security", "token_id": token_id, "door": admin_id,
     })
-
-
-# --- runtime-instellingen + LLM-call-capture -----------------------------------
-
-class SettingsOut(BaseModel):
-    capture_llm_calls: bool = False
-
-
-class SettingsIn(BaseModel):
-    # Partiële update (None = ongewijzigd).
-    capture_llm_calls: bool | None = None
-
-
-class LlmCallOut(BaseModel):
-    id: int
-    project_slug: str
-    activiteit: str = ""
-    ronde: int = 0
-    poging: int = 1
-    fase: str = ""
-    model: str = ""
-    provider: str = ""
-    system_prompt: str = ""
-    user_prompt: str = ""
-    response_text: str = ""
-    tokens_in: int = 0
-    tokens_out: int = 0
-    ok: bool = True
-    error: str | None = None
-    tijdstip: str = ""
-
-
-async def _settings_out(store: JobStore) -> SettingsOut:
-    return SettingsOut(capture_llm_calls=await app_settings.capture_enabled(store))
-
-
-@router.get("/settings", response_model=SettingsOut)
-async def haal_settings(store: JobStore = Depends(get_store)):
-    return await _settings_out(store)
-
-
-@router.put("/settings", response_model=SettingsOut)
-async def zet_settings(body: SettingsIn, store: JobStore = Depends(get_store)):
-    if body.capture_llm_calls is not None:
-        await app_settings.set_capture(store, body.capture_llm_calls)
-    return await _settings_out(store)
-
-
-@router.get("/projects/{slug}/llm-calls", response_model=list[LlmCallOut])
-async def lijst_llm_calls(slug: str, store: JobStore = Depends(get_store)):
-    """Vastgelegde LLM-calls (prompt + ruwe respons) van één analyse, op volgorde. Admin-only."""
-    rijen = await store.lijst_llm_calls(slug)
-    out: list[LlmCallOut] = []
-    for r in rijen:
-        ts = r.get("tijdstip")
-        out.append(LlmCallOut(
-            id=r["id"], project_slug=r.get("project_slug", ""),
-            activiteit=r.get("activiteit", ""), ronde=r.get("ronde", 0),
-            poging=r.get("poging", 1), fase=r.get("fase", ""),
-            model=r.get("model", ""), provider=r.get("provider", ""),
-            system_prompt=r.get("system_prompt", ""), user_prompt=r.get("user_prompt", ""),
-            response_text=r.get("response_text", ""),
-            tokens_in=r.get("tokens_in", 0), tokens_out=r.get("tokens_out", 0),
-            ok=bool(r.get("ok", True)), error=r.get("error"),
-            tijdstip=ts.isoformat() if hasattr(ts, "isoformat") else (ts or ""),
-        ))
-    return out
