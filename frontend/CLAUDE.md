@@ -1,15 +1,15 @@
 # CLAUDE.md — wetsanalyse-frontend
 
-Next.js (App Router) + TypeScript-webapp bovenop de [wetsanalyse-API](../api) én de graph-qa-agent.
-Twee gezichten: (a) de **analyse-webapp** — analyse aanmaken, live voortgang (SSE; incl. het live
-agent-redeneren van de agentische act-2-motor via `current_fase`), de human-in-the-loop review-lus,
-het eindrapport, en een `/beheer`-scherm voor LLM-modelprofielen, de wet-catalogus en token-verbruik —
-en (b) **de werkplek** (`/workbench`, de *Assistent-pagina*): één gespreksvenster voor **vragen én
-JAS-annotatie**, live tegen graph-qa (§*Werkplek*).
+Next.js (App Router) + TypeScript-webapp bovenop de graph-qa-agent (en, voor login/beheer, de
+[wetsanalyse-API](../api)). De app **is de werkplek**: `/workbench` (de *Assistent-pagina*) — één
+chat-achtig gespreksvenster voor **vragen én JAS-annotatie**, live tegen graph-qa (§*Werkplek*). De
+home (`/`) leidt daarheen door.
 
-> **Scope: alleen activiteit 2.** Begrippen (activiteit 3) en de RegelSpraak-formaliseringsfase zijn
-> uit de frontend **verwijderd** (worden later op een agentische basis herbouwd). Elke analyse eindigt
-> act2-only (`scope: "act2"`); het rapport toont markeringen + verwijzingen.
+> **Scope: chat-werkruimte.** De analyse-webapp (analyses aanmaken, projectenlijst, review-lus,
+> rapport) is **uit de frontend verwijderd**; alleen de werkplek + login + een uitgekleed `/beheer`
+> (modelprofielen, gebruikers, API-tokens) blijft. De api-`/v1/projects`-analyse-backend bestaat nog
+> **headless** (niet meer via de webapp ontsloten). Begrippen (activiteit 3) en RegelSpraak zijn eerder
+> al verwijderd.
 Lees ook de projectroot-`CLAUDE.md` en `../api/CLAUDE.md` — de API is de bron van waarheid voor de
 datacontracten en de state machine; deze app is een **dunne, server-getokende schil** eroverheen.
 Operationele details (lokaal draaien, env-vars, deployment) staan in de `README.md`; dit bestand
@@ -40,59 +40,30 @@ De **harde scheidingslijn**: alles met een token is server-only.
 - `app/api/_lib/proxy.ts` — de kern van de BFF: één `proxy(path, init)`-helper die de upstream-status
   en -body **ongewijzigd** teruggeeft (incl. 401/404/409/429/503 + `Retry-After`/`Location`/
   `Content-Type`-headers), zodat de client correcte foutafhandeling houdt. `init.admin: true`
-  injecteert het admin-token i.p.v. het client-token. `Location` wordt herschreven van
-  `/v1/projects/{id}` naar de eigen `/api/projects/{id}`-route. Verzin in nieuwe routes geen eigen
-  fetch-logica — leid alles via deze helper.
-- `app/api/projects/[id]/events/route.ts` + `app/api/projects/events/route.ts` — de twee
-  **uitzonderingen**: SSE-passthrough (geen `proxy()`), pipen `upstream.body` rauw door met
-  `X-Accel-Buffering: no` en `Cache-Control: no-transform`. De eerste is de per-project-stream
-  (projectdetail); de tweede is de **aggregate-stream** over álle analyses van de client die de
-  projectenlijst (`/`) live houdt (upstream `GET /v1/projects/events`; het geaggregeerde per-analyse
-  overzicht draait sinds de opheffing van `/dashboard` in Grafana). Beide
-  worden via de gedeelde hook `lib/useProjectenStream.ts` geconsumeerd. Bij wijzigen niet bufferen —
-  dat breekt de live voortgang (en NPM moet proxy-buffering ook uit hebben).
-- `lib/server.ts` — server-side GET-helpers voor Server Components (rechtstreeks server→server, scheelt
-  een extra self-fetch via de BFF bij de eerste render).
+  injecteert het admin-token i.p.v. het client-token. Verzin in nieuwe routes geen eigen
+  fetch-logica — leid alles via deze helper. De **SSE-uitzondering** is de werkplek-agent-route
+  (`app/api/annotatie/agent/route.ts`): geen `proxy()`, maar rauwe passthrough van `upstream.body`
+  met `X-Accel-Buffering: no` en `Cache-Control: no-transform` (NPM moet proxy-buffering óók uit
+  hebben) — zie §*Werkplek*.
+- `lib/server.ts` — server-side helpers voor Server Components / auth (rechtstreeks server→server,
+  scheelt een extra self-fetch via de BFF bij de eerste render). Bevat de auth-verificatie
+  (`verifyCredentials`/`getAccountStatus`/`getSetupStatus`) die de login-flow gebruikt.
 - `lib/api.ts` — alle client-side fetch-helpers naar `/api/**`. Eén plek voor het foutcontract
   (`parseError` → `ApiError` met `retryAfter`); gebruik `isApiError()` in de UI.
-- `lib/types.ts` — **met de hand afgeleid van `../api/app/contracts.py`** en de bron-van-waarheid voor
-  de TS-kant. Wijzigt het API-contract, werk dit bestand bij (verifieer desgewenst tegen
-  `openapi-typescript http://localhost:3000/openapi.json` — zie de README). `lib/states.ts` /
-  `lib/jas.ts` / `lib/fasen.ts` zijn afgeleide presentatie-helpers (macro-statuslabels,
-  JAS-klasse-weergave, en het fijnmazige **fase**-vocabulaire dat 1-op-1 de orchestrator-fasen
-  spiegelt — verzin daar geen fasen bij; brongetrouw geldt ook in de UI. `lib/fasen.ts` dekt beide
-  act-2-motoren: de agentische (`agent-markeren`/`verwijzingen-volgen`) en de deterministische rollback
-  (`verwijzingen-inventariseren`/`llm-generatie`)). **De analyse-eenheid is het werkgebied met meerdere
-  bronnen:** een analyse draagt `bronnen[]` (wet+artikel+lid), activiteit 2 rendert per bron.
-  `lib/bronnen.ts` centraliseert de bron-labels, de `vindplaatsen`-weergave en de wet-afleiding;
-  het analyseformulier (`ProjectForm`/`lib/projectForm.ts`) heeft herhaalbare bron-rijen en een
-  **artikel-combobox met autocomplete + lid-keuzelijst** (wetsstructuur via `lib/useWetStructuur.ts`
-  + `lib/artikelFilter.ts` + `components/ui/Combobox.tsx`; degradeert naar vrije invoer als de
-  lookup faalt).
+- `lib/types.ts` — **met de hand afgeleid van `../api/app/contracts.py`** (+ `annotatie_contracts.py`)
+  en de bron-van-waarheid voor de TS-kant. Wijzigt het API-contract, werk dit bestand bij (verifieer
+  desgewenst tegen `openapi-typescript http://localhost:3000/openapi.json` — zie de README).
+  `lib/jas.ts` is de afgeleide presentatie-helper voor de JAS-klasse-weergave (kleur + label uit
+  `docs/wa-table.png`); brongetrouw geldt ook in de UI — verzin er geen klassen bij.
 - `app/**/page.tsx` (Server Components) — data ophalen via `lib/server.ts`; interactie delegeren naar
-  een `*Client.tsx` Client Component (bv. `app/projecten/[id]/ProjectClient.tsx`). `app/page.tsx`
-  (home) rendert server-side de projectlijst en delegeert naar `ProjectenLijstClient` — live via
-  `useProjectenStream` op de aggregate-route. Het client-side **zoek-/filter-/sorteer-/pagineerlaag**
-  zit in `lib/projectFilter.ts` (`filterEnSorteer`/`distinctWetten`/`paginate`) +
-  `components/ProjectControls.tsx` + `components/Pagination.tsx`; statusgroepen via `statusBucket` in
-  `lib/states.ts`. **Let op:** het aparte per-analyse live-overzicht (`app/dashboard` +
-  `DashboardCard`) is **verwijderd** — dat overzicht draait nu in Grafana (dashboard
-  *"Wetsanalyse — systeemtopologie"*, gevoed door de read-only jobstore-datasource). De
-  aggregate-SSE-stream (`/api/projects/events` → `useProjectenStream`) blijft; de home-projectenlijst
-  gebruikt 'm nog. Voeg dus geen nieuwe consument toe die dat overzicht in de webapp terugbrengt.
-- `components/` — presentatie; `components/admin/` is het `/beheer`-scherm (achter het admin-token):
-  modelprofielen, wetten, gebruikers, token-verbruik én **`LlmCapturePanel`** (toggle voor het
-  vastleggen van LLM-calls + viewer per analyse-id; BFF-routes `/api/admin/settings` en
-  `/api/admin/projects/[id]/llm-calls`). `components/ui/` zijn de primitives. De **cross-referenties**
-  (`Verwijzing`-type in `lib/types.ts`)
-  renderen puur in `RapportView.tsx` (Verwijzingen-sectie) en `ReviewPanel.tsx` (scope-feedback per
-  verwijzing, via het bestaande per-id-feedbackmechanisme) uit de bestaande `/rapport`- en
-  `/ronde`-data — er is **geen nieuwe BFF-route** voor nodig.
-- **Act2-only afronden.** `ReviewPanel.tsx` biedt bij activiteit 2 één **"Akkoord — afronden"**-knop
-  (feedback-status `akkoord`, zonder opmerkingen — het API-contract valideert dat). De analyse gaat
-  dan naar `klaar` met `scope: "act2"` (`Scope`-type in `lib/types.ts`); `ProjectClient.tsx` toont het
-  act2-rapport. Begrippen (activiteit 3) en de RegelSpraak-vervolgfase zijn uit de webapp verwijderd —
-  geen "Activiteit 3 uitvoeren"/"Naar RegelSpraak"-knoppen, geen `RegelspraakView`/act3-BFF-routes meer.
+  een `*Client.tsx` Client Component. `app/page.tsx` (home) doet server-side een `redirect("/workbench")`.
+  De werkplek zit in `app/workbench/page.tsx`, het beheer in `app/beheer/page.tsx`, het account in
+  `app/account/page.tsx`, en de auth-schermen in `app/login/*` + `app/setup` + `app/disclaimer`.
+- `components/` — presentatie. `components/werkplek/` + `components/workbench/` = de chat-werkruimte
+  (zie §*Werkplek*). `components/admin/` is het uitgeklede `/beheer`-scherm (achter het admin-token):
+  **`BeheerClient`** met modelprofielen (`ProfileEditor`), **`UsersPanel`** (gebruikersbeheer) en
+  **`ApiTokensPanel`**. `components/account/` + `components/auth/` dragen de login/2fa/setup-flow.
+  `components/ui/` zijn de primitives.
 - **Vormgeving (Rijkshuisstijl, Belastingdienst-stijlvak)** — alle design tokens centraal:
   CSS-variabelen in `app/globals.css` → Tailwind in `tailwind.config.ts` (lintblauw `#154273` +
   hemelblauw `#007bc7` op wit, Fira Sans/Mono als vrij alternatief voor Rijksoverheid Sans,
@@ -104,7 +75,7 @@ De **harde scheidingslijn**: alles met een token is server-only.
   (bv. naast een invoerveld), geef hem dan `className="w-full sm:w-auto"` en laat de container op
   mobiel stapelen (`flex flex-col … sm:flex-row`) — geen vaste/`flex-wrap`-knoprijen die op smal
   scherm overlopen. De JAS-klassekleuren in `lib/jas.ts` zijn de **exacte labelkleuren uit
-  `docs/wa-table.png`**; job-state-kleuren in `lib/states.ts`.
+  `docs/wa-table.png`**.
 
 ## Werkplek — de Assistent-pagina (`/workbench`)
 
@@ -182,12 +153,9 @@ tokens/secrets/inhoud loggen. In de vitest-node-omgeving wordt `server-only` ges
   (`POST/PUT/PATCH/DELETE` op `/api/*`, incl. de publieke `/api/login-verify`): een meegestuurde
   vreemde Origin → 403; zonder Origin-header valt het terug op `SameSite=Lax`. De cookie-flags
   (`httpOnly`/`sameSite=lax`/`secure`) staan expliciet in `authConfig` vastgelegd.
-- **Geen vrije model-string of dwingende wet-lijst in de UI.** Het modelprofiel kies je uit de live
-  `/api/profiles`-dropdown; de wet-dropdown (`/api/wetten`) is een gemak — is de catalogus leeg, dan
-  val je terug op vrije BWB-id-invoer. Hetzelfde geldt voor de artikel-autocomplete en lid-keuze
-  (`/api/wetten/[bwbId]/structuur` en `/api/wetten/[bwbId]/artikelen/[artikel]`): faalt de
-  structuur-lookup, dan degradeert de rij naar vrije tekstvelden. De API blijft elke geldige
-  BWB-id accepteren.
+- **Geen dwingende wet-lijst in de UI.** De wet-dropdown (`/api/wetten`) die de werkplek gebruikt is
+  een gemak — is de catalogus leeg, dan val je terug op vrije BWB-id-invoer. De API/agent blijft elke
+  geldige BWB-id accepteren.
 - **Huisstijl via tokens, niet hardcoded.** Kleur en typografie lopen via de tokens in
   `app/globals.css` + `tailwind.config.ts` (en `lib/jas.ts`/`lib/states.ts` voor de badges) — strooi
   geen losse hex-waarden door componenten. Het officiële logo-asset (`public/belastingdienst-logo.svg`)

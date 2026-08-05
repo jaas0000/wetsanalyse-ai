@@ -1,42 +1,23 @@
 # Wetsanalyse-frontend
 
-Next.js (App Router) + TypeScript-frontend voor de [Wetsanalyse-API](../api). Ontsluit de
-JAS-workflow (**activiteit 2**) in de browser: analyse aanmaken, live agent-voortgang, de
-human-in-the-loop review-lus en het eindrapport — inclusief de **cross-referenties** (een
-Verwijzingen-sectie in het rapport, per functie met status en `wetten.overheid.nl`-links, en
-per-verwijzing scope-feedback in de review). Bij het review-checkpoint rondt de analist met
-**"Akkoord — afronden"** de analyse act2-only af (`scope: "act2"`).
+Next.js (App Router) + TypeScript-frontend. De app **is de werkplek**: een chat-achtige werkruimte
+tegen de graph-qa-agent (login/beheer lopen via de [Wetsanalyse-API](../api)). De home leidt door naar
+`/workbench`.
 
-> Begrippen (activiteit 3) en de RegelSpraak-fase zijn uit de webapp verwijderd en worden later op een
-> agentische basis herbouwd.
+> **De analyse-webapp is verwijderd.** Analyses aanmaken/reviewen/rapporteren zit niet meer in de
+> frontend; alleen de werkplek + login + een uitgekleed `/beheer` (modelprofielen, gebruikers,
+> API-tokens) blijft. De api-`/v1/projects`-backend bestaat nog headless.
 
-Daarnaast is er **de werkplek** (`/workbench`, de *Assistent-pagina*): één gespreksvenster met **twee
+**De werkplek** (`/workbench`, de *Assistent-pagina*): één gespreksvenster met **twee
 werkwijzen** — **vragen** aan de Juridische Assistent (brongetrouwe Q&A over de kennisgraaf) en
 **JAS-annotatie** (de agent stelt JAS-elementen voor → de jurist reviewt per element:
 approve/edit/reject/comment). Die pagina praat live met de graph-qa-agent (SSE) en bewaart de
-review-state via de API.
+review-state via de API. De home (`/`) leidt hierheen door.
 
-Het geaggregeerde live-overzicht van álle analyses (per analyse de engine-stap tot op
-**functieniveau**, met verstreken tijd, token-verbruik en foutstatus) is **verhuisd naar Grafana**
-— het dashboard *"Wetsanalyse — systeemtopologie"* (`deploy/observability/`), gevoed door een
-read-only view op de jobstore. De aggregate-SSE-route (`/api/projects/events`) blijft bestaan en
-houdt de **home-projectenlijst** live.
-
-De home-projectenlijst heeft een client-side **zoek-/filter-/sorteerbalk** (status, vrije
-tekst op naam/BWB-id/artikel, wet) met **paginering**, bovenop de live SSE-lijst.
-
-Daarnaast een **`/beheer`-scherm** voor het LLM-beheer: de modelprofielen die de analyses aansturen
-(toevoegen/bewerken/verwijderen, default kiezen, verbinding testen), een **wet-catalogus** (BWB-id +
-naam, met "Naam ophalen" via de MCP) en een overzicht van het token-verbruik. Bij **Nieuwe analyse**
-kies je zowel het modelprofiel als de wet uit een dropdown die live wordt opgehaald, zodat
-wijzigingen in de draaiende app direct meekomen; na de wet-keuze wordt **artikel** een combobox
-met autocomplete op de echte wetsstructuur en **lid** een keuzelijst met de echte leden (plus een
-bevestigingsregel met opschrift en tekstsnippet). De dropdowns zijn een gemak: is de catalogus
-leeg of faalt de structuur-lookup, dan val je terug op vrije invoer.
-
-De analyse dekt **activiteit 2** (markeren + classificeren in JAS-klassen); begrippen (activiteit 3)
-en de RegelSpraak-fase zijn uit de webapp verwijderd en worden later op een agentische basis herbouwd.
-Het beheer loopt via aparte `/api/admin/*`-routes met een **apart admin-token** (zie hieronder).
+Daarnaast een uitgekleed **`/beheer`-scherm** voor het LLM-beheer: de modelprofielen die de
+agent aansturen (toevoegen/bewerken/verwijderen, default kiezen, verbinding testen),
+**gebruikers** en **API-tokens**. Het beheer loopt via aparte `/api/admin/*`-routes met een
+**apart admin-token** (zie hieronder).
 
 ## Architectuur — BFF met server-side token
 
