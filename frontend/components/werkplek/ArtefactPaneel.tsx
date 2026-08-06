@@ -96,7 +96,11 @@ export function ArtefactPaneel({ doc, info, ontbrekend, actiefId, onKies, onBesl
           <DocumentPaneel
             opschrift=""
             leden={ledenVan(info)}
-            elementen={doc.elementen.map((e) => ({ id: e.id, klasse: e.klasse, tekst: e.tekst }))}
+            // Verworpen markeringen niet in de tekst oplichten (de reviewer keurde ze net af); ze
+            // blijven wél in de ReviewQueue zichtbaar met hun "verworpen"-status.
+            elementen={doc.elementen
+              .filter((e) => e.lifecycle !== "rejected")
+              .map((e) => ({ id: e.id, klasse: e.klasse, tekst: e.tekst }))}
             actiefId={actiefId}
             onKies={onKies}
           />

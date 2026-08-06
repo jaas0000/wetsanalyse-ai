@@ -130,14 +130,25 @@ function DecisionCard({
           <button disabled={bezig} onClick={() => verstuur({ type: "approve" })} className={`${KNOP_BASIS} ${KNOP_SUCCES}`}>
             Akkoord
           </button>
-          <button onClick={() => setActie("edit")} className={`${KNOP_BASIS} ${KNOP_INFO}`}>
+          <button
+            onClick={() => {
+              // Reset naar de actuele waarden zodat een eerder geannuleerde bewerking niet blijft hangen.
+              setKlasse(el.klasse);
+              setToelichting(el.toelichting);
+              setActie("edit");
+            }}
+            className={`${KNOP_BASIS} ${KNOP_INFO}`}
+          >
             Aanpassen
           </button>
           <button onClick={() => setActie("reject")} className={`${KNOP_BASIS} ${KNOP_FOUT}`}>
             Verwerpen
           </button>
           <button
-            onClick={() => setActie("comment")}
+            onClick={() => {
+              setComment("");
+              setActie("comment");
+            }}
             className={`${KNOP_BASIS} border border-line text-ink hover:bg-surface`}
           >
             Opmerking
