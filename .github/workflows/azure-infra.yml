@@ -7,18 +7,11 @@ name: azure-infra
 
 on:
   push:
-    branches: [master, release/acceptance]
+    branches: [master]
     paths:
       - "deploy/azure/**"
       - ".github/workflows/azure-infra.yml"
   workflow_dispatch:
-    inputs:
-      env_name:
-        description: "Doel-env (dev = master → rg-wetsanalyse; acc = release/acceptance → rg-wetsanalyse-acc)"
-        required: true
-        default: dev
-        type: choice
-        options: [dev, acc]
 
 jobs:
   deploy:
@@ -36,7 +29,7 @@ jobs:
       LLM_API_BASE: ${{ vars.LLM_API_BASE }}
       AZURE_LOCATION: ${{ vars.AZURE_LOCATION }}
 
-    if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/release/acceptance' || github.event_name == 'workflow_dispatch'
+    if: github.ref == 'refs/heads/master'
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -51,8 +44,6 @@ jobs:
             && env.AZURE_AI_KEY != ''
             && env.GRAPHDB_TOKEN != ''
             && env.LLM_API_BASE != '' }}
-        env:
-          ENV_NAME: ${{ github.event_name == 'workflow_dispatch' && inputs.env_name || (github.ref == 'refs/heads/release/acceptance' && 'acc' || 'dev') }}
         run: |
           az login --service-principal \
             --username "$AZURE_CLIENT_ID" \
@@ -62,6 +53,6 @@ jobs:
           python3 deploy/azure/gen-deploy.py \
             --llm-api-base "$LLM_API_BASE" \
             --graphdb-token "$GRAPHDB_TOKEN" \
-            --env-name "$ENV_NAME" \
+            --resource-group rg-wetsanalyse \
             --location "${AZURE_LOCATION:-northeurope}" \
             --run
