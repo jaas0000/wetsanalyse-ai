@@ -29,12 +29,32 @@ export function ArtefactPaneel({ doc, info, ontbrekend, actiefId, onKies, onBesl
   const paneelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const opEsc = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onSluit();
+    const opKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        onSluit();
+        return;
+      }
+      // Focus binnen het paneel houden (Tab-trap).
+      if (e.key === "Tab" && paneelRef.current) {
+        const f = paneelRef.current.querySelectorAll<HTMLElement>(
+          'a[href],button:not([disabled]),textarea,input,select,[tabindex]:not([tabindex="-1"])',
+        );
+        if (f.length === 0) return;
+        const first = f[0];
+        const last = f[f.length - 1];
+        const actief = document.activeElement;
+        if (e.shiftKey && (actief === first || actief === paneelRef.current)) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && actief === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
     };
-    window.addEventListener("keydown", opEsc);
+    window.addEventListener("keydown", opKey);
     paneelRef.current?.focus();
-    return () => window.removeEventListener("keydown", opEsc);
+    return () => window.removeEventListener("keydown", opKey);
   }, [onSluit]);
 
   const opschrift = `${info.citeertitel || doc.bwbId} — artikel ${info.artikel}${doc.lid ? ` lid ${doc.lid}` : ""}`;

@@ -61,13 +61,19 @@ export function WerkplekClient({ initialGesprekId, onGesprekAangemaakt, onGewijz
   const [artefactSlug, setArtefactSlug] = useState<string | undefined>();
   const lijstRef = useRef<HTMLDivElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
+  // Synchrone guard tegen dubbel-verzenden (twee Enters in dezelfde tick): de `bezig`-state komt te laat
+  // — vóór de eerste `await` (maakGesprek) is die nog false, wat twee gesprekken zou aanmaken.
+  const bezigRef = useRef(false);
 
-  // Hydrateer één keer bij mount: bestaande gespreksberichten → thread. (De shell remount dit component
-  // via een key wanneer echt van gesprek wordt gewisseld, dus dit hoeft niet op gesprekId te reageren.)
+  // Hydrateer één keer bij mount: bestaande gespreksberichten → thread. Lees de id uit een MOUNT-vaste
+  // ref, niet uit de reactieve prop: bij de eerste beurt zet de shell `activeId` (→ prop null→id) zónder
+  // remount; zou de effect daarop herstarten, dan overschrijft `haalGesprek` de lopende stream. Een échte
+  // gespreks-wissel remount dit component (via `key={mountKey}`), dus de ref draagt dan de juiste id.
+  const hydratieId = useRef(initialGesprekId).current;
   useEffect(() => {
-    if (!initialGesprekId) return;
+    if (!hydratieId) return;
     let afgebroken = false;
-    haalGesprek(initialGesprekId)
+    haalGesprek(hydratieId)
       .then((g) => {
         if (afgebroken) return;
         setItems(
@@ -86,7 +92,7 @@ export function WerkplekClient({ initialGesprekId, onGesprekAangemaakt, onGewijz
     return () => {
       afgebroken = true;
     };
-  }, [initialGesprekId]);
+  }, [hydratieId]);
 
   useEffect(() => {
     lijstRef.current?.scrollTo({ top: lijstRef.current.scrollHeight, behavior: "smooth" });
@@ -140,7 +146,8 @@ export function WerkplekClient({ initialGesprekId, onGesprekAangemaakt, onGewijz
 
   async function verstuur(vast?: string) {
     const prompt = (vast ?? invoer).trim();
-    if (!prompt || bezig) return;
+    if (!prompt || bezigRef.current) return;
+    bezigRef.current = true;
     setInvoer("");
 
     // Zorg voor een gesprek-id (maak er bij de eerste beurt één aan; titel = de vraag, afgekapt).
@@ -153,6 +160,7 @@ export function WerkplekClient({ initialGesprekId, onGesprekAangemaakt, onGewijz
         onGesprekAangemaakt(gid);
       } catch (e) {
         setItems((xs) => [...xs, { id: uid(), type: "antwoord", tekst: `⚠️ ${foutTekst(e)}` }]);
+        bezigRef.current = false;
         return;
       }
     }
@@ -231,6 +239,7 @@ export function WerkplekClient({ initialGesprekId, onGesprekAangemaakt, onGewijz
       updateItem(antId, { tekst: `⚠️ ${foutTekst(e)}` });
     } finally {
       setBezig(false);
+      bezigRef.current = false;
     }
   }
 
@@ -251,7 +260,7 @@ export function WerkplekClient({ initialGesprekId, onGesprekAangemaakt, onGewijz
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div className="flex min-h-0 flex-1 flex-col">
       {/* Thread — enige scrollende gebied; berichten in een gecentreerde leeskolom */}
       <div ref={lijstRef} className="min-h-0 flex-1 overflow-y-auto" aria-live="polite">
         <div className="mx-auto max-w-3xl space-y-6 px-4 py-8">

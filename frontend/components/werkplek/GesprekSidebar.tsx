@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { signOut, useSession } from "next-auth/react";
 
 import { GesprekLijst } from "@/components/werkplek/GesprekLijst";
@@ -39,8 +39,26 @@ export function GesprekSidebar({
 }: Props) {
   const { data: session } = useSession();
   const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
   const isBeheerder = session?.user?.role === "beheerder";
   const naam = session?.user?.userid ?? session?.user?.email ?? "";
+
+  // Sluit de instellingen-popover bij Escape of een klik buiten het blok.
+  useEffect(() => {
+    if (!menuOpen) return;
+    const opBuiten = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
+    };
+    const opEsc = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMenuOpen(false);
+    };
+    document.addEventListener("mousedown", opBuiten);
+    window.addEventListener("keydown", opEsc);
+    return () => {
+      document.removeEventListener("mousedown", opBuiten);
+      window.removeEventListener("keydown", opEsc);
+    };
+  }, [menuOpen]);
 
   return (
     <div className="flex h-full flex-col bg-surface">
@@ -97,7 +115,7 @@ export function GesprekSidebar({
       </div>
 
       {/* Instellingen + gebruiker (onderin) */}
-      <div className="relative border-t border-line px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2">
+      <div ref={menuRef} className="relative border-t border-line px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2">
         {menuOpen && (
           <div className="absolute inset-x-3 bottom-full mb-1 overflow-hidden rounded-kaart border border-line bg-paper shadow-kaart">
             <Link

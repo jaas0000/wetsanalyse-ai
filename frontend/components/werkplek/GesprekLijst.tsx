@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import type { GesprekSamenvatting } from "@/lib/types";
 
@@ -60,8 +60,12 @@ function Rij({
   const [bewerk, setBewerk] = useState(false);
   const [titel, setTitel] = useState(gesprek.titel);
   const label = gesprek.titel || "Nieuw gesprek";
+  // `Enter` sluit de bewerk-modus (unmount van de input) → `onBlur` vuurt daarná óók: guard tegen 2× PATCH.
+  const bewaardRef = useRef(false);
 
   function bewaar() {
+    if (bewaardRef.current) return;
+    bewaardRef.current = true;
     const schoon = titel.trim();
     if (schoon && schoon !== gesprek.titel) onHernoem(schoon);
     setBewerk(false);
@@ -112,6 +116,7 @@ function Rij({
           type="button"
           onClick={() => {
             setTitel(gesprek.titel);
+            bewaardRef.current = false;
             setBewerk(true);
           }}
           aria-label="Hernoemen"
