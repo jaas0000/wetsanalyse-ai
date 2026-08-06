@@ -33,7 +33,7 @@ compose. Enige stack-env: `PROXY_NETWORK` (default `homeinfra_internal`).
 
 ## 2. De app-stacks laten exporteren
 
-Zet in elke app-stack (`wetsanalyse-api`, `wetsanalyse-frontend`, `wettenbank-mcp`) de stack-env en
+Zet in elke app-stack (`wetsanalyse-api`, `wetsanalyse-frontend`) de stack-env en
 **herstart** de container (OTel initialiseert bij processtart):
 
 ```
@@ -62,12 +62,11 @@ Doe een chat en een keuzelijst-/structuur-ophaal in de webapp, dan in Grafana �
 - **Tempo**: één trace `frontend → API → MCP` (gedeelde `trace_id`), plus de keten `frontend → graph-qa`.
 - **Loki**: de gecorreleerde logregels (filter op `trace_id`); via de derived field spring je door naar
   de trace in Tempo.
-- **Prometheus**: `wettenbank_cache_toegang_total` (label `resultaat=hit|miss`) en de auto-http-metrics
-  (`http_server_duration_milliseconds_*`). Services onderscheiden via label `exported_job`.
-  Uit de connectors: `traces_service_graph_request_total` (labels `client`/`server`/`connection_type`)
-  en `traces_spanmetrics_calls_total`/`_duration_*` (labels `service_name`/`span_name`). Let op: de
-  `http_client_*`-metric draagt **geen host/target-label**, dus per-bestemming-edges (frontend →
-  API, MCP → overheid.nl, API → Postgres) komen uit de service-graph, niet uit `http_client`.
+- **Prometheus**: de auto-http-metrics (`http_server_duration_milliseconds_*`). Services onderscheiden
+  via label `exported_job`. Uit de connectors: `traces_service_graph_request_total` (labels
+  `client`/`server`/`connection_type`) en `traces_spanmetrics_calls_total`/`_duration_*` (labels
+  `service_name`/`span_name`). Let op: de `http_client_*`-metric draagt **geen host/target-label**, dus
+  per-bestemming-edges (frontend → API, API → Postgres) komen uit de service-graph, niet uit `http_client`.
 
 ## Aandachtspunten
 
@@ -86,15 +85,12 @@ De twee hebben een **duidelijke rolverdeling** (en linken naar elkaar): topologi
 observability = *trends/analytics*. Metrics staan zo op één plek, zonder duplicatie.
 
 - `grafana-dashboard-topologie.json` — *"Wetsanalyse — systeemtopologie"* (**live/ops**): de **live keten
-  die oplicht** (Canvas: frontend → API → MCP/LLM/Postgres → overheid.nl, en frontend → graph-qa; met een rode
-  **keten-fouten (15 min)**-badge), de **automatische Node Graph** (servicegraph-subset), een
-  **trace-waterfall + logs** om één executie te volgen, en de **live analyses-tabel** (met gekleurde
-  jobs-stats) die het opgeheven frontend-`/dashboard` vervangt. Geen trend-panels — die staan in het
-  observability-dashboard (dashboardlink bovenin).
+  die oplicht** (Canvas: frontend → API/graph-qa → LLM/Postgres; met een rode **keten-fouten (15 min)**-badge),
+  de **automatische Node Graph** (servicegraph-subset) en een **trace-waterfall + logs** om één executie te
+  volgen. Geen trend-panels — die staan in het observability-dashboard (dashboardlink bovenin).
 - `grafana-dashboard-wetsanalyse.json` — *"Wetsanalyse — observability"* (**trends/analytics**):
-  MCP-cache, HTTP (request-rate/latency-p95 met threshold-lijnen/foutrate + 5xx-foutratio),
-  **scrape-health** (targets up/down) en de **overheid.nl-dependency** (SRU-latency p95 + request-rate),
-  plus logs en traces.
+  HTTP (request-rate/latency-p95 met threshold-lijnen/foutrate + 5xx-foutratio), **scrape-health**
+  (targets up/down), plus logs en traces.
 
 Importeren:
 
@@ -107,21 +103,20 @@ Vereist de datasource-uid's **`wa-prometheus`**, **`wa-loki`**, **`wa-tempo`** (
 `grafana-datasources.yaml`) en een map met uid `wetsanalyse`.
 
 > **Systeemtopologie afronden.** De Canvas is bewust een startpunt: doorloopt/lichthoogte fijn je het
-> makkelijkst interactief bij (*Edit → Canvas*). De node-queries voor frontend/Postgres/graph-qa/overheid.nl
-> leunen op de service-graph-metrics — draai eerst een chat/keuzelijst-ophaal zodat de connectors data
-> hebben, en verifieer dan de labelwaarden (`client`/`server`) in *Explore* voordat je ze vastzet.
+> makkelijkst interactief bij (*Edit → Canvas*). De node-queries voor frontend/Postgres/graph-qa
+> leunen op de service-graph-metrics — draai eerst een chat zodat de connectors data hebben, en
+> verifieer dan de labelwaarden (`client`/`server`) in *Explore* voordat je ze vastzet.
 
-## 6. Frontend/MCP-logs naar Loki (Alloy)
+## 6. Frontend-logs naar Loki (Alloy)
 
-De **API** logt via OTLP naar Loki. De **frontend** en **MCP** loggen naar stdout/stderr; de
-`alloy`-service (in de compose) scrapet die container-logs en pusht ze naar Loki
-(`alloy-config.alloy`). De config filtert bewust op `wetsanalyse-frontend` + `wettenbank-mcp` (de API
-niet — die komt al via OTLP, dus geen dubbeling), zet `service_name` op de containernaam, promoveert
-`niveau` → label `detected_level` en `trace_id`/`categorie` → structured metadata.
+De **API** logt via OTLP naar Loki. De **frontend** logt naar stdout/stderr; de `alloy`-service (in de
+compose) scrapet die container-logs en pusht ze naar Loki (`alloy-config.alloy`). De config filtert
+bewust op `wetsanalyse-frontend` (de API niet — die komt al via OTLP, dus geen dubbeling), zet
+`service_name` op de containernaam, promoveert `niveau` → label `detected_level` en
+`trace_id`/`categorie` → structured metadata.
 
 - **Docker-socket:** alloy mount `/var/run/docker.sock` **read-only** (alleen containerlogs lezen).
-- Verifiëren: Grafana → Explore → Loki → `{service_name="wettenbank-mcp"}` en
-  `{service_name="wetsanalyse-frontend"}` geven logregels.
+- Verifiëren: Grafana → Explore → Loki → `{service_name="wetsanalyse-frontend"}` geeft logregels.
 
 ## 7. Alerting
 

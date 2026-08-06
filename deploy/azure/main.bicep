@@ -1,6 +1,6 @@
 // deploy/azure/main.bicep
 // Azure Container Apps-stack voor Wetsanalyse — 4 componenten:
-//   PostgreSQL Flexible Server · Wettenbank MCP · API · Frontend
+//   PostgreSQL Flexible Server · API · graph-qa · Frontend
 //
 // Deployment (vanuit de projectroot):
 //   python3 deploy/azure/gen-deploy.py "<azure-ai-key>" \
@@ -118,61 +118,9 @@ resource cae 'Microsoft.App/managedEnvironments@2024-03-01' = {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 3. Wettenbank MCP (internal — alleen bereikbaar binnen de CAE)
-// ─────────────────────────────────────────────────────────────────────────────
-resource mcpApp 'Microsoft.App/containerApps@2024-03-01' = {
-  name: '${appName}-mcp'
-  location: location
-  properties: {
-    managedEnvironmentId: cae.id
-    configuration: {
-      ingress: {
-        external: false
-        targetPort: 3000
-        transport: 'auto'
-      }
-    }
-    template: {
-      containers: [
-        {
-          name: 'mcp'
-          image: 'ghcr.io/palmw01/wettenbank-mcp:latest'
-          resources: {
-            cpu: json('0.25')
-            memory: '0.5Gi'
-          }
-          env: [
-            { name: 'MCP_TRANSPORT',     value: 'http' }
-            { name: 'PORT',              value: '3000' }
-            { name: 'MCP_ALLOW_NO_AUTH', value: '1' }
-          ]
-          probes: [
-            {
-              type: 'Liveness'
-              httpGet: { path: '/health', port: 3000 }
-              initialDelaySeconds: 10
-              periodSeconds: 30
-              timeoutSeconds: 5
-              failureThreshold: 3
-            }
-          ]
-        }
-      ]
-      scale: {
-        minReplicas: 1
-        maxReplicas: 1
-      }
-    }
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// 4. API Container App (internal)
+// 3. API Container App (internal)
 // ─────────────────────────────────────────────────────────────────────────────
 var dbUrl = 'postgresql+asyncpg://wetsanalyse:${dbAdminPassword}@${pgServer.properties.fullyQualifiedDomainName}:5432/wetsanalyse?ssl=require'
-// Interne app-FQDN dragen het verplichte `.internal.`-segment (`<app>.internal.<defaultDomain>`);
-// die niet met de hand opbouwen maar uit de resource lezen, anders resolvet de host niet.
-var mcpInternalUrl = 'https://${mcpApp.properties.configuration.ingress.fqdn}/mcp'
 
 resource apiApp 'Microsoft.App/containerApps@2024-03-01' = {
   name: '${appName}-api'
@@ -226,7 +174,6 @@ resource apiApp 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'LLM_PROVIDER',                value: llmProvider }
             { name: 'LLM_MODEL',                   value: llmModel }
             { name: 'LLM_API_BASE',                value: llmApiBase }
-            { name: 'WETTENBANK_MCP_URL',          value: mcpInternalUrl }
             { name: 'WETSANALYSE_AUTH_REQUIRED',   value: '1' }
             { name: 'HOME',                        value: '/tmp' }
             { name: 'LLM_API_KEY_FILE',              value: '/run/secrets/llm_api_key' }
@@ -264,7 +211,7 @@ resource apiApp 'Microsoft.App/containerApps@2024-03-01' = {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 5. graph-qa Container App (internal) — de agent op de BWB-kennisgraaf (GraphDB)
+// 4. graph-qa Container App (internal) — de agent op de BWB-kennisgraaf (GraphDB)
 // ─────────────────────────────────────────────────────────────────────────────
 // Fase 1: verbindt met de HUIDIGE graaf via de publieke GraphDB-MCP (graphdbMcpUrl-default). Intern
 // (alleen binnen de CAE); niet publiek, want graph-qa praat met de open+writable GraphDB. Fase 2:
@@ -349,7 +296,7 @@ resource graphQaApp 'Microsoft.App/containerApps@2024-03-01' = {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 6. Frontend Container App (external HTTPS)
+// 5. Frontend Container App (external HTTPS)
 // ─────────────────────────────────────────────────────────────────────────────
 // Interne API-/graph-qa-FQDN uit de resource (bevat `.internal.`); de externe frontend-URL mág met de
 // hand (extern = `<app>.<defaultDomain>`) — een `.ingress.fqdn`-referentie zou hier een cycle geven
@@ -442,5 +389,4 @@ resource frontendApp 'Microsoft.App/containerApps@2024-03-01' = {
 output frontendUrl        string = 'https://${frontendApp.properties.configuration.ingress.fqdn}'
 output apiInternalFqdn    string = apiApp.properties.configuration.ingress.fqdn
 output graphQaInternalFqdn string = graphQaApp.properties.configuration.ingress.fqdn
-output mcpInternalFqdn    string = mcpApp.properties.configuration.ingress.fqdn
 output dbServerFqdn       string = pgServer.properties.fullyQualifiedDomainName

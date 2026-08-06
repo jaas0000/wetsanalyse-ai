@@ -3,8 +3,8 @@
  * Wetsanalyse-admin MCP-server (stdio).
  *
  * Ontsluit de bestaande admin-API van de Wetsanalyse-webapp (`/v1/admin/*`) als agent-tools, zodat
- * een MCP-client (Claude Code) de productie-app kan configureren: modelprofielen, wet-catalogus,
- * gebruikers en de genereerbare API-tokens (read).
+ * een MCP-client (Claude Code) de productie-app kan configureren: modelprofielen, gebruikers en de
+ * genereerbare API-tokens (read).
  *
  * Config via env (nooit in de repo):
  *   WETSANALYSE_ADMIN_API_URL   — basis-URL van de API, bv. https://wetsanalyse-api.ipalm.nl
@@ -107,34 +107,6 @@ const TOOLS = [
         input: S({ name: z.string() }),
         run: async (a) => {
             await apiFetch("DELETE", `/v1/admin/profiles/${seg(a.name)}`);
-            return { ok: true };
-        },
-    },
-    // — wet-catalogus —
-    {
-        name: "list_wetten",
-        description: "Lijst de wet-catalogus (BWB-id + naam).",
-        input: S({}),
-        run: () => apiFetch("GET", "/v1/admin/wetten"),
-    },
-    {
-        name: "upsert_wet",
-        description: "Maak of werk een wet-catalogus-item bij (BWB-id + leesbare naam).",
-        input: S({ bwbId: z.string(), naam: z.string().optional() }),
-        run: ({ bwbId, naam }) => apiFetch("PUT", `/v1/admin/wetten/${seg(bwbId)}`, { naam: naam ?? "" }),
-    },
-    {
-        name: "resolve_wet",
-        description: "Stel de officiële citeertitel van een wet voor via de wettenbank-MCP.",
-        input: S({ bwbId: z.string() }),
-        run: (a) => apiFetch("POST", `/v1/admin/wetten/${seg(a.bwbId)}/resolve`),
-    },
-    {
-        name: "delete_wet",
-        description: "Verwijder een wet-catalogus-item.",
-        input: S({ bwbId: z.string() }),
-        run: async (a) => {
-            await apiFetch("DELETE", `/v1/admin/wetten/${seg(a.bwbId)}`);
             return { ok: true };
         },
     },

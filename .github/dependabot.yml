@@ -2,21 +2,6 @@
 # Houdt de npm-dependencies, de basis-image en de GitHub Actions actueel.
 version: 2
 updates:
-  # --- MCP-server (TypeScript) ---
-  - package-ecosystem: npm
-    directory: /tools/wettenbank-mcp
-    schedule:
-      interval: weekly
-    open-pull-requests-limit: 5
-    groups:
-      dev-dependencies:
-        dependency-type: development
-
-  - package-ecosystem: docker
-    directory: /tools/wettenbank-mcp
-    schedule:
-      interval: weekly
-
   # --- Frontend (Next.js) ---
   - package-ecosystem: npm
     directory: /frontend

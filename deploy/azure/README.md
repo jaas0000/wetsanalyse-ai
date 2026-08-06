@@ -5,7 +5,6 @@ Deployt de volledige Wetsanalyse-stack op **Azure Container Apps** met vijf comp
 | Component | Image | Bereikbaar |
 |---|---|---|
 | PostgreSQL | Azure Database for PostgreSQL | intern |
-| Wettenbank MCP | `ghcr.io/palmw01/wettenbank-mcp` | intern |
 | API | `ghcr.io/palmw01/wetsanalyse-api` | intern |
 | graph-qa | `ghcr.io/palmw01/graph-qa` | intern |
 | Frontend | `ghcr.io/palmw01/wetsanalyse-frontend` | publiek HTTPS |

@@ -13,8 +13,7 @@ ongewijzigd met alléén gestructureerde JSON-logging (nul overhead, geen gedrag
 |-----------|---------|--------|---------|
 | **API** (`api/`, FastAPI) | JSON-`dictConfig`, request-id-middleware, access-log | FastAPI-requests, DB | http-server-latency, request-count/foutrate (auto) |
 | **Frontend** (`frontend/`, Next.js) | server-side JSON naar stdout in de BFF-lagen | `@vercel/otel`: route handlers + uitgaande `fetch` (traceparent) | request-count/latency (auto) |
-| **MCP** (`tools/wettenbank-mcp/`) | bestaande JSON-stderr-logger, nu met trace-velden | `/mcp`-requests (http) + SRU/repository-fetches (undici) | http-server-latency, upstream-fetch-duur, cache hit/miss |
-| **Chatbot-hop** | API `/v1/chat` + BFF-route (geen inhoud/secret) | span `chat.n8n` + traceparent naar n8n | — |
+| **graph-qa** (`tools/graph-qa/`) | gestructureerde JSON-logs | `/v1/chat` (SSE) + GraphDB-MCP-calls | http-server-latency (auto) |
 
 De **n8n-workflow en de GraphDB-kennisgraaf draaien buiten deze repo** en zijn niet
 geïnstrumenteerd. Voor een trace die dóórloopt tot in de agent moet de n8n-workflow zelf
@@ -22,15 +21,14 @@ OTel-instrumentatie krijgen (follow-up).
 
 ## Correlatie
 
-Eén **trace-id** verbindt de keten: `frontend → API → MCP` (wettekst ophalen) en
-`frontend → API → n8n` (chat). OTel propageert automatisch via de W3C-`traceparent`-header op
+Eén **trace-id** verbindt de keten: `frontend → API → PostgreSQL` en `frontend → graph-qa` (chat, SSE). OTel propageert automatisch via de W3C-`traceparent`-header op
 uitgaande `fetch`/httpx-calls. Elke logregel draagt `trace_id`/`span_id` zodra er een span actief is,
 plus (in de API) een `request_id` per inkomend verzoek (`X-Request-Id`, gegenereerd of overgenomen en
 in de response geëchood).
 
 ## Logschema
 
-Alle drie de loggers delen dezelfde vorm (bron: `tools/wettenbank-mcp/src/logger.ts`):
+Alle loggers delen dezelfde vorm (bv. `frontend/lib/logger.ts`):
 
 ```json
 {"ts":"2026-07-16T14:37:23.698Z","niveau":"info","categorie":"functioneel",
@@ -49,7 +47,7 @@ Zet in elke stack (of `.env`) het endpoint van je OTel-Collector; laat 'm leeg o
 
 ```bash
 OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318   # leeg = uit (alleen JSON-logs)
-OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf                # API/MCP; frontend gebruikt @vercel/otel
+OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf                # API/graph-qa; frontend gebruikt @vercel/otel
 OTEL_SERVICE_NAME=wetsanalyse-api                        # per component (zie compose-defaults)
 OTEL_RESOURCE_ATTRIBUTES=deployment.environment=productie
 LOG_LEVEL=info
@@ -63,7 +61,7 @@ De env-vars staan al in de drie `docker-compose.yml`'s, de `.env.example`'s en (
 > **Let op bij Portainer + CI-deploy:** een stack-update via de Portainer-API **vervangt** de
 > volledige stack-env door wat de deploy-payload meestuurt — een handmatig in Portainer gezette
 > `OTEL_EXPORTER_OTLP_ENDPOINT` overleeft de eerstvolgende redeploy dus niet. Daarom geven de drie
-> publish-workflows (`api`/`frontend`/`docker`-`-publish.yml`) het endpoint expliciet mee in de
+> publish-workflows (`api`/`frontend`-`-publish.yml`) het endpoint expliciet mee in de
 > `jq`-payload, default `http://otel-collector:4318` (override via repo-var
 > `vars.OTEL_EXPORTER_OTLP_ENDPOINT`). Laat die regel staan — zonder het endpoint valt de
 > compose-default terug op leeg en zet een deploy de hele observability stil (alleen de
@@ -99,7 +97,7 @@ Grafana. Volledige stappen: [`deploy/observability/README.md`](../deploy/observa
 
 De stack bevat bovendien:
 
-- **Alloy** — scrapet de container-stdout van **frontend + MCP** (die niet via OTLP loggen) en pusht
+- **Alloy** — scrapet de container-stdout van de **frontend** (die niet via OTLP logt) en pusht
   die naar Loki (`service_name` = containernaam, `niveau` → label `detected_level`, `trace_id`/
   `categorie` als structured metadata). De API blijft via OTLP loggen, dus geen dubbeling.
   Read-only `docker.sock`-mount. Config: `alloy-config.alloy`.
@@ -109,7 +107,7 @@ De stack bevat bovendien:
   systeemtopologie. Niet-geïnstrumenteerde afhankelijkheden (LLM, n8n, overheid.nl, Postgres)
   verschijnen als virtuele peer-node. Configuratie: `connectors:` in `otel-collector-config.yaml`.
 - **Dashboards** (map "Wetsanalyse") — `grafana-dashboard-wetsanalyse.json` (*"observability"*:
-  MCP-cache, HTTP-verkeer, scrape-health, overheid.nl-dependency, logs, traces) én
+  HTTP-verkeer, scrape-health, logs, traces) én
   `grafana-dashboard-topologie.json` (*"systeemtopologie"*: de live keten die oplicht in een
   Canvas-plaat, de automatische Node Graph, en een trace-waterfall + logs om één executie te volgen).
   Importeren via de UI, `provision-grafana.sh` (beide) of `POST /api/dashboards/db`.
@@ -134,15 +132,14 @@ eerlijker en eenduidiger.
 ## Verifiëren
 
 - **No-op-gating**: start zonder endpoint → alles draait, alleen JSON-logs.
-- **Trace-correlatie**: vraag in de werkplek een keuzelijst/structuur op → één trace omspant frontend
-  → API → MCP. De werkplek-chat loopt frontend → graph-qa (SSE).
+- **Trace-correlatie**: de werkplek-chat loopt frontend → graph-qa (SSE); login/beheer loopt
+  frontend → API → PostgreSQL — één trace deelt de `trace_id`.
 - **Geen lek**: `grep` de logoutput op `bearer`/`secret`/de chat-`secret`-waarde → leeg.
 
 ### Metric- en labelnamen (zoals ze in Prometheus/Loki landen)
 
 De OTLP→Prometheus-export voegt unit-/type-suffixen toe; onthoud dit bij het bouwen van queries:
 
-- `wettenbank_cache_toegang_total` — counter, label **`resultaat`** (`hit`/`miss`).
 - Auto-HTTP: `http_server_duration_milliseconds_*` (labels `http_method`/`http_status_code`/`http_target`).
   Let op: `http_client_*` draagt **géén** host/target-label — per-bestemming-edges komen uit de
   service-graph, niet uit `http_client`.
@@ -150,7 +147,7 @@ De OTLP→Prometheus-export voegt unit-/type-suffixen toe; onthoud dit bij het b
   **`client`**/**`server`**/`connection_type`) en `traces_spanmetrics_calls_total`/`_duration_*`
   (labels **`service_name`**/**`span_name`**). Leeg tot de collector met de connectors draait én er
   traces zijn.
-- Services onderscheiden via het label **`exported_job`** (`wetsanalyse-api`/`wettenbank-mcp`/…).
+- Services onderscheiden via het label **`exported_job`** (`wetsanalyse-api`/`wetsanalyse-frontend`/…).
 - **Loki**: de OTLP-logs dragen de velden als **structured metadata** (`detected_level`, `trace_id`,
   `categorie`), niet als JSON in de regel — filter dus op die labels, niet met `| json`. De
   Loki-datasource heeft een derived field `trace_id` → Tempo voor de doorklik.

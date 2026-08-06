@@ -1,12 +1,5 @@
 {
   "mcpServers": {
-    "wettenbank": {
-      "type": "http",
-      "url": "https://wettenbank-mcp.ipalm.nl/mcp",
-      "headers": {
-        "Authorization": "Bearer ${WETTENBANK_TOKEN}"
-      }
-    },
     "wetsanalyse-admin": {
       "command": "node",
       "args": ["tools/wetsanalyse-admin-mcp/dist/index.js"],

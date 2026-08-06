@@ -8,9 +8,9 @@ Een **agent-platform** voor **Wetsanalyse**: het gestructureerd, brongetrouw en 
 van Nederlandse wet- en regelgeving volgens de methode Wetsanalyse (Ausems, Bulles & Lokin) en het
 Juridisch Analyseschema (JAS). De kern is een gedeployde dienst — de **wetsanalyse-API**, de
 **webapp met de werkplek** en de eigen **QA/annotatie-agent (`tools/graph-qa/`, "de Juridische
-Assistent")** op de **BWB-kennisgraaf** — die draait op Azure Container Apps én Portainer. De
-**wettenbank-MCP** (live wettekst) is de databron voor het skill-spoor en de graaf-ingestie, niet
-meer voor de werkplek-runtime.
+Assistent")** op de **BWB-kennisgraaf** — die draait op Azure Container Apps én Portainer. De graaf
+wordt gevuld door de **BWB-importer** (in de `palmw01/graphdb`-repo), die de wettekst rechtstreeks bij
+overheid.nl ophaalt — er is geen aparte wettenbank-MCP meer.
 
 Brongetrouwheid is niet onderhandelbaar: werk alleen met letterlijk opgehaalde wettekst, citeer
 letterlijk, en houd elke markering/begrip/regel/annotatie herleidbaar naar artikel + lid +
@@ -31,18 +31,14 @@ expliciet gemaakt in plaats van schijnzekerheid.
 
 ### Platform-componenten
 
-1. **`tools/wettenbank-mcp/`** — een MCP-server (TypeScript) die de actuele wettekst ophaalt via de
-   publieke SRU-API van `overheid.nl`. Databron voor het (legacy) skill-spoor en de graaf-ingestie;
-   de deployte werkplek werkt op de graaf (via graph-qa) en raakt deze MCP niet. Heeft een eigen,
-   gedetailleerde `CLAUDE.md` — lees die bij werk *in* de MCP.
-2. **`api/`** — headless FastAPI-backend (PostgreSQL-opslag, per-client bearer-auth) voor de werkplek.
+1. **`api/`** — headless FastAPI-backend (PostgreSQL-opslag, per-client bearer-auth) voor de werkplek.
    Bedient het **annotatie-domein** (`/v1/annotatie/*`: documenten/elementen/beslissingen + append-only
    auditlog), het **login-/gebruikersbeheer** (de API is de identiteitsbron van de webapp), het
    **LLM-modelprofielbeheer** (`/v1/admin/*`; de env-`LLM_*`-waarden seeden alleen het eerste
    default-profiel) en de **profiel-keuzelijst** (`/v1/profiles`). De oude
    `/v1/projects`-analyse-pijplijn (generatie-engine, GraphDB-bron, review-lus, rapport, JAS-promotie)
    is **verwijderd** nadat de webapp erop uit ging. Eigen `CLAUDE.md` + `README.md`.
-3. **`frontend/`** — Next.js-webapp (BFF) bovenop de API. De app **is de werkplek** (`/workbench`, de
+2. **`frontend/`** — Next.js-webapp (BFF) bovenop de API. De app **is de werkplek** (`/workbench`, de
    *Assistent-pagina*): één chat-achtig gespreksvenster voor **vragen én JAS-annotatie**, live tegen
    graph-qa (SSE); de home leidt daarheen door. Daarnaast een uitgekleed **`/beheer`-scherm**
    (modelprofielen, gebruikers, API-tokens; achter een apart admin-token). De analyse-webapp (analyses
@@ -52,7 +48,7 @@ expliciet gemaakt in plaats van schijnzekerheid.
    `/setup`; optionele TOTP-2FA via `/account`). De UI volgt de **Rijkshuisstijl** (Belastingdienst-
    stijlvak: lintblauw, Fira-fonts, het officiële Belastingdienst-logo en JAS-klassekleuren uit
    `docs/wetsanalyse/wa-table.png`). Eigen `CLAUDE.md` + `README.md`.
-4. **`tools/graph-qa/`** — de eigen **QA/annotatie-agent** ("de Juridische Assistent") die vragen over
+3. **`tools/graph-qa/`** — de eigen **QA/annotatie-agent** ("de Juridische Assistent") die vragen over
    wet- en regelgeving beantwoordt door de BWB-**kennisgraaf** (GraphDB via MCP) te bevragen en het
    antwoord **brongetrouw** te onderbouwen (grounding + bronnen uit de tool-trace). Eén **unified
    LangGraph-agent**: een **supervisor** kiest per vraag een worker-keten — de **antwoord-worker**
@@ -61,14 +57,14 @@ expliciet gemaakt in plaats van schijnzekerheid.
    Endpoints: `POST /v1/chat` (SSE) en `GET /v1/artikel`. De werkplek praat er **direct** mee (SSE);
    de persistente review-state loopt via de API (`/v1/annotatie/*`). Deployt via CI naar Azure
    Container Apps én een Portainer-stack (image `ghcr.io/palmw01/graph-qa`). Eigen `CLAUDE.md` + `README.md`.
-5. **`analyses/`** — output van het skill-spoor: per **werkgebied** (kennisdomein met **meerdere
+4. **`analyses/`** — output van het skill-spoor: per **werkgebied** (kennisdomein met **meerdere
    bronnen** — een bron = `bwbId`+`artikel`+`lid?`, niet één artikel) een map met het eindrapport en de
    `werk/`-tussenbestanden. Activiteit 2 markeert per bron. De map heet naar de werkgebied-naam
    (kebab-case); bij ontbreken valt ze terug op de eerste bron (`<bwbid>-art<nr>[-lidN]`).
 
 ### Legacy / oorsprong — het skill-spoor (gedeelde inhoudsbron)
 
-6. **`.claude/skills/wetsanalyse/`** — de inhoudelijke skill die de analyse **interactief in Claude
+5. **`.claude/skills/wetsanalyse/`** — de inhoudelijke skill die de analyse **interactief in Claude
    Code** uitvoert (activiteit 2: markeren + classificeren in JAS-klassen) en een `rapport.json`
    oplevert (HTML-viewer; Markdown als export). De skill *gebruikt* de MCP als bron.
 
@@ -81,26 +77,18 @@ los van — dat werkt op de GraphDB-kennisgraaf met zijn eigen toollaag en promp
 Dit is een verzameling losse onderdelen, geen monorepo met één buildsysteem. Het bindmiddel
 zijn **projectrelatieve paden**, zodat de map portabel is tussen machines/OS'en:
 
-- `.mcp.json` → **remote HTTP**: `type: "http"`, `url: https://wettenbank-mcp.ipalm.nl/mcp`,
-  met `Authorization: Bearer ${WETTENBANK_TOKEN}` (token via env, niet in de repo). De server
-  draait als Portainer-stack achter Nginx Proxy Manager — zie `tools/wettenbank-mcp/CLAUDE.md`
-  (Deployment). Het lokale **stdio**-alternatief (`command: "node"`,
-  `args: ["tools/wettenbank-mcp/dist/index.js"]`) staat daar ook beschreven als fallback.
-  Wil iemand buiten dit project alleen het publieke image `ghcr.io/palmw01/wettenbank-mcp`
-  draaien, dan is `tools/wettenbank-mcp/HANDLEIDING-IMAGE.md` de beknopte instap.
-  `.mcp.json` bevat daarnaast twee **sessie-tools**: `wetsanalyse-admin` (stdio-server die de
-  admin-API `/v1/admin/*` als tools ontsluit; token via `WETSANALYSE_ADMIN_TOKEN` — zie
-  `tools/wetsanalyse-admin-mcp/README.md`) en `grafana` (de officiële `mcp/grafana`-server voor het
-  inrichten van datasources/dashboards; `GRAFANA_URL` + `GRAFANA_SERVICE_ACCOUNT_TOKEN=${GRAFANA_TOKEN}`).
+- `.mcp.json` → twee **sessie-tools** (de wettenbank-MCP is verwijderd): `wetsanalyse-admin`
+  (stdio-server die de admin-API `/v1/admin/*` als tools ontsluit; token via `WETSANALYSE_ADMIN_TOKEN`
+  — zie `tools/wetsanalyse-admin-mcp/README.md`) en `grafana` (de officiële `mcp/grafana`-server voor
+  het inrichten van datasources/dashboards; `GRAFANA_URL` + `GRAFANA_SERVICE_ACCOUNT_TOKEN=${GRAFANA_TOKEN}`).
 - `.claude/settings.json` → **gedeeld en gecommit**: bevat een `PreToolUse`-hook die
   `scripts/write_guard.py` aanroept bij elke Write/Edit-tool. De guard beschermt beide sporen:
   hij blokkeert schrijven naar `analyses/**/werk/**/feedback.json` (uitsluitend de review-server
   schrijft dat) en het overschrijven van een `analyse.json` in `werk/` zodra de
   ronde **voltooid** is — d.w.z. zodra `feedback.json` in de ronde-map bestaat (gereviewde
   rondes zijn immutabel; correcties vóór de review mogen wél).
-- `.claude/settings.local.json` → `enabledMcpjsonServers` (bv. `["wettenbank", "grafana"]`) plus een
-  **machine-lokale** allowlist en de tokens (`WETTENBANK_TOKEN`, `WETSANALYSE_ADMIN_TOKEN`,
-  `GRAFANA_TOKEN`). Dit bestand is **gitignored** (`.gitignore`), dus het reist niet mee en is per definitie
+- `.claude/settings.local.json` → `enabledMcpjsonServers` (bv. `["grafana"]`) plus een
+  **machine-lokale** allowlist en de tokens (`WETSANALYSE_ADMIN_TOKEN`, `GRAFANA_TOKEN`). Dit bestand is **gitignored** (`.gitignore`), dus het reist niet mee en is per definitie
   niet gedeeld: een andere machine/analist bouwt z'n eigen lijst gewoon opnieuw op via de
   permissieprompts. De allowlist is bewust krap en portabel gehouden — de grants voor
   `review_server.py` en `rapport_server.py` gebruiken wildcards i.p.v. absolute paden — zodat
@@ -113,30 +101,18 @@ Bij twijfel naar achtergebleven absolute paden:
 
 ## Veelgebruikte commando's
 
-```bash
-# MCP-server (werk altijd binnen tools/wettenbank-mcp/)
-cd tools/wettenbank-mcp
-npm install        # dependencies
-npm run build      # TypeScript → dist/  (dist/ is nodig om te draaien en is gecommit)
-npm test           # vitest unit-tests (draaien vóór een commit)
-npm run test:watch
-npx vitest run src/index.test.ts          # één testbestand
-npx vitest run -t "naam van de test"      # één test op naam
-
-# MCP-gezondheid (vanuit de projectroot)
-claude mcp list                            # verwacht: wettenbank → ✓ Connected
-```
-
-Na het bouwen of wijzigen van de MCP-server: `claude mcp list` om te bevestigen dat hij nog
-verbindt voordat je de skill gebruikt.
+Per onderdeel gelden eigen commando's — zie de respectievelijke `CLAUDE.md`/`README.md`
+(`api/`, `frontend/`, `tools/graph-qa/`, `tools/wetsanalyse-admin-mcp/`). Sessie-MCP-gezondheid vanuit
+de projectroot: `claude mcp list` (verwacht `grafana`/`wetsanalyse-admin` → ✓ Connected).
 
 ## De wetsanalyse-skill: werkstroom en checkpoints
 
 De skill (`.claude/skills/wetsanalyse/SKILL.md`) is de gezaghebbende beschrijving. De
 kernstructuur die meerdere bestanden raakt:
 
-- **Stap 1** haalt tekst op via de MCP-tools `wettenbank_zoek` → `wettenbank_structuur` →
-  `wettenbank_artikel` (en `wettenbank_zoekterm` voor brondefinities in definitieartikelen).
+- **Stap 1** haalde tekst op via de wettenbank-MCP (`wettenbank_zoek`/`_structuur`/`_artikel`). **Die
+  MCP is verwijderd**, dus deze interactieve fetch-stap werkt niet meer; het skill-spoor blijft als
+  gedeelde inhoudsbron (`references/`/`scripts/`). De platform-runtime haalt wettekst uit de graaf.
 - **Stap 1b — verwijzingen inventariseren & volgen** (`references/verwijzingen-volgen.md`): de
   uitgaande verwijzingen van de bepaling opsporen (de MCP geeft getagde intref/extref per lid;
   natuurlijke-taalverwijzingen herkent de skill zelf), classificeren naar functie en volgens
@@ -181,7 +157,7 @@ vier hendels (Context, Tools, Loop, Governance) in plaats van het model te verde
 ## Observability
 
 Alle draaiende onderdelen (API, frontend, MCP, graph-qa) zijn **geïnstrumenteerd, niet bemeterd**:
-ze emitteren gestructureerde JSON-logs (één gedeelde vorm, bron `tools/wettenbank-mcp/src/logger.ts`)
+ze emitteren gestructureerde JSON-logs (één gedeelde vorm, bv. `frontend/lib/logger.ts`)
 en kunnen OpenTelemetry (traces/metrics/logs) naar een **configureerbaar OTLP-endpoint** sturen
 (`OTEL_EXPORTER_OTLP_ENDPOINT`; leeg = alleen logs, nul overhead). Eén trace-id verbindt de keten
 frontend → API → MCP/graph-qa. Een **optionele verzamelstack staat in `deploy/observability/`**:

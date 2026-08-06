@@ -49,7 +49,7 @@
         "type": "prometheus",
         "uid": "wa-prometheus"
       },
-      "description": "Live systeemtopologie van de keten. Een blok gloeit blauw op zodra er in de laatste 15 min verkeer doorheen liep (grijs = stil); het getal is het volume in dat venster. Zo blijft een bursty analyse ook ná de LLM-burst zichtbaar. Frontend/Postgres komen uit de afgeleide servicegraph-metrics, de chat-agent uit de spanmetrics; MCP telt de bediende cache-lookups en overheid.nl de uitgaande http-client-calls van de MCP.",
+      "description": "Live systeemtopologie van de keten. Een blok gloeit blauw op zodra er in de laatste 15 min verkeer doorheen liep (grijs = stil); het getal is het volume in dat venster. Zo blijft een bursty analyse ook ná de LLM-burst zichtbaar. Frontend/Postgres komen uit de afgeleide servicegraph-metrics, de chat-agent uit de spanmetrics.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -377,96 +377,6 @@
             },
             {
               "type": "text",
-              "name": "l_mcp",
-              "config": {
-                "align": "center",
-                "valign": "middle",
-                "size": 13,
-                "color": {
-                  "fixed": "#d8d9da"
-                },
-                "text": {
-                  "mode": "fixed",
-                  "fixed": "Wettenbank-MCP"
-                }
-              },
-              "background": {
-                "color": {
-                  "fixed": "transparent"
-                }
-              },
-              "constraint": {
-                "horizontal": "left",
-                "vertical": "top"
-              },
-              "placement": {
-                "top": 25,
-                "left": 620,
-                "width": 160,
-                "height": 20
-              }
-            },
-            {
-              "type": "metric-value",
-              "name": "n_mcp",
-              "config": {
-                "align": "center",
-                "valign": "middle",
-                "size": 22,
-                "color": {
-                  "fixed": "#ffffff"
-                },
-                "text": {
-                  "mode": "field",
-                  "field": "MCP"
-                }
-              },
-              "background": {
-                "color": {
-                  "field": "MCP"
-                }
-              },
-              "border": {
-                "color": {
-                  "fixed": "#0b3d91"
-                },
-                "width": 2
-              },
-              "constraint": {
-                "horizontal": "left",
-                "vertical": "top"
-              },
-              "placement": {
-                "top": 47,
-                "left": 620,
-                "width": 160,
-                "height": 50
-              },
-              "connections": [
-                {
-                  "color": {
-                    "fixed": "#0b3d91"
-                  },
-                  "size": {
-                    "fixed": 2,
-                    "min": 1,
-                    "max": 6
-                  },
-                  "path": "straight",
-                  "source": {
-                    "x": 1,
-                    "y": 0
-                  },
-                  "target": {
-                    "x": -1,
-                    "y": 0
-                  },
-                  "targetName": "n_overheid"
-                }
-              ]
-            },
-            {
-              "type": "text",
               "name": "l_postgres",
               "config": {
                 "align": "center",
@@ -603,74 +513,6 @@
             },
             {
               "type": "text",
-              "name": "l_overheid",
-              "config": {
-                "align": "center",
-                "valign": "middle",
-                "size": 13,
-                "color": {
-                  "fixed": "#5f6368"
-                },
-                "text": {
-                  "mode": "fixed",
-                  "fixed": "overheid.nl (SRU)"
-                }
-              },
-              "background": {
-                "color": {
-                  "fixed": "transparent"
-                }
-              },
-              "constraint": {
-                "horizontal": "left",
-                "vertical": "top"
-              },
-              "placement": {
-                "top": 25,
-                "left": 880,
-                "width": 180,
-                "height": 20
-              }
-            },
-            {
-              "type": "metric-value",
-              "name": "n_overheid",
-              "config": {
-                "align": "center",
-                "valign": "middle",
-                "size": 20,
-                "color": {
-                  "fixed": "#ffffff"
-                },
-                "text": {
-                  "mode": "field",
-                  "field": "overheid.nl"
-                }
-              },
-              "background": {
-                "color": {
-                  "field": "overheid.nl"
-                }
-              },
-              "border": {
-                "color": {
-                  "fixed": "#5f6368"
-                },
-                "width": 2
-              },
-              "constraint": {
-                "horizontal": "left",
-                "vertical": "top"
-              },
-              "placement": {
-                "top": 47,
-                "left": 880,
-                "width": 180,
-                "height": 50
-              }
-            },
-            {
-              "type": "text",
               "name": "l_fouten",
               "config": {
                 "align": "center",
@@ -771,30 +613,6 @@
             "uid": "wa-prometheus"
           },
           "editorMode": "code",
-          "expr": "sum(increase(wettenbank_cache_toegang_total[15m])) or vector(0)",
-          "instant": true,
-          "legendFormat": "MCP",
-          "range": false,
-          "refId": "MCP"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "wa-prometheus"
-          },
-          "editorMode": "code",
-          "expr": "sum(increase(http_client_request_duration_seconds_count{exported_job=\"wettenbank-mcp\"}[15m])) or vector(0)",
-          "instant": true,
-          "legendFormat": "overheid.nl",
-          "range": false,
-          "refId": "overheid"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "wa-prometheus"
-          },
-          "editorMode": "code",
           "expr": "sum(increase(traces_service_graph_request_total{client=\"wetsanalyse-api\", connection_type=\"database\"}[15m])) or vector(0)",
           "instant": true,
           "legendFormat": "Postgres",
@@ -847,7 +665,7 @@
         "type": "tempo",
         "uid": "wa-tempo"
       },
-      "description": "Automatisch uit de traces getekende service-graph (servicegraph-connector). Bolgrootte = request-rate, rand-kleur = foutratio. Bevat alleen de gekoppelde edges (user/frontend/API/DB); externe hops (MCP→overheid) ontbreken hier — die staan in de hand-gebouwde canvas hierboven.",
+      "description": "Automatisch uit de traces getekende service-graph (servicegraph-connector). Bolgrootte = request-rate, rand-kleur = foutratio. Bevat alleen de gekoppelde edges (user/frontend/API/DB); de hand-gebouwde canvas hierboven toont dezelfde keten met de volumes.",
       "gridPos": {
         "h": 12,
         "w": 12,
@@ -934,7 +752,7 @@
             "uid": "wa-loki"
           },
           "editorMode": "code",
-          "expr": "{service_name=~\"wetsanalyse-.*|wettenbank-mcp\"}",
+          "expr": "{service_name=~\"wetsanalyse-.*\"}",
           "queryType": "range",
           "refId": "A"
         }

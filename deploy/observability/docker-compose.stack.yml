@@ -99,7 +99,7 @@ configs:
         targets = discovery.docker.containers.targets
         rule {
           source_labels = ["__meta_docker_container_name"]
-          regex         = "/(wetsanalyse-frontend|wettenbank-mcp)"
+          regex         = "/(wetsanalyse-frontend)"
           action        = "keep"
         }
         rule {

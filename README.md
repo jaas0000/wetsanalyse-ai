@@ -12,15 +12,14 @@ schijnzekerheid te produceren.
 
 De draaiende kern is een gedeployde dienst: de **wetsanalyse-API**, de **webapp met de werkplek** en de
 eigen **QA/annotatie-agent (graph-qa, "de Juridische Assistent")** die op de **BWB-kennisgraaf** (GraphDB)
-werkt. De **wettenbank-MCP** (live wettekst uit overheid.nl) voedt het (legacy) skill-spoor en de
-graaf-ingestie, maar zit niet meer in de runtime van de werkplek. Het geheel draait op Azure Container
-Apps én op zelf-gehoste Portainer-stacks.
+werkt. De graaf wordt gevuld door de **BWB-importer** (nu in de `palmw01/graphdb`-repo), die de wettekst
+rechtstreeks bij overheid.nl ophaalt — er is geen aparte wettenbank-MCP meer. Het geheel draait op Azure
+Container Apps én op zelf-gehoste Portainer-stacks.
 
 ## Onderdelen
 
 | Onderdeel | Map | Wat het doet |
 |-----------|-----|--------------|
-| **wettenbank-MCP** | `tools/wettenbank-mcp/` | MCP-server (TypeScript) die actuele wettekst ophaalt via de publieke SRU-API van `overheid.nl`. Databron voor het (legacy) skill-spoor en de graaf-ingestie — niet meer voor de werkplek-runtime. |
 | **wetsanalyse-API** | `api/` | Headless FastAPI-backend voor de werkplek: het **JAS-annotatiedomein** (`/v1/annotatie/*`), **login + gebruikersbeheer** (identiteitsbron van de webapp), **LLM-modelprofielbeheer** en de **profiel-keuzelijst**. PostgreSQL-opslag, per-client bearer-auth. *(De oude `/v1/projects`-analyse-pijplijn is verwijderd.)* |
 | **frontend + werkplek** | `frontend/` | Next.js-webapp (BFF). De app **is de werkplek** (`/workbench`, de *Assistent-pagina*): één chat-achtig gespreksvenster voor **vragen én JAS-annotatie**, live tegen graph-qa. Plus een uitgekleed **`/beheer`** (modelprofielen, gebruikers, API-tokens). Achter een **login** (userid + wachtwoord, rollen, optionele 2FA). Vormgegeven volgens de **Rijkshuisstijl** (Belastingdienst-stijlvak). |
 | **graph-qa — de Juridische Assistent** | `tools/graph-qa/` | De eigen QA/annotatie-agent: beantwoordt vragen over wet- en regelgeving door de BWB-**kennisgraaf** (GraphDB via MCP) te bevragen, brongetrouw onderbouwd. Eén **unified LangGraph-agent** met een supervisor die per vraag kiest tussen de antwoord-worker (specialisten definitie/duiding/algemeen) en de annotatie-worker (ophaal → annoteer → Critic). Endpoints `POST /v1/chat` (SSE) + `GET /v1/artikel`. |
@@ -32,10 +31,11 @@ Apps én op zelf-gehoste Portainer-stacks.
 ## De methode in het kort
 
 Alles is brongetrouw — alleen letterlijk opgehaalde wettekst, alles herleidbaar naar artikel + lid +
-bronreferentie (jci-uri) — en volgt de JAS-werkstroom:
+bronreferentie (jci-uri). De **werkplek** werkt op de kennisgraaf (graph-qa levert de wettekst). Het
+onderstaande beschrijft de **JAS-werkstroom** van het (legacy) interactieve skill-spoor; dat spoor
+haalde wettekst via een aparte wettenbank-MCP, die inmiddels is verwijderd (de graaf is nu de bron).
 
-1. **Wettekst ophalen** via de wettenbank-MCP (`wettenbank_zoek` → `wettenbank_structuur` →
-   `wettenbank_artikel`).
+1. **Wettekst ophalen** (skill-spoor, legacy).
 1b. **Verwijzingen inventariseren & volgen**: de uitgaande verwijzingen van de bepaling (naar het
    definitieartikel, andere leden, schakelbepalingen, gedelegeerde regelingen) opsporen,
    classificeren naar functie, en de relevante volgens beleid volgen (diepte-cap 1 +
@@ -86,33 +86,22 @@ provider/model/endpoint/temperatuur, slaat de API-key versleuteld op (write-only
 markeert een default en test de verbinding. De env-`LLM_*`-waarden seeden alleen het eerste
 default-profiel. (De QA/annotatie-agent `graph-qa` draait als aparte dienst met een eigen LLM-config.)
 
-**Deployment.** Het platform draait op **Azure Container Apps** (`deploy/azure/`: Postgres, wettenbank-mcp,
-api, graph-qa, frontend) én als **zelf-gehoste Portainer-stacks** achter Nginx Proxy Manager; CI bouwt de
-images (GHCR) en doet de stack-redeploy. Detail-instructies staan in de respectievelijke `CLAUDE.md`- en
-`deploy/`-bestanden.
+**Deployment.** Het platform draait op **Azure Container Apps** (`deploy/azure/`: Postgres, api, graph-qa,
+frontend) én als **zelf-gehoste Portainer-stacks** achter Nginx Proxy Manager; CI bouwt de images (GHCR)
+en doet de stack-redeploy. De graaf-ingestie (BWB-importer) draait als geplande GitHub Action in de
+`palmw01/graphdb`-repo. Detail-instructies staan in de respectievelijke `CLAUDE.md`- en `deploy/`-bestanden.
 
 ## Legacy: de skill in Claude Code
 
-Het project begon als een interactieve **wetsanalyse-skill** in Claude Code. Dat spoor bestaat nog en
-werkt standalone, en levert bovendien de `references/`/`scripts/` die het platform hergebruikt.
+Het project begon als een interactieve **wetsanalyse-skill** in Claude Code (`.claude/skills/wetsanalyse/`).
+Dat spoor bestaat nog en levert de `references/`/`scripts/` die het platform hergebruikt (o.a. de canonieke
+JAS-klassenlijst voor de API). De inhoudelijke regels staan in de skill-`references/`; zie
+[`CLAUDE.md`](CLAUDE.md) voor de projectstructuur.
 
-De wettenbank-MCP is standaard een **remote HTTP-server** (`.mcp.json` → `https://wettenbank-mcp.ipalm.nl/mcp`);
-zet alleen het toegangstoken in de omgeving en controleer dat Claude Code de server ziet:
-
-```bash
-export WETTENBANK_TOKEN=<jouw-token>   # gaat als 'Authorization: Bearer' mee
-claude mcp list                        # verwacht: wettenbank → ✓ Connected (HTTP)
-```
-
-Vraag daarna in Claude Code om een wetsanalyse (bijvoorbeeld *"doe een wetsanalyse van artikel 9 lid 1
-Invorderingswet 1990"*); de skill haalt de tekst zelf op, doorloopt de activiteit-2-werkstroom met een
-review-checkpoint en levert een `rapport.json` (HTML-viewer + Markdown-export). Zie
-[`CLAUDE.md`](CLAUDE.md) voor de projectstructuur en de skill-`references/` voor de inhoudelijke regels
-(o.a. de JAS-klassen).
-
-> **Lokaal draaien (fallback).** Wil je de MCP-server zelf draaien i.p.v. de remote endpoint, bouw hem dan
-> en zet `.mcp.json` op het stdio-alternatief (zie `tools/wettenbank-mcp/CLAUDE.md`): `cd tools/wettenbank-mcp
-> && npm install && npm run build && npm test`.
+> **Live wettekst ophalen is vervallen.** De skill haalde wettekst via een aparte **wettenbank-MCP**; die
+> MCP is verwijderd (de werkplek werkt op de graaf, en de graaf wordt gevuld door de BWB-importer die
+> rechtstreeks bij overheid.nl ophaalt). De interactieve fetch-stap van de skill werkt daardoor niet meer;
+> het skill-spoor fungeert nu vooral als gedeelde inhoudsbron.
 
 ## Databron & licentie
 
