@@ -23,7 +23,7 @@ from ..annotatie_contracts import (
     AnnotatieDocument, AnnotatieElement, AuditRecord, Beslissing, BeslissingInvoer, BeslissingType,
     DocumentCreate, DocumentSamenvatting, ElementenInvoer, Lifecycle,
 )
-from ..annotatie_store import AnnotatieStore
+from ..annotatie_store import GEEN_ELEMENT, AnnotatieStore
 from ..auth import require_client
 from ..db import utcnow
 from ..deps import get_annotatie_store
@@ -135,48 +135,57 @@ async def beslis(
     client_id: str = Depends(require_client),
     store: AnnotatieStore = Depends(get_annotatie_store),
 ):
-    doc = await _document_or_404(store, slug, client_id)
-    el = next((x for x in doc.elementen if x.id == element_id), None)
-    if el is None:
-        raise HTTPException(status_code=404, detail=f"Onbekend element: {element_id}")
-
-    diff: dict = {}
+    # Pre-validatie die het element niet nodig heeft (faalt vóór de atomaire mutatie).
     if req.type == BeslissingType.edit:
         if req.review_reason is None:
             raise HTTPException(status_code=422, detail="review_reason is verplicht bij een edit.")
         if req.wijziging is None:
             raise HTTPException(status_code=422, detail="wijziging is verplicht bij een edit.")
-        for veld in ("klasse", "tekst", "toelichting", "lid"):
-            nieuw = getattr(req.wijziging, veld)
-            if nieuw is not None and nieuw != getattr(el, veld):
-                if veld == "klasse" and nieuw not in GELDIGE_JAS_KLASSEN:
-                    raise HTTPException(status_code=422, detail=f"Ongeldige JAS-klasse: {nieuw}")
-                diff[veld] = {"voor": getattr(el, veld), "na": nieuw}
-                setattr(el, veld, nieuw)
-        el.lifecycle = Lifecycle.edited
-        el.herkomst = "mens"
-        el.diff = diff
-    elif req.type == BeslissingType.approve:
-        el.lifecycle = Lifecycle.human_approved
+        if req.wijziging.klasse is not None and req.wijziging.klasse not in GELDIGE_JAS_KLASSEN:
+            raise HTTPException(status_code=422, detail=f"Ongeldige JAS-klasse: {req.wijziging.klasse}")
     elif req.type == BeslissingType.reject:
         if req.review_reason is None:
             raise HTTPException(status_code=422, detail="review_reason is verplicht bij een reject.")
-        el.lifecycle = Lifecycle.rejected
-    # comment → geen lifecycle-wijziging
 
-    el.beslissingen.append(Beslissing(
-        type=req.type, actor=client_id, tijd=utcnow(),
-        review_reason=req.review_reason, comment=req.comment, wijziging=diff,
-    ))
-    await store.vervang_elementen(slug, doc.elementen)
+    diff_holder: dict = {}
+
+    def toepassen(el: AnnotatieElement) -> None:
+        """Muteert het element in-place binnen de atomaire store-transactie (row-lock)."""
+        diff: dict = {}
+        if req.type == BeslissingType.edit:
+            for veld in ("klasse", "tekst", "toelichting", "lid"):
+                nieuw = getattr(req.wijziging, veld)
+                if nieuw is not None and nieuw != getattr(el, veld):
+                    diff[veld] = {"voor": getattr(el, veld), "na": nieuw}
+                    setattr(el, veld, nieuw)
+            el.lifecycle = Lifecycle.edited
+            el.herkomst = "mens"
+            el.diff = diff
+        elif req.type == BeslissingType.approve:
+            el.lifecycle = Lifecycle.human_approved
+        elif req.type == BeslissingType.reject:
+            el.lifecycle = Lifecycle.rejected
+        # comment → geen lifecycle-wijziging
+        el.beslissingen.append(Beslissing(
+            type=req.type, actor=client_id, tijd=utcnow(),
+            review_reason=req.review_reason, comment=req.comment, wijziging=diff,
+        ))
+        diff_holder.update(diff)
+
+    resultaat = await store.beslis_op_element(slug, client_id, element_id, toepassen)
+    if resultaat is None:
+        raise HTTPException(status_code=404, detail=f"Onbekend annotatie-document: {slug}")
+    if resultaat is GEEN_ELEMENT:
+        raise HTTPException(status_code=404, detail=f"Onbekend element: {element_id}")
+
     await store.schrijf_audit(
         slug, client_id, client_id, f"beslissing-{req.type.value}", element_id=element_id,
         detail={
             "review_reason": req.review_reason.value if req.review_reason else None,
-            "comment": req.comment, "diff": diff,
+            "comment": req.comment, "diff": diff_holder,
         },
     )
-    return await store.laad_document(slug)
+    return resultaat
 
 
 @router.get("/documenten/{slug}/audit", response_model=list[AuditRecord])

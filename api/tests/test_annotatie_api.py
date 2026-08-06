@@ -120,3 +120,38 @@ async def test_verwijderen(client):
     slug = await _maak_doc(client)
     assert (await client.delete(f"{BASIS}/{slug}")).status_code == 204
     assert (await client.get(f"{BASIS}/{slug}")).status_code == 404
+
+
+async def test_beslis_op_element_atomair_behoudt_andere_besluiten(client):
+    """De atomaire beslis-write (row-lock) verwerkt één element zónder de andere elementen te
+    overschrijven — geen lost update bij gelijktijdige besluiten. Plus de 404-sentinels."""
+    from app.annotatie_contracts import Lifecycle
+    from app.annotatie_store import GEEN_ELEMENT, AnnotatieStore
+
+    slug = await _maak_doc(client)
+    r = await client.put(f"{BASIS}/{slug}/elementen", json={"elementen": [
+        {"klasse": "Rechtssubject", "tekst": "de ontvanger", "lid": "1"},
+        {"klasse": "Rechtsbetrekking", "tekst": "kan uitstel verlenen", "lid": "1"},
+    ]})
+    el0, el1 = r.json()["elementen"][0]["id"], r.json()["elementen"][1]["id"]
+
+    store = AnnotatieStore()
+
+    def keur_goed(el):
+        el.lifecycle = Lifecycle.human_approved
+
+    def verwerp(el):
+        el.lifecycle = Lifecycle.rejected
+
+    assert await store.beslis_op_element(slug, "anonymous", el0, keur_goed) is not None
+    assert await store.beslis_op_element(slug, "anonymous", el1, verwerp) is not None
+
+    doc = (await client.get(f"{BASIS}/{slug}")).json()
+    lc = {e["id"]: e["lifecycle"] for e in doc["elementen"]}
+    assert lc[el0] == "human_approved"  # niet gewist door de tweede write
+    assert lc[el1] == "rejected"
+
+    # 404-sentinels: onbekend document / niet-eigenaar → None; onbekend element → GEEN_ELEMENT.
+    assert await store.beslis_op_element("bestaat-niet", "anonymous", el0, keur_goed) is None
+    assert await store.beslis_op_element(slug, "andere-client", el0, keur_goed) is None
+    assert await store.beslis_op_element(slug, "anonymous", "geen-el", keur_goed) is GEEN_ELEMENT

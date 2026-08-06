@@ -8,10 +8,15 @@ blijven (SQLite-tests).
 """
 from __future__ import annotations
 
+from typing import Callable
+
 from sqlalchemy import delete, insert, select, update
 
 from . import db
 from .annotatie_contracts import AnnotatieDocument, AnnotatieElement, AuditRecord
+
+# Sentinel: het document bestaat (en is van de client) maar het gevraagde element niet.
+GEEN_ELEMENT = object()
 
 
 def _naar_document(row) -> AnnotatieDocument:
@@ -71,6 +76,46 @@ class AnnotatieStore:
                 .where(db.annotatie_documenten.c.slug == slug)
                 .values(elementen=[e.model_dump(mode="json") for e in elementen], updated=db.utcnow())
             )
+
+    async def beslis_op_element(
+        self,
+        slug: str,
+        client_id: str,
+        element_id: str,
+        toepassen: Callable[[AnnotatieElement], None],
+    ) -> AnnotatieDocument | None | object:
+        """Pas een human-decision ATOMAIR toe op één element: laad het document met een row-lock
+        (`with_for_update`), toets eigenaarschap, muteer het element via `toepassen` en schrijf de
+        volledige array in DEZELFDE transactie weg. Zo kunnen twee gelijktijdige besluiten op
+        verschillende elementen elkaar niet meer overschrijven (lost update + audit-divergentie).
+
+        Retourneert het bijgewerkte document, `None` (onbekend/niet-eigenaar → 404) of `GEEN_ELEMENT`
+        (element bestaat niet → 404). `toepassen` muteert het element in-place (en kan de diff/lifecycle
+        zetten). Op SQLite is `with_for_update` een no-op maar serialiseert de transactie de write.
+        """
+        now = db.utcnow()
+        async with db.get_engine().begin() as conn:
+            row = (await conn.execute(
+                select(db.annotatie_documenten)
+                .where(db.annotatie_documenten.c.slug == slug)
+                .with_for_update()
+            )).first()
+            if row is None:
+                return None
+            doc = _naar_document(row)
+            if doc.client_id != client_id:
+                return None
+            el = next((x for x in doc.elementen if x.id == element_id), None)
+            if el is None:
+                return GEEN_ELEMENT
+            toepassen(el)
+            await conn.execute(
+                update(db.annotatie_documenten)
+                .where(db.annotatie_documenten.c.slug == slug)
+                .values(elementen=[e.model_dump(mode="json") for e in doc.elementen], updated=now)
+            )
+        doc.updated = now
+        return doc
 
     async def zet_status(self, slug: str, status: str) -> None:
         async with db.get_engine().begin() as conn:
