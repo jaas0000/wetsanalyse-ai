@@ -60,9 +60,10 @@ Na de pivot naar de chat-werkruimte bedient de API vijf dingen:
 - `db.py` — async SQLAlchemy-Core laag: engine-beheer + de tabeldefinities (`llm_profiles`,
   `users`, `api_tokens`, `annotatie_documenten`, `annotatie_audit`, `gesprekken`,
   `gesprek_berichten`). Portable types
-  (`JSON`→`JSONB` op Postgres, `JSON` op SQLite-tests), tz-aware datetimes. `create_all` maakt
-  ontbrekende tabellen idempotent aan bij de start; `reconcile_schema()` voegt nieuwe kolommen
-  idempotent toe.
+  (`JSON`→`JSONB` op Postgres, `JSON` op SQLite-tests), tz-aware datetimes. `create_all` maakt bij de
+  start alleen **ontbrekende tabellen** idempotent aan; er is **geen** auto-migratie van kolommen — een
+  nieuwe/gewijzigde kolom op een bestaande tabel vergt een bewuste migratie (`ALTER TABLE`/Alembic) op
+  productie.
 - `llm/` — `LLMClient`-protocol + LiteLLM-implementatie (provider = config; `complete()` levert JSON
   conform een schema). `throttle.py` — proces-globale **concurrency-rem** (semafoor) op gelijktijdige
   LLM-calls (`WETSANALYSE_LLM_MAX_CONCURRENCY`); ingesteld in de lifespan. De enige LLM-call in deze

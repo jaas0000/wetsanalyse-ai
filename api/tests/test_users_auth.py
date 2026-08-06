@@ -415,3 +415,40 @@ async def test_2fa_http_via_header(client):
     totp_code = _totp_now(begin.json()["otpauth_uri"])
     dis = await client.post("/v1/auth/2fa/disable", json={"totp": totp_code}, headers=hdr)
     assert dis.status_code == 204
+
+
+async def test_gevoelige_endpoints_rate_limited(monkeypatch):
+    """De geauthenticeerde 2FA/wachtwoord-endpoints delen de brute-force-rem (`sensitive_allowed`):
+    na de limiet volgt 429 — ook op mislukte pogingen, zodat een gekaapte sessie geen TOTP/wachtwoord
+    kan brute-forcen. Een andere userid heeft zijn eigen bucket."""
+    _fresh_settings(
+        monkeypatch,
+        WETSANALYSE_AUTH_REQUIRED="0",
+        WETSANALYSE_RATE_LIMIT_MAX="2",
+        WETSANALYSE_RATE_LIMIT_WINDOW="60",
+    )
+    from app import db, ratelimit
+
+    ratelimit.reset()
+    db.init_engine("sqlite+aiosqlite://")
+    await db.create_all()
+
+    from app.main import app
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        await ac.post(
+            "/v1/auth/setup", json={"userid": "baas", "email": "b@example.com", "password": "wachtwoord1"}
+        )
+        hdr = {"X-User-Id": "baas"}
+        payload = {"current": "fout", "new": "nieuwwachtwoord"}  # geldig contract, fout huidig ww → 400
+
+        # 2 pogingen toegestaan (400 = fout wachtwoord), de 3e wordt door de rem geblokkeerd (429).
+        assert (await ac.post("/v1/auth/change-password", json=payload, headers=hdr)).status_code == 400
+        assert (await ac.post("/v1/auth/change-password", json=payload, headers=hdr)).status_code == 400
+        geblokkeerd = await ac.post("/v1/auth/change-password", json=payload, headers=hdr)
+        assert geblokkeerd.status_code == 429 and geblokkeerd.headers.get("Retry-After")
+
+        # De rem is per-userid: een andere X-User-Id wordt niet meteen geblokkeerd (eigen bucket).
+        ander = await ac.post("/v1/auth/change-password", json=payload, headers={"X-User-Id": "ander"})
+        assert ander.status_code != 429
+
+    await db.dispose_engine()

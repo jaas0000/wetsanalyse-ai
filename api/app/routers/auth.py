@@ -23,6 +23,7 @@ from pydantic import BaseModel, Field
 
 from .. import ratelimit, users
 from ..auth import require_client
+from ..config import get_settings
 from ..secrets_crypto import SecretsCryptoError, crypto_beschikbaar
 
 router = APIRouter(prefix="/auth", tags=["auth"], dependencies=[Depends(require_client)])
@@ -158,8 +159,20 @@ async def me(userid: str = Depends(huidige_userid)):
     return MeOut(userid=user.userid, email=user.email, role=user.role, totp_enabled=user.totp_enabled)
 
 
+def _rem_gevoelig(userid: str) -> None:
+    """429 als de userid te veel gevoelige pogingen doet (wachtwoord/2FA); gelijk aan `/verify`."""
+    if not ratelimit.sensitive_allowed(userid):
+        s = get_settings()
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Te veel pogingen; probeer later opnieuw.",
+            headers={"Retry-After": str(int(s.rate_limit_window_s))},
+        )
+
+
 @router.post("/change-password", status_code=status.HTTP_204_NO_CONTENT)
 async def change_password(body: PasswordChangeIn, userid: str = Depends(huidige_userid)):
+    _rem_gevoelig(userid)
     try:
         await users.change_own_password(userid, body.current, body.new)
     except users.UserError as e:
@@ -182,6 +195,7 @@ async def tfa_begin(userid: str = Depends(huidige_userid)):
 
 @router.post("/2fa/activate", status_code=status.HTTP_204_NO_CONTENT)
 async def tfa_activate(body: TotpActivateIn, userid: str = Depends(huidige_userid)):
+    _rem_gevoelig(userid)
     try:
         await users.activate_2fa(userid, body.totp)
     except users.UserError as e:
@@ -190,6 +204,7 @@ async def tfa_activate(body: TotpActivateIn, userid: str = Depends(huidige_useri
 
 @router.post("/2fa/disable", status_code=status.HTTP_204_NO_CONTENT)
 async def tfa_disable(body: TotpDisableIn, userid: str = Depends(huidige_userid)):
+    _rem_gevoelig(userid)
     try:
         await users.disable_2fa(userid, body.totp)
     except users.UserError as e:
