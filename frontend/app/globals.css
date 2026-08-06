@@ -8,6 +8,7 @@
      componenten; alleen de waarden zijn naar de Rijkshuisstijl gezet. */
   --paper: 255 255 255; /* #FFFFFF — pagina-achtergrond */
   --surface: 245 246 248; /* #F5F6F8 — cards/secties (lichtgrijs) */
+  --surface-2: 237 240 244; /* #EDF0F4 — gelaagde vlakken (genest paneel in een kaart) */
   --ink: 26 26 26; /* #1A1A1A — broodtekst (≥ 4,5:1 op wit) */
   --lint: 21 66 115; /* #154273 — lintblauw: koppen + primaire merkkleur */
   --muted: 74 90 110; /* #4A5A6E — secundaire tekst */
@@ -23,6 +24,23 @@
   --waarschuwing: 225 112 0; /* #E17000 */
   --fout: 213 43 30; /* #D52B1E */
   --info: 0 123 199; /* #007BC7 */
+
+  /* Aandacht-tinten voor de annotatie-review (🟢🟡🔴), afgeleid van de functionele kleuren
+     (succes/gold/fout). Zachte achtergrond + rand + toegankelijke tekst-tint per niveau; zo draagt
+     het niveau de review-kaart zónder rauwe Tailwind-kleuren buiten de huisstijl. */
+  --aandacht-groen-bg: 233 243 225; /* zacht groen */
+  --aandacht-groen-rand: 188 217 168;
+  --aandacht-groen-tekst: 44 102 8; /* #2C6608 */
+  --aandacht-geel-bg: 251 239 226; /* zacht oker */
+  --aandacht-geel-rand: 231 201 168;
+  --aandacht-geel-tekst: 142 70 0; /* #8E4600 (= gold) */
+  --aandacht-rood-bg: 251 231 229; /* zacht rood */
+  --aandacht-rood-rand: 240 192 188;
+  --aandacht-rood-tekst: 176 38 26; /* #B0261A */
+
+  /* Elevation (modern jasje): fijne, lintblauw-getinte schaduwen i.p.v. overal een 1px-rand. */
+  --schaduw-zacht: 0 1px 2px rgb(21 66 115 / 0.06), 0 1px 3px rgb(21 66 115 / 0.05);
+  --schaduw-kaart: 0 4px 14px rgb(21 66 115 / 0.08), 0 1px 3px rgb(21 66 115 / 0.06);
 }
 
 * {

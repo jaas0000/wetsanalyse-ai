@@ -258,3 +258,48 @@ export interface OntbrekendItem {
   klasse: string;
   reden: string;
 }
+
+// --- Gesprekken (chatgeschiedenis) — afgeleid van api/app/gesprek_contracts.py ---
+
+export type Rol = "user" | "assistant";
+
+/** Eén beurt in een gesprek. Assistent-berichten dragen optioneel denkproces/bronnen, of een
+ *  verwijzing naar een annotatie-document (`annotatie_slug` + de Critic-`ontbrekend`-suggesties). */
+export interface Bericht {
+  id?: number;
+  rol: Rol;
+  tekst: string;
+  denk: string;
+  bronnen: Bron[];
+  annotatie_slug: string;
+  ontbrekend: OntbrekendItem[];
+  created?: string;
+}
+
+/** Eén chat-gesprek met zijn berichten (volledig geladen). */
+export interface Gesprek {
+  id: string;
+  user_id: string;
+  titel: string;
+  berichten: Bericht[];
+  created?: string;
+  updated?: string;
+}
+
+/** Lichte lijst-weergave voor de sidebar (chatgeschiedenis). */
+export interface GesprekSamenvatting {
+  id: string;
+  titel: string;
+  aantal_berichten: number;
+  updated?: string;
+}
+
+/** Eén toe te voegen bericht (append). */
+export interface BerichtInvoer {
+  rol: Rol;
+  tekst?: string;
+  denk?: string;
+  bronnen?: Bron[];
+  annotatie_slug?: string;
+  ontbrekend?: OntbrekendItem[];
+}

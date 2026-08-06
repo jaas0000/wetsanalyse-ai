@@ -68,7 +68,7 @@ export function DocumentPaneel({
   const segmenten = useMemo(() => segmenteer(bron, elementen), [bron, elementen]);
 
   return (
-    <div className="rounded-xl border border-line bg-white p-5">
+    <div className="rounded-kaart border border-line bg-white p-5 shadow-zacht">
       {opschrift && <h2 className="mb-3 font-display text-lg font-semibold text-lint">{opschrift}</h2>}
       <p className="whitespace-pre-wrap text-[0.95rem] leading-7 text-ink">
         {segmenten.map((s, i) =>

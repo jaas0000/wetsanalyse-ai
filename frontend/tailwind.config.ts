@@ -11,6 +11,7 @@ const config: Config = {
       colors: {
         paper: "rgb(var(--paper) / <alpha-value>)",
         surface: "rgb(var(--surface) / <alpha-value>)",
+        "surface-2": "rgb(var(--surface-2) / <alpha-value>)",
         ink: "rgb(var(--ink) / <alpha-value>)",
         lint: "rgb(var(--lint) / <alpha-value>)",
         muted: "rgb(var(--muted) / <alpha-value>)",
@@ -25,6 +26,26 @@ const config: Config = {
         waarschuwing: "rgb(var(--waarschuwing) / <alpha-value>)",
         fout: "rgb(var(--fout) / <alpha-value>)",
         info: "rgb(var(--info) / <alpha-value>)",
+        // Aandacht-tinten voor de annotatie-review (🟢🟡🔴).
+        "aandacht-groen": {
+          bg: "rgb(var(--aandacht-groen-bg) / <alpha-value>)",
+          rand: "rgb(var(--aandacht-groen-rand) / <alpha-value>)",
+          tekst: "rgb(var(--aandacht-groen-tekst) / <alpha-value>)",
+        },
+        "aandacht-geel": {
+          bg: "rgb(var(--aandacht-geel-bg) / <alpha-value>)",
+          rand: "rgb(var(--aandacht-geel-rand) / <alpha-value>)",
+          tekst: "rgb(var(--aandacht-geel-tekst) / <alpha-value>)",
+        },
+        "aandacht-rood": {
+          bg: "rgb(var(--aandacht-rood-bg) / <alpha-value>)",
+          rand: "rgb(var(--aandacht-rood-rand) / <alpha-value>)",
+          tekst: "rgb(var(--aandacht-rood-tekst) / <alpha-value>)",
+        },
+      },
+      boxShadow: {
+        zacht: "var(--schaduw-zacht)",
+        kaart: "var(--schaduw-kaart)",
       },
       fontFamily: {
         display: ["var(--font-sans)", "system-ui", "sans-serif"],
@@ -35,6 +56,9 @@ const config: Config = {
         // Rijkshuisstijl: button ≈ 10% van de hoogte (48px), formulierveld ≈ 5%.
         button: "5px",
         field: "3px",
+        // Modern jasje: rondere kaarten/bubbels (Claude-achtig) náást de RH-knopradius.
+        kaart: "14px",
+        bubbel: "16px",
         // Vormelement: één grote afgeronde hoek als signatuur (RH-radius-stap).
         vorm: "32px",
       },

@@ -6,14 +6,20 @@ zelfstandige, Dockeriseerbare dienst die je via HTTP (Postman/Swagger) bevraagt 
 
 ## Scope: wat deze API nog doet
 
-Na de pivot naar de chat-werkruimte bedient de API vier dingen:
+Na de pivot naar de chat-werkruimte bedient de API vijf dingen:
 
 1. **Het JAS-annotatiedomein van de werkplek** (`/v1/annotatie/*`): documenten/elementen/beslissingen
    + append-only auditlog. De agent stelt voor, de mens beslist; de API bewaart de review-state.
-2. **Login + gebruikersbeheer** (`/v1/auth/*` + `/v1/admin/users`): de API is de identiteitsbron van
+   **Client-gescopet** (gedeeld tussen ingelogde gebruikers van dezelfde BFF-client).
+2. **De chatgeschiedenis van de werkplek** (`/v1/gesprekken/*`): gesprekken + geordende berichten
+   (`gesprek_contracts.py`/`gesprek_store.py`/`routers/gesprekken.py`). Anders dan het annotatie-domein
+   **per-gebruiker gescopet** via de vertrouwde `X-User-Id`-header (`huidige_userid`, hergebruikt uit
+   de auth-router; 404 op andermans gesprek). Een bericht kan naar een annotatie-document verwijzen
+   (`annotatie_slug`); de review-state zelf blijft in het annotatie-domein.
+3. **Login + gebruikersbeheer** (`/v1/auth/*` + `/v1/admin/users`): de API is de identiteitsbron van
    de webapp (userid + wachtwoord, rollen, optionele TOTP-2FA).
-3. **LLM-modelprofielbeheer** (`/v1/admin/profiles`).
-4. De **profiel-keuzelijst** voor de UI (`/v1/profiles`).
+4. **LLM-modelprofielbeheer** (`/v1/admin/profiles`).
+5. De **profiel-keuzelijst** voor de UI (`/v1/profiles`).
 
 > **De analyse-pijplijn is verwijderd.** De oude `/v1/projects`-werkstroom (analyses aanmaken/
 > reviewen/rapporteren), de act-2-generatie-engine (orchestrator, agent⇄tools-worker, GraphDB-bron,
@@ -52,7 +58,8 @@ Na de pivot naar de chat-werkruimte bedient de API vier dingen:
   `LLM_CONFIG_SECRET(_FILE)`). De profielen worden beheerd via `/beheer` en gevalideerd met de
   verbindingstest; de QA-agent (graph-qa) heeft een eigen LLM-config en wordt er niet door aangestuurd.
 - `db.py` — async SQLAlchemy-Core laag: engine-beheer + de tabeldefinities (`llm_profiles`,
-  `users`, `api_tokens`, `annotatie_documenten`, `annotatie_audit`). Portable types
+  `users`, `api_tokens`, `annotatie_documenten`, `annotatie_audit`, `gesprekken`,
+  `gesprek_berichten`). Portable types
   (`JSON`→`JSONB` op Postgres, `JSON` op SQLite-tests), tz-aware datetimes. `create_all` maakt
   ontbrekende tabellen idempotent aan bij de start; `reconcile_schema()` voegt nieuwe kolommen
   idempotent toe.
@@ -92,7 +99,8 @@ loggen. Zie `docs/observability.md`.
 
 ## Garanties (niet aan tornen)
 
-- **Multi-tenant isolatie.** Elk annotatie-document is client-gescopet (404 op andermans slug).
+- **Multi-tenant isolatie.** Elk annotatie-document is client-gescopet (404 op andermans slug); elk
+  **gesprek** is per-gebruiker gescopet via de vertrouwde `X-User-Id`-header (404 op andermans id).
 - **De admin-laag is altijd auth-plichtig.** `/v1/admin/*` heeft geen `AUTH_REQUIRED`-bypass; zonder
   admin-tokens geeft alles 401. De plaintext-API-key komt nooit terug in een respons (alleen
   `api_key_set`); het opslaan vereist een geconfigureerde Fernet-master-key.

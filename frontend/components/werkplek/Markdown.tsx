@@ -7,11 +7,11 @@ import remarkGfm from "remark-gfm";
  *  veilig; links laten we alleen door voor http(s) en openen extern. (Verhuisd uit ChatAssistent.) */
 export function Markdown({ tekst }: { tekst: string }) {
   return (
-    <div className="space-y-2 break-words text-sm text-ink [overflow-wrap:anywhere]">
+    <div className="space-y-3 break-words text-[0.9375rem] leading-relaxed text-ink [overflow-wrap:anywhere]">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
-          p: ({ children }) => <p className="leading-snug">{children}</p>,
+          p: ({ children }) => <p className="leading-relaxed">{children}</p>,
           a: ({ href, children }) => {
             const veilig = typeof href === "string" && /^https?:\/\//i.test(href);
             return veilig ? (

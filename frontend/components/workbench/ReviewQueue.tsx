@@ -22,11 +22,22 @@ const LIFECYCLE_LABEL: Record<string, string> = {
   rejected: "verworpen",
 };
 
-const AANDACHT: Record<string, { emoji: string; label: string }> = {
-  groen: { emoji: "🟢", label: "groen — geen bezwaar" },
-  geel: { emoji: "🟡", label: "geel — even kijken" },
-  rood: { emoji: "🔴", label: "rood — waarschijnlijk fout" },
+// Aandacht-niveau (🟢🟡🔴) is de dragende visuele as: het kleurt de linker-accentrand + een zachte
+// tint. Alle kleuren via de aandacht-design-tokens (geen rauwe Tailwind-kleuren buiten de huisstijl).
+const AANDACHT: Record<string, { emoji: string; label: string; rand: string; tint: string }> = {
+  groen: { emoji: "🟢", label: "groen — geen bezwaar", rand: "border-l-aandacht-groen-rand", tint: "bg-aandacht-groen-bg/40" },
+  geel: { emoji: "🟡", label: "geel — even kijken", rand: "border-l-aandacht-geel-rand", tint: "bg-aandacht-geel-bg/40" },
+  rood: { emoji: "🔴", label: "rood — waarschijnlijk fout", rand: "border-l-aandacht-rood-rand", tint: "bg-aandacht-rood-bg/40" },
 };
+
+const BESLIST = ["human_approved", "edited", "rejected"];
+
+// Actieknoppen via de functionele tokens (geen emerald/sky/rose): akkoord = succes, aanpassen = info,
+// verwerpen = fout.
+const KNOP_SUCCES = "bg-succes text-paper hover:brightness-110";
+const KNOP_INFO = "bg-info text-paper hover:brightness-110";
+const KNOP_FOUT = "bg-fout text-paper hover:brightness-110";
+const KNOP_BASIS = "rounded-lg px-2.5 py-1.5 text-xs font-medium transition disabled:opacity-50";
 
 type Actie = "reject" | "edit" | "comment" | null;
 
@@ -49,7 +60,8 @@ function DecisionCard({
   const [bezig, setBezig] = useState(false);
 
   // "beslist" = de mens heeft al een besluit genomen; `voorgesteld`/`critic_checked` zijn nog te reviewen.
-  const beslist = ["human_approved", "edited", "rejected"].includes(el.lifecycle);
+  const beslist = BESLIST.includes(el.lifecycle);
+  const aandacht = el.aandacht ? AANDACHT[el.aandacht] : null;
 
   async function verstuur(req: BeslissingInvoer) {
     setBezig(true);
@@ -64,32 +76,37 @@ function DecisionCard({
   return (
     <div
       onClick={onKies}
-      className={`rounded-xl border bg-white p-3 transition ${
-        actief ? "border-lint ring-1 ring-lint" : "border-line"
-      }`}
+      className={`rounded-kaart border border-line border-l-4 bg-white p-3 shadow-zacht transition ${
+        beslist ? "opacity-75" : aandacht ? `${aandacht.rand} ${aandacht.tint}` : "border-l-line"
+      } ${actief ? "border-lint ring-1 ring-lint" : ""}`}
     >
       <div className="flex items-center justify-between gap-2">
         <span className="flex items-center gap-1.5">
           {el.aandacht && (
-            <span title={el.critic || AANDACHT[el.aandacht]?.label} aria-label={AANDACHT[el.aandacht]?.label}>
-              {AANDACHT[el.aandacht]?.emoji}
+            <span title={el.critic || aandacht?.label} aria-label={aandacht?.label}>
+              {aandacht?.emoji}
             </span>
           )}
           <span className={`rounded px-2 py-0.5 text-xs font-semibold ${jasStyle(el.klasse)}`}>{el.klasse}</span>
         </span>
-        <span className="text-[0.65rem] uppercase tracking-wide text-muted">
+        <span className="flex items-center gap-1.5 text-[0.65rem] uppercase tracking-wide text-muted">
+          {beslist && (
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="text-succes" aria-hidden>
+              <path d="M20 6 9 17l-5-5" />
+            </svg>
+          )}
           {LIFECYCLE_LABEL[el.lifecycle] ?? el.lifecycle}
           {el.lid ? ` · lid ${el.lid}` : ""}
         </span>
       </div>
-      <p className="mt-1.5 text-sm text-ink">“{el.tekst}”</p>
-      {el.toelichting && <p className="mt-1 text-xs text-muted">{el.toelichting}</p>}
+      <p className="mt-2 border-l-2 border-line pl-2.5 text-sm italic text-ink">“{el.tekst}”</p>
+      {el.toelichting && <p className="mt-1.5 text-xs text-muted">{el.toelichting}</p>}
       {el.critic && <p className="mt-1 text-xs italic text-muted">Critic: {el.critic}</p>}
       {el.alternatieven.length > 0 &&
         (beslist ? (
           <p className="mt-1 text-xs text-muted">Twijfel: {el.alternatieven.map((a) => a.klasse).join(", ")}</p>
         ) : (
-          <div className="mt-1 flex flex-wrap items-center gap-1 text-xs text-muted" onClick={(e) => e.stopPropagation()}>
+          <div className="mt-1.5 flex flex-wrap items-center gap-1 text-xs text-muted" onClick={(e) => e.stopPropagation()}>
             <span>Twijfel — kies om te wijzigen:</span>
             {el.alternatieven.map((a) => (
               <button
@@ -109,29 +126,19 @@ function DecisionCard({
         ))}
 
       {!beslist && actie === null && (
-        <div className="mt-2 flex flex-wrap gap-1.5" onClick={(e) => e.stopPropagation()}>
-          <button
-            disabled={bezig}
-            onClick={() => verstuur({ type: "approve" })}
-            className="rounded bg-emerald-600 px-2 py-1 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
-          >
+        <div className="mt-2.5 flex flex-wrap gap-1.5" onClick={(e) => e.stopPropagation()}>
+          <button disabled={bezig} onClick={() => verstuur({ type: "approve" })} className={`${KNOP_BASIS} ${KNOP_SUCCES}`}>
             Akkoord
           </button>
-          <button
-            onClick={() => setActie("edit")}
-            className="rounded bg-sky-600 px-2 py-1 text-xs font-medium text-white hover:bg-sky-700"
-          >
+          <button onClick={() => setActie("edit")} className={`${KNOP_BASIS} ${KNOP_INFO}`}>
             Aanpassen
           </button>
-          <button
-            onClick={() => setActie("reject")}
-            className="rounded bg-rose-600 px-2 py-1 text-xs font-medium text-white hover:bg-rose-700"
-          >
+          <button onClick={() => setActie("reject")} className={`${KNOP_BASIS} ${KNOP_FOUT}`}>
             Verwerpen
           </button>
           <button
             onClick={() => setActie("comment")}
-            className="rounded border border-line px-2 py-1 text-xs font-medium text-ink hover:bg-surface"
+            className={`${KNOP_BASIS} border border-line text-ink hover:bg-surface`}
           >
             Opmerking
           </button>
@@ -142,11 +149,7 @@ function DecisionCard({
         <div className="mt-2 space-y-1.5" onClick={(e) => e.stopPropagation()}>
           <RedenSelect reden={reden} setReden={setReden} />
           <div className="flex gap-1.5">
-            <button
-              disabled={bezig}
-              onClick={() => verstuur({ type: "reject", review_reason: reden })}
-              className="rounded bg-rose-600 px-2 py-1 text-xs font-medium text-white disabled:opacity-50"
-            >
+            <button disabled={bezig} onClick={() => verstuur({ type: "reject", review_reason: reden })} className={`${KNOP_BASIS} ${KNOP_FOUT}`}>
               Verwerpen
             </button>
             <AnnuleerKnop onClick={() => setActie(null)} />
@@ -159,7 +162,7 @@ function DecisionCard({
           <select
             value={klasse}
             onChange={(e) => setKlasse(e.target.value)}
-            className="w-full rounded border border-line px-2 py-1 text-xs"
+            className="w-full rounded-field border border-line px-2 py-1.5 text-xs"
           >
             {JAS_KLASSEN.map((k) => (
               <option key={k} value={k}>
@@ -171,16 +174,14 @@ function DecisionCard({
             value={toelichting}
             onChange={(e) => setToelichting(e.target.value)}
             placeholder="Toelichting"
-            className="w-full rounded border border-line px-2 py-1 text-xs"
+            className="w-full rounded-field border border-line px-2 py-1.5 text-xs"
           />
           <RedenSelect reden={reden} setReden={setReden} />
           <div className="flex gap-1.5">
             <button
               disabled={bezig}
-              onClick={() =>
-                verstuur({ type: "edit", review_reason: reden, wijziging: { klasse, toelichting } })
-              }
-              className="rounded bg-sky-600 px-2 py-1 text-xs font-medium text-white disabled:opacity-50"
+              onClick={() => verstuur({ type: "edit", review_reason: reden, wijziging: { klasse, toelichting } })}
+              className={`${KNOP_BASIS} ${KNOP_INFO}`}
             >
               Opslaan
             </button>
@@ -195,13 +196,13 @@ function DecisionCard({
             value={comment}
             onChange={(e) => setComment(e.target.value)}
             placeholder="Opmerking"
-            className="w-full rounded border border-line px-2 py-1 text-xs"
+            className="w-full rounded-field border border-line px-2 py-1.5 text-xs"
           />
           <div className="flex gap-1.5">
             <button
               disabled={bezig || !comment.trim()}
               onClick={() => verstuur({ type: "comment", comment })}
-              className="rounded bg-lint px-2 py-1 text-xs font-medium text-white disabled:opacity-50"
+              className={`${KNOP_BASIS} bg-lint text-paper hover:bg-accent-soft`}
             >
               Plaatsen
             </button>
@@ -218,7 +219,7 @@ function RedenSelect({ reden, setReden }: { reden: ReviewReason; setReden: (r: R
     <select
       value={reden}
       onChange={(e) => setReden(e.target.value as ReviewReason)}
-      className="w-full rounded border border-line px-2 py-1 text-xs"
+      className="w-full rounded-field border border-line px-2 py-1.5 text-xs"
     >
       {REDENEN.map((r) => (
         <option key={r.waarde} value={r.waarde}>
@@ -231,7 +232,7 @@ function RedenSelect({ reden, setReden }: { reden: ReviewReason; setReden: (r: R
 
 function AnnuleerKnop({ onClick }: { onClick: () => void }) {
   return (
-    <button onClick={onClick} className="rounded border border-line px-2 py-1 text-xs text-muted hover:bg-surface">
+    <button onClick={onClick} className={`${KNOP_BASIS} border border-line text-muted hover:bg-surface`}>
       Annuleren
     </button>
   );
@@ -252,17 +253,37 @@ export function ReviewQueue({
     acc[el.lifecycle] = (acc[el.lifecycle] ?? 0) + 1;
     return acc;
   }, {});
+  const totaal = elementen.length;
+  const beslist = elementen.filter((el) => BESLIST.includes(el.lifecycle)).length;
+  const teReviewen = (telling.voorgesteld ?? 0) + (telling.critic_checked ?? 0);
+  const perc = totaal ? Math.round((beslist / totaal) * 100) : 0;
+  const afgerond = totaal > 0 && beslist === totaal;
 
   return (
-    <div className="space-y-2">
-      <div className="flex items-center gap-3 text-xs text-muted">
-        <span>{elementen.length} elementen</span>
-        {(telling.voorgesteld ?? 0) + (telling.critic_checked ?? 0) > 0 ? (
-          <span>🟡 {(telling.voorgesteld ?? 0) + (telling.critic_checked ?? 0)} te reviewen</span>
-        ) : null}
-        {telling.human_approved ? <span>🟢 {telling.human_approved} akkoord</span> : null}
-        {telling.rejected ? <span>🔴 {telling.rejected} verworpen</span> : null}
+    <div className="space-y-2.5">
+      {/* Voortgang: hoeveel van de N elementen zijn beoordeeld, met een dunne balk. */}
+      <div className="rounded-kaart border border-line bg-surface px-3 py-2.5 shadow-zacht">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-xs font-medium text-ink">
+            Review — {beslist}/{totaal} beoordeeld
+          </span>
+          {afgerond ? (
+            <span className="inline-flex items-center gap-1 rounded-full bg-aandacht-groen-bg px-2 py-0.5 text-[0.65rem] font-semibold text-aandacht-groen-tekst">
+              ✓ Review afgerond
+            </span>
+          ) : (
+            <span className="flex items-center gap-2 text-[0.65rem] text-muted">
+              {teReviewen > 0 && <span>🟡 {teReviewen}</span>}
+              {telling.human_approved ? <span>🟢 {telling.human_approved}</span> : null}
+              {telling.rejected ? <span>🔴 {telling.rejected}</span> : null}
+            </span>
+          )}
+        </div>
+        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-line/60" role="progressbar" aria-valuenow={perc} aria-valuemin={0} aria-valuemax={100}>
+          <div className={`h-full rounded-full transition-all ${afgerond ? "bg-succes" : "bg-lint"}`} style={{ width: `${perc}%` }} />
+        </div>
       </div>
+
       {elementen.map((el) => (
         <DecisionCard
           key={el.id}

@@ -50,8 +50,8 @@ De **harde scheidingslijn**: alles met een token is server-only.
   (`verifyCredentials`/`getAccountStatus`/`getSetupStatus`) die de login-flow gebruikt.
 - `lib/api.ts` — alle client-side fetch-helpers naar `/api/**`. Eén plek voor het foutcontract
   (`parseError` → `ApiError` met `retryAfter`); gebruik `isApiError()` in de UI.
-- `lib/types.ts` — **met de hand afgeleid van `../api/app/contracts.py`** (+ `annotatie_contracts.py`)
-  en de bron-van-waarheid voor de TS-kant. Wijzigt het API-contract, werk dit bestand bij (verifieer
+- `lib/types.ts` — **met de hand afgeleid van `../api/app/contracts.py`** (+ `annotatie_contracts.py`
+  + `gesprek_contracts.py`) en de bron-van-waarheid voor de TS-kant. Wijzigt het API-contract, werk dit bestand bij (verifieer
   desgewenst tegen `openapi-typescript http://localhost:3000/openapi.json` — zie de README).
   `lib/jas.ts` is de afgeleide presentatie-helper voor de JAS-klasse-weergave (kleur + label uit
   `docs/wa-table.png`); brongetrouw geldt ook in de UI — verzin er geen klassen bij.
@@ -79,14 +79,28 @@ De **harde scheidingslijn**: alles met een token is server-only.
 
 ## Werkplek — de Assistent-pagina (`/workbench`)
 
-De **Assistent-pagina** (`app/workbench/page.tsx`, titel "Assistent") → `components/werkplek/WerkplekClient.tsx`:
-één gespreksvenster voor **twee werkwijzen** — **vragen** aan de Juridische Assistent (Q&A over de
-kennisgraaf) én **JAS-annotatie** (de agent annoteert een bepaling → de mens reviewt; zie
-`docs/wetsanalyse-workbench/PLAN.md`). Beide lopen als SSE tegen graph-qa's unified agent.
-- De annotatie-sub-UI zit in `components/workbench/`: **`DocumentPaneel`** highlight de **letterlijke**
-  fragmenten in de artikeltekst (`segmenteer` + `lib/jas.ts:jasStyle`; substring-terugvinden), **`ReviewQueue`**
-  = decision-cards (edit/reject vragen een `review_reason`), `DocumentLijst` de open documenten.
-- **Twee backends, frontend orkestreert:** het **live agent-verkeer via graph-qa** — BFF
+De **Assistent-pagina** (`app/workbench/page.tsx`, titel "Assistent") → `components/werkplek/WorkbenchShell.tsx`:
+een **volledige chat-app-shell** (Claude/ChatGPT-achtig, in Belastingdienst-huisstijl). Op `/workbench`
+wijkt de globale chrome: `components/SiteHeader.tsx` (null op `/workbench`) + `components/AppMain.tsx`
+(daar vol-bleed `h-[100dvh]`); `SiteFooter` was al null. De shell is twee kolommen:
+- **Links de sidebar** (`GesprekSidebar` + `GesprekLijst`): bovenin het Belastingdienst-logo, een
+  "Nieuw gesprek"-knop, de **chatgeschiedenis** (per-gebruiker gepersisteerd), en onderin een
+  **instellingen/gebruiker**-blok (Account/Beheer + uitloggen). Op `<lg` is dit een off-canvas drawer
+  (mobiele topbar met hamburger; scrim/Escape/safe-area).
+- **Rechts het chatvenster** (`WerkplekClient.tsx`): één gespreksvenster voor **vragen** (Q&A) én
+  **JAS-annotatie**, beide als SSE tegen graph-qa's unified agent. De thread hydrateert uit het actieve
+  gesprek en **persisteert elke beurt** naar de api (`/v1/gesprekken/*`); de shell remount het venster
+  (via `key`) alleen bij echt van gesprek wisselen, niet wanneer een verse chat bij de eerste beurt zijn
+  id krijgt (anders breekt de stream). De graph-qa `conversationId` (thread_id) = het `gesprekId`.
+- De **annotatie-review** is een **artefact**: een annotatie-beurt toont een compacte chip in de thread
+  die het **`ArtefactPaneel`** opent — een van rechts inschuivend paneel (mobiel bottom-sheet) met de
+  annotatie-sub-UI uit `components/workbench/`: **`DocumentPaneel`** highlight de **letterlijke**
+  fragmenten (`segmenteer` + `lib/jas.ts:jasStyle`; substring-terugvinden) en **`ReviewQueue`** de
+  decision-cards (aandacht-as 🟢🟡🔴, voortgangsteller; edit/reject vragen een `review_reason`).
+- **Drie backends, frontend orkestreert:** de **chatgeschiedenis via de api** — BFF
+  `app/api/gesprekken/*` → `/v1/gesprekken/*` via `proxy()`, mét de vertrouwde `X-User-Id` uit de sessie
+  (client-helpers `lijstGesprekken`/`maakGesprek`/`haalGesprek`/`voegBerichtToe`/`hernoemGesprek`/
+  `verwijderGesprek`); het **live agent-verkeer via graph-qa** — BFF
   `app/api/annotatie/agent/route.ts` = SSE-passthrough naar `graphQaBaseUrl()` + `GRAPH_QA_TOKEN`
   (client-helper `annoteerAgentStream` in `lib/api.ts`), en het documentpaneel haalt de artikeltekst via
   `app/api/annotatie/artikel/route.ts` → graph-qa `GET /v1/artikel` (`haalArtikelGraaf`). De **persistente

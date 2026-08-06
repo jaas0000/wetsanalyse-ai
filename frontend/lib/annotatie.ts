@@ -8,12 +8,12 @@ export const DOCUMENT_STATUS_LABEL: Record<DocumentStatus, string> = {
   gepromoveerd: "In de graaf",
 };
 
-// Badge-tone per status (Tailwind, Rijkshuisstijl): in behandeling = aandacht-oranje,
-// geaccordeerd = succes-groen, in de graaf = lintblauw.
+// Badge-tone per status (via de design-tokens, geen losse hex): in behandeling = aandacht-oker,
+// geaccordeerd = aandacht-groen, in de graaf = lintblauw.
 export const DOCUMENT_STATUS_STYLE: Record<DocumentStatus, string> = {
-  in_review: "bg-[#fbefe2] text-[#8e4600] border-[#e7c9a8]",
-  geaccordeerd: "bg-[#e6f0e0] text-[#2c6608] border-[#bcd9a8]",
-  gepromoveerd: "bg-[#e7eef5] text-[#154273] border-[#bcd2e6]",
+  in_review: "bg-aandacht-geel-bg text-aandacht-geel-tekst border-aandacht-geel-rand",
+  geaccordeerd: "bg-aandacht-groen-bg text-aandacht-groen-tekst border-aandacht-groen-rand",
+  gepromoveerd: "bg-lint/10 text-lint border-lint/25",
 };
 
 export function documentStatusLabel(status: DocumentStatus): string {

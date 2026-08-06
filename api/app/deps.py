@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .annotatie_store import AnnotatieStore
+    from .gesprek_store import GesprekStore
 
 logger = logging.getLogger(__name__)
 
@@ -19,3 +20,10 @@ def get_annotatie_store() -> "AnnotatieStore":
     from .annotatie_store import AnnotatieStore
 
     return AnnotatieStore()
+
+
+@lru_cache
+def get_gesprek_store() -> "GesprekStore":
+    from .gesprek_store import GesprekStore
+
+    return GesprekStore()

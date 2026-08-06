@@ -132,6 +132,36 @@ annotatie_audit = Table(
 )
 
 
+# --- Gesprekken-domein (chat-werkruimte) --------------------------------------
+# Persistente chatgeschiedenis van de werkplek. Anders dan het annotatie-domein (client-gescopet,
+# gedeeld) zijn gesprekken **per gebruiker** gescopet via `user_id` — de identiteit die de BFF uit de
+# ingelogde sessie als vertrouwde `X-User-Id`-header meegeeft (nooit uit browser-input). Eén rij per
+# gesprek; de berichten staan als aparte, geordende rijen (append-only in de praktijk: de UI voegt toe).
+gesprekken = Table(
+    "gesprekken",
+    metadata,
+    Column("id", String(64), primary_key=True),
+    Column("user_id", String(64), nullable=False, default=""),
+    Column("titel", Text, nullable=False, default=""),
+    Column("created", _DT, nullable=False),
+    Column("updated", _DT, nullable=False),
+    Index("ix_gesprekken_user_updated", "user_id", "updated"),
+)
+
+# De berichten binnen een gesprek. `inhoud` (JSON) draagt de heterogene payload van één beurt:
+# {tekst, denk?, bronnen?, annotatie_slug?, ontbrekend?}. De tijdlijn = ORDER BY id.
+gesprek_berichten = Table(
+    "gesprek_berichten",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("gesprek_id", String(64), nullable=False),
+    Column("rol", String(16), nullable=False, default="user"),
+    Column("inhoud", _JSON, nullable=False, default=dict),
+    Column("created", _DT, nullable=False),
+    Index("ix_gesprek_berichten_gesprek", "gesprek_id", "id"),
+)
+
+
 # --- engine-beheer -------------------------------------------------------------
 
 _engine: AsyncEngine | None = None

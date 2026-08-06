@@ -2,20 +2,18 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
-import { Button } from "@/components/ui/Button";
+import { ArtefactPaneel } from "@/components/werkplek/ArtefactPaneel";
 import { Markdown } from "@/components/werkplek/Markdown";
-import { DocumentLijst } from "@/components/workbench/DocumentLijst";
-import { DocumentPaneel } from "@/components/workbench/DocumentPaneel";
-import { ReviewQueue } from "@/components/workbench/ReviewQueue";
 import {
   annoteerAgentStream,
   beslis,
   haalArtikelGraaf,
   haalDocument,
+  haalGesprek,
   isApiError,
-  lijstDocumenten,
   maakDocument,
-  verwijderDocument,
+  maakGesprek,
+  voegBerichtToe,
   zetElementen,
 } from "@/lib/api";
 import type {
@@ -23,20 +21,16 @@ import type {
   AnnotatieDocument,
   BeslissingInvoer,
   Bron,
-  DocumentSamenvatting,
   GraafArtikel,
   OntbrekendItem,
   VoorstelElement,
 } from "@/lib/types";
-import { jasStyle } from "@/lib/jas";
 import { wettenOverheidHref } from "@/lib/url";
 
 type Item =
   | { id: string; type: "user"; tekst: string }
   | { id: string; type: "antwoord"; tekst: string; denk?: string; bronnen?: Bron[] }
   | { id: string; type: "annotatie"; slug: string; ontbrekend?: OntbrekendItem[] };
-
-const SESSIE_KEY = "wa_werkplek_sessie";
 
 function uid(): string {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
@@ -47,80 +41,56 @@ function foutTekst(e: unknown): string {
   return (e as Error)?.message ?? "Er ging iets mis.";
 }
 
-function sessie(): string {
-  try {
-    const bestaand = localStorage.getItem(SESSIE_KEY);
-    if (bestaand) return bestaand;
-    const id = `web-${crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`}`;
-    localStorage.setItem(SESSIE_KEY, id);
-    return id;
-  } catch {
-    return `web-${Date.now()}`;
-  }
+interface Props {
+  /** Het te openen gesprek, of `null` voor een vers (nog niet gepersisteerd) gesprek. */
+  initialGesprekId: string | null;
+  /** Roept terug zodra bij de eerste beurt een gesprek is aangemaakt (voor sidebar-highlight + lijst). */
+  onGesprekAangemaakt: (id: string) => void;
+  /** Roept terug na elke persistente wijziging zodat de sidebar-lijst kan verversen. */
+  onGewijzigd: () => void;
 }
 
-function ledenVan(info: GraafArtikel): string[] {
-  return info.leden_teksten.map((l) => (l.lid ? `${l.lid}. ${l.tekst}` : l.tekst)).filter(Boolean);
-}
-
-export function WerkplekClient() {
-  const [documenten, setDocumenten] = useState<DocumentSamenvatting[]>([]);
+export function WerkplekClient({ initialGesprekId, onGesprekAangemaakt, onGewijzigd }: Props) {
+  const [gesprekId, setGesprekId] = useState<string | null>(initialGesprekId);
   const [items, setItems] = useState<Item[]>([]);
   const [docs, setDocs] = useState<Record<string, AnnotatieDocument>>({});
   const [infos, setInfos] = useState<Record<string, GraafArtikel>>({});
   const [invoer, setInvoer] = useState("");
   const [bezig, setBezig] = useState(false);
   const [actiefId, setActiefId] = useState<string | undefined>();
-  const [hoogte, setHoogte] = useState<string>("70dvh");
-  const [menuOpen, setMenuOpen] = useState(false); // mobiele documenten-drawer
-  const sessieRef = useRef<string>("");
+  const [artefactSlug, setArtefactSlug] = useState<string | undefined>();
   const lijstRef = useRef<HTMLDivElement>(null);
-  const rootRef = useRef<HTMLDivElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
 
+  // Hydrateer één keer bij mount: bestaande gespreksberichten → thread. (De shell remount dit component
+  // via een key wanneer echt van gesprek wordt gewisseld, dus dit hoeft niet op gesprekId te reageren.)
   useEffect(() => {
-    sessieRef.current = sessie();
-    verversLijst();
-  }, []);
-
-  // Vul de ruimte tussen de eigen bovenkant en de globale footer (runtime gemeten; geen magische
-  // aftrek), zodat de invoerbalk laag staat en alleen de thread scrollt — én de footer + de onderrand
-  // van <main> zichtbaar blijven i.p.v. onder de viewport te vallen. Herberekenen bij resize/toetsenbord
-  // (visualViewport op mobiel); de footer wordt op smalle schermen hoger (tekst wrapt), dus meten.
-  useLayoutEffect(() => {
-    const meet = () => {
-      const top = rootRef.current?.getBoundingClientRect().top ?? 0;
-      const vh = window.visualViewport?.height ?? window.innerHeight;
-      const footer = document.querySelector("footer");
-      const footerH = footer ? footer.offsetHeight : 0;
-      const mainEl = rootRef.current?.closest("main");
-      const mainPb = mainEl ? parseFloat(getComputedStyle(mainEl).paddingBottom) || 0 : 0;
-      // Reserveer de footer + de onderpadding van <main> + een kleine tussenruimte.
-      const reserve = footerH + mainPb + 8;
-      setHoogte(`${Math.max(320, Math.round(vh - top - reserve))}px`);
-    };
-    meet();
-    window.addEventListener("resize", meet);
-    window.visualViewport?.addEventListener("resize", meet);
+    if (!initialGesprekId) return;
+    let afgebroken = false;
+    haalGesprek(initialGesprekId)
+      .then((g) => {
+        if (afgebroken) return;
+        setItems(
+          g.berichten.map((b) =>
+            b.rol === "user"
+              ? { id: uid(), type: "user" as const, tekst: b.tekst }
+              : b.annotatie_slug
+                ? { id: uid(), type: "annotatie" as const, slug: b.annotatie_slug, ontbrekend: b.ontbrekend }
+                : { id: uid(), type: "antwoord" as const, tekst: b.tekst, denk: b.denk, bronnen: b.bronnen },
+          ),
+        );
+        // Documenten van annotatie-berichten alvast laden voor de chip-labels.
+        for (const b of g.berichten) if (b.annotatie_slug) void laadDoc(b.annotatie_slug);
+      })
+      .catch(() => {});
     return () => {
-      window.removeEventListener("resize", meet);
-      window.visualViewport?.removeEventListener("resize", meet);
+      afgebroken = true;
     };
-  }, []);
+  }, [initialGesprekId]);
 
   useEffect(() => {
     lijstRef.current?.scrollTo({ top: lijstRef.current.scrollHeight, behavior: "smooth" });
   }, [items, bezig]);
-
-  // Escape sluit de mobiele drawer.
-  useEffect(() => {
-    if (!menuOpen) return;
-    const opEsc = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setMenuOpen(false);
-    };
-    window.addEventListener("keydown", opEsc);
-    return () => window.removeEventListener("keydown", opEsc);
-  }, [menuOpen]);
 
   // Auto-groeiende textarea (groeit met de inhoud tot een max; daarna intern scrollen).
   useLayoutEffect(() => {
@@ -130,32 +100,78 @@ export function WerkplekClient() {
     ta.style.height = `${Math.min(ta.scrollHeight, 200)}px`;
   }, [invoer]);
 
-  function verversLijst() {
-    lijstDocumenten().then(setDocumenten).catch(() => {});
-  }
   function updateItem(id: string, patch: Partial<Item>) {
     setItems((xs) => xs.map((x) => (x.id === id ? ({ ...x, ...patch } as Item) : x)));
+  }
+
+  async function laadDoc(slug: string): Promise<AnnotatieDocument | null> {
+    try {
+      const document = await haalDocument(slug);
+      setDocs((m) => ({ ...m, [slug]: document }));
+      return document;
+    } catch {
+      return null;
+    }
+  }
+
+  async function openArtefact(slug: string) {
+    const doc = docs[slug] ?? (await laadDoc(slug));
+    if (!doc) return;
+    if (!infos[slug]) {
+      try {
+        const graaf = await haalArtikelGraaf(doc.bwbId, doc.artikel, doc.lid);
+        setInfos((m) => ({ ...m, [slug]: graaf }));
+      } catch {
+        /* zonder graaf geen paneel */
+        return;
+      }
+    }
+    setArtefactSlug(slug);
+  }
+
+  /** Persisteer één beurt (best-effort; een mislukte opslag mag de chat niet blokkeren). */
+  async function persisteer(gid: string, rol: "user" | "assistant", velden: Record<string, unknown>) {
+    try {
+      await voegBerichtToe(gid, { rol, ...velden });
+    } catch {
+      /* stil — de UI toont de beurt sowieso */
+    }
   }
 
   async function verstuur(vast?: string) {
     const prompt = (vast ?? invoer).trim();
     if (!prompt || bezig) return;
     setInvoer("");
+
+    // Zorg voor een gesprek-id (maak er bij de eerste beurt één aan; titel = de vraag, afgekapt).
+    let gid = gesprekId;
+    if (!gid) {
+      try {
+        const g = await maakGesprek(prompt.slice(0, 80));
+        gid = g.id;
+        setGesprekId(gid);
+        onGesprekAangemaakt(gid);
+      } catch (e) {
+        setItems((xs) => [...xs, { id: uid(), type: "antwoord", tekst: `⚠️ ${foutTekst(e)}` }]);
+        return;
+      }
+    }
+
     const antId = uid();
     setItems((xs) => [...xs, { id: uid(), type: "user", tekst: prompt }, { id: antId, type: "antwoord", tekst: "" }]);
     setBezig(true);
+    void persisteer(gid, "user", { tekst: prompt });
 
     const doelRef: { d: AgentDoel | null } = { d: null };
     const els: VoorstelElement[] = [];
     const ontbrekend: OntbrekendItem[] = [];
     let tekst = "";
     let denk = "";
+    let bronnen: Bron[] = [];
     try {
       await annoteerAgentStream(
         prompt,
         {
-          // Het denkproces (statusstappen + tool-narratie) stroomt naar `denk`; het eindantwoord
-          // naar `tekst`. De frontend toont ze gescheiden (inklapbaar denkproces-blok + antwoord).
           onStatus: (m) => {
             denk += (denk ? "\n" : "") + "· " + m;
             updateItem(antId, { denk });
@@ -168,18 +184,19 @@ export function WerkplekClient() {
             tekst += t;
             updateItem(antId, { tekst });
           },
-          onSources: (b) => updateItem(antId, { bronnen: b }),
+          onSources: (b) => {
+            bronnen = b;
+            updateItem(antId, { bronnen: b });
+          },
           onDoel: (d) => (doelRef.d = d),
           onElement: (e) => els.push(e),
-          onOntbrekend: (items) => ontbrekend.push(...items),
+          onOntbrekend: (xs) => ontbrekend.push(...xs),
         },
-        sessieRef.current,
+        gid,
       );
 
       const doel = doelRef.d;
       if (doel && doel.bwbId) {
-        // De ophaal-agent stuurt de opgehaalde tekst mee in het doel — gebruik dát (één bron; werkt ook
-        // voor beleidsregels/divisies zoals '9.1'). Val alleen terug op de graaf als het ontbreekt.
         const graaf: GraafArtikel = doel.leden_teksten?.length
           ? {
               bwbId: doel.bwbId,
@@ -203,10 +220,13 @@ export function WerkplekClient() {
             x.id === antId ? { id: antId, type: "annotatie", slug: bijgewerkt.slug, ontbrekend } : x,
           ),
         );
-        verversLijst();
-      } else if (!tekst.trim()) {
-        updateItem(antId, { tekst: "(geen antwoord)" });
+        setArtefactSlug(bijgewerkt.slug); // schuif het artefact meteen in
+        void persisteer(gid, "assistant", { annotatie_slug: bijgewerkt.slug, ontbrekend });
+      } else {
+        if (!tekst.trim()) updateItem(antId, { tekst: "(geen antwoord)" });
+        void persisteer(gid, "assistant", { tekst: tekst.trim() || "(geen antwoord)", denk, bronnen });
       }
+      onGewijzigd();
     } catch (e) {
       updateItem(antId, { tekst: `⚠️ ${foutTekst(e)}` });
     } finally {
@@ -214,46 +234,11 @@ export function WerkplekClient() {
     }
   }
 
-  async function openDocument(slug: string) {
-    if (!docs[slug]) {
-      try {
-        const document = await haalDocument(slug);
-        const graaf = await haalArtikelGraaf(document.bwbId, document.artikel, document.lid);
-        setDocs((m) => ({ ...m, [slug]: document }));
-        setInfos((m) => ({ ...m, [slug]: graaf }));
-      } catch (e) {
-        setItems((xs) => [...xs, { id: uid(), type: "antwoord", tekst: `⚠️ ${foutTekst(e)}` }]);
-        return;
-      }
-    }
-    // Staat dit document al open in de thread? Dan geen tweede kaart toevoegen (voorkomt duplicaten
-    // bij herhaald klikken in het linkermenu).
-    setItems((xs) =>
-      xs.some((x) => x.type === "annotatie" && x.slug === slug)
-        ? xs
-        : [...xs, { id: uid(), type: "annotatie", slug }],
-    );
-  }
-
-  async function verwijder(slug: string) {
-    if (!window.confirm("Dit annotatie-document verwijderen? Dit kan niet ongedaan worden gemaakt.")) return;
-    try {
-      await verwijderDocument(slug);
-      setItems((xs) => xs.filter((x) => !(x.type === "annotatie" && x.slug === slug)));
-      verversLijst();
-    } catch {
-      /* stil */
-    }
-  }
-
   async function beslissing(slug: string, elementId: string, req: BeslissingInvoer) {
     try {
       const bij = await beslis(slug, elementId, req);
       setDocs((m) => ({ ...m, [slug]: bij }));
-      verversLijst();
     } catch (e) {
-      // Niet stil slikken: een mislukte beslissing (409/422/404/429/netwerk) verdampt anders zonder
-      // dat de jurist het merkt — de kaart sluit alsof het lukte. Toon de fout in de thread.
       setItems((xs) => [...xs, { id: uid(), type: "antwoord", tekst: `⚠️ Beslissing mislukt: ${foutTekst(e)}` }]);
     }
   }
@@ -266,146 +251,107 @@ export function WerkplekClient() {
   }
 
   return (
-    <div
-      ref={rootRef}
-      style={{ height: hoogte }}
-      className="grid gap-4 lg:grid-cols-[minmax(220px,260px)_1fr]"
-    >
-      {/* Zijpaneel met lopende annotaties (desktop; op mobiel via de drawer hieronder) */}
-      <div className="hidden min-h-0 overflow-y-auto lg:block">
-        <DocumentLijst
-          documenten={documenten}
-          onOpen={openDocument}
-          onNew={() => setItems([])}
-          onVerwijder={verwijder}
-        />
-      </div>
-
-      {/* Mobiele drawer met dezelfde documentenlijst */}
-      {menuOpen && (
-        <div className="fixed inset-0 z-40 lg:hidden" role="dialog" aria-modal="true" aria-label="Annotaties">
-          <div className="absolute inset-0 bg-ink/40" onClick={() => setMenuOpen(false)} />
-          <div className="absolute inset-y-0 left-0 w-[82%] max-w-xs overflow-y-auto bg-paper p-3 shadow-xl">
-            <div className="mb-2 flex items-center justify-between">
-              <span className="font-display text-sm font-semibold text-lint">Annotaties</span>
-              <button
-                type="button"
-                onClick={() => setMenuOpen(false)}
-                aria-label="Sluiten"
-                className="rounded-lg px-2 py-1 text-muted transition-colors hover:text-ink"
-              >
-                ✕
-              </button>
+    <div className="flex h-full min-h-0 flex-col">
+      {/* Thread — enige scrollende gebied; berichten in een gecentreerde leeskolom */}
+      <div ref={lijstRef} className="min-h-0 flex-1 overflow-y-auto" aria-live="polite">
+        <div className="mx-auto max-w-3xl space-y-6 px-4 py-8">
+          {items.length === 0 && (
+            <div className="pt-[10dvh] text-center">
+              <p className="font-display text-2xl font-semibold text-lint">Waarmee kan ik helpen?</p>
+              <p className="mx-auto mt-2 max-w-md text-sm text-muted">
+                Stel een vraag over de wet- en regelgeving, of vraag een annotatie volgens het JAS.
+              </p>
+              <div className="mt-6 flex flex-wrap justify-center gap-2">
+                {VOORBEELDEN.map((v) => (
+                  <button
+                    key={v}
+                    type="button"
+                    onClick={() => void verstuur(v)}
+                    className="rounded-bubbel border border-line bg-paper px-3.5 py-2 text-left text-xs text-lint shadow-zacht transition-all hover:-translate-y-0.5 hover:border-lint/40 hover:shadow-kaart"
+                  >
+                    {v}
+                  </button>
+                ))}
+              </div>
             </div>
-            <DocumentLijst
-              documenten={documenten}
-              onOpen={(slug) => {
-                setMenuOpen(false);
-                void openDocument(slug);
-              }}
-              onNew={() => {
-                setMenuOpen(false);
-                setItems([]);
-              }}
-              onVerwijder={verwijder}
-            />
-          </div>
-        </div>
-      )}
+          )}
 
-      <div className="flex min-h-0 min-w-0 flex-col">
-        {/* Mobiele triggerbalk voor de documenten-drawer (desktop heeft de zijkolom) */}
-        <div className="mb-1 flex shrink-0 lg:hidden">
-          <button
-            type="button"
-            onClick={() => setMenuOpen(true)}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-line px-2.5 py-1.5 text-xs text-ink transition-colors hover:border-lint"
-            aria-label="Annotaties openen"
-          >
-            <span aria-hidden>☰</span>
-            <span>Annotaties{documenten.length > 0 ? ` (${documenten.length})` : ""}</span>
-          </button>
-        </div>
-
-        {/* Thread — enige scrollende gebied; berichten in een gecentreerde leeskolom */}
-        <div ref={lijstRef} className="min-h-0 flex-1 overflow-y-auto" aria-live="polite">
-          <div className="mx-auto max-w-3xl space-y-6 px-1 py-6">
-            {items.length === 0 && (
-              <div className="pt-6 text-center">
-                <p className="font-display text-lg font-semibold text-lint">Waarmee kan ik helpen?</p>
-                <p className="mt-1 text-sm text-muted">
-                  Stel een vraag over de wet- en regelgeving, of vraag een annotatie volgens het JAS.
-                </p>
-                <div className="mt-4 flex flex-wrap justify-center gap-2">
-                  {VOORBEELDEN.map((v) => (
-                    <button
-                      key={v}
-                      type="button"
-                      onClick={() => void verstuur(v)}
-                      className="rounded-full border border-line bg-paper px-3 py-1.5 text-left text-xs text-lint transition-colors hover:bg-surface"
-                    >
-                      {v}
-                    </button>
-                  ))}
+          {items.map((item) =>
+            item.type === "user" ? (
+              <div key={item.id} className="flex justify-end">
+                <div className="max-w-[85%] whitespace-pre-wrap break-words rounded-bubbel bg-lint/10 px-4 py-2.5 text-sm text-ink">
+                  {item.tekst}
                 </div>
               </div>
-            )}
-
-            {items.map((item) =>
-              item.type === "user" ? (
-                <div key={item.id} className="flex justify-end">
-                  <div className="max-w-[85%] whitespace-pre-wrap break-words rounded-2xl bg-accent px-4 py-2.5 text-sm text-paper">
-                    {item.tekst}
-                  </div>
-                </div>
-              ) : item.type === "antwoord" ? (
-                <div key={item.id} className="text-sm text-ink">
-                  {item.denk && <DenkProces tekst={item.denk} actief={bezig && !item.tekst} />}
-                  {item.tekst ? (
-                    <Markdown tekst={item.tekst} />
-                  ) : item.denk ? null : (
-                    <Punten />
-                  )}
-                  {item.bronnen && item.bronnen.length > 0 && <Bronnen bronnen={item.bronnen} />}
-                </div>
-              ) : docs[item.slug] && infos[item.slug] ? (
-                <AnnotatieKaart
-                  key={item.id}
-                  doc={docs[item.slug]}
-                  info={infos[item.slug]}
-                  ontbrekend={item.ontbrekend}
-                  actiefId={actiefId}
-                  onKies={setActiefId}
-                  onBeslissing={(elementId, req) => beslissing(item.slug, elementId, req)}
-                />
-              ) : null,
-            )}
-          </div>
-        </div>
-
-        {/* Invoerbalk — gepind onderaan, gecentreerd, auto-groeiend */}
-        <div className="shrink-0 bg-paper">
-          <div className="mx-auto max-w-3xl px-1 pb-3 pt-2">
-            <div className="flex items-end gap-2 rounded-2xl border border-line bg-white px-2 py-1.5 focus-within:border-lint">
-              <textarea
-                ref={taRef}
-                value={invoer}
-                onChange={(e) => setInvoer(e.target.value)}
-                onKeyDown={opToets}
-                rows={1}
-                placeholder="Stel een vraag of vraag een annotatie…"
-                className="max-h-[200px] flex-1 resize-none bg-transparent px-2 py-2 text-sm text-ink placeholder:text-faint focus:outline-none"
+            ) : item.type === "antwoord" ? (
+              <div key={item.id} className="text-sm text-ink">
+                {item.denk && <DenkProces tekst={item.denk} actief={bezig && !item.tekst} />}
+                {item.tekst ? <Markdown tekst={item.tekst} /> : item.denk ? null : <Punten />}
+                {item.bronnen && item.bronnen.length > 0 && <Bronnen bronnen={item.bronnen} />}
+              </div>
+            ) : (
+              <AnnotatieChip
+                key={item.id}
+                doc={docs[item.slug]}
+                aantal={docs[item.slug]?.elementen.length}
+                onOpen={() => void openArtefact(item.slug)}
               />
-              <Button onClick={() => verstuur()} disabled={bezig || !invoer.trim()} size="sm" className="mb-0.5 w-auto shrink-0">
-                {bezig ? "…" : "Stuur"}
-              </Button>
-            </div>
-            <p className="mt-2 text-center text-xs text-faint">
-              De agent bevraagt de kennisgraaf — controleer altijd de bron.
-            </p>
-          </div>
+            ),
+          )}
         </div>
       </div>
+
+      {/* Invoerbalk — gepind onderaan, gecentreerd, auto-groeiend */}
+      <div className="shrink-0 bg-paper">
+        <div className="mx-auto max-w-3xl px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2">
+          <div className="flex items-end gap-2 rounded-bubbel border border-line bg-white px-2 py-1.5 shadow-zacht transition-shadow focus-within:border-lint focus-within:shadow-kaart">
+            <textarea
+              ref={taRef}
+              value={invoer}
+              onChange={(e) => setInvoer(e.target.value)}
+              onKeyDown={opToets}
+              rows={1}
+              placeholder="Stel een vraag of vraag een annotatie…"
+              className="max-h-[200px] flex-1 resize-none bg-transparent px-2 py-2 text-sm text-ink placeholder:text-faint focus:outline-none"
+            />
+            <button
+              type="button"
+              onClick={() => verstuur()}
+              disabled={bezig || !invoer.trim()}
+              aria-label="Versturen"
+              className="mb-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent text-paper transition-colors hover:bg-accent-soft disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-lint"
+            >
+              {bezig ? (
+                <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-paper" />
+              ) : (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <path d="M12 19V5M5 12l7-7 7 7" />
+                </svg>
+              )}
+            </button>
+          </div>
+          <p className="mt-2 text-center text-xs text-faint">
+            De agent bevraagt de kennisgraaf — controleer altijd de bron.
+          </p>
+        </div>
+      </div>
+
+      {/* Annotatie-artefact (slide-in) */}
+      {artefactSlug && docs[artefactSlug] && infos[artefactSlug] && (
+        <ArtefactPaneel
+          doc={docs[artefactSlug]}
+          info={infos[artefactSlug]}
+          ontbrekend={
+            (items.find((x) => x.type === "annotatie" && x.slug === artefactSlug) as
+              | { ontbrekend?: OntbrekendItem[] }
+              | undefined)?.ontbrekend
+          }
+          actiefId={actiefId}
+          onKies={setActiefId}
+          onBeslissing={(elementId, req) => beslissing(artefactSlug, elementId, req)}
+          onSluit={() => setArtefactSlug(undefined)}
+        />
+      )}
     </div>
   );
 }
@@ -416,52 +362,41 @@ const VOORBEELDEN = [
   "Welke artikelen gaan over invordering?",
 ];
 
-function AnnotatieKaart({
+/** Compacte kaart in de chatstroom die naar het annotatie-artefact leidt (opent het slide-in paneel). */
+function AnnotatieChip({
   doc,
-  info,
-  ontbrekend,
-  actiefId,
-  onKies,
-  onBeslissing,
+  aantal,
+  onOpen,
 }: {
-  doc: AnnotatieDocument;
-  info: GraafArtikel;
-  ontbrekend?: OntbrekendItem[];
-  actiefId?: string;
-  onKies: (id?: string) => void;
-  onBeslissing: (elementId: string, req: BeslissingInvoer) => Promise<void>;
+  doc?: AnnotatieDocument;
+  aantal?: number;
+  onOpen: () => void;
 }) {
-  const opschrift = `${info.citeertitel || doc.bwbId} — artikel ${info.artikel}${doc.lid ? ` lid ${doc.lid}` : ""}`;
+  const titel = doc ? `${doc.werkgebied || doc.bwbId} — art. ${doc.artikel}${doc.lid ? ` lid ${doc.lid}` : ""}` : "Annotatie";
   return (
-    <div className="grid gap-4 rounded-xl border border-line bg-surface p-3 lg:grid-cols-[1.4fr_1fr]">
-      <DocumentPaneel
-        opschrift={opschrift}
-        leden={ledenVan(info)}
-        elementen={doc.elementen.map((e) => ({ id: e.id, klasse: e.klasse, tekst: e.tekst }))}
-        actiefId={actiefId}
-        onKies={onKies}
-      />
-      <div className="space-y-3">
-        {doc.elementen.length > 0 ? (
-          <ReviewQueue elementen={doc.elementen} actiefId={actiefId} onKies={onKies} onBeslissing={onBeslissing} />
-        ) : (
-          <p className="text-sm text-muted">Geen elementen.</p>
-        )}
-        {ontbrekend && ontbrekend.length > 0 && (
-          <div className="rounded-xl border border-dashed border-line bg-paper p-3">
-            <p className="text-xs font-medium text-muted">Mogelijk ontbrekend (Critic-suggestie)</p>
-            <ul className="mt-1.5 space-y-1">
-              {ontbrekend.map((o, i) => (
-                <li key={i} className="flex items-start gap-1.5 text-xs">
-                  <span className={`shrink-0 rounded px-1.5 py-0.5 font-medium ${jasStyle(o.klasse)}`}>{o.klasse}</span>
-                  {o.reden && <span className="text-muted">{o.reden}</span>}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-      </div>
-    </div>
+    <button
+      type="button"
+      onClick={onOpen}
+      className="flex w-full items-center gap-3 rounded-kaart border border-line bg-surface px-4 py-3 text-left shadow-zacht transition-all hover:-translate-y-0.5 hover:border-lint/40 hover:shadow-kaart focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-lint"
+    >
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-lint/10 text-lint" aria-hidden>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z" />
+          <path d="M14 2v6h6M9 13l2 2 4-4" />
+        </svg>
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm font-medium text-ink">{titel}</span>
+        <span className="block text-xs text-muted">
+          JAS-annotatie{typeof aantal === "number" ? ` · ${aantal} elementen` : ""} · review openen
+        </span>
+      </span>
+      <span className="shrink-0 text-muted" aria-hidden>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="m9 18 6-6-6-6" />
+        </svg>
+      </span>
+    </button>
   );
 }
 
@@ -478,8 +413,6 @@ function Punten() {
 // Inklapbaar "Denkproces"-blok (Claude-stijl): streamt live terwijl de agent werkt (`actief`) en klapt
 // automatisch dicht zodra het antwoord er is. De gebruiker kan het handmatig weer openen.
 function DenkProces({ tekst, actief }: { tekst: string; actief: boolean }) {
-  // `open` volgt standaard `actief` (open tijdens streamen, dicht zodra het antwoord landt); zodra de
-  // gebruiker zelf klikt, wint die keuze. Afgeleid tijdens render — geen setState-in-effect.
   const [keuze, setKeuze] = useState<boolean | null>(null);
   const open = keuze ?? actief;
 
@@ -488,19 +421,17 @@ function DenkProces({ tekst, actief }: { tekst: string; actief: boolean }) {
       <button
         type="button"
         onClick={() => setKeuze(!open)}
-        className="inline-flex items-center gap-1.5 text-xs text-muted transition-colors hover:text-ink"
+        className="inline-flex items-center gap-1.5 rounded-full px-1 text-xs text-muted transition-colors hover:text-ink"
         aria-expanded={open}
       >
-        {actief && (
-          <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-muted" aria-hidden />
-        )}
+        {actief && <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-accent-soft" aria-hidden />}
         <span>{actief ? "Denkt na…" : "Denkproces"}</span>
         <span className={`transition-transform ${open ? "rotate-90" : ""}`} aria-hidden>
           ▸
         </span>
       </button>
       {open && (
-        <div className="mt-1.5 whitespace-pre-wrap border-l-2 border-line pl-3 text-xs leading-relaxed text-muted [overflow-wrap:anywhere]">
+        <div className="mt-1.5 whitespace-pre-wrap rounded-kaart border border-line bg-surface px-3 py-2 text-xs leading-relaxed text-muted [overflow-wrap:anywhere]">
           {tekst}
         </div>
       )}
@@ -525,7 +456,7 @@ function Bronnen({ bronnen }: { bronnen: Bron[] }) {
         </span>
       </button>
       {open && (
-        <div className="mt-1.5 break-words border-l-2 border-line pl-3 text-xs text-muted [overflow-wrap:anywhere]">
+        <div className="mt-1.5 break-words rounded-kaart border border-line bg-surface px-3 py-2 text-xs text-muted [overflow-wrap:anywhere]">
           {bronnen.map((b, i) => {
             const href = wettenOverheidHref(b.uri);
             return (

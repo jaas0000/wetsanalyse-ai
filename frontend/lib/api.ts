@@ -20,10 +20,14 @@ import type {
   AgentDoel,
   AnnotatieDocument,
   AuditRecord,
+  Bericht,
+  BerichtInvoer,
   BeslissingInvoer,
   Bron,
   DocumentCreate,
   DocumentSamenvatting,
+  Gesprek,
+  GesprekSamenvatting,
   GraafArtikel,
   OntbrekendItem,
   VoorstelElement,
@@ -287,6 +291,48 @@ export async function haalAudit(slug: string): Promise<AuditRecord[]> {
   return json<AuditRecord[]>(
     await fetch(`/api/annotatie/documenten/${pathSegment(slug)}/audit`, { cache: "no-store" }),
   );
+}
+
+// --- Gesprekken (chatgeschiedenis; per-gebruiker via de BFF-X-User-Id) ------
+
+export async function lijstGesprekken(): Promise<GesprekSamenvatting[]> {
+  return json<GesprekSamenvatting[]>(await fetch("/api/gesprekken", { cache: "no-store" }));
+}
+
+export async function maakGesprek(titel = ""): Promise<Gesprek> {
+  const res = await fetch("/api/gesprekken", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ titel }),
+  });
+  return json<Gesprek>(res);
+}
+
+export async function haalGesprek(id: string): Promise<Gesprek> {
+  return json<Gesprek>(await fetch(`/api/gesprekken/${pathSegment(id)}`, { cache: "no-store" }));
+}
+
+export async function voegBerichtToe(id: string, bericht: BerichtInvoer): Promise<Bericht> {
+  const res = await fetch(`/api/gesprekken/${pathSegment(id)}/berichten`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(bericht),
+  });
+  return json<Bericht>(res);
+}
+
+export async function hernoemGesprek(id: string, titel: string): Promise<Gesprek> {
+  const res = await fetch(`/api/gesprekken/${pathSegment(id)}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ titel }),
+  });
+  return json<Gesprek>(res);
+}
+
+export async function verwijderGesprek(id: string): Promise<void> {
+  const res = await fetch(`/api/gesprekken/${pathSegment(id)}`, { method: "DELETE" });
+  if (!res.ok) throw await parseError(res);
 }
 
 /** Stuur een vrije prompt naar de unified agent (BFF → graph-qa /v1/chat, SSE). De supervisor kiest
