@@ -61,7 +61,7 @@ class AnnotatieAlternatief(BaseModel):
 class AnnotatieVoorstel(BaseModel):
     """Eén door de agent voorgesteld JAS-annotatie-element voor een artikel.
 
-    `tekst` is een letterlijk fragment uit de artikeltekst; `span`/`grounded`/`vindplaats` worden
+    `tekst` is een letterlijk fragment uit de artikeltekst; `grounded`/`vindplaats` worden
     server-side ingevuld door de brongetrouwheid-check (nooit door het model).
     """
 
@@ -70,7 +70,6 @@ class AnnotatieVoorstel(BaseModel):
     lid: str = ""
     toelichting: str = ""
     alternatieven: list[AnnotatieAlternatief] = []
-    span: list[int] | None = None      # [start, end] in de (genormaliseerde) artikeltekst
     grounded: bool = False
     vindplaats: str = ""               # bwbId/artikel/lid/jci-notatie
     aandacht: str = ""                 # "" | groen | geel | rood — gezet door de Critic-node

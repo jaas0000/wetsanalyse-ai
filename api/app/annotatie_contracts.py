@@ -85,7 +85,6 @@ class AnnotatieElement(BaseModel):
     lid: str = ""
     toelichting: str = ""
     vindplaats: str = ""
-    span: list[int] | None = None
     herkomst: str = "agent"    # agent | mens
     lifecycle: Lifecycle = Lifecycle.voorgesteld
     alternatieven: list[Alternatief] = []
@@ -138,7 +137,6 @@ class ElementInvoer(BaseModel):
     lid: str = ""
     toelichting: str = ""
     vindplaats: str = ""
-    span: list[int] | None = None
     alternatieven: list[Alternatief] = []
     aandacht: Aandacht | None = None   # Critic-oordeel (groen|geel|rood); None = geen Critic-pas
     critic: str = ""                   # korte Critic-motivatie

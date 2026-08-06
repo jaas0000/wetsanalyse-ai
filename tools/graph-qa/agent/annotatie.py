@@ -90,7 +90,7 @@ def _parse_elementen(text: str) -> list[dict[str, Any]]:
 def _verwerk(
     llm_text: str, corpus: str, bwb_id: str, artikel: str, scope_lid: str | None = None
 ) -> tuple[list[AnnotatieVoorstel], int]:
-    """Parse de LLM-JSON, valideer klasse + brongetrouwheid, bereken span/vindplaats.
+    """Parse de LLM-JSON, valideer klasse + brongetrouwheid, bereken vindplaats.
 
     Is een `scope_lid` gezet (annotatie tot één lid), dan wint dat voor de vindplaats — elke markering
     verwijst dan naar dat lid, ook als het model het lid-veld leeg laat.
@@ -125,7 +125,6 @@ def _verwerk(
                 lid=lid,
                 toelichting=str(e.get("toelichting", "")).strip(),
                 alternatieven=alts,
-                span=[idx, idx + len(norm_frag)],
                 grounded=True,
                 vindplaats=vindplaats,
             )

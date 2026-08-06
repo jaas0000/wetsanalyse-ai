@@ -58,11 +58,14 @@ def _leden_en_corpus(bwb_id: str, artikel: str, graph: GraphPort, lid: str | Non
         if tekst:
             leden.append({"lid": (r.get("lidnummer") or "").strip(), "tekst": tekst})
     leden.sort(key=lambda ld: _lidsleutel(ld["lid"]))
-    if lid and str(lid).strip():
+    lid_gevraagd = bool(lid and str(lid).strip())
+    if lid_gevraagd:
         leden = [ld for ld in leden if _match_lid(ld["lid"], str(lid))]
     elif not leden and art_tekst.strip():
         leden = [{"lid": "", "tekst": art_tekst.strip()}]
-    if not leden:  # geen artikel/lid-tekst gevonden → probeer de bepaling op nummer
+    # Bepaling-fallback (decimaal nummer zoals '9.1') alleen zónder specifiek lid; een niet-bestaand
+    # lid levert leeg op i.p.v. terug te vallen op de hele bepaling.
+    if not leden and not lid_gevraagd:
         leden = _bepaling_fallback(bwb_id, artikel, graph)
     corpus = "\n\n".join((f'{ld["lid"]}. {ld["tekst"]}' if ld["lid"] else ld["tekst"]) for ld in leden)
     return leden, corpus

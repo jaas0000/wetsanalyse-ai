@@ -147,7 +147,6 @@ export interface AnnotatieElement {
   lid: string;
   toelichting: string;
   vindplaats: string;
-  span?: number[] | null;
   herkomst: string;
   lifecycle: Lifecycle;
   alternatieven: Alternatief[];
@@ -246,7 +245,6 @@ export interface VoorstelElement {
   lid: string;
   toelichting: string;
   vindplaats: string;
-  span?: number[] | null;
   alternatieven: Alternatief[];
   grounded: boolean;
   aandacht?: Aandacht;   // Critic-oordeel (groen|geel|rood); afwezig = geen Critic-pas

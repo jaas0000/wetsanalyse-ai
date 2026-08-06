@@ -115,7 +115,7 @@ async def zet_elementen(
         lifecycle = Lifecycle.critic_checked if e.aandacht is not None else Lifecycle.voorgesteld
         elementen.append(AnnotatieElement(
             id=uuid.uuid4().hex[:12], klasse=e.klasse, tekst=e.tekst, lid=e.lid,
-            toelichting=e.toelichting, vindplaats=e.vindplaats, span=e.span,
+            toelichting=e.toelichting, vindplaats=e.vindplaats,
             herkomst="agent", lifecycle=lifecycle, alternatieven=e.alternatieven,
             aandacht=e.aandacht, critic=e.critic,
         ))
