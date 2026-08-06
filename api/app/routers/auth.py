@@ -18,6 +18,8 @@ POST /v1/auth/2fa/disable         — schakel 2FA uit — X-User-Id
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from pydantic import BaseModel, Field
 
@@ -72,6 +74,8 @@ class MeOut(BaseModel):
     email: str
     role: str
     totp_enabled: bool
+    # Sessie-epoch voor revocatie: de BFF verwerpt JWT's die vóór deze tijd zijn uitgegeven.
+    sessions_valid_from: datetime | None = None
 
 
 class TotpBeginOut(BaseModel):
@@ -156,7 +160,10 @@ async def me(userid: str = Depends(huidige_userid)):
     user = await users.get_user(userid)
     if user is None or not user.active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Account niet (meer) actief.")
-    return MeOut(userid=user.userid, email=user.email, role=user.role, totp_enabled=user.totp_enabled)
+    return MeOut(
+        userid=user.userid, email=user.email, role=user.role, totp_enabled=user.totp_enabled,
+        sessions_valid_from=user.sessions_valid_from,
+    )
 
 
 def _rem_gevoelig(userid: str) -> None:

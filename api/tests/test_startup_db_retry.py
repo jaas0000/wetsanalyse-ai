@@ -27,7 +27,11 @@ async def test_db_retry_slaagt_na_paar_pogingen(monkeypatch):
     async def fake_sleep(_s):
         calls["sleep"] += 1
 
+    async def noop_reconcile():
+        return None
+
     monkeypatch.setattr(main.db, "create_all", flaky_create_all)
+    monkeypatch.setattr(main.db, "reconcile_schema", noop_reconcile)
     monkeypatch.setattr(main.asyncio, "sleep", fake_sleep)
 
     await main._init_db_met_retry()

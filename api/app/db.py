@@ -25,7 +25,9 @@ from sqlalchemy import (
     String,
     Table,
     Text,
+    text,
 )
+from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from sqlalchemy.pool import StaticPool
@@ -74,6 +76,9 @@ users = Table(
     Column("totp_secret_enc", Text, nullable=True),
     Column("totp_enabled", Boolean, nullable=False, default=False),
     Column("active", Boolean, nullable=False, default=True),
+    # Sessie-epoch: JWT-sessies met een `loginAt` vóór deze tijd zijn ongeldig (revocatie bij
+    # wachtwoordwijziging/-reset). NULL = nooit gewijzigd → geen revocatie.
+    Column("sessions_valid_from", _DT, nullable=True),
     Column("created", _DT, nullable=False),
     Column("updated", _DT, nullable=False),
 )
@@ -202,10 +207,38 @@ async def dispose_engine() -> None:
 
 async def create_all() -> None:
     """Maak de tabellen aan (tests + beproevingsfase; productie kan dit later via Alembic doen).
-    Idempotent: alleen ONTBREKENDE tabellen worden aangemaakt. De kept-tabellen dragen hun volledige
-    schema in de definities hierboven, dus er is geen aparte kolom-migratiestap meer nodig."""
+    Idempotent: alleen ONTBREKENDE tabellen worden aangemaakt."""
     async with get_engine().begin() as conn:
         await conn.run_sync(metadata.create_all)
+
+
+def _ontbrekende_kolommen(sync_conn, tabel: Table) -> list[Column]:
+    """Kolommen die in de definitie staan maar (nog) niet in de DB. Lege lijst als de tabel ontbreekt
+    (die maakt `create_all` compleet aan)."""
+    insp = sa_inspect(sync_conn)
+    if not insp.has_table(tabel.name):
+        return []
+    bestaand = {c["name"] for c in insp.get_columns(tabel.name)}
+    return [col for col in tabel.columns if col.name not in bestaand]
+
+
+async def reconcile_schema() -> None:
+    """Additieve kolom-migratie: voeg kolommen toe die in de tabeldefinitie staan maar in de DB
+    ontbreken. `create_all` maakt alleen ontbrekende *tabellen*; zonder deze stap breekt een `SELECT`
+    over een nieuw gedefinieerde kolom op een bestaande productie-tabel. **Alleen toevoegen** — nooit
+    droppen of typewijzigen (dus dataverlies uitgesloten). Veilig op SQLite én Postgres; draait in de
+    lifespan vóór het serveren."""
+    engine = get_engine()
+    preparer = engine.dialect.identifier_preparer
+    async with engine.begin() as conn:
+        for tabel in metadata.tables.values():
+            for col in await conn.run_sync(_ontbrekende_kolommen, tabel):
+                coltype = col.type.compile(dialect=engine.dialect)
+                ddl = (
+                    f"ALTER TABLE {preparer.format_table(tabel)} "
+                    f"ADD COLUMN {preparer.format_column(col)} {coltype}"
+                )
+                await conn.execute(text(ddl))
 
 
 def aware(dt: datetime | None) -> datetime | None:

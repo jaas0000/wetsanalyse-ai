@@ -35,6 +35,8 @@ async def _init_db_met_retry() -> None:
     for poging in range(1, pogingen + 1):
         try:
             await db.create_all()
+            # Additieve kolom-migratie (create_all dekt alleen ontbrekende tabellen). Idempotent.
+            await db.reconcile_schema()
             if poging > 1:
                 logger.info("DB-verbinding gelukt na %d pogingen", poging)
             return

@@ -82,7 +82,7 @@ export async function verifyCredentials(
 
 /** Actuele accountstatus voor de periodieke sessie-herverificatie (jwt-callback in auth.ts). */
 export type AccountStatus =
-  | { status: "actief"; role: "beheerder" | "analist"; email: string }
+  | { status: "actief"; role: "beheerder" | "analist"; email: string; sessionsValidFrom?: number }
   | { status: "ingetrokken" } // 401: account inactief of verwijderd → sessie invalideren
   | { status: "onbekend" }; // API tijdelijk onbereikbaar → sessie laten staan (maxAge begrenst)
 
@@ -95,8 +95,18 @@ export async function getAccountStatus(userid: string): Promise<AccountStatus> {
     });
     if (res.status === 401) return { status: "ingetrokken" };
     if (!res.ok) return { status: "onbekend" };
-    const me = (await res.json()) as { role: "beheerder" | "analist"; email: string };
-    return { status: "actief", role: me.role, email: me.email };
+    const me = (await res.json()) as {
+      role: "beheerder" | "analist";
+      email: string;
+      sessions_valid_from?: string | null;
+    };
+    const svf = me.sessions_valid_from ? Date.parse(me.sessions_valid_from) : NaN;
+    return {
+      status: "actief",
+      role: me.role,
+      email: me.email,
+      sessionsValidFrom: Number.isNaN(svf) ? undefined : svf,
+    };
   } catch {
     return { status: "onbekend" };
   }

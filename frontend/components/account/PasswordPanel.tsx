@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { signOut } from "next-auth/react";
 import { Button } from "@/components/ui/Button";
 import { Card, Section } from "@/components/ui/Card";
 import { Field, Input } from "@/components/ui/Field";
@@ -34,9 +35,12 @@ export function PasswordPanel() {
       setNieuw("");
       setHerhaling("");
       setKlaar(true);
+      // Een wachtwoordwijziging revoket alle sessies (ook op andere apparaten). Log dit apparaat
+      // meteen uit en terug naar /login, zodat het een vers token haalt i.p.v. zo dadelijk zelf uit
+      // te vliegen bij de herverificatie.
+      await signOut({ callbackUrl: "/login" });
     } catch (e) {
       setFout(isApiError(e) ? e.detail : (e as Error).message);
-    } finally {
       setBezig(false);
     }
   }
