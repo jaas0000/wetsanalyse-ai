@@ -19,6 +19,8 @@ datasources:
     access: proxy
     url: http://prometheus:9090
     isDefault: false
+    jsonData:
+      httpMethod: POST
   - name: Loki (wetsanalyse)
     uid: wa-loki
     type: loki

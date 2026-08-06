@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Past de 4 alertregels toe op de bestaande Grafana via de provisioning-API. Idempotent: de regels
+# Past de 3 alertregels toe op de bestaande Grafana via de provisioning-API. Idempotent: de regels
 # worden geüpsert (X-Disable-Provenance:true houdt ze UI-bewerkbaar). Vereist env: GRAFANA_URL,
 # GRAFANA_TOKEN.
 #

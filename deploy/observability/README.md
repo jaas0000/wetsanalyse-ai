@@ -135,9 +135,9 @@ De hele observability-laag staat in één keer neer via **`.github/workflows/dep
 
 1. **Backends-stack** → Portainer (`docker-compose.stack.yml`, de self-contained variant met inline
    `configs:` — géén host-bestanden nodig). Idempotente PUT + wachten tot de 5 containers draaien.
-2. **Grafana provisionen** → `provision-grafana.sh` (idempotent: de 3 datasources + de map + het
-   dashboard `grafana-dashboard-wetsanalyse.json`).
-3. **Alerting** → `alerting/apply.sh` (de 4 regels; ze volgen het default notification-beleid).
+2. **Grafana provisionen** → `provision-grafana.sh` (idempotent: de 3 datasources + de map + **beide**
+   dashboards, `grafana-dashboard-wetsanalyse.json` én `grafana-dashboard-topologie.json`).
+3. **Alerting** → `alerting/apply.sh` (de 3 regels; ze volgen het default notification-beleid).
 
 Benodigde secrets/vars: `PORTAINER_URL`/`PORTAINER_API_KEY`/`vars.PORTAINER_OBSERVABILITY_STACK_ID`,
 `GRAFANA_URL`/`GRAFANA_TOKEN`. Losse componenten draai je ook handmatig

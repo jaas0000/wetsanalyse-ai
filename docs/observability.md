@@ -15,9 +15,9 @@ ongewijzigd met alléén gestructureerde JSON-logging (nul overhead, geen gedrag
 | **Frontend** (`frontend/`, Next.js) | server-side JSON naar stdout in de BFF-lagen | `@vercel/otel`: route handlers + uitgaande `fetch` (traceparent) | request-count/latency (auto) |
 | **graph-qa** (`tools/graph-qa/`) | gestructureerde JSON-logs | `/v1/chat` (SSE) + GraphDB-MCP-calls | http-server-latency (auto) |
 
-De **n8n-workflow en de GraphDB-kennisgraaf draaien buiten deze repo** en zijn niet
-geïnstrumenteerd. Voor een trace die dóórloopt tot in de agent moet de n8n-workflow zelf
-OTel-instrumentatie krijgen (follow-up).
+De **GraphDB-kennisgraaf en de externe diensten** (overheid.nl-bronnen, de LLM-provider) draaien buiten
+deze repo en zijn niet geïnstrumenteerd; ze verschijnen in de traces als virtuele peer-node (zie de
+service-graph-connector) i.p.v. als eigen span.
 
 ## Correlatie
 
@@ -104,15 +104,16 @@ De stack bevat bovendien:
 - **Service-graph/spanmetrics-connectors** — de collector leidt uit de traces ook RED-metrics per
   service (`traces_spanmetrics_*`) en topologie-edges (`traces_service_graph_request_total`) af. Die
   gaan de metrics-pipeline in (→ Prometheus op `:8889`) en voeden het Node Graph-panel + de live
-  systeemtopologie. Niet-geïnstrumenteerde afhankelijkheden (LLM, n8n, overheid.nl, Postgres)
+  systeemtopologie. Niet-geïnstrumenteerde afhankelijkheden (LLM, overheid.nl, Postgres)
   verschijnen als virtuele peer-node. Configuratie: `connectors:` in `otel-collector-config.yaml`.
 - **Dashboards** (map "Wetsanalyse") — `grafana-dashboard-wetsanalyse.json` (*"observability"*:
   HTTP-verkeer, scrape-health, logs, traces) én
   `grafana-dashboard-topologie.json` (*"systeemtopologie"*: de live keten die oplicht in een
   Canvas-plaat, de automatische Node Graph, en een trace-waterfall + logs om één executie te volgen).
   Importeren via de UI, `provision-grafana.sh` (beide) of `POST /api/dashboards/db`.
-- **Alerting** — `alerting/` (contactpunt + regels: HTTP 5xx, latency p95, backend down;
-  routeren naar een webhook, bv. n8n) met een idempotent `apply.sh`.
+- **Alerting** — `alerting/` (3 regels: HTTP 5xx, latency p95, telemetrie-backend down) met een
+  idempotent `apply.sh`. De regels dragen **géén eigen contactpunt** en volgen het default
+  notification-beleid van je Grafana — richt daar de gewenste ontvanger in.
 
 Wie liever een all-in-één demo-image draait (inclusief Grafana) kan `grafana/otel-lgtm` gebruiken;
 deze repo mikt op koppeling aan een bestaande Grafana.

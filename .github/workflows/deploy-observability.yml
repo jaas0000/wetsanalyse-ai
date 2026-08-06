@@ -1,5 +1,5 @@
 # Reproduceerbare deploy van de observability-laag: de backends-stack (OTel-Collector + Tempo + Loki +
-# Prometheus + Alloy) naar Portainer, plus Grafana-provisioning (datasources + dashboard) en alerting.
+# Prometheus + Alloy) naar Portainer, plus Grafana-provisioning (datasources + dashboards) en alerting.
 # Handmatig (workflow_dispatch) of bij wijzigingen in deploy/observability/**. Géén image-build:
 # upstream images. Inactief tot de secrets/vars bestaan.
 
@@ -86,10 +86,10 @@ jobs:
           done
           echo "::error::Grafana werd niet gereed na de redeploy."; cat /tmp/gh.json || true; exit 1
 
-      - name: Grafana provisionen (datasources + dashboard)
+      - name: Grafana provisionen (datasources + dashboards)
         if: ${{ env.GRAFANA_TOKEN != '' }}
         run: bash deploy/observability/provision-grafana.sh
 
-      - name: Alerting toepassen (contactpunt + regels)
+      - name: Alerting toepassen (regels)
         if: ${{ env.GRAFANA_TOKEN != '' }}
         run: bash deploy/observability/alerting/apply.sh
