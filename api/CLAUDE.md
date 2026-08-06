@@ -240,6 +240,14 @@ de publieke login-route het geheugen niet vol pompen.
 
 ## Roadmap (nog niet gebouwd)
 
-Per-gebruiker gescheiden werkruimtes (de gebruikersidentiteit doorvoeren tot in de scoping; nu delen
-alle ingelogde gebruikers de upstream API-client van de BFF), externe IdP/OIDC, en de herbouw van een
-agentische analyse-flow op de kennisgraaf (buiten deze API).
+- **Per-gebruiker gescheiden annotatie-werkruimtes.** Het mechanisme om de gebruikersidentiteit tot in
+  de scoping door te voeren bestaat al — het **gesprekken-domein** (`/v1/gesprekken/*`) is
+  per-gebruiker gescopet via de vertrouwde `X-User-Id`-header (`huidige_userid`). Rest: dat dóórtrekken
+  naar het **annotatie-domein**, dat nu nog *client*-gescopet is (gedeeld tussen ingelogde gebruikers
+  van dezelfde BFF-client).
+- **Externe IdP/OIDC.** De API is nu zelf de identiteitsbron (userid + wachtwoord, optioneel TOTP);
+  federatie met een externe IdP is nog niet gebouwd.
+- **Herbouw van de bredere agentische analyse-flow.** De agentische **act-2-annotatie draait al** in
+  graph-qa (de annotatie-worker: ophaal → annoteer → Critic → advance). Rest: **begrippen (activiteit
+  3)** en de **RegelSpraak-formalisering** — eerder uit de engine/webapp/skill verwijderd om later op
+  agentische basis te herbouwen (buiten deze API).
