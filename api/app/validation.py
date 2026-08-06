@@ -1,21 +1,18 @@
-"""Validatie — hergebruikt de skill-checks en voegt de harde brongetrouwheid-invariant toe.
+"""Canonieke JAS-klassenlijst — de enige bron voor de klassevalidatie in het annotatiedomein.
 
-Twee soorten:
-  - SCHEMA (check_activiteit_2/3 uit validate_analyse.py): FOUTEN blokkeren — de orchestrator
-    probeert eerst auto-correctie en zet de job anders naar `fout`, ook in review:false
-    (gelijke handhaving met het skill-spoor, waar exit 2 de review-server tegenhoudt).
-    WAARSCHUWINGEN blokkeren niet; die gaan als context mee naar het checkpoint.
-  - HARD (brongetrouwheid): geldt ALTIJD, ook in review:false. Faalt dit na auto-correctie,
-    dan gaat de job naar `fout` — nooit stil naar `klaar`.
+`GELDIGE_JAS_KLASSEN` komt uit het skill-script `validate_analyse.py` (de gedeelde
+`references`/`scripts`-inhoudsbron), zodat de api niet drift ten opzichte van het skill-spoor. Het
+annotatiedomein (`routers/annotatie.py`) valideert de klasse van een voorgesteld element hiertegen.
+
+> De vroegere brongetrouwheid-/schema-checks van de (verwijderde) `/v1/projects`-analyse-pijplijn
+> stonden hier ook; die zijn weg. Brongetrouwheid wordt nu afgedwongen in graph-qa (grounding) en de
+> frontend (`segmenteer`), niet server-side in de api.
 """
 
 from __future__ import annotations
 
 import importlib.util
-import re
 import sys
-import unicodedata
-from pathlib import Path
 
 from .config import SKILL_SCRIPTS
 
@@ -39,91 +36,3 @@ def _load_skill_module(naam: str):
 
 _validate = _load_skill_module("validate_analyse")
 GELDIGE_JAS_KLASSEN: set[str] = _validate.GELDIGE_JAS_KLASSEN  # canonieke bron (drift-fix)
-JAS_KLASSEN_VOLGORDE: tuple[str, ...] = _validate.JAS_KLASSEN_VOLGORDE  # weergave-volgorde (wa-table.png)
-jas_sorteersleutel = _validate.jas_sorteersleutel
-
-
-# Concerns die in de API door de harde, genormaliseerde brongetrouwheid_check worden gedekt.
-# De skill-checks rapporteren ze óók (rauwe substring-match, zonder normalisatie — de
-# citaat-mismatch daar is sinds de hardening een blokkerende FOUT), wat tot dubbele en soms
-# vals-positieve meldingen leidt. We filteren ze hier — uit fouten én waarschuwingen — zodat per
-# concern precies één (de harde, genormaliseerde) melding overblijft. De skill-scripts zelf
-# blijven ongemoeid: in het skill-spoor is die check de enige citaat/vindplaats-controle.
-_OVERLAPT_MET_HARD = (
-    "lijkt geen letterlijk citaat",        # citaat (act 2)
-    "Veld 'vindplaats' ontbreekt",         # vindplaats (act 2: markering, lid-relatief)
-    "geen 'vindplaatsen'",                 # vindplaatsen (act 3: begrip/afleidingsregel)
-)
-
-
-def schema_check(data: dict, activiteit: str) -> tuple[list[str], list[str]]:
-    """Zachte schema/volledigheidscheck (activiteit 2) — delegeert naar de skill-functie.
-
-    Waarschuwingen die de harde brongetrouwheid_check al dekt (citaat, vindplaats) worden
-    uitgefilterd om dubbele meldingen in de review te voorkomen.
-    """
-    fouten, waarschuwingen = _validate.check_activiteit_2(data)
-    fouten = [f for f in fouten if not any(m in f for m in _OVERLAPT_MET_HARD)]
-    waarschuwingen = [
-        w for w in waarschuwingen if not any(m in w for m in _OVERLAPT_MET_HARD)
-    ]
-    return fouten, waarschuwingen
-
-
-# --- harde brongetrouwheid-invariant -----------------------------------------
-
-_WS = re.compile(r"\s+")
-_QUOTES = str.maketrans({"‘": "'", "’": "'", "“": '"', "”": '"', "«": '"', "»": '"'})
-# De MCP levert de lid-tekst met intref/extref als inline-Markdown-link ([label](jci-target));
-# de frontend rendert daaruit de klikbare verwijzing. Een markering citeert echter het zichtbare
-# label, niet de link-syntax — dus vóór de citaat-vergelijking vervangen we [label](target) door
-# het label. (Alleen bij vergelijken: de opgeslagen lid-tekst houdt de markup voor de UI.)
-_MD_LINK = re.compile(r"\[([^\]]+)\]\([^)]*\)")
-
-
-def _strip_md_links(tekst: str) -> str:
-    """Vervang inline-Markdown-links [label](target) door hun zichtbare label."""
-    return _MD_LINK.sub(r"\1", tekst)
-
-
-def normaliseer(tekst: str) -> str:
-    """Normaliseer unicode-compositie (NFC) + whitespace + typografische quotes, zodat echte
-    citaten niet vals-positief zijn. NFC voorkomt dat een composé 'é' (U+00E9) en een
-    decomposé 'e'+combining-accent (U+0065 U+0301) — visueel identiek — als ongelijk gelden."""
-    return _WS.sub(" ", unicodedata.normalize("NFC", tekst).translate(_QUOTES)).strip().lower()
-
-
-def brongetrouwheid_check(data: dict, activiteit: str = "2") -> list[str]:
-    """Harde controles die altijd gelden, werkgebied-breed. Geeft een lijst schendingen terug
-    (leeg = ok). Activiteit 2 controleert per bron: bronreferentie aanwezig, en elke markering
-    een vindplaats + letterlijk citaat uit de leden-tekst van DIE bron."""
-    schendingen: list[str] = []
-
-    bronnen = data.get("bronnen") or []
-    for bron in bronnen:
-        label = bron.get("label") or bron.get("bron_id") or "?"
-        if not (bron.get("bronreferentie") or "").strip():
-            schendingen.append(
-                f"[{label}] Bronreferentie (jci) ontbreekt — moet uit de MCP komen, niet uit het LLM."
-            )
-        leden_genorm = normaliseer(
-            _strip_md_links(" ".join((lid.get("tekst") or "") for lid in (bron.get("leden") or [])))
-        )
-        for m in bron.get("markeringen") or []:
-            mid = m.get("id", "?")
-            if not (m.get("vindplaats") or "").strip():
-                schendingen.append(f"[{mid}] Vindplaats ontbreekt (herleidbaarheid verplicht).")
-            formulering = (m.get("formulering") or "").strip()
-            # Hergebruik de canonieke citaat-toets uit het skill-script (drift-fix): die
-            # respecteert beletselteken ('...'/'…') en vierkante-haak-invoegingen ([...]).
-            if (
-                formulering
-                and leden_genorm
-                and not _validate.fragmenten_letterlijk(normaliseer(formulering), leden_genorm)
-            ):
-                kort = formulering[:60] + ("…" if len(formulering) > 60 else "")
-                schendingen.append(
-                    f"[{mid}] Formulering is geen letterlijk citaat uit de leden-tekst: '{kort}'"
-                )
-
-    return schendingen
