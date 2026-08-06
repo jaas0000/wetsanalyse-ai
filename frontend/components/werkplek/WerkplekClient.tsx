@@ -64,6 +64,9 @@ export function WerkplekClient({ initialGesprekId, onGesprekAangemaakt, onGewijz
   // Synchrone guard tegen dubbel-verzenden (twee Enters in dezelfde tick): de `bezig`-state komt te laat
   // — vóór de eerste `await` (maakGesprek) is die nog false, wat twee gesprekken zou aanmaken.
   const bezigRef = useRef(false);
+  // "Stick-to-bottom": alleen automatisch meescrollen als de gebruiker al onderaan staat, zodat
+  // omhoogscrollen tijdens het streamen niet telkens wordt teruggetrokken.
+  const stickRef = useRef(true);
 
   // Hydrateer één keer bij mount: bestaande gespreksberichten → thread. Lees de id uit een MOUNT-vaste
   // ref, niet uit de reactieve prop: bij de eerste beurt zet de shell `activeId` (→ prop null→id) zónder
@@ -95,8 +98,14 @@ export function WerkplekClient({ initialGesprekId, onGesprekAangemaakt, onGewijz
   }, [hydratieId]);
 
   useEffect(() => {
-    lijstRef.current?.scrollTo({ top: lijstRef.current.scrollHeight, behavior: "smooth" });
+    const el = lijstRef.current;
+    if (el && stickRef.current) el.scrollTo({ top: el.scrollHeight });
   }, [items, bezig]);
+
+  function onThreadScroll() {
+    const el = lijstRef.current;
+    if (el) stickRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+  }
 
   // Auto-groeiende textarea (groeit met de inhoud tot een max; daarna intern scrollen).
   useLayoutEffect(() => {
@@ -150,6 +159,13 @@ export function WerkplekClient({ initialGesprekId, onGesprekAangemaakt, onGewijz
     bezigRef.current = true;
     setInvoer("");
 
+    // Toon de user-bubbel + antwoord-placeholder OPTIMISTISCH, vóór het (bij een nieuw gesprek) awaiten
+    // van maakGesprek — anders "verdwijnt" het bericht tijdens die round-trip.
+    const antId = uid();
+    setItems((xs) => [...xs, { id: uid(), type: "user", tekst: prompt }, { id: antId, type: "antwoord", tekst: "" }]);
+    setBezig(true);
+    stickRef.current = true; // een nieuwe beurt springt altijd naar de bodem
+
     // Zorg voor een gesprek-id (maak er bij de eerste beurt één aan; titel = de vraag, afgekapt).
     let gid = gesprekId;
     if (!gid) {
@@ -159,15 +175,13 @@ export function WerkplekClient({ initialGesprekId, onGesprekAangemaakt, onGewijz
         setGesprekId(gid);
         onGesprekAangemaakt(gid);
       } catch (e) {
-        setItems((xs) => [...xs, { id: uid(), type: "antwoord", tekst: `⚠️ ${foutTekst(e)}` }]);
+        updateItem(antId, { tekst: `⚠️ ${foutTekst(e)}` });
+        setBezig(false);
         bezigRef.current = false;
         return;
       }
     }
 
-    const antId = uid();
-    setItems((xs) => [...xs, { id: uid(), type: "user", tekst: prompt }, { id: antId, type: "antwoord", tekst: "" }]);
-    setBezig(true);
     void persisteer(gid, "user", { tekst: prompt });
 
     const doelRef: { d: AgentDoel | null } = { d: null };
@@ -261,8 +275,12 @@ export function WerkplekClient({ initialGesprekId, onGesprekAangemaakt, onGewijz
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
+      {/* Beknopte statusmelding voor schermlezers (niet de hele thread live maken → geen token-spam). */}
+      <p className="sr-only" aria-live="polite">
+        {bezig ? "Bezig met antwoorden…" : ""}
+      </p>
       {/* Thread — enige scrollende gebied; berichten in een gecentreerde leeskolom */}
-      <div ref={lijstRef} className="min-h-0 flex-1 overflow-y-auto" aria-live="polite">
+      <div ref={lijstRef} onScroll={onThreadScroll} className="min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto max-w-3xl space-y-6 px-4 py-8">
           {items.length === 0 && (
             <div className="pt-[10dvh] text-center">
