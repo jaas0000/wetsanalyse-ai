@@ -24,13 +24,17 @@ async def client(monkeypatch):
     db.init_engine("sqlite+aiosqlite://")
     await db.create_all()
 
-    # Document van een andere tenant — moet voor "anonymous" onzichtbaar zijn (404).
+    # Document van een andere GEBRUIKER — moet voor "gebruiker-a" onzichtbaar zijn (404).
     await AnnotatieStore().maak_document(
-        AnnotatieDocument(slug="andermans-doc", client_id="andere-client", bwbId="BWBR3", artikel="1")
+        AnnotatieDocument(slug="andermans-doc", user_id="gebruiker-b", client_id="andere-client",
+                          bwbId="BWBR3", artikel="1")
     )
 
     from app.main import app
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+    # De BFF zet de ingelogde identiteit als vertrouwde X-User-Id-header; hier "gebruiker-a".
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test", headers={"X-User-Id": "gebruiker-a"}
+    ) as ac:
         yield ac
 
     get_settings.cache_clear()
@@ -143,8 +147,8 @@ async def test_beslis_op_element_atomair_behoudt_andere_besluiten(client):
     def verwerp(el):
         el.lifecycle = Lifecycle.rejected
 
-    assert await store.beslis_op_element(slug, "anonymous", el0, keur_goed) is not None
-    assert await store.beslis_op_element(slug, "anonymous", el1, verwerp) is not None
+    assert await store.beslis_op_element(slug, "gebruiker-a", el0, keur_goed) is not None
+    assert await store.beslis_op_element(slug, "gebruiker-a", el1, verwerp) is not None
 
     doc = (await client.get(f"{BASIS}/{slug}")).json()
     lc = {e["id"]: e["lifecycle"] for e in doc["elementen"]}
@@ -152,6 +156,6 @@ async def test_beslis_op_element_atomair_behoudt_andere_besluiten(client):
     assert lc[el1] == "rejected"
 
     # 404-sentinels: onbekend document / niet-eigenaar → None; onbekend element → GEEN_ELEMENT.
-    assert await store.beslis_op_element("bestaat-niet", "anonymous", el0, keur_goed) is None
-    assert await store.beslis_op_element(slug, "andere-client", el0, keur_goed) is None
-    assert await store.beslis_op_element(slug, "anonymous", "geen-el", keur_goed) is GEEN_ELEMENT
+    assert await store.beslis_op_element("bestaat-niet", "gebruiker-a", el0, keur_goed) is None
+    assert await store.beslis_op_element(slug, "gebruiker-b", el0, keur_goed) is None
+    assert await store.beslis_op_element(slug, "gebruiker-a", "geen-el", keur_goed) is GEEN_ELEMENT

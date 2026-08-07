@@ -2,8 +2,10 @@
 De wetsanalyse-workbench-resource (gemount onder /v1/annotatie).
 
 Vers annotatie-domein: documenten per bron, per element een human-decision (approve/edit/reject/
-comment) en een append-only audit trail. Client-gescopet (404 — niet 403 — bij andermans document,
-zodat het bestaan niet lekt). JAS-klassen worden gevalideerd tegen `validation.GELDIGE_JAS_KLASSEN`.
+comment) en een append-only audit trail. **Per-gebruiker gescopet** via de vertrouwde `X-User-Id`
+(`huidige_userid`, zoals de gesprekken) — 404 (niet 403) bij andermans document, zodat het bestaan niet
+lekt; de bearer-`client_id` blijft als herkomst in de audit. JAS-klassen worden gevalideerd tegen
+`validation.GELDIGE_JAS_KLASSEN`.
 
 POST   /v1/annotatie/documenten                                  — maak document
 GET    /v1/annotatie/documenten?limit=&offset=                   — eigen documenten (samenvatting)
@@ -28,14 +30,16 @@ from ..auth import require_client
 from ..db import utcnow
 from ..deps import get_annotatie_store
 from ..validation import GELDIGE_JAS_KLASSEN
+from .auth import huidige_userid
 
 router = APIRouter(prefix="/annotatie", tags=["annotatie"])
 
 
-async def _document_or_404(store: AnnotatieStore, slug: str, client_id: str) -> AnnotatieDocument:
-    """Laadt het document en dwingt eigenaarschap af. 404 (niet 403) bij mismatch — lekt niet."""
+async def _document_or_404(store: AnnotatieStore, slug: str, user_id: str) -> AnnotatieDocument:
+    """Laadt het document en dwingt eigenaarschap af. 404 (niet 403) bij mismatch — lekt niet.
+    Per-gebruiker gescopet: de eigenaar is de ingelogde gebruiker (`user_id`), niet de bearer-client."""
     doc = await store.laad_document(slug)
-    if doc is None or doc.client_id != client_id:
+    if doc is None or doc.user_id != user_id:
         raise HTTPException(status_code=404, detail=f"Onbekend annotatie-document: {slug}")
     return doc
 
@@ -43,17 +47,18 @@ async def _document_or_404(store: AnnotatieStore, slug: str, client_id: str) -> 
 @router.post("/documenten", status_code=status.HTTP_201_CREATED, response_model=AnnotatieDocument)
 async def maak_document(
     req: DocumentCreate,
+    user_id: str = Depends(huidige_userid),
     client_id: str = Depends(require_client),
     store: AnnotatieStore = Depends(get_annotatie_store),
 ):
     slug = uuid.uuid4().hex[:16]
     doc = AnnotatieDocument(
-        slug=slug, client_id=client_id, werkgebied=req.werkgebied,
+        slug=slug, user_id=user_id, client_id=client_id, werkgebied=req.werkgebied,
         bwbId=req.bwbId, artikel=req.artikel, lid=req.lid or "",
     )
     await store.maak_document(doc)
     await store.schrijf_audit(
-        slug, client_id, client_id, "document-aangemaakt",
+        slug, client_id, user_id, "document-aangemaakt",
         detail={"bwbId": req.bwbId, "artikel": req.artikel, "lid": req.lid or ""},
     )
     return await store.laad_document(slug)
@@ -63,10 +68,10 @@ async def maak_document(
 async def lijst_documenten(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
-    client_id: str = Depends(require_client),
+    user_id: str = Depends(huidige_userid),
     store: AnnotatieStore = Depends(get_annotatie_store),
 ):
-    docs = await store.lijst_documenten(client_id, limit, offset)
+    docs = await store.lijst_documenten(user_id, limit, offset)
     return [
         DocumentSamenvatting(
             slug=d.slug, bwbId=d.bwbId, artikel=d.artikel, lid=d.lid, werkgebied=d.werkgebied,
@@ -79,19 +84,19 @@ async def lijst_documenten(
 @router.get("/documenten/{slug}", response_model=AnnotatieDocument)
 async def haal_document(
     slug: str,
-    client_id: str = Depends(require_client),
+    user_id: str = Depends(huidige_userid),
     store: AnnotatieStore = Depends(get_annotatie_store),
 ):
-    return await _document_or_404(store, slug, client_id)
+    return await _document_or_404(store, slug, user_id)
 
 
 @router.delete("/documenten/{slug}", status_code=status.HTTP_204_NO_CONTENT)
 async def verwijder_document(
     slug: str,
-    client_id: str = Depends(require_client),
+    user_id: str = Depends(huidige_userid),
     store: AnnotatieStore = Depends(get_annotatie_store),
 ):
-    await _document_or_404(store, slug, client_id)
+    await _document_or_404(store, slug, user_id)
     await store.verwijder_document(slug)
 
 
@@ -99,11 +104,12 @@ async def verwijder_document(
 async def zet_elementen(
     slug: str,
     req: ElementenInvoer,
+    user_id: str = Depends(huidige_userid),
     client_id: str = Depends(require_client),
     store: AnnotatieStore = Depends(get_annotatie_store),
 ):
     """Zet de voorgestelde elementen (van de agent). Ongeldige klasse / leeg fragment wordt verworpen."""
-    await _document_or_404(store, slug, client_id)
+    await _document_or_404(store, slug, user_id)
     elementen: list[AnnotatieElement] = []
     verworpen = 0
     for e in req.elementen:
@@ -121,7 +127,7 @@ async def zet_elementen(
         ))
     await store.vervang_elementen(slug, elementen)
     await store.schrijf_audit(
-        slug, client_id, client_id, "elementen-voorgesteld",
+        slug, client_id, user_id, "elementen-voorgesteld",
         detail={"aantal": len(elementen), "verworpen": verworpen},
     )
     return await store.laad_document(slug)
@@ -132,6 +138,7 @@ async def beslis(
     slug: str,
     element_id: str,
     req: BeslissingInvoer,
+    user_id: str = Depends(huidige_userid),
     client_id: str = Depends(require_client),
     store: AnnotatieStore = Depends(get_annotatie_store),
 ):
@@ -167,19 +174,19 @@ async def beslis(
             el.lifecycle = Lifecycle.rejected
         # comment → geen lifecycle-wijziging
         el.beslissingen.append(Beslissing(
-            type=req.type, actor=client_id, tijd=utcnow(),
+            type=req.type, actor=user_id, tijd=utcnow(),
             review_reason=req.review_reason, comment=req.comment, wijziging=diff,
         ))
         diff_holder.update(diff)
 
-    resultaat = await store.beslis_op_element(slug, client_id, element_id, toepassen)
+    resultaat = await store.beslis_op_element(slug, user_id, element_id, toepassen)
     if resultaat is None:
         raise HTTPException(status_code=404, detail=f"Onbekend annotatie-document: {slug}")
     if resultaat is GEEN_ELEMENT:
         raise HTTPException(status_code=404, detail=f"Onbekend element: {element_id}")
 
     await store.schrijf_audit(
-        slug, client_id, client_id, f"beslissing-{req.type.value}", element_id=element_id,
+        slug, client_id, user_id, f"beslissing-{req.type.value}", element_id=element_id,
         detail={
             "review_reason": req.review_reason.value if req.review_reason else None,
             "comment": req.comment, "diff": diff_holder,
@@ -191,8 +198,8 @@ async def beslis(
 @router.get("/documenten/{slug}/audit", response_model=list[AuditRecord])
 async def haal_audit(
     slug: str,
-    client_id: str = Depends(require_client),
+    user_id: str = Depends(huidige_userid),
     store: AnnotatieStore = Depends(get_annotatie_store),
 ):
-    await _document_or_404(store, slug, client_id)
+    await _document_or_404(store, slug, user_id)
     return await store.lees_audit(slug)

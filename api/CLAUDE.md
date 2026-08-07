@@ -10,9 +10,10 @@ Na de pivot naar de chat-werkruimte bedient de API vijf dingen:
 
 1. **Het JAS-annotatiedomein van de werkplek** (`/v1/annotatie/*`): documenten/elementen/beslissingen
    + append-only auditlog. De agent stelt voor, de mens beslist; de API bewaart de review-state.
-   **Client-gescopet** (gedeeld tussen ingelogde gebruikers van dezelfde BFF-client).
+   **Per-gebruiker gescopet** via de vertrouwde `X-User-Id`-header (`huidige_userid`, net als de
+   gesprekken; 404 op andermans document). De bearer-`client_id` blijft als herkomst in de audit.
 2. **De chatgeschiedenis van de werkplek** (`/v1/gesprekken/*`): gesprekken + geordende berichten
-   (`gesprek_contracts.py`/`gesprek_store.py`/`routers/gesprekken.py`). Anders dan het annotatie-domein
+   (`gesprek_contracts.py`/`gesprek_store.py`/`routers/gesprekken.py`). Net als het annotatie-domein
    **per-gebruiker gescopet** via de vertrouwde `X-User-Id`-header (`huidige_userid`, hergebruikt uit
    de auth-router; 404 op andermans gesprek). Een bericht kan naar een annotatie-document verwijzen
    (`annotatie_slug`); de review-state zelf blijft in het annotatie-domein.
@@ -76,7 +77,8 @@ Na de pivot naar de chat-werkruimte bedient de API vijf dingen:
 - `annotatie_contracts.py` — Pydantic-modellen + enums (`AnnotatieDocument`, `AnnotatieElement` met
   `lifecycle`/`beslissingen`/`alternatieven`/`aandacht`/`diff`, `Beslissing`, `AuditRecord`,
   `ReviewReason`). `annotatie_store.py` — `AnnotatieStore` (aparte store op dezelfde engine).
-  `routers/annotatie.py` — `/v1/annotatie/*`, client-gescopet (`require_client` + `_document_or_404`).
+  `routers/annotatie.py` — `/v1/annotatie/*`, per-gebruiker gescopet (`huidige_userid` + `_document_or_404`;
+  `require_client` blijft de bearer-poort + audit-herkomst).
   Levenscyclus: document aanmaken → `PUT elementen` (voorstellen van de agent; klasse gevalideerd tegen
   `validation.GELDIGE_JAS_KLASSEN`) → per element een human-decision (approve/edit/reject/comment;
   edit/reject vereisen `review_reason`; edit berekent een `diff`) → `GET audit`. Elke actie schrijft
@@ -101,8 +103,8 @@ loggen. Zie `docs/observability.md`.
 
 ## Garanties (niet aan tornen)
 
-- **Multi-tenant isolatie.** Elk annotatie-document is client-gescopet (404 op andermans slug); elk
-  **gesprek** is per-gebruiker gescopet via de vertrouwde `X-User-Id`-header (404 op andermans id).
+- **Per-gebruiker isolatie.** Elk annotatie-document én elk **gesprek** is per-gebruiker gescopet via
+  de vertrouwde `X-User-Id`-header (`huidige_userid`) — 404 op andermans slug/id (lekt niet).
 - **De admin-laag is altijd auth-plichtig.** `/v1/admin/*` heeft geen `AUTH_REQUIRED`-bypass; zonder
   admin-tokens geeft alles 401. De plaintext-API-key komt nooit terug in een respons (alleen
   `api_key_set`); het opslaan vereist een geconfigureerde Fernet-master-key.
@@ -240,11 +242,6 @@ de publieke login-route het geheugen niet vol pompen.
 
 ## Roadmap (nog niet gebouwd)
 
-- **Per-gebruiker gescheiden annotatie-werkruimtes.** Het mechanisme om de gebruikersidentiteit tot in
-  de scoping door te voeren bestaat al — het **gesprekken-domein** (`/v1/gesprekken/*`) is
-  per-gebruiker gescopet via de vertrouwde `X-User-Id`-header (`huidige_userid`). Rest: dat dóórtrekken
-  naar het **annotatie-domein**, dat nu nog *client*-gescopet is (gedeeld tussen ingelogde gebruikers
-  van dezelfde BFF-client).
 - **Externe IdP/OIDC.** De API is nu zelf de identiteitsbron (userid + wachtwoord, optioneel TOTP);
   federatie met een externe IdP is nog niet gebouwd.
 - **Herbouw van de bredere agentische analyse-flow.** De agentische **act-2-annotatie draait al** in

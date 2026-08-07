@@ -98,7 +98,8 @@ class AnnotatieDocument(BaseModel):
     """Annotaties per bron (bwbId+artikel[+lid]) binnen een werkgebied."""
 
     slug: str
-    client_id: str = ""
+    user_id: str = ""       # eigenaar (ingelogde gebruiker); de zichtbaarheid gaat hierop
+    client_id: str = ""      # bearer-client (herkomst/tenant)
     werkgebied: str = ""
     bwbId: str
     artikel: str

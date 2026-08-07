@@ -158,6 +158,7 @@ export interface AnnotatieElement {
 
 export interface AnnotatieDocument {
   slug: string;
+  user_id: string;
   client_id: string;
   werkgebied: string;
   bwbId: string;

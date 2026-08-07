@@ -108,6 +108,9 @@ annotatie_documenten = Table(
     "annotatie_documenten",
     metadata,
     Column("slug", String(255), primary_key=True),
+    # Eigenaar = de ingelogde gebruiker (per-gebruiker gescopet, zoals de gesprekken). `client_id`
+    # blijft de bearer-client als herkomst-/tenant-veld, maar de zichtbaarheid gaat op `user_id`.
+    Column("user_id", String(64), nullable=False, default=""),
     Column("client_id", String(128), nullable=False, default=""),
     Column("werkgebied", Text, nullable=False, default=""),
     Column("bwbId", String(64), nullable=False, default=""),
@@ -117,7 +120,7 @@ annotatie_documenten = Table(
     Column("elementen", _JSON, nullable=False, default=list),
     Column("created", _DT, nullable=False),
     Column("updated", _DT, nullable=False),
-    Index("ix_annotatie_docs_client_updated", "client_id", "updated"),
+    Index("ix_annotatie_docs_user_updated", "user_id", "updated"),
 )
 
 # Append-only audit trail: de onwijzigbare geschiedenis (event-log) náást de huidige documentstaat.

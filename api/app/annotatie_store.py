@@ -23,6 +23,7 @@ def _naar_document(row) -> AnnotatieDocument:
     d = row._mapping
     return AnnotatieDocument(
         slug=d["slug"],
+        user_id=d["user_id"] or "",   # legacy-rijen (vóór de migratie) hebben NULL → ""
         client_id=d["client_id"],
         werkgebied=d["werkgebied"],
         bwbId=d["bwbId"],
@@ -41,6 +42,7 @@ class AnnotatieStore:
         async with db.get_engine().begin() as conn:
             await conn.execute(insert(db.annotatie_documenten).values(
                 slug=doc.slug,
+                user_id=doc.user_id,
                 client_id=doc.client_id,
                 werkgebied=doc.werkgebied,
                 bwbId=doc.bwbId,
@@ -59,11 +61,11 @@ class AnnotatieStore:
             )).first()
         return _naar_document(row) if row else None
 
-    async def lijst_documenten(self, client_id: str, limit: int = 50, offset: int = 0) -> list[AnnotatieDocument]:
+    async def lijst_documenten(self, user_id: str, limit: int = 50, offset: int = 0) -> list[AnnotatieDocument]:
         async with db.get_engine().connect() as conn:
             rows = (await conn.execute(
                 select(db.annotatie_documenten)
-                .where(db.annotatie_documenten.c.client_id == client_id)
+                .where(db.annotatie_documenten.c.user_id == user_id)
                 .order_by(db.annotatie_documenten.c.updated.desc())
                 .limit(limit).offset(offset)
             )).all()
@@ -80,7 +82,7 @@ class AnnotatieStore:
     async def beslis_op_element(
         self,
         slug: str,
-        client_id: str,
+        user_id: str,
         element_id: str,
         toepassen: Callable[[AnnotatieElement], None],
     ) -> AnnotatieDocument | None | object:
@@ -103,7 +105,7 @@ class AnnotatieStore:
             if row is None:
                 return None
             doc = _naar_document(row)
-            if doc.client_id != client_id:
+            if doc.user_id != user_id:
                 return None
             el = next((x for x in doc.elementen if x.id == element_id), None)
             if el is None:
