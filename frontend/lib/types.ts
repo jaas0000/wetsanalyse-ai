@@ -843,16 +843,22 @@ export interface BerichtOut {
   gepubliceerd: boolean;
   gepubliceerd_op: string | null;
   gelezen: boolean;
-  aangemaakt_door: string;
   created: string;
   updated: string;
 }
 
 /** Bericht zonder leesstatus (voor admin-beheerlijst). */
-export type AdminBerichtOut = Omit<BerichtOut, "gelezen">;
+export type AdminBerichtOut = Omit<BerichtOut, "gelezen"> & { aangemaakt_door: string };
 
 export interface OngelezenAantalOut {
   aantal: number;
+}
+
+export interface BerichtenPaginaOut {
+  items: BerichtOut[];
+  totaal: number;
+  pagina: number;
+  per_pagina: number;
 }
 
 export interface BerichtAanmakenIn {

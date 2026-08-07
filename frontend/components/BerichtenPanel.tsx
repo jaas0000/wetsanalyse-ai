@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import {
   getOngelezenAantal,
   listBerichten,
@@ -77,9 +78,10 @@ export function BerichtenPanel() {
   const onOpen = useCallback(async () => {
     setLaden(true);
     try {
+      // listBerichten gebruikt ?ongelezen=true — server filtert al.
       const items = await listBerichten();
       setBerichten(items);
-      if (items.some((b) => !b.gelezen)) {
+      if (items.length > 0) {
         await markeerAllesGelezen().catch(() => {});
         setOngelezen(0);
         setBerichten(items.map((b) => ({ ...b, gelezen: true })));
@@ -135,13 +137,20 @@ export function BerichtenPanel() {
         </div>
       )}
       {!laden && berichten !== null && berichten.length === 0 && (
-        <p className="px-4 py-6 text-sm text-muted">Geen berichten.</p>
+        <p className="px-4 py-4 text-sm text-muted">Geen nieuwe berichten.</p>
       )}
       {!laden && berichten !== null && berichten.length > 0 && (
         <div>
           {berichten.map((b) => (
             <BerichtItem key={b.id} bericht={b} />
           ))}
+        </div>
+      )}
+      {!laden && (
+        <div className="border-t border-line px-4 py-2">
+          <Link href="/berichten" className="text-xs text-lint hover:underline">
+            Alle berichten bekijken →
+          </Link>
         </div>
       )}
     </Popover>

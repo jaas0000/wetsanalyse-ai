@@ -44,6 +44,7 @@ import type {
   AnnotatieDocument,
   AuditRecord,
   BerichtAanmakenIn,
+  BerichtenPaginaOut,
   BerichtOut,
   BerichtPublicatieIn,
   BeslissingInvoer,
@@ -559,7 +560,16 @@ export async function haalArtikelGraaf(bwbId: string, artikel: string, lid?: str
 // --- Berichtensysteem (analist) ----------------------------------------------
 
 export async function listBerichten(): Promise<BerichtOut[]> {
-  return json<BerichtOut[]>(await fetch("/api/berichten", { cache: "no-store" }));
+  const data = await json<BerichtenPaginaOut>(
+    await fetch("/api/berichten?ongelezen=true&per_pagina=100", { cache: "no-store" }),
+  );
+  return data.items;
+}
+
+export async function listBerichtenPagina(pagina: number): Promise<BerichtenPaginaOut> {
+  return json<BerichtenPaginaOut>(
+    await fetch(`/api/berichten?pagina=${pagina}`, { cache: "no-store" }),
+  );
 }
 
 export async function getOngelezenAantal(): Promise<OngelezenAantalOut> {

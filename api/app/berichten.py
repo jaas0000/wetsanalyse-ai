@@ -41,24 +41,56 @@ def _row_to_dict(row, *, gelezen: bool | None = None) -> dict:
     return result
 
 
-async def list_berichten(userid: str) -> list[dict]:
-    """Gepubliceerde berichten voor een analist, met gelezen-vlag, nieuwste eerst (max 20)."""
+def _user_created_subq(userid: str):
+    u = db.users
+    return select(u.c.created).where(u.c.userid == userid).scalar_subquery()
+
+
+async def list_berichten(
+    userid: str,
+    offset: int = 0,
+    limit: int = 20,
+    ongelezen_only: bool = False,
+) -> list[dict]:
+    """Gepubliceerde berichten voor een analist, met gelezen-vlag, nieuwste eerst."""
     b = db.berichten
     lb = db.bericht_leesbewijzen
-    u = db.users
     stmt = (
         select(b, lb.c.userid.isnot(None).label("gelezen"))
         .outerjoin(lb, (lb.c.bericht_id == b.c.id) & (lb.c.userid == userid))
         .where(b.c.gepubliceerd.is_(True))
         # Alleen berichten ná aanmaken van de user-account — nieuw aangemelde users
         # zien geen historische berichten (consistent met ongelezen_aantal).
-        .where(b.c.created >= select(u.c.created).where(u.c.userid == userid).scalar_subquery())
+        .where(b.c.created >= _user_created_subq(userid))
         .order_by(b.c.created.desc())
-        .limit(20)
+        .offset(offset)
+        .limit(limit)
     )
+    if ongelezen_only:
+        stmt = stmt.where(lb.c.userid.is_(None))
     async with db.get_engine().connect() as conn:
         rows = (await conn.execute(stmt)).mappings().all()
     return [_row_to_dict(r, gelezen=bool(r["gelezen"])) for r in rows]
+
+
+async def list_berichten_totaal(userid: str, ongelezen_only: bool = False) -> int:
+    """Totaal aantal gepubliceerde berichten zichtbaar voor deze analist."""
+    b = db.berichten
+    lb = db.bericht_leesbewijzen
+    stmt = (
+        select(func.count())
+        .select_from(b)
+        .where(b.c.gepubliceerd.is_(True))
+        .where(b.c.created >= _user_created_subq(userid))
+    )
+    if ongelezen_only:
+        stmt = (
+            stmt.outerjoin(lb, (lb.c.bericht_id == b.c.id) & (lb.c.userid == userid))
+            .where(lb.c.userid.is_(None))
+        )
+    async with db.get_engine().connect() as conn:
+        result = await conn.scalar(stmt)
+    return int(result or 0)
 
 
 async def ongelezen_aantal(userid: str) -> int:

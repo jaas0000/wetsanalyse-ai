@@ -236,10 +236,12 @@ async def test_analist_ziet_gepubliceerd_bericht(client):
         json={"gepubliceerd": True},
     )
 
-    # Analist haalt lijst op.
+    # Analist haalt lijst op (envelope-formaat met items/totaal/pagina/per_pagina).
     r = await client.get("/v1/berichten", headers={"X-User-Id": userid})
     assert r.status_code == 200
-    ids = [b["id"] for b in r.json()]
+    body = r.json()
+    assert "items" in body and "totaal" in body
+    ids = [b["id"] for b in body["items"]]
     assert bericht_id in ids
 
 
@@ -279,3 +281,60 @@ async def test_ongelezen_route_vereist_user_id(client):
     """Zonder X-User-Id header → 401 (huidige_userid dependency)."""
     r = await client.get("/v1/berichten/ongelezen-aantal")
     assert r.status_code == 401
+
+
+async def test_paginering_pagina2(client):
+    """Pagina 2 met per_pagina=2 geeft het derde bericht terug."""
+    userid = "pagina2-user"
+    await client.post("/v1/admin/users", headers=_ADM, json={"userid": userid, "email": f"{userid}@test.nl"})
+
+    ids = []
+    for i in range(3):
+        r = await client.post(
+            "/v1/admin/berichten", headers=_ADM,
+            json={"titel": f"Bericht {i}", "inhoud": "Tekst.", "type": "info"},
+        )
+        ids.append(r.json()["id"])
+        await client.patch(
+            f"/v1/admin/berichten/{ids[-1]}/publicatie",
+            headers=_ADM, json={"gepubliceerd": True},
+        )
+
+    r = await client.get("/v1/berichten?pagina=2&per_pagina=2", headers={"X-User-Id": userid})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["pagina"] == 2
+    assert body["totaal"] == 3
+    assert len(body["items"]) == 1
+
+
+async def test_ongeldige_pagina_geeft_422(client):
+    """pagina=0 voldoet niet aan ge=1 → 422 Unprocessable Entity."""
+    r = await client.get("/v1/berichten?pagina=0", headers={"X-User-Id": "irrelevant"})
+    assert r.status_code == 422
+
+
+async def test_ongelezen_filter(client):
+    """?ongelezen=true geeft alleen ongelezen berichten terug."""
+    userid = "ongelezen-filter-user"
+    await client.post("/v1/admin/users", headers=_ADM, json={"userid": userid, "email": f"{userid}@test.nl"})
+
+    r = await client.post(
+        "/v1/admin/berichten", headers=_ADM,
+        json={"titel": "Ongelezen", "inhoud": "Tekst.", "type": "info"},
+    )
+    bericht_id = r.json()["id"]
+    await client.patch(
+        f"/v1/admin/berichten/{bericht_id}/publicatie",
+        headers=_ADM, json={"gepubliceerd": True},
+    )
+
+    # Vóór markeren: filter geeft het bericht terug.
+    r = await client.get("/v1/berichten?ongelezen=true", headers={"X-User-Id": userid})
+    assert r.status_code == 200
+    assert any(b["id"] == bericht_id for b in r.json()["items"])
+
+    # Na markeren: filter geeft geen berichten meer.
+    await client.post("/v1/berichten/lees-alles", headers={"X-User-Id": userid})
+    r = await client.get("/v1/berichten?ongelezen=true", headers={"X-User-Id": userid})
+    assert r.json()["items"] == []
