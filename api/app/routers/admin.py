@@ -465,6 +465,7 @@ class AdminBerichtOut(BaseModel):
     type: str
     versie: str | None = None
     gepubliceerd: bool
+    gepubliceerd_op: str | None = None
     aangemaakt_door: str = ""
     created: str = ""
     updated: str = ""
@@ -482,6 +483,7 @@ class BerichtPublicatieIn(BaseModel):
 
 
 def _bericht_out(row: dict) -> AdminBerichtOut:
+    gp_op = row.get("gepubliceerd_op")
     return AdminBerichtOut(
         id=row["id"],
         titel=row["titel"],
@@ -489,6 +491,7 @@ def _bericht_out(row: dict) -> AdminBerichtOut:
         type=row["type"],
         versie=row.get("versie"),
         gepubliceerd=bool(row["gepubliceerd"]),
+        gepubliceerd_op=gp_op.isoformat() if gp_op else None,
         aangemaakt_door=row.get("aangemaakt_door", ""),
         created=row["created"].isoformat() if row.get("created") else "",
         updated=row["updated"].isoformat() if row.get("updated") else "",

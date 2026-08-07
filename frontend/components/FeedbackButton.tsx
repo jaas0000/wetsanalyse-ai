@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { stuurFeedback } from "@/lib/api";
-import { isApiError } from "@/lib/api";
+import { isApiError, stuurFeedback } from "@/lib/api";
 
 type Categorie = "verbeteridee" | "probleemmelding" | "compliment" | "vraag";
 
@@ -74,6 +73,7 @@ export function FeedbackButton() {
     <>
       {/* Floating knop */}
       <button
+        type="button"
         onClick={() => setOpen(true)}
         aria-label="Feedback geven"
         className="fixed bottom-6 right-6 z-40 flex min-h-[48px] items-center gap-2 rounded-button border border-transparent bg-accent px-4 py-2 text-sm font-medium text-paper shadow-lg transition-colors hover:bg-accent-soft focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-lint"
