@@ -20,6 +20,13 @@ from __future__ import annotations
 
 import os
 import pathlib
+
+
+def schrijf_prive(path: pathlib.Path, inhoud: str) -> None:
+    """Schrijf een bestand met mode 0o600 in één atomaire syscall (geen readable window)."""
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as fh:
+        fh.write(inhoud)
 import signal
 import subprocess
 import sys
@@ -120,7 +127,7 @@ else:
 # ---------------------------------------------------------------------------
 log("API .env schrijven…")
 env_path = API_DIR / ".env"
-env_path.write_text(f"""\
+schrijf_prive(env_path, f"""\
 DATABASE_URL={DATABASE_URL}
 WETSANALYSE_API_TOKENS={api_tokens}
 WETSANALYSE_ADMIN_TOKENS={adm_tokens}
@@ -134,14 +141,13 @@ LLM_API_KEY={llm_key}
 LLM_CONFIG_SECRET={cfg_secret}
 LOG_FORMAT=text
 """)
-env_path.chmod(0o600)
 
 # ---------------------------------------------------------------------------
 # 4. .env.local voor de frontend schrijven
 # ---------------------------------------------------------------------------
 log("Frontend .env.local schrijven…")
 env_local = FRONTEND_DIR / ".env.local"
-env_local.write_text(f"""\
+schrijf_prive(env_local, f"""\
 API_BASE_URL=http://localhost:{API_PORT}
 API_TOKEN={api_token}
 ADMIN_API_TOKEN={adm_token}
@@ -149,7 +155,6 @@ AUTH_SECRET={auth_sec}
 AUTH_URL=http://localhost:{FRONTEND_PORT}
 NODE_ENV=development
 """)
-env_local.chmod(0o600)
 
 # ---------------------------------------------------------------------------
 # 5. Processen starten
