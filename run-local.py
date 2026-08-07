@@ -1,15 +1,28 @@
 #!/usr/bin/env python3
 """
-Draai de wetsanalyse-stack lokaal vanuit de worktree (development-modus).
+Draai de wetsanalyse-stack lokaal (development-modus).
 
 Wat dit doet:
-  1. Leest bestaande secrets uit local-setup/secrets-local/
-  2. Start een PostgreSQL-container via podman (poort 5432)
-  3. Schrijft .env (API) en frontend/.env.local (frontend) — worden NIET gecommit
-  4. Start de API op poort 3010  (uvicorn, hot-reload)
-  5. Start de frontend op poort 3011 (Next.js dev server)
+  1. Genereert bij de eerste run zelf de interne secrets (Postgres-wachtwoord, interne
+     API/admin-tokens, twee dev-inlogaccounts) in local-setup/secrets-local/ (gitignored,
+     buiten git) — stabiel over herhaalde runs, want persistent opgeslagen.
+  2. Start een PostgreSQL-container via podman (poort 5432).
+  3. Schrijft .env (API) en frontend/.env.local (frontend) — worden NIET gecommit.
+  4. Start de API op poort 3010  (uvicorn, hot-reload).
+  5. Start de frontend op poort 3011 (Next.js dev server).
 
 Stop alles met Ctrl+C.
+
+Vóór de EERSTE run moet je drie échte externe credentials zelf aanleveren — dit script kan
+ze niet zelf genereren, want het zijn geen lokale secrets maar bestaande, externe waarden:
+
+    mkdir -p local-setup/secrets-local
+    echo -n "<azure-ai-foundry-key>"                        > local-setup/secrets-local/llm_api_key
+    echo -n "https://<resource-naam>.services.ai.azure.com" > local-setup/secrets-local/llm_api_base
+    echo -n "<wettenbank-token>"                             > local-setup/secrets-local/wettenbank_token
+
+Alle andere secrets (Postgres, interne tokens, dev-inlogwachtwoorden) genereert het script zelf
+bij de eerste run en onthoudt ze in dezelfde map.
 
 SSH-forwarding vanuit je Mac (zie ook de skill 'local-dev-run'):
   ssh -L 3011:localhost:3011 wet-admin@<ip>
@@ -18,8 +31,10 @@ SSH-forwarding vanuit je Mac (zie ook de skill 'local-dev-run'):
 
 from __future__ import annotations
 
+import base64
 import os
 import pathlib
+import secrets as secrets_lib
 
 
 def schrijf_prive(path: pathlib.Path, inhoud: str) -> None:
@@ -27,6 +42,8 @@ def schrijf_prive(path: pathlib.Path, inhoud: str) -> None:
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, "w") as fh:
         fh.write(inhoud)
+
+
 import signal
 import subprocess
 import sys
@@ -35,11 +52,10 @@ import time
 # ---------------------------------------------------------------------------
 # Paden
 # ---------------------------------------------------------------------------
-SCRIPT_DIR  = pathlib.Path(__file__).parent.resolve()
-WORKSPACE   = SCRIPT_DIR.parents[1]           # workspaces/workspace1
-SECRETS_DIR = WORKSPACE / "local-setup" / "secrets-local"
-API_DIR     = SCRIPT_DIR / "api"
-FRONTEND_DIR= SCRIPT_DIR / "frontend"
+SCRIPT_DIR   = pathlib.Path(__file__).parent.resolve()
+SECRETS_DIR  = SCRIPT_DIR / "local-setup" / "secrets-local"
+API_DIR      = SCRIPT_DIR / "api"
+FRONTEND_DIR = SCRIPT_DIR / "frontend"
 
 API_PORT      = 3010
 FRONTEND_PORT = 3011
@@ -50,32 +66,74 @@ PG_CONTAINER  = "wetsanalyse-dev-postgres"
 # Hulpfuncties
 # ---------------------------------------------------------------------------
 def secret(name: str) -> str:
+    """Externe credential — moet al bestaan; dit script genereert 'm niet (kan niet: het is een
+    echte waarde van buiten deze machine, zoals een Azure-key of een gedeeld bearer-token)."""
     p = SECRETS_DIR / name
     if not p.exists():
-        sys.exit(f"[FOUT] Secret ontbreekt: {p}\n"
-                 "       Draai eerst local-setup/local-setup.sh om secrets te genereren.")
+        sys.exit(
+            f"[FOUT] Externe secret ontbreekt: {p}\n"
+            f"       Zie de module-docstring bovenaan dit script voor welke drie bestanden je\n"
+            f"       zelf moet aanmaken, bv.: mkdir -p {SECRETS_DIR} && echo -n '<waarde>' > {p}"
+        )
     return p.read_text().strip()
+
+
+def secret_of_gegenereerd(name: str, genereer) -> str:
+    """Interne secret — alleen relevant voor de lokale stack zelf (geen echte externe
+    credential). Wordt bij ontbreken eenmalig gegenereerd en persistent opgeslagen, zodat 'ie
+    stabiel blijft over herhaalde runs (belangrijk voor de idempotente accountaanmaak
+    hieronder: een bestaand dev-account moet bij de volgende run hetzelfde wachtwoord houden)."""
+    p = SECRETS_DIR / name
+    if not p.exists():
+        SECRETS_DIR.mkdir(parents=True, exist_ok=True)
+        schrijf_prive(p, genereer())
+    return p.read_text().strip()
+
+
+def genereer_token() -> str:
+    return secrets_lib.token_urlsafe(24)
+
+
+def genereer_wachtwoord() -> str:
+    # Kort genoeg om handmatig over te typen tijdens lokaal testen, met ruim voldoende entropie
+    # voor een throwaway lokaal dev-account dat nooit buiten deze machine komt.
+    return secrets_lib.token_urlsafe(9)
+
+
+def genereer_fernet_key() -> str:
+    # Zelfde formaat als cryptography.fernet.Fernet.generate_key(): 32 willekeurige bytes,
+    # urlsafe-base64. Geen cryptography-import nodig in dit orchestratie-script (draait met de
+    # ambient python3, niet per se met de venv waarin die dependency zit) — de API zelf leest
+    # deze waarde later gewoon in via Fernet(...), wat elke geldige key van dit formaat accepteert.
+    return base64.urlsafe_b64encode(secrets_lib.token_bytes(32)).decode()
+
 
 def log(msg: str) -> None:
     print(f"\033[1;36m==>\033[0m {msg}", flush=True)
 
+
 def run(cmd: list[str], **kwargs) -> subprocess.CompletedProcess:
     return subprocess.run(cmd, check=True, **kwargs)
 
+
 # ---------------------------------------------------------------------------
-# 1. Secrets inlezen
+# 1. Secrets inlezen (intern: genereren-en-onthouden; extern: moet al bestaan)
 # ---------------------------------------------------------------------------
-log("Secrets inlezen…")
-pg_user    = secret("postgres_user")
-pg_pass    = secret("postgres_password")
-api_token  = secret("frontend_api_token")
-adm_token  = secret("frontend_admin_token")
-auth_sec   = secret("frontend_auth_secret")
-cfg_secret = secret("llm_config_secret")
-llm_key    = secret("llm_api_key")
-mcp_tok    = secret("wettenbank_token")
-adm_tokens = secret("admin_tokens")       # "admin:<token>"
-api_tokens = secret("api_tokens")         # "frontend:<token>"
+log("Secrets inlezen (interne secrets worden zo nodig eenmalig gegenereerd)…")
+pg_user    = secret_of_gegenereerd("postgres_user", lambda: "wetsanalyse")
+pg_pass    = secret_of_gegenereerd("postgres_password", genereer_token)
+api_token  = secret_of_gegenereerd("frontend_api_token", genereer_token)
+adm_token  = secret_of_gegenereerd("frontend_admin_token", genereer_token)
+auth_sec   = secret_of_gegenereerd("frontend_auth_secret", genereer_token)
+cfg_secret = secret_of_gegenereerd("llm_config_secret", genereer_fernet_key)
+adm_tokens = secret_of_gegenereerd("admin_tokens", lambda: f"admin:{genereer_token()}")
+api_tokens = secret_of_gegenereerd("api_tokens", lambda: f"frontend:{genereer_token()}")
+admin_pw   = secret_of_gegenereerd("local_admin_password", genereer_wachtwoord)
+test_pw    = secret_of_gegenereerd("local_test_password", genereer_wachtwoord)
+
+llm_key  = secret("llm_api_key")
+llm_base = secret("llm_api_base")
+mcp_tok  = secret("wettenbank_token")
 
 DATABASE_URL = (
     f"postgresql+asyncpg://{pg_user}:{pg_pass}@localhost:{PG_HOST_PORT}/wetsanalyse"
@@ -136,7 +194,7 @@ WETTENBANK_MCP_URL=https://wettenbank-mcp.ipalm.nl/mcp
 WETTENBANK_TOKEN={mcp_tok}
 LLM_PROVIDER=azure_ai
 LLM_MODEL=claude-sonnet-4-6
-LLM_API_BASE=https://jjpl-m8ei8xzz-eastus2.services.ai.azure.com
+LLM_API_BASE={llm_base}
 LLM_API_KEY={llm_key}
 LLM_CONFIG_SECRET={cfg_secret}
 LOG_FORMAT=text
@@ -197,10 +255,11 @@ fe_bearer  = api_tokens.split(":", 1)[1]
 
 log("Testgebruikers aanmaken…")
 
-# 1. admin / adminadmin — beheerder (via setup; 409 als al bestaat)
+# 1. admin — beheerder (via setup; 409 als al bestaat). Wachtwoord komt uit
+#    local-setup/secrets-local/local_admin_password (gegenereerd bij de eerste run).
 status, body = api_post(
     "/v1/auth/setup",
-    {"userid": "admin", "email": "admin@local.test", "password": "adminadmin"},
+    {"userid": "admin", "email": "admin@local.test", "password": admin_pw},
     {"Authorization": f"Bearer {fe_bearer}"},
 )
 if status == 201:
@@ -210,18 +269,19 @@ elif status == 409:
 else:
     log(f"  admin: onverwacht {status} — {body}")
 
-# 2. test / testtest1 — analist (via admin; 409 als al bestaat)
+# 2. test — analist (via admin; 409 als al bestaat). Wachtwoord komt uit
+#    local-setup/secrets-local/local_test_password.
 status, body = api_post(
     "/v1/admin/users",
-    {"userid": "test", "email": "test@local.test", "password": "testtest1", "role": "analist"},
+    {"userid": "test", "email": "test@local.test", "password": test_pw, "role": "analist"},
     {"Authorization": f"Bearer {adm_bearer}"},
 )
 if status == 201:
     temp_pw = body.get("temp_password", "")
-    # Zet tijdelijk wachtwoord direct om naar permanent
+    # Zet tijdelijk wachtwoord direct om naar het gegenereerde permanente wachtwoord.
     api_post(
         "/v1/auth/change-password",
-        {"current": temp_pw, "new": "testtest1"},
+        {"current": temp_pw, "new": test_pw},
         {"Authorization": f"Bearer {fe_bearer}", "X-User-Id": "test"},
     )
     log("  test (analist) aangemaakt")
@@ -241,9 +301,9 @@ print("\033[1;32m✓ Stack actief\033[0m")
 print(f"  Frontend : \033[4mhttp://localhost:{FRONTEND_PORT}\033[0m")
 print(f"  API docs : \033[4mhttp://localhost:{API_PORT}/docs\033[0m")
 print()
-print("\033[1mTestgebruikers:\033[0m")
-print("  admin / adminadmin  (beheerder)")
-print("  test  / testtest1   (analist)")
+print("\033[1mTestgebruikers\033[0m (wachtwoorden persistent opgeslagen in local-setup/secrets-local/):")
+print(f"  admin / {admin_pw}  (beheerder)")
+print(f"  test  / {test_pw}  (analist)")
 print()
 print("\033[1mSSH-forwarding vanuit Mac:\033[0m")
 print(f"  ssh -L {FRONTEND_PORT}:localhost:{FRONTEND_PORT} wet-admin@<ip-van-deze-vm>")
