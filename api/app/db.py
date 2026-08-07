@@ -406,6 +406,18 @@ async def reconcile_schema() -> None:
         await conn.exec_driver_sql(
             "CREATE INDEX IF NOT EXISTS ix_projects_state ON projects (state)"
         )
+        # feedback_gezien_op: tijdstip waarop een beheerder de feedbackpagina voor het
+        # laatst heeft bezocht; NULL = nooit bekeken (alle feedback telt als ongelezen).
+        def _users_kolommen(sync_conn):
+            insp = inspect(sync_conn)
+            return {c["name"] for c in insp.get_columns("users")} if insp.has_table("users") else set()
+
+        bestaande_users = await conn.run_sync(_users_kolommen)
+        if "feedback_gezien_op" not in bestaande_users:
+            dt_typ = "TIMESTAMPTZ" if is_pg else "DATETIME"
+            await conn.exec_driver_sql(
+                f"ALTER TABLE users ADD COLUMN feedback_gezien_op {dt_typ}"
+            )
 
 
 def aware(dt: datetime | None) -> datetime | None:

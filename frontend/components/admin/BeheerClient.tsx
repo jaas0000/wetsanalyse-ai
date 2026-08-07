@@ -9,6 +9,7 @@ import { Tag } from "@/components/ui/Badge";
 import {
   deleteProfile,
   deleteWet,
+  getOngelezenFeedbackAantal,
   isApiError,
   listProfiles,
   listWetCatalog,
@@ -33,11 +34,17 @@ export function BeheerClient() {
   const [profielen, setProfielen] = useState<LlmProfileOut[] | null>(null);
   const [wetten, setWetten] = useState<WetOut[] | null>(null);
   const [fout, setFout] = useState<string | null>(null);
+  const [ongelezenFeedback, setOngelezenFeedback] = useState(0);
   const [edit, setEdit] = useState<EditState>({ open: false });
   const [tests, setTests] = useState<Record<string, TestResult | "bezig">>({});
 
   const laad = useCallback(async () => {
     setFout(null);
+    try {
+      setOngelezenFeedback(await getOngelezenFeedbackAantal());
+    } catch {
+      /* stil falen — badge is optioneel */
+    }
     try {
       setProfielen(await listProfiles());
     } catch (e) {
@@ -129,7 +136,14 @@ export function BeheerClient() {
       <BerichtenBeheerPanel />
       <Section title="Gebruikersfeedback" subtitle="Ingezonden feedback van gebruikers">
         <ButtonRow>
-          <LinkButton href="/beheer/feedback" variant="secondary">Bekijk alle feedback</LinkButton>
+          <span className="relative inline-flex">
+            <LinkButton href="/beheer/feedback" variant="secondary">Bekijk alle feedback</LinkButton>
+            {ongelezenFeedback > 0 && (
+              <span className="absolute -right-2 -top-2 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-accent px-1 text-xs font-semibold text-paper">
+                {ongelezenFeedback > 99 ? "99+" : ongelezenFeedback}
+              </span>
+            )}
+          </span>
         </ButtonRow>
       </Section>
       <Section title="Modelprofielen" count={profielen?.length} subtitle="LLM-configuratie">

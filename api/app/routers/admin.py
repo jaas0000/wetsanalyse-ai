@@ -28,6 +28,7 @@ from pydantic import BaseModel, Field
 
 from .. import api_tokens, app_settings, berichten as berichten_svc, feedback as feedback_svc, profiles, usage, users, wetten
 from ..auth import require_admin
+from .auth import huidige_userid
 from ..deps import get_store
 from ..jobstore import JobStore
 from ..llm.litellm_client import build_llm_client
@@ -549,6 +550,22 @@ class FeedbackAdminOut(BaseModel):
     tekst: str
     pagina: str | None = None
     created: str
+
+
+class OngelezenFeedbackOut(BaseModel):
+    aantal: int
+
+
+@router.get("/feedback/ongelezen-aantal", response_model=OngelezenFeedbackOut)
+async def get_ongelezen_feedback_aantal(userid: str = Depends(huidige_userid)):
+    aantal = await feedback_svc.ongelezen_feedback_aantal(userid)
+    return OngelezenFeedbackOut(aantal=aantal)
+
+
+@router.post("/feedback/markeer-gezien", status_code=status.HTTP_204_NO_CONTENT)
+async def post_markeer_feedback_gezien(userid: str = Depends(huidige_userid)):
+    await feedback_svc.markeer_feedback_gezien(userid)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/feedback", response_model=list[FeedbackAdminOut])
