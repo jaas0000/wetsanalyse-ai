@@ -41,3 +41,7 @@ api/secrets/
 api/docker-compose.override.yml
 api/_data/
 api/spike_act2.json
+
+# Secrets voor run-local.py (Postgres-wachtwoord, interne tokens, dev-inlogaccounts) — zie de
+# docstring bovenaan run-local.py voor welke bestanden je zelf moet aanleveren.
+local-setup/

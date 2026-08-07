@@ -90,6 +90,23 @@ zonder redeploy. Je kiest provider/model/endpoint/temperatuur, slaat de API-key 
 (write-only, nooit teruggegeven), markeert een default, test de verbinding, en ziet het
 token-verbruik per model/profiel. De env-`LLM_*`-waarden seeden alleen het eerste default-profiel.
 
+**Lokaal de hele stack draaien.** Voor snel lokaal ontwikkelen (Postgres + API + frontend in één
+commando) is er `run-local.py` in de projectroot. Vereist `podman`, `uv` en `npm`. Vóór de eerste
+run drie échte externe credentials zelf aanleveren (dit script kan ze niet zelf genereren):
+
+```bash
+mkdir -p local-setup/secrets-local
+echo -n "<azure-ai-foundry-key>"                        > local-setup/secrets-local/llm_api_key
+echo -n "https://<resource-naam>.services.ai.azure.com" > local-setup/secrets-local/llm_api_base
+echo -n "<wettenbank-token>"                            > local-setup/secrets-local/wettenbank_token
+python3 run-local.py
+```
+
+Alle overige secrets (Postgres-wachtwoord, interne API/admin-tokens, twee dev-inlogaccounts)
+genereert het script zelf bij de eerste run en bewaart ze in `local-setup/secrets-local/`
+(gitignored). Frontend op `:3011`, API-docs op `:3010/docs`. Ctrl+C stopt alles. Zie de
+docstring bovenaan `run-local.py` voor details.
+
 **Deployment.** Het platform draait op **Azure Container Apps** (`deploy/azure/`: Postgres, wettenbank-mcp,
 api, graph-qa, frontend) én als **zelf-gehoste Portainer-stacks** achter Nginx Proxy Manager; CI bouwt de
 images (GHCR) en doet de stack-redeploy. Detail-instructies staan in de respectievelijke `CLAUDE.md`- en
