@@ -2,8 +2,9 @@ import { proxy, readBody } from "../../_lib/proxy";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
-  return proxy("/v1/admin/berichten", { admin: true });
+export async function GET(req: Request) {
+  const qs = new URL(req.url).search;
+  return proxy(`/v1/admin/berichten${qs}`, { admin: true });
 }
 
 export async function POST(req: Request) {

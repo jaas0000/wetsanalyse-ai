@@ -40,6 +40,7 @@ import type {
 } from "./types";
 import type {
   AgentDoel,
+  AdminBerichtenPaginaOut,
   AdminBerichtOut,
   AnnotatieDocument,
   AuditRecord,
@@ -635,8 +636,10 @@ export async function markeerAllesGelezen(): Promise<void> {
 
 // --- Berichtensysteem (admin) ------------------------------------------------
 
-export async function listAlleBerichten(): Promise<AdminBerichtOut[]> {
-  return json<AdminBerichtOut[]>(await fetch("/api/admin/berichten", { cache: "no-store" }));
+export async function listAlleBerichten(pagina = 1, perPagina = 20): Promise<AdminBerichtenPaginaOut> {
+  return json<AdminBerichtenPaginaOut>(
+    await fetch(`/api/admin/berichten?pagina=${pagina}&per_pagina=${perPagina}`, { cache: "no-store" }),
+  );
 }
 
 export async function maakBericht(body: BerichtAanmakenIn): Promise<AdminBerichtOut> {

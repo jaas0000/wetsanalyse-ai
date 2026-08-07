@@ -8,6 +8,7 @@ import { BerichtBadge } from "@/components/ui/BerichtBadge";
 import { Tag } from "@/components/ui/Badge";
 import { Melding } from "@/components/ui/Melding";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { Pagination } from "@/components/Pagination";
 import { Markdown } from "@/components/werkplek/Markdown";
 import { BerichtEditor } from "./BerichtEditor";
 import {
@@ -16,10 +17,13 @@ import {
   verwijderBericht,
   zetPublicatie,
 } from "@/lib/api";
-import type { AdminBerichtOut, BerichtType } from "@/lib/types";
+import type { AdminBerichtenPaginaOut, AdminBerichtOut, BerichtType } from "@/lib/types";
+
+const PER_PAGINA = 20;
 
 export function BerichtenBeheerPanel() {
-  const [berichten, setBerichten] = useState<AdminBerichtOut[] | null>(null);
+  const [data, setData] = useState<AdminBerichtenPaginaOut | null>(null);
+  const [pagina, setPagina] = useState(1);
   const [fout, setFout] = useState<string | null>(null);
   const [uitgeklapt, setUitgeklapt] = useState<Set<number>>(new Set());
   const [toonLijst, setToonLijst] = useState(false);
@@ -35,25 +39,30 @@ export function BerichtenBeheerPanel() {
     });
   }
 
-  const laad = useCallback(async () => {
+  const laad = useCallback(async (p: number) => {
     setFout(null);
     try {
-      setBerichten(await listAlleBerichten());
+      setData(await listAlleBerichten(p, PER_PAGINA));
     } catch (e) {
       setFout(isApiError(e) ? `${e.detail} (${e.status})` : (e as Error).message);
-      setBerichten([]);
+      setData({ items: [], totaal: 0, pagina: p, per_pagina: PER_PAGINA });
     }
   }, []);
 
   function onToonBerichten() {
     setToonLijst(true);
-    void laad();
+    void laad(pagina);
+  }
+
+  function onPage(p: number) {
+    setPagina(p);
+    void laad(p);
   }
 
   async function onPublicatie(b: AdminBerichtOut) {
     try {
       await zetPublicatie(b.id, !b.gepubliceerd);
-      await laad();
+      await laad(pagina);
     } catch (e) {
       setFout(isApiError(e) ? `${e.detail} (${e.status})` : (e as Error).message);
     }
@@ -63,7 +72,7 @@ export function BerichtenBeheerPanel() {
     if (!confirm(`Bericht "${b.titel}" definitief verwijderen?`)) return;
     try {
       await verwijderBericht(b.id);
-      await laad();
+      await laad(pagina);
     } catch (e) {
       setFout(isApiError(e) ? `${e.detail} (${e.status})` : (e as Error).message);
     }
@@ -75,7 +84,7 @@ export function BerichtenBeheerPanel() {
         <BerichtEditor
           bericht={editBericht}
           onCancel={() => setEditBericht(false)}
-          onDone={() => { setEditBericht(false); setToonLijst(true); void laad(); }}
+          onDone={() => { setEditBericht(false); setToonLijst(true); void laad(pagina); }}
         />
       </Section>
     );
@@ -92,20 +101,20 @@ export function BerichtenBeheerPanel() {
         )}
       </ButtonRow>
 
-      {toonLijst && berichten === null && (
+      {toonLijst && data === null && (
         <div className="space-y-3">
           <Skeleton className="h-14 w-full" />
           <Skeleton className="h-14 w-full" />
         </div>
       )}
 
-      {toonLijst && berichten !== null && berichten.length === 0 && (
+      {toonLijst && data !== null && data.items.length === 0 && (
         <p className="text-sm text-muted">Nog geen berichten.</p>
       )}
 
-      {toonLijst && berichten !== null && berichten.length > 0 && (
+      {toonLijst && data !== null && data.items.length > 0 && (
         <div className="space-y-3">
-          {berichten.map((b) => {
+          {data.items.map((b) => {
             const open = uitgeklapt.has(b.id);
             return (
               <Card key={b.id} className="overflow-hidden p-0">
@@ -160,6 +169,16 @@ export function BerichtenBeheerPanel() {
             );
           })}
         </div>
+      )}
+
+      {toonLijst && data !== null && (
+        <Pagination
+          page={pagina}
+          totalPages={Math.max(1, Math.ceil(data.totaal / PER_PAGINA))}
+          total={data.totaal}
+          pageSize={PER_PAGINA}
+          onPage={onPage}
+        />
       )}
     </Section>
   );

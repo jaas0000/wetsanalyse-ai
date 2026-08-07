@@ -20,7 +20,9 @@ POST   /v1/admin/wetten/{bwbId}/resolve   — stel de officiële citeertitel voo
 
 from __future__ import annotations
 
+import asyncio
 import logging
+from datetime import datetime
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
@@ -499,10 +501,33 @@ def _bericht_out(row: dict) -> AdminBerichtOut:
     )
 
 
-@router.get("/berichten", response_model=list[AdminBerichtOut])
-async def lijst_berichten():
-    rows = await berichten_svc.list_alle_berichten()
-    return [_bericht_out(r) for r in rows]
+class AdminBerichtenPaginaOut(BaseModel):
+    items: list[AdminBerichtOut]
+    totaal: int
+    pagina: int
+    per_pagina: int
+
+
+@router.get("/berichten", response_model=AdminBerichtenPaginaOut)
+async def lijst_berichten(
+    pagina: int = Query(default=1, ge=1),
+    # Default ruim gehouden (i.t.t. de 20 van de analist-route): tools/wetsanalyse-admin-mcp
+    # roept dit endpoint ongepagineerd aan voor de "release notes schrijven"-workflow en
+    # heeft geen offset/limit-parameter om verder te bladeren — een kleinere default zou
+    # oudere berichten stil onbereikbaar maken voor die tool.
+    per_pagina: int = Query(default=100, ge=1, le=500),
+):
+    offset = (pagina - 1) * per_pagina
+    rows, totaal = await asyncio.gather(
+        berichten_svc.list_alle_berichten(offset=offset, limit=per_pagina),
+        berichten_svc.list_alle_berichten_totaal(),
+    )
+    return AdminBerichtenPaginaOut(
+        items=[_bericht_out(r) for r in rows],
+        totaal=totaal,
+        pagina=pagina,
+        per_pagina=per_pagina,
+    )
 
 
 @router.post("/berichten", response_model=AdminBerichtOut, status_code=status.HTTP_201_CREATED)
