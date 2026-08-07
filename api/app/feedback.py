@@ -36,6 +36,13 @@ async def dien_in(
         return result.scalar_one()
 
 
+async def verwijder_feedback(feedback_id: int) -> None:
+    """Verwijder één feedbackitem op id."""
+    from sqlalchemy import delete as sa_delete
+    async with db.get_engine().begin() as conn:
+        await conn.execute(sa_delete(db.user_feedback).where(db.user_feedback.c.id == feedback_id))
+
+
 async def ongelezen_feedback_aantal(admin_userid: str) -> int:
     """Aantal feedback-items ingediend nadat deze beheerder ze voor het laatst heeft gezien."""
     uf = db.user_feedback

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Card, Section } from "@/components/ui/Card";
 import { Melding } from "@/components/ui/Melding";
-import { getFeedback, isApiError, markeerFeedbackGezien } from "@/lib/api";
+import { getFeedback, isApiError, markeerFeedbackGezien, verwijderFeedback } from "@/lib/api";
 import type { FeedbackItem } from "@/lib/api";
 
 const CATEGORIE_LABELS: Record<string, string> = {
@@ -16,6 +16,7 @@ const CATEGORIE_LABELS: Record<string, string> = {
 export function FeedbackLijstClient() {
   const [items, setItems] = useState<FeedbackItem[] | null>(null);
   const [fout, setFout] = useState<string | null>(null);
+  const [bezig, setBezig] = useState<number | null>(null);
 
   useEffect(() => {
     void markeerFeedbackGezien().catch(() => { /* stil falen */ });
@@ -23,6 +24,19 @@ export function FeedbackLijstClient() {
       .then(setItems)
       .catch((e) => setFout(isApiError(e) ? `${e.detail} (${e.status})` : (e as Error).message));
   }, []);
+
+  async function onVerwijder(id: number) {
+    if (!confirm("Dit feedbackbericht verwijderen?")) return;
+    setBezig(id);
+    try {
+      await verwijderFeedback(id);
+      setItems((prev) => prev?.filter((i) => i.id !== id) ?? null);
+    } catch (e) {
+      setFout(isApiError(e) ? `${e.detail} (${e.status})` : (e as Error).message);
+    } finally {
+      setBezig(null);
+    }
+  }
 
   return (
     <Section title="Ingezonden feedback" count={items?.length}>
@@ -47,6 +61,15 @@ export function FeedbackLijstClient() {
                     timeStyle: "short",
                   })}
                 </span>
+                <button
+                  type="button"
+                  onClick={() => void onVerwijder(item.id)}
+                  disabled={bezig === item.id}
+                  aria-label={`Feedbackbericht #${item.id} verwijderen`}
+                  className="text-xs text-fout opacity-60 transition-opacity hover:opacity-100 disabled:cursor-not-allowed"
+                >
+                  {bezig === item.id ? "…" : "Verwijderen"}
+                </button>
               </div>
               {item.pagina && (
                 <p className="mt-2 text-xs text-muted">

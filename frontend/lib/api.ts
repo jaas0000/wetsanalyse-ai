@@ -231,6 +231,11 @@ export async function markeerFeedbackGezien(): Promise<void> {
   if (!res.ok) throw await parseError(res);
 }
 
+export async function verwijderFeedback(id: number): Promise<void> {
+  const res = await fetch(`/api/admin/feedback/${encodeURIComponent(id)}`, { method: "DELETE" });
+  if (!res.ok) throw await parseError(res);
+}
+
 // --- Admin: LLM-modelprofielen + verbruik -----------------------------------
 
 export async function listProfiles(): Promise<LlmProfileOut[]> {

@@ -556,6 +556,12 @@ class OngelezenFeedbackOut(BaseModel):
     aantal: int
 
 
+@router.delete("/feedback/{feedback_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def verwijder_feedback(feedback_id: int):
+    await feedback_svc.verwijder_feedback(feedback_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 @router.get("/feedback/ongelezen-aantal", response_model=OngelezenFeedbackOut)
 async def get_ongelezen_feedback_aantal(userid: str = Depends(huidige_userid)):
     aantal = await feedback_svc.ongelezen_feedback_aantal(userid)
