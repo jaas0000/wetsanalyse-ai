@@ -100,7 +100,9 @@ async def test_admin_feedback_lijst(client):
 
     res = await client.get("/v1/admin/feedback", headers=_ADM)
     assert res.status_code == 200
-    items = res.json()
+    body = res.json()
+    assert body["totaal"] == 2
+    items = body["items"]
     assert len(items) == 2
     # Nieuwste eerst
     assert items[0]["tekst"] == "Tweede bericht"

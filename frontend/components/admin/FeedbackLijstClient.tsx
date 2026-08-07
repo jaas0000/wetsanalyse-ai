@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Card, Section } from "@/components/ui/Card";
 import { Melding } from "@/components/ui/Melding";
+import { Pagination } from "@/components/Pagination";
 import { getFeedback, isApiError, markeerFeedbackGezien, verwijderFeedback } from "@/lib/api";
-import type { FeedbackItem } from "@/lib/api";
+import type { FeedbackPaginaOut } from "@/lib/api";
 
 const CATEGORIE_LABELS: Record<string, string> = {
   verbeteridee: "Verbeteridee",
@@ -13,24 +14,48 @@ const CATEGORIE_LABELS: Record<string, string> = {
   vraag: "Vraag",
 };
 
+const PER_PAGINA = 50;
+
 export function FeedbackLijstClient() {
-  const [items, setItems] = useState<FeedbackItem[] | null>(null);
+  const [data, setData] = useState<FeedbackPaginaOut | null>(null);
+  const [pagina, setPagina] = useState(1);
   const [fout, setFout] = useState<string | null>(null);
   const [bezig, setBezig] = useState<number | null>(null);
 
-  useEffect(() => {
-    void markeerFeedbackGezien().catch(() => { /* stil falen */ });
-    getFeedback()
-      .then(setItems)
-      .catch((e) => setFout(isApiError(e) ? `${e.detail} (${e.status})` : (e as Error).message));
+  const laad = useCallback(async (p: number) => {
+    setFout(null);
+    try {
+      const result = await getFeedback((p - 1) * PER_PAGINA, PER_PAGINA);
+      setData(result);
+      if (p === 1) {
+        // Nieuwste item staat vooraan (created.desc()); markeer pas ná het tonen en tot dat
+        // moment — niet tot "nu" — zodat feedback die tussen laden en markeren binnenkomt
+        // niet ten onrechte als gezien telt (was: twee gelijktijdige requests met dat risico).
+        const tot = result.items[0]?.created;
+        void markeerFeedbackGezien(tot).catch(() => { /* stil falen */ });
+      }
+    } catch (e) {
+      setFout(isApiError(e) ? `${e.detail} (${e.status})` : (e as Error).message);
+    }
   }, []);
+
+  useEffect(() => {
+    void laad(1);
+  }, [laad]);
+
+  function onPage(p: number) {
+    setPagina(p);
+    void laad(p);
+  }
 
   async function onVerwijder(id: number) {
     if (!confirm("Dit feedbackbericht verwijderen?")) return;
     setBezig(id);
     try {
       await verwijderFeedback(id);
-      setItems((prev) => prev?.filter((i) => i.id !== id) ?? null);
+      setData((prev) =>
+        prev ? { items: prev.items.filter((i) => i.id !== id), totaal: prev.totaal - 1 } : null,
+      );
     } catch (e) {
       setFout(isApiError(e) ? `${e.detail} (${e.status})` : (e as Error).message);
     } finally {
@@ -39,15 +64,15 @@ export function FeedbackLijstClient() {
   }
 
   return (
-    <Section title="Ingezonden feedback" count={items?.length}>
+    <Section title="Ingezonden feedback" count={data?.totaal}>
       {fout && <Melding type="fout" className="mb-3">{fout}</Melding>}
-      {items === null ? (
+      {data === null ? (
         <p className="text-sm text-muted">Laden…</p>
-      ) : items.length === 0 ? (
+      ) : data.items.length === 0 ? (
         <p className="text-sm text-muted">Nog geen feedback ingezonden.</p>
       ) : (
         <div className="space-y-3">
-          {items.map((item) => (
+          {data.items.map((item) => (
             <Card key={item.id} className="p-4">
               <div className="flex flex-wrap items-center gap-3">
                 <span className="font-mono text-xs text-faint">#{item.id}</span>
@@ -55,6 +80,7 @@ export function FeedbackLijstClient() {
                   {CATEGORIE_LABELS[item.categorie] ?? item.categorie}
                 </span>
                 <span className="text-xs text-muted">{item.userid}</span>
+                <span className="text-xs text-faint">client: {item.client_id}</span>
                 <span className="ml-auto text-xs text-faint">
                   {new Date(item.created).toLocaleString("nl-NL", {
                     dateStyle: "short",
@@ -81,6 +107,15 @@ export function FeedbackLijstClient() {
             </Card>
           ))}
         </div>
+      )}
+      {data !== null && (
+        <Pagination
+          page={pagina}
+          totalPages={Math.max(1, Math.ceil(data.totaal / PER_PAGINA))}
+          total={data.totaal}
+          pageSize={PER_PAGINA}
+          onPage={onPage}
+        />
       )}
     </Section>
   );

@@ -99,6 +99,17 @@ async def huidige_userid(x_user_id: str | None = Header(default=None)) -> str:
     return x_user_id
 
 
+async def huidige_beheerder(userid: str = Depends(huidige_userid)) -> str:
+    """Als `huidige_userid`, met een verse controle dat deze user een actieve beheerder is.
+    Defense-in-depth naast de admin-bearer: de BFF zet X-User-Id server-side vanuit de sessie,
+    maar `require_admin` levert een los statisch token-label — geen `users.userid` — dus die
+    laag alleen garandeert niet dat de meegestuurde X-User-Id ook echt een beheerder is."""
+    user = await users.get_user(userid)
+    if user is None or not user.active or user.role != "beheerder":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Geen beheerder.")
+    return userid
+
+
 # --- registratie + login -------------------------------------------------------
 
 @router.get("/setup-status", response_model=SetupStatus)

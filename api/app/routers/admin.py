@@ -30,7 +30,7 @@ from pydantic import BaseModel, Field
 
 from .. import api_tokens, app_settings, berichten as berichten_svc, feedback as feedback_svc, profiles, usage, users, wetten
 from ..auth import require_admin
-from .auth import huidige_userid
+from .auth import huidige_beheerder, huidige_userid
 from ..deps import get_store
 from ..jobstore import JobStore
 from ..llm.litellm_client import build_llm_client
@@ -581,31 +581,49 @@ class OngelezenFeedbackOut(BaseModel):
     aantal: int
 
 
+class MarkeerGezienIn(BaseModel):
+    tot: datetime | None = None
+
+
+class FeedbackAdminPaginaOut(BaseModel):
+    items: list[FeedbackAdminOut]
+    totaal: int
+
+
 @router.delete("/feedback/{feedback_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def verwijder_feedback(feedback_id: int):
-    await feedback_svc.verwijder_feedback(feedback_id)
+    try:
+        await feedback_svc.verwijder_feedback(feedback_id)
+    except feedback_svc.FeedbackError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/feedback/ongelezen-aantal", response_model=OngelezenFeedbackOut)
-async def get_ongelezen_feedback_aantal(userid: str = Depends(huidige_userid)):
+async def get_ongelezen_feedback_aantal(userid: str = Depends(huidige_beheerder)):
     aantal = await feedback_svc.ongelezen_feedback_aantal(userid)
     return OngelezenFeedbackOut(aantal=aantal)
 
 
 @router.post("/feedback/markeer-gezien", status_code=status.HTTP_204_NO_CONTENT)
-async def post_markeer_feedback_gezien(userid: str = Depends(huidige_userid)):
-    await feedback_svc.markeer_feedback_gezien(userid)
+async def post_markeer_feedback_gezien(
+    body: MarkeerGezienIn = MarkeerGezienIn(), userid: str = Depends(huidige_beheerder)
+):
+    await feedback_svc.markeer_feedback_gezien(userid, tot=body.tot)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@router.get("/feedback", response_model=list[FeedbackAdminOut])
+@router.get("/feedback", response_model=FeedbackAdminPaginaOut)
 async def get_feedback(offset: int = Query(0, ge=0), limit: int = Query(50, ge=1, le=200)):
-    rows = await feedback_svc.lijst_feedback(offset=offset, limit=limit)
-    return [
+    rows, totaal = await asyncio.gather(
+        feedback_svc.lijst_feedback(offset=offset, limit=limit),
+        feedback_svc.lijst_feedback_totaal(),
+    )
+    items = [
         FeedbackAdminOut(
             **{k: v for k, v in row.items() if k != "created"},
             created=row["created"].isoformat(),
         )
         for row in rows
     ]
+    return FeedbackAdminPaginaOut(items=items, totaal=totaal)
