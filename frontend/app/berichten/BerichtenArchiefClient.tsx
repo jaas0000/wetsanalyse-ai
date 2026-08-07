@@ -45,7 +45,9 @@ export function BerichtenArchiefClient() {
       .then((result) => {
         if (stale) return;
         setData(result);
-        if (pagina === 1) markeerAllesGelezen().catch(() => {});
+        if (pagina === 1 && result.items.some((b) => !b.gelezen)) {
+          markeerAllesGelezen().catch(() => {});
+        }
       })
       .catch((err) => {
         if (!stale) setFout(isApiError(err) ? err.detail : "Kan berichten niet laden.");

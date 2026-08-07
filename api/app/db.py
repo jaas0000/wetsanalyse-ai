@@ -138,6 +138,13 @@ users = Table(
     Column("active", Boolean, nullable=False, default=True),
     Column("created", _DT, nullable=False),
     Column("updated", _DT, nullable=False),
+    # Tijdstip waarop een beheerder de feedbackpagina voor het laatst heeft bezocht; NULL =
+    # nooit bekeken. Declaratief hier (voor nieuwe DB's via create_all) én idempotent via ALTER
+    # in reconcile_schema hieronder (voor bestaande DB's) — zelfde tweeledige patroon als
+    # bronnen/begrippenlijst/scope/regelspraak op projects. Zonder deze Column-declaratie
+    # crasht elke query die u.c.feedback_gezien_op aanraakt met AttributeError, ook al bestaat
+    # de kolom al in de echte database (SQLAlchemy Core kent de kolom pas via de Table-object).
+    Column("feedback_gezien_op", _DT, nullable=True),
 )
 
 # Genereerbare API-tokens voor programmatische admin-toegang (bv. de admin-MCP), náást de

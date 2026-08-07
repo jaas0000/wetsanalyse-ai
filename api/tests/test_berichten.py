@@ -44,7 +44,6 @@ async def client(monkeypatch):
 
 
 _ADM = {"Authorization": "Bearer admin-token"}
-_CLI = {}  # auth_required=0 → elk verzoek zonder token wordt doorgelaten als client
 
 
 async def _insert_user(db, userid: str, email: str | None = None) -> None:
@@ -180,6 +179,74 @@ async def test_nieuwe_user_ziet_geen_historische_berichten(db):
     berichten = await svc.list_berichten("nieuw")
     assert all(b["id"] != row["id"] for b in berichten)
     assert await svc.ongelezen_aantal("nieuw") == 0
+
+
+async def test_concept_voor_registratie_publicatie_erna_is_zichtbaar(db):
+    """R1: een concept geschreven vóór de user-registratie, maar pas ná registratie
+    gepubliceerd, moet wél zichtbaar zijn — de zichtbaarheid volgt het publicatiemoment,
+    niet het aanmaakmoment van het concept."""
+    from app import berichten as svc
+
+    # Concept vóór de user-registratie.
+    row = await svc.maak_bericht("Concept", "Nog niet gepubliceerd.", "info", None, "adm")
+
+    # User registreert zich ná het aanmaken van het concept.
+    await _insert_user(db, "later-geregistreerd")
+
+    # Publicatie gebeurt nog weer later.
+    await svc.set_gepubliceerd(row["id"], True)
+
+    berichten = await svc.list_berichten("later-geregistreerd")
+    assert any(b["id"] == row["id"] for b in berichten)
+    assert await svc.ongelezen_aantal("later-geregistreerd") == 1
+
+
+async def test_markeer_alles_gelezen_concurrent(db):
+    """R2: gelijktijdige aanroepen (twee tabbladen, React StrictMode) mogen niet op een
+    duplicate-key-fout lopen, en leveren precies één leesbewijs per bericht op."""
+    import asyncio
+    from sqlalchemy import func, select
+    from app import berichten as svc
+    from app import db as _db
+
+    await _insert_user(db, "concurrent-user")
+    row = await svc.maak_bericht("B", "T", "info", None, "adm")
+    await svc.set_gepubliceerd(row["id"], True)
+
+    # Geen exception, ook niet bij gelijktijdige uitvoering.
+    await asyncio.gather(*(svc.markeer_alles_gelezen("concurrent-user") for _ in range(5)))
+
+    async with _db.get_engine().connect() as conn:
+        cnt = await conn.scalar(
+            select(func.count()).select_from(_db.bericht_leesbewijzen)
+            .where(_db.bericht_leesbewijzen.c.bericht_id == row["id"])
+            .where(_db.bericht_leesbewijzen.c.userid == "concurrent-user")
+        )
+    assert cnt == 1
+
+
+async def test_verwijder_bericht_onbekend_doet_geen_wijziging(db):
+    """verwijder_bericht op een onbekend id doet geen enkele write vóór de 404 — geen
+    no-op-commit meer (was: de leesbewijzen-delete committede alsnog). Bewijs: een
+    bestaand bericht blijft byte-voor-byte ongewijzigd na een faalpoging op een ander id."""
+    from app import berichten as svc
+
+    await svc.maak_bericht("Blijft staan", "Ongewijzigd.", "info", None, "adm")
+    voor = await svc.list_alle_berichten()
+    assert len(voor) == 1
+
+    with pytest.raises(svc.BerichtError):
+        await svc.verwijder_bericht(9999)
+
+    na = await svc.list_alle_berichten()
+    assert voor == na
+
+
+async def test_lege_lijst_alle_berichten(db):
+    from app import berichten as svc
+
+    assert await svc.list_alle_berichten() == []
+    assert await svc.list_alle_berichten_totaal() == 0
 
 
 # --- router: autorisatie -------------------------------------------------------
@@ -338,3 +405,22 @@ async def test_ongelezen_filter(client):
     await client.post("/v1/berichten/lees-alles", headers={"X-User-Id": userid})
     r = await client.get("/v1/berichten?ongelezen=true", headers={"X-User-Id": userid})
     assert r.json()["items"] == []
+
+
+async def test_admin_berichten_paginering(client):
+    """GET /v1/admin/berichten pagineert (envelope items/totaal/pagina/per_pagina)."""
+    ids = []
+    for i in range(3):
+        r = await client.post(
+            "/v1/admin/berichten", headers=_ADM,
+            json={"titel": f"Admin-bericht {i}", "inhoud": "Tekst.", "type": "info"},
+        )
+        ids.append(r.json()["id"])
+
+    r = await client.get("/v1/admin/berichten?pagina=2&per_pagina=1", headers=_ADM)
+    assert r.status_code == 200
+    body = r.json()
+    assert body["pagina"] == 2
+    assert body["per_pagina"] == 1
+    assert body["totaal"] == 3
+    assert len(body["items"]) == 1

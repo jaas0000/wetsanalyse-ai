@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { usePathname } from "next/navigation";
 import { isApiError, stuurFeedback } from "@/lib/api";
 
 type Categorie = "verbeteridee" | "probleemmelding" | "compliment" | "vraag";
@@ -13,7 +14,9 @@ const CATEGORIEEN: { waarde: Categorie; label: string }[] = [
 ];
 
 export function FeedbackButton() {
+  const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const [paginaBijOpen, setPaginaBijOpen] = useState("");
   const [categorie, setCategorie] = useState<Categorie>("verbeteridee");
   const [tekst, setTekst] = useState("");
   const [bezig, setBezig] = useState(false);
@@ -21,6 +24,7 @@ export function FeedbackButton() {
   const [fout, setFout] = useState<string | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const eersteInputRef = useRef<HTMLInputElement>(null);
+  const launcherRef = useRef<HTMLButtonElement>(null);
 
   // Sluit modal op Escape
   useEffect(() => {
@@ -39,6 +43,7 @@ export function FeedbackButton() {
 
   function sluit() {
     setOpen(false);
+    launcherRef.current?.focus();
     // Reset na sluitanimatie
     setTimeout(() => {
       setVerzonden(false);
@@ -59,7 +64,7 @@ export function FeedbackButton() {
       await stuurFeedback({
         categorie,
         tekst: tekst.trim(),
-        pagina: typeof window !== "undefined" ? window.location.pathname : undefined,
+        pagina: paginaBijOpen || undefined,
       });
       setVerzonden(true);
     } catch (e) {
@@ -73,8 +78,12 @@ export function FeedbackButton() {
     <>
       {/* Floating knop */}
       <button
+        ref={launcherRef}
         type="button"
-        onClick={() => setOpen(true)}
+        onClick={() => {
+          setPaginaBijOpen(pathname ?? "");
+          setOpen(true);
+        }}
         aria-label="Feedback geven"
         className="fixed bottom-6 right-6 z-40 flex min-h-[48px] items-center gap-2 rounded-button border border-transparent bg-accent px-4 py-2 text-sm font-medium text-paper shadow-lg transition-colors hover:bg-accent-soft focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-lint"
       >
@@ -88,7 +97,7 @@ export function FeedbackButton() {
           className="fixed inset-0 z-50 flex items-end justify-end p-6 sm:items-center sm:justify-center"
           role="dialog"
           aria-modal="true"
-          aria-labelledby="feedback-titel"
+          aria-labelledby={verzonden ? "feedback-bedankt-titel" : "feedback-titel"}
         >
           {/* Backdrop */}
           <div
@@ -105,7 +114,9 @@ export function FeedbackButton() {
             {verzonden ? (
               <div className="flex flex-col items-center gap-4 py-4 text-center">
                 <span className="text-3xl" aria-hidden>✓</span>
-                <p className="font-semibold text-lint">Bedankt voor uw feedback!</p>
+                <p id="feedback-bedankt-titel" className="font-semibold text-lint">
+                  Bedankt voor uw feedback!
+                </p>
                 <p className="text-sm text-muted">
                   Uw bericht is ontvangen en wordt meegenomen in de doorontwikkeling.
                 </p>
@@ -162,9 +173,7 @@ export function FeedbackButton() {
                 {/* Paginacontext */}
                 <p className="mb-3 text-xs text-muted">
                   <span className="font-medium text-ink">Pagina:</span>{" "}
-                  <span className="font-mono">
-                    {typeof window !== "undefined" ? window.location.pathname : ""}
-                  </span>
+                  <span className="font-mono">{paginaBijOpen}</span>
                 </p>
 
                 {/* Tekst */}

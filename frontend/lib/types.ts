@@ -861,6 +861,13 @@ export interface BerichtenPaginaOut {
   per_pagina: number;
 }
 
+export interface AdminBerichtenPaginaOut {
+  items: AdminBerichtOut[];
+  totaal: number;
+  pagina: number;
+  per_pagina: number;
+}
+
 export interface BerichtAanmakenIn {
   titel: string;
   inhoud: string;

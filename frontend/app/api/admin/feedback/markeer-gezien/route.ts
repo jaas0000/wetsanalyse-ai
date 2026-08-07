@@ -3,12 +3,17 @@ import { geenSessie, sessionUserId } from "../../../_lib/session";
 
 export const dynamic = "force-dynamic";
 
-export async function POST() {
+export async function POST(req: Request) {
   const userid = await sessionUserId();
   if (!userid) return geenSessie();
+  const body = await req.text();
   return proxy("/v1/admin/feedback/markeer-gezien", {
     method: "POST",
-    headers: { "X-User-Id": userid },
+    body: body || undefined,
+    headers: {
+      "X-User-Id": userid,
+      ...(body ? { "Content-Type": "application/json" } : {}),
+    },
     admin: true,
   });
 }

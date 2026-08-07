@@ -40,6 +40,7 @@ import type {
 } from "./types";
 import type {
   AgentDoel,
+  AdminBerichtenPaginaOut,
   AdminBerichtOut,
   AnnotatieDocument,
   AuditRecord,
@@ -205,6 +206,7 @@ export async function stuurFeedback(body: {
 
 export interface FeedbackItem {
   id: number;
+  client_id: string;
   userid: string;
   categorie: string;
   tekst: string;
@@ -212,12 +214,17 @@ export interface FeedbackItem {
   created: string;
 }
 
-export async function getFeedback(offset = 0, limit = 50): Promise<FeedbackItem[]> {
+export interface FeedbackPaginaOut {
+  items: FeedbackItem[];
+  totaal: number;
+}
+
+export async function getFeedback(offset = 0, limit = 50): Promise<FeedbackPaginaOut> {
   const res = await fetch(
     `/api/admin/feedback?offset=${offset}&limit=${limit}`,
     { cache: "no-store" },
   );
-  return json<FeedbackItem[]>(res);
+  return json<FeedbackPaginaOut>(res);
 }
 
 export async function getOngelezenFeedbackAantal(): Promise<number> {
@@ -226,8 +233,12 @@ export async function getOngelezenFeedbackAantal(): Promise<number> {
   return data.aantal;
 }
 
-export async function markeerFeedbackGezien(): Promise<void> {
-  const res = await fetch("/api/admin/feedback/markeer-gezien", { method: "POST" });
+export async function markeerFeedbackGezien(tot?: string): Promise<void> {
+  const res = await fetch("/api/admin/feedback/markeer-gezien", {
+    method: "POST",
+    headers: tot ? { "Content-Type": "application/json" } : {},
+    body: tot ? JSON.stringify({ tot }) : undefined,
+  });
   if (!res.ok) throw await parseError(res);
 }
 
@@ -635,8 +646,10 @@ export async function markeerAllesGelezen(): Promise<void> {
 
 // --- Berichtensysteem (admin) ------------------------------------------------
 
-export async function listAlleBerichten(): Promise<AdminBerichtOut[]> {
-  return json<AdminBerichtOut[]>(await fetch("/api/admin/berichten", { cache: "no-store" }));
+export async function listAlleBerichten(pagina = 1, perPagina = 20): Promise<AdminBerichtenPaginaOut> {
+  return json<AdminBerichtenPaginaOut>(
+    await fetch(`/api/admin/berichten?pagina=${pagina}&per_pagina=${perPagina}`, { cache: "no-store" }),
+  );
 }
 
 export async function maakBericht(body: BerichtAanmakenIn): Promise<AdminBerichtOut> {
