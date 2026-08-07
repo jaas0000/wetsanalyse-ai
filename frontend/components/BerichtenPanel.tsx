@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
   getOngelezenAantal,
@@ -59,6 +59,7 @@ export function BerichtenPanel() {
   const [ongelezen, setOngelezen] = useState(0);
   const [berichten, setBerichten] = useState<BerichtOut[] | null>(null);
   const [laden, setLaden] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
 
   const laadAantal = useCallback(async () => {
     try {
@@ -98,8 +99,11 @@ export function BerichtenPanel() {
   return (
     <Popover
       className="w-80 max-h-[480px] overflow-y-auto rounded-button border border-line bg-paper shadow-md"
+      ariaLabel="Berichten"
+      onClose={() => triggerRef.current?.focus()}
       trigger={(open, toggle) => (
         <button
+          ref={triggerRef}
           type="button"
           aria-label="Berichten"
           aria-expanded={open}
