@@ -28,6 +28,8 @@ export function ApiTokensPanel() {
   }, []);
 
   useEffect(() => {
+    // Data-load bij mount: setState gebeurt async ná de fetch (geen synchrone render-cascade).
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     laad();
   }, [laad]);
 

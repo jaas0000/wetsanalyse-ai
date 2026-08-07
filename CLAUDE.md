@@ -165,7 +165,8 @@ OTel-Collector (met **spanmetrics/servicegraph-connectors** die topologie-edges 
 afleiden) + Tempo + Loki + Prometheus, plus **Alloy** dat de stdout-logs van frontend en MCP
 naar Loki shipt, **twee kant-en-klare Grafana-dashboards** (`grafana-dashboard-wetsanalyse.json` =
 trends; `grafana-dashboard-topologie.json` = *"systeemtopologie"*: de live keten die oplicht op basis
-van de trace-servicegraph) en **alerting** (`alerting/`, Grafana-contactpunt). Je koppelt 'm aan je bestaande Grafana; laat het endpoint
+van de trace-servicegraph) en **alerting** (`alerting/`; 3 regels die het default notification-beleid
+van je Grafana volgen — géén eigen contactpunt). Je koppelt 'm aan je bestaande Grafana; laat het endpoint
 leeg om alles ongewijzigd met alléén JSON-logs te draaien. De volledige uitleg (env-vars, logschema,
 AVG-redactie, dashboard/alerting) staat in **`docs/observability.md`**.
 
