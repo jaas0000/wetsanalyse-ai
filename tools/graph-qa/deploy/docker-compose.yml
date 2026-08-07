@@ -36,6 +36,11 @@ services:
       # Multi-hop decompositie aan (default 1). Simpele vraag → 1 deelvraag, streamt direct zonder
       # synthese-tax; samengestelde vraag → decompose → per-deelvraag retrieval → synthese.
       ENABLE_DECOMPOSITION: ${ENABLE_DECOMPOSITION:-1}
+      # Geheugen-checkpointer. Voorrang: een gedeelde Postgres (horizontaal veilig — nodig zodra je
+      # >1 replica draait) zodra het host-bestand checkpoint_db_url bestaat met een
+      # `postgresql://user:pass@postgres:5432/graphqa`-URL; ontbreekt dat bestand, dan valt 'ie terug op
+      # het per-instance SQLite-volume hieronder (single-instance-geheugen — pin dan tot 1 replica).
+      CHECKPOINT_DB_URL_FILE: /run/secrets/checkpoint_db_url
       CHECKPOINT_DB_PATH: /data/conversations_checkpoints.db
       CORS_ORIGINS: ${CORS_ORIGINS:-}
       # --- secrets via host-bestanden (*_FILE) ---

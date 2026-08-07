@@ -5,11 +5,11 @@ Behoudt de publieke `answer_stream`-signatuur en het SSE-event-contract, zodat d
 en frontend ongewijzigd blijven. De stroom (plan→retrieve→reason→verify→finalize) en de
 token-streaming leven in de toestandsgraaf.
 
-Geheugen loopt via de LangGraph-checkpointer (thread_id = conversation_id): met een
-`checkpoint_db_path` durabel (AsyncSqliteSaver, de file persisteert cross-request →
-continuïteit), anders in-proces (MemorySaver). De wrapper reset per beurt de
-werkvelden en levert de nieuwe user-message; de append-reducer plakt die aan de
-gepersisteerde historie.
+Geheugen loopt via de LangGraph-checkpointer (thread_id = conversation_id). Backend-keuze
+(voorrang): `checkpoint_db_url` → **Postgres** (AsyncPostgresSaver; gedeeld tussen replica's,
+horizontaal veilig) → `checkpoint_db_path` → **SQLite** (durable file, maar per-instance) →
+anders in-proces (MemorySaver). De wrapper reset per beurt de werkvelden en levert de nieuwe
+user-message; de append-reducer plakt die aan de gepersisteerde historie.
 """
 from __future__ import annotations
 
@@ -29,7 +29,20 @@ logger = logging.getLogger(__name__)
 
 
 def _checkpointer_ctx(settings: Settings):
-    """Async context manager die de gekozen checkpointer levert."""
+    """Async context manager die de gekozen checkpointer levert. Voorrang: Postgres (gedeeld →
+    horizontaal veilig) → SQLite-bestand (durable, per-instance) → in-memory."""
+    url = settings.checkpoint_db_url
+    if url:
+        from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+
+        @asynccontextmanager
+        async def _pg():
+            async with AsyncPostgresSaver.from_conn_string(url) as saver:
+                await saver.setup()  # idempotent: maakt de checkpoint-tabellen als ze ontbreken
+                yield saver
+
+        return _pg()
+
     path = settings.checkpoint_db_path
     if path:
         p = Path(path)
@@ -46,6 +59,23 @@ def _checkpointer_ctx(settings: Settings):
         yield MemorySaver()
 
     return _mem()
+
+
+async def delete_conversation(conversation_id: str, *, settings: Settings | None = None) -> None:
+    """Wis het volledige agent-geheugen (checkpointer-thread) van één gesprek. Idempotent: een
+    onbekende `conversation_id` is geen fout. Aangeroepen als de werkplek een gesprek verwijdert, zodat
+    de inhoud niet in de checkpointer-DB achterblijft (privacy — parallel aan de API-berichten-delete)."""
+    settings = settings or Settings.from_env()
+    async with _checkpointer_ctx(settings) as saver:
+        # Zorg dat de checkpoint-tabellen bestaan (SQLite maakt ze anders pas bij de eerste write →
+        # adelete_thread op een verse DB zou "no such table" geven). Idempotent; Postgres deed dit al.
+        setup = getattr(saver, "setup", None)
+        if setup is not None:
+            try:
+                await setup()
+            except Exception:  # noqa: BLE001 — MemorySaver e.d. hebben geen tabellen
+                pass
+        await saver.adelete_thread(conversation_id)
 
 
 async def answer_stream(

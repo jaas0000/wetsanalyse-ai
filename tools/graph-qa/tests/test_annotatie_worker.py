@@ -134,6 +134,34 @@ def test_critic_faalt_stil_elementen_komen_door():
     assert all(el["aandacht"] == "" for el in elementen)   # gedegradeerd, maar wel doorgelaten
 
 
+def test_annotatie_laat_leesbaar_spoor_in_geheugen(tmp_path):
+    """Na een annotatie-beurt ziet een vervolgvraag (zelfde conversation_id) de gemarkeerde elementen
+    terug in de historie — zodat 'waarom Rechtssubject?' context heeft."""
+    settings = make_settings(enable_decomposition=False, checkpoint_db_path=str(tmp_path / "cp.db"))
+
+    # Beurt 1: annoteer art. 9 lid 1.
+    llm1 = FakeLLM([
+        response([text_block("WORKERS: annotatie\nPLAN: annoteer art 9 lid 1")], "end_turn"),
+        response([tool_block("t1", "get_lid", {"bwb_id": "BWBR0004770", "artikel": "9", "lid": "1"})], "tool_use"),
+        response([text_block('{"bwbId":"BWBR0004770","artikel":"9","lid":"1","nummer":"","citeertitel":"IW"}')], "end_turn"),
+        response([text_block(ELEMENTEN_JSON)], "end_turn"),
+        response([text_block(CRITIC_JSON)], "end_turn"),
+    ])
+    _run(answer_stream("annoteer artikel 9 lid 1 IW", "annot-mem", settings=settings, llm=llm1, graph=FakeGraph(result=LID_TSV)))
+
+    # Beurt 2: vervolgvraag; de agent moet de annotatie-samenvatting in de meegegeven historie zien.
+    llm2 = FakeLLM([
+        response([text_block("SPECIALIST: algemeen\nPLAN: direct")], "end_turn"),  # supervisor
+        response([text_block("Omdat 'De ontvanger' de dragende actor is.")], "end_turn"),  # agent
+    ])
+    _run(answer_stream("waarom markeerde je 'De ontvanger' als Rechtssubject?", "annot-mem",
+                       settings=settings, llm=llm2, graph=FakeGraph(result="")))
+
+    serialized = " ".join(str(c.get("messages")) for c in llm2.calls)
+    assert "[Annotatie" in serialized
+    assert "Rechtssubject" in serialized and "De ontvanger" in serialized
+
+
 def test_gewone_vraag_blijft_antwoord_geen_annotatie():
     llm = FakeLLM([
         response([text_block("SPECIALIST: algemeen\nPLAN: direct")], "end_turn"),  # supervisor → antwoord

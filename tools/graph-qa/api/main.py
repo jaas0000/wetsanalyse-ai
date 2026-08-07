@@ -43,7 +43,7 @@ from sse_starlette.sse import EventSourceResponse
 load_dotenv()  # laad .env als die naast de server staat
 
 from agent import observability  # noqa: E402
-from agent.agent import answer_stream  # noqa: E402
+from agent.agent import answer_stream, delete_conversation  # noqa: E402
 from agent.agent_common import run_sync  # noqa: E402
 from agent.config import Settings  # noqa: E402
 from agent.models import ArtikelResult, ChatRequest  # noqa: E402
@@ -170,6 +170,18 @@ async def chat(
             yield {"data": json.dumps(event, ensure_ascii=False)}
 
     return EventSourceResponse(event_generator())
+
+
+@app.delete("/v1/conversations/{conversation_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def verwijder_conversation(
+    conversation_id: str,
+    _rl: None = Depends(_rate_limit),
+    _auth: None = Depends(_check_auth),
+) -> None:
+    """Wis het agent-geheugen (checkpointer-thread) van één gesprek. Idempotent (onbekende id → 204).
+    De werkplek roept dit aan náást de API-berichten-delete, zodat een verwijderd gesprek niet in de
+    checkpointer-DB achterblijft (privacy)."""
+    await delete_conversation(conversation_id, settings=settings)
 
 
 @app.get("/v1/artikel", response_model=ArtikelResult)

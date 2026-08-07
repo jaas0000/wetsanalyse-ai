@@ -26,7 +26,7 @@ from langgraph.config import get_stream_writer
 from langgraph.graph import END, START, StateGraph
 
 from .agent_common import truncate
-from .annotatie import _parse_elementen, _verwerk, _verwerk_critic
+from .annotatie import _verwerk, _verwerk_critic
 from .annotatie_prompt import (
     annotatie_systeemprompt,
     annotatie_userprompt,
@@ -386,7 +386,7 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
                 "artikel/lid (bij een beleidsregel bv. '9.1')."
             )
             writer({"type": "token", "content": melding})
-            return {"answer": melding, "voorstellen": []}
+            return {"answer": melding, "voorstellen": [], "messages": [{"role": "assistant", "content": melding}]}
 
         resp = llm.create(
             model=model,
@@ -405,7 +405,7 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
             plek = f"artikel {aanduiding}" + (f" lid {doel['lid']}" if doel.get("lid") else "")
             leeg = f"Ik vond geen JAS-elementen om te markeren in {plek}."
             writer({"type": "token", "content": leeg})
-            return {"answer": leeg, "voorstellen": []}
+            return {"answer": leeg, "voorstellen": [], "messages": [{"role": "assistant", "content": leeg}]}
         return {"voorstellen": [v.model_dump() for v in voorstellen], "answer": ""}
 
     def critic_node(state: State) -> dict[str, Any]:
@@ -461,7 +461,13 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
             delen.append(f"{len(ontbrekend)} mogelijk ontbrekend")
         samenvatting = "; ".join(delen) + "."
         writer({"type": "token", "content": samenvatting})
-        return {"answer": samenvatting}
+        # Geheugen: leg een leesbaar spoor van de annotatie vast (met de elementen) zodat een
+        # vervolgvraag ("waarom Rechtssubject?") context heeft. De `element`-events/SSE blijven ongewijzigd.
+        elems = "; ".join(f"{v.get('klasse', '')}: '{truncate(str(v.get('tekst', '')), 80)}'" for v in voorstellen[:12])
+        geheugen = f"[Annotatie {plek}] Ik markeerde {len(voorstellen)} JAS-elementen: {elems}" + (
+            " (…)" if len(voorstellen) > 12 else "."
+        )
+        return {"answer": samenvatting, "messages": [{"role": "assistant", "content": geheugen}]}
 
     def tools_node(state: State) -> dict[str, Any]:
         writer = get_stream_writer()

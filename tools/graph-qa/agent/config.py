@@ -65,7 +65,9 @@ class Settings(BaseModel):
     max_subquestions: int = 5         # cap op het aantal deelvragen (kosten/latency begrenzen)
     sub_max_turns: int = 8            # agent⇄tools-beurten per deelvraag (los van max_turns)
 
-    # Geheugen (LangGraph-checkpointer). Pad gezet → durable AsyncSqliteSaver; None → in-memory.
+    # Geheugen (LangGraph-checkpointer). Voorrang: `checkpoint_db_url` (Postgres, gedeeld → horizontaal
+    # veilig) → anders `checkpoint_db_path` (durable AsyncSqliteSaver, per-instance) → anders in-memory.
+    checkpoint_db_url: str | None = None
     checkpoint_db_path: str | None = "conversations_checkpoints.db"
 
     # Grounding
@@ -106,6 +108,7 @@ class Settings(BaseModel):
             "otel_service_name": e.get("OTEL_SERVICE_NAME"),
             "log_format": e.get("LOG_FORMAT"),
             "log_level": e.get("LOG_LEVEL"),
+            "checkpoint_db_url": _read_secret(e, "CHECKPOINT_DB_URL"),
             "checkpoint_db_path": e.get("CHECKPOINT_DB_PATH"),
         }
         # None én lege string weglaten zodat de veld-defaults van kracht blijven (een gezet-maar-leeg

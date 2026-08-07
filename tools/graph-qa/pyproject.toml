@@ -13,6 +13,10 @@ dependencies = [
     "sse-starlette>=2.1.0",
     "langgraph>=1.2",
     "langgraph-checkpoint-sqlite>=3.1",
+    # Postgres-checkpointer (gedeelde, horizontaal-veilige geheugenopslag; actief zodra
+    # CHECKPOINT_DB_URL gezet is — anders blijft de SQLite-default van kracht).
+    "langgraph-checkpoint-postgres>=3.0",
+    "psycopg[binary]>=3.2",
 ]
 # NB: Settings gebruikt bewust een gewone pydantic BaseModel (agent/config.py),
 # niet pydantic-settings — geen extra runtime-dependency nodig.

@@ -54,6 +54,21 @@ de decompositie-tak).
 (`answer_stream`) is de dunne wrapper: hij bouwt/injecteert de providers, kiest de checkpointer,
 compileert de graaf en levert het SSE-event-contract.
 
+### Gespreksgeheugen (checkpointer)
+
+`thread_id = conversation_id`; de agent krijgt per beurt de **volledige gepersisteerde `messages`-historie**
+mee (getrimd op `max_history_chars`), inclusief zijn eigen antwoorden — én de annotatie-worker laat een
+korte assistant-samenvatting van de markeringen achter, zodat vervolgvragen context hebben. Backend-keuze
+(`_checkpointer_ctx`, voorrang): **`CHECKPOINT_DB_URL`** → `AsyncPostgresSaver` (gedeeld → **horizontaal
+veilig**, verplicht bij >1 replica) → **`CHECKPOINT_DB_PATH`** → `AsyncSqliteSaver` (durable file, maar
+**per-instance**) → in-memory. `DELETE /v1/conversations/{id}` wist de thread (`adelete_thread`).
+
+> **Twee gescheiden stores op dezelfde `conversation_id`.** De UI-historie leeft in de **API**
+> (`/v1/gesprekken/*`, Postgres); het agent-geheugen in **deze checkpointer**. Ze zijn onafhankelijk —
+> een gesprek verwijderen wist bewust bóiden (BFF roept de API-delete én deze `DELETE /v1/conversations/{id}`
+> aan). Bij een reset van één store (bv. het checkpointer-volume) kan de UI historie tonen die de agent
+> niet meer heeft; dat is een geaccepteerde consequentie van de gescheiden opslag.
+
 ### Poorten & adapters (DI)
 
 - **`ports.py`** — `GraphPort` / `LLMPort` protocols. Alles wat naar buiten praat, loopt hierlangs,
@@ -85,7 +100,9 @@ compileert de graaf en levert het SSE-event-contract.
 
 ### API-laag (`api/main.py`)
 
-`GET /health`, `POST /v1/chat` (SSE; body `{question, conversation_id?}`) en `GET /v1/artikel`
+`GET /health`, `POST /v1/chat` (SSE; body `{question, conversation_id?}`), `DELETE /v1/conversations/{id}`
+(wist het agent-geheugen — de checkpointer-thread — van één gesprek; idempotent → 204; de werkplek roept
+dit aan bij het verwijderen van een gesprek, náást de API-berichten-delete) en `GET /v1/artikel`
 (artikeltekst uit de graaf voor het documentpaneel van de werkplek; query `bwb_id`/`artikel`/`lid?`).
 De **lifespan** doet fail-fast `settings.require_graph()` bij boot en flush't de OTel-buffers bij
 shutdown (`observability.shutdown()`). Beveiliging: CORS-credentials nooit samen met `*` (elke `"*"`
