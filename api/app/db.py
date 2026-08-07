@@ -158,6 +158,34 @@ api_tokens = Table(
     Column("last_used", _DT, nullable=True),
 )
 
+# --- Berichtensysteem -----------------------------------------------------------
+# Release notes en aankondigingen: beheerders schrijven berichten (draft → gepubliceerd);
+# analisten lezen ze via het panel in de navigatie. Leesbewijzen zijn user+bericht pairs.
+berichten = Table(
+    "berichten",
+    metadata,
+    Column("id",              Integer, primary_key=True, autoincrement=True),
+    Column("titel",           Text, nullable=False, default=""),
+    Column("inhoud",          Text, nullable=False, default=""),
+    Column("type",            String(16), nullable=False, default="info"),
+    Column("versie",          String(32), nullable=True),
+    Column("gepubliceerd",    Boolean, nullable=False, default=False),
+    Column("gepubliceerd_op", _DT, nullable=True),
+    Column("aangemaakt_door", String(128), nullable=False, default=""),
+    Column("created",         _DT, nullable=False),
+    Column("updated",         _DT, nullable=False),
+    Index("ix_berichten_gepubliceerd_created", "gepubliceerd", "created"),
+)
+
+bericht_leesbewijzen = Table(
+    "bericht_leesbewijzen",
+    metadata,
+    Column("bericht_id", Integer, nullable=False),
+    Column("userid",     String(64), nullable=False),
+    Column("gelezen_op", _DT, nullable=False),
+    PrimaryKeyConstraint("bericht_id", "userid"),
+)
+
 # Generieke runtime-config (key/value) — beheerbaar via /v1/admin/settings + /beheer. Eerste
 # sleutel: `capture_llm_calls` (bool). Bewust een aparte, kleine tabel zodat een toggle de hot
 # projects-rij niet raakt en latere instellingen er zonder migratie bij kunnen.
@@ -344,6 +372,15 @@ async def reconcile_schema() -> None:
 
             await _verbreed_indien_nodig("projects", "current_activiteit")
             await _verbreed_indien_nodig("rondes", "activiteit")
+        # gepubliceerd_op: tijdstip van publicatie (NULL = ongepubliceerd / niet bijgehouden).
+        def _berichten_kolommen(sync_conn):
+            insp = inspect(sync_conn)
+            return {c["name"] for c in insp.get_columns("berichten")} if insp.has_table("berichten") else set()
+
+        bestaande_berichten = await conn.run_sync(_berichten_kolommen)
+        if "gepubliceerd_op" not in bestaande_berichten:
+            dt_typ = "TIMESTAMPTZ" if is_pg else "DATETIME"
+            await conn.exec_driver_sql(f"ALTER TABLE berichten ADD COLUMN gepubliceerd_op {dt_typ}")
         # Hot-path indexen op een bestaande tabel: create_all maakt indexen alleen mee bij een
         # verse tabel, dus voor een bestaande prod-DB hier idempotent toevoegen. IF NOT EXISTS
         # werkt op zowel PostgreSQL als SQLite, dus ook veilig ná create_all in de tests.

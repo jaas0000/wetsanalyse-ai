@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
 import { LinkButton } from "@/components/ui/Button";
+import { BerichtenPanel } from "@/components/BerichtenPanel";
 import { wisDisclaimer } from "@/lib/api";
 
 /** Wis het disclaimer-akkoord en log dan pas uit (gedeelde-machine-hygiëne). Zonder het wissen
@@ -93,7 +94,8 @@ export function SiteNav() {
         <LinkButton href="/nieuw" size="sm" className="ml-2">
           Nieuwe analyse
         </LinkButton>
-        <span className="ml-3 hidden max-w-[12rem] truncate text-xs text-faint lg:inline" title={session.user.email ?? ""}>
+        <BerichtenPanel />
+        <span className="ml-1 hidden max-w-[12rem] truncate text-xs text-faint lg:inline" title={session.user.email ?? ""}>
           {session.user.userid ?? session.user.email}
         </span>
         <button
@@ -104,6 +106,11 @@ export function SiteNav() {
           Uitloggen
         </button>
       </nav>
+
+      {/* Mobiel: bell (aparte instantie naast hamburger) */}
+      <span className="sm:hidden">
+        <BerichtenPanel />
+      </span>
 
       {/* Mobiel: hamburger-toggle */}
       <button

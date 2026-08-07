@@ -147,12 +147,9 @@ const TOOLS = [
     },
     {
         name: "set_settings",
-        description: "Werk runtime-instellingen bij (partieel). chat_secret is write-only.",
+        description: "Werk runtime-instellingen bij. Momenteel ondersteund: capture_llm_calls (bool).",
         input: S({
             capture_llm_calls: z.boolean().optional(),
-            chat_enabled: z.boolean().optional(),
-            chat_webhook_url: z.string().optional(),
-            chat_secret: z.string().optional(),
         }),
         run: (body) => apiFetch("PUT", "/v1/admin/settings", body),
     },
@@ -187,6 +184,45 @@ const TOOLS = [
         description: "Lijst de genereerbare API-tokens (alleen metadata; nooit het token zelf).",
         input: S({}),
         run: () => apiFetch("GET", "/v1/admin/api-tokens"),
+    },
+    // — berichten (release notes) —
+    {
+        name: "maak_bericht",
+        description: "Maak een concept-release-note aan. Titel max ~60 tekens, inhoud max 2 zinnen. " +
+            "Type: 'update' (nieuwe functie/verbetering), 'waarschuwing' (gedrag verandert), " +
+            "'info' (neutraal), 'kritiek' (dringende aandacht). Publiceert nog niet — roep daarna " +
+            "publiceer_bericht aan met het teruggegeven id.",
+        input: S({
+            titel: z.string().max(256).describe("Beschrijft wat er veranderd is, max ~60 tekens."),
+            inhoud: z.string().max(10000).describe("Max 2 zinnen — wat is er veranderd en wat betekent dat voor de gebruiker. Markdown toegestaan."),
+            type: z.enum(["update", "waarschuwing", "info", "kritiek"]).default("update"),
+            versie: z.string().max(32).optional().describe("Optioneel, bv. 'v1.3.0' of '2026-08'."),
+        }),
+        run: ({ titel, inhoud, type, versie }) => apiFetch("POST", "/v1/admin/berichten", { titel, inhoud, type, versie: versie ?? null }),
+    },
+    {
+        name: "publiceer_bericht",
+        description: "Publiceer een bericht zodat alle analisten het zien (badge + panel). Geef het id terug van maak_bericht.",
+        input: S({ id: z.number().int().positive() }),
+        run: (a) => apiFetch("PATCH", `/v1/admin/berichten/${a.id}/publicatie`, { gepubliceerd: true }),
+    },
+    {
+        name: "list_berichten_admin",
+        description: "Lijst alle berichten (incl. concepten). Handig om bestaande id's op te zoeken voor publiceer_bericht of update_bericht.",
+        input: S({}),
+        run: () => apiFetch("GET", "/v1/admin/berichten"),
+    },
+    {
+        name: "update_bericht",
+        description: "Pas de inhoud van een bestaand bericht aan (ook al gepubliceerd). Roep eerst list_berichten_admin aan om de huidige waarden te zien — PUT vervangt alle velden.",
+        input: S({
+            id: z.number().int().positive(),
+            titel: z.string().max(256).describe("Beschrijft wat er veranderd is, max ~60 tekens."),
+            inhoud: z.string().max(10000).describe("Max 2 zinnen — wat is er veranderd en wat betekent dat voor de gebruiker. Markdown toegestaan."),
+            type: z.enum(["update", "waarschuwing", "info", "kritiek"]),
+            versie: z.string().max(32).optional().describe("Optioneel, bv. 'v1.3.0' of '2026-08'."),
+        }),
+        run: ({ id, ...body }) => apiFetch("PUT", `/v1/admin/berichten/${id}`, body),
     },
 ];
 // ── Server ────────────────────────────────────────────────────────────────────

@@ -22,6 +22,7 @@ import { UsagePanel } from "./UsagePanel";
 import { UsersPanel } from "./UsersPanel";
 import { ApiTokensPanel } from "./ApiTokensPanel";
 import { LlmCapturePanel } from "./LlmCapturePanel";
+import { BerichtenBeheerPanel } from "./BerichtenBeheerPanel";
 
 type EditState =
   | { open: false }
@@ -125,6 +126,7 @@ export function BeheerClient() {
 
   return (
     <div className="space-y-8">
+      <BerichtenBeheerPanel />
       <Section title="Modelprofielen" count={profielen?.length} subtitle="LLM-configuratie">
         {fout && <Melding type="fout" className="mb-3">{fout}</Melding>}
         <ButtonRow className="mb-4">

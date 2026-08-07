@@ -235,6 +235,22 @@ jobstore-datasource `wa-postgres`) en **alerting** (`alerting/`, Grafana-contact
 leeg om alles ongewijzigd met alléén JSON-logs te draaien. De volledige uitleg (env-vars, logschema,
 AVG-redactie, dashboard/alerting) staat in **`docs/observability.md`**.
 
+## Release notes schrijven
+
+Maak je een wijziging die zichtbaar is voor analisten (nieuwe functie, gewijzigd gedrag,
+verwijderde UI-optie)? Publiceer dan een release note via de `wetsanalyse-admin` MCP:
+
+1. Tool `maak_bericht` met `{ titel, inhoud, type, versie? }`
+2. Tool `publiceer_bericht` met het teruggegeven `id`
+
+**Formaat — zo kort mogelijk:**
+- `titel`: max ~60 tekens, beschrijft wat er veranderd is
+- `inhoud`: max 2 zinnen — wat is er veranderd en wat betekent dat voor de gebruiker (Markdown)
+- `type`: `update` (nieuwe functie/verbetering) | `waarschuwing` (gedrag verandert) | `info` (neutraal)
+- `versie`: optioneel, bv. de sprint of datum
+
+Sla release notes over bij: pure refactors, bugfixes die niemand merkt, infra/deploy-wijzigingen.
+
 ## Skills
 
 De wetsanalyse-skill staat in `.claude/skills/wetsanalyse/`; de vervolgskill regelspraak (formaliseren

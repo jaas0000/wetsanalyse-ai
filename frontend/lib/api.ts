@@ -40,13 +40,18 @@ import type {
 } from "./types";
 import type {
   AgentDoel,
+  AdminBerichtOut,
   AnnotatieDocument,
   AuditRecord,
+  BerichtAanmakenIn,
+  BerichtOut,
+  BerichtPublicatieIn,
   BeslissingInvoer,
   Bron,
   DocumentCreate,
   DocumentSamenvatting,
   GraafArtikel,
+  OngelezenAantalOut,
   OntbrekendItem,
   VoorstelElement,
 } from "./types";
@@ -549,5 +554,64 @@ export async function haalArtikelGraaf(bwbId: string, artikel: string, lid?: str
   }`;
   const res = await fetch(`/api/annotatie/artikel?${q}`, { cache: "no-store" });
   return json<GraafArtikel>(res);
+}
+
+// --- Berichtensysteem (analist) ----------------------------------------------
+
+export async function listBerichten(): Promise<BerichtOut[]> {
+  return json<BerichtOut[]>(await fetch("/api/berichten", { cache: "no-store" }));
+}
+
+export async function getOngelezenAantal(): Promise<OngelezenAantalOut> {
+  return json<OngelezenAantalOut>(
+    await fetch("/api/berichten/ongelezen-aantal", { cache: "no-store" }),
+  );
+}
+
+export async function markeerAllesGelezen(): Promise<void> {
+  const res = await fetch("/api/berichten/lees-alles", { method: "POST" });
+  if (!res.ok) throw await parseError(res);
+}
+
+// --- Berichtensysteem (admin) ------------------------------------------------
+
+export async function listAlleBerichten(): Promise<AdminBerichtOut[]> {
+  return json<AdminBerichtOut[]>(await fetch("/api/admin/berichten", { cache: "no-store" }));
+}
+
+export async function maakBericht(body: BerichtAanmakenIn): Promise<AdminBerichtOut> {
+  return json<AdminBerichtOut>(
+    await fetch("/api/admin/berichten", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+  );
+}
+
+export async function updateBericht(id: number, body: BerichtAanmakenIn): Promise<AdminBerichtOut> {
+  return json<AdminBerichtOut>(
+    await fetch(`/api/admin/berichten/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+  );
+}
+
+export async function zetPublicatie(id: number, gepubliceerd: boolean): Promise<AdminBerichtOut> {
+  const body: BerichtPublicatieIn = { gepubliceerd };
+  return json<AdminBerichtOut>(
+    await fetch(`/api/admin/berichten/${id}/publicatie`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+  );
+}
+
+export async function verwijderBericht(id: number): Promise<void> {
+  const res = await fetch(`/api/admin/berichten/${id}`, { method: "DELETE" });
+  if (!res.ok) throw await parseError(res);
 }
 

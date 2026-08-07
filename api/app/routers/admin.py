@@ -21,11 +21,12 @@ POST   /v1/admin/wetten/{bwbId}/resolve   — stel de officiële citeertitel voo
 from __future__ import annotations
 
 import logging
+from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from pydantic import BaseModel, Field
 
-from .. import api_tokens, app_settings, profiles, usage, users, wetten
+from .. import api_tokens, app_settings, berichten as berichten_svc, profiles, usage, users, wetten
 from ..auth import require_admin
 from ..deps import get_store
 from ..jobstore import JobStore
@@ -453,3 +454,83 @@ async def lijst_llm_calls(slug: str, store: JobStore = Depends(get_store)):
             tijdstip=ts.isoformat() if hasattr(ts, "isoformat") else (ts or ""),
         ))
     return out
+
+
+# --- berichtensysteem ---------------------------------------------------------
+
+class AdminBerichtOut(BaseModel):
+    id: int
+    titel: str
+    inhoud: str
+    type: str
+    versie: str | None = None
+    gepubliceerd: bool
+    aangemaakt_door: str = ""
+    created: str = ""
+    updated: str = ""
+
+
+class BerichtAanmakenIn(BaseModel):
+    titel: str = Field(max_length=256)
+    inhoud: str = Field(max_length=10000)
+    type: Literal["info", "update", "waarschuwing", "kritiek"] = "info"
+    versie: str | None = Field(default=None, max_length=32)
+
+
+class BerichtPublicatieIn(BaseModel):
+    gepubliceerd: bool
+
+
+def _bericht_out(row: dict) -> AdminBerichtOut:
+    return AdminBerichtOut(
+        id=row["id"],
+        titel=row["titel"],
+        inhoud=row["inhoud"],
+        type=row["type"],
+        versie=row.get("versie"),
+        gepubliceerd=bool(row["gepubliceerd"]),
+        aangemaakt_door=row.get("aangemaakt_door", ""),
+        created=row["created"].isoformat() if row.get("created") else "",
+        updated=row["updated"].isoformat() if row.get("updated") else "",
+    )
+
+
+@router.get("/berichten", response_model=list[AdminBerichtOut])
+async def lijst_berichten():
+    rows = await berichten_svc.list_alle_berichten()
+    return [_bericht_out(r) for r in rows]
+
+
+@router.post("/berichten", response_model=AdminBerichtOut, status_code=status.HTTP_201_CREATED)
+async def maak_bericht(body: BerichtAanmakenIn, admin_id: str = Depends(require_admin)):
+    row = await berichten_svc.maak_bericht(
+        body.titel, body.inhoud, body.type, body.versie, admin_id
+    )
+    return _bericht_out(row)
+
+
+@router.put("/berichten/{bericht_id}", response_model=AdminBerichtOut)
+async def bewerk_bericht(bericht_id: int, body: BerichtAanmakenIn):
+    try:
+        row = await berichten_svc.update_bericht(bericht_id, body.titel, body.inhoud, body.type, body.versie)
+    except berichten_svc.BerichtError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return _bericht_out(row)
+
+
+@router.patch("/berichten/{bericht_id}/publicatie", response_model=AdminBerichtOut)
+async def zet_publicatie(bericht_id: int, body: BerichtPublicatieIn):
+    try:
+        row = await berichten_svc.set_gepubliceerd(bericht_id, body.gepubliceerd)
+    except berichten_svc.BerichtError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return _bericht_out(row)
+
+
+@router.delete("/berichten/{bericht_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def verwijder_bericht(bericht_id: int):
+    try:
+        await berichten_svc.verwijder_bericht(bericht_id)
+    except berichten_svc.BerichtError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

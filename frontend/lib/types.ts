@@ -828,3 +828,40 @@ export interface OntbrekendItem {
   klasse: string;
   reden: string;
 }
+
+// --- Berichtensysteem --------------------------------------------------------
+
+export type BerichtType = "info" | "update" | "waarschuwing" | "kritiek";
+
+/** Gepubliceerd bericht met leesstatus (voor analisten). */
+export interface BerichtOut {
+  id: number;
+  titel: string;
+  inhoud: string;
+  type: BerichtType;
+  versie: string | null;
+  gepubliceerd: boolean;
+  gepubliceerd_op: string | null;
+  gelezen: boolean;
+  aangemaakt_door: string;
+  created: string;
+  updated: string;
+}
+
+/** Bericht zonder leesstatus (voor admin-beheerlijst). */
+export type AdminBerichtOut = Omit<BerichtOut, "gelezen">;
+
+export interface OngelezenAantalOut {
+  aantal: number;
+}
+
+export interface BerichtAanmakenIn {
+  titel: string;
+  inhoud: string;
+  type: BerichtType;
+  versie?: string | null;
+}
+
+export interface BerichtPublicatieIn {
+  gepubliceerd: boolean;
+}
