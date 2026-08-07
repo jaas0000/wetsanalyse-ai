@@ -59,6 +59,8 @@ export function WerkplekClient({ initialGesprekId, onGesprekAangemaakt, onGewijz
   const [bezig, setBezig] = useState(false);
   const [actiefId, setActiefId] = useState<string | undefined>();
   const [artefactSlug, setArtefactSlug] = useState<string | undefined>();
+  // Zichtbaarheid van de "naar beneden"-pil: aan zodra de gebruiker weg van de bodem scrolt.
+  const [toonNaarBeneden, setToonNaarBeneden] = useState(false);
   const lijstRef = useRef<HTMLDivElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
   // Synchrone guard tegen dubbel-verzenden (twee Enters in dezelfde tick): de `bezig`-state komt te laat
@@ -104,7 +106,18 @@ export function WerkplekClient({ initialGesprekId, onGesprekAangemaakt, onGewijz
 
   function onThreadScroll() {
     const el = lijstRef.current;
-    if (el) stickRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+    if (!el) return;
+    const bijBodem = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+    stickRef.current = bijBodem;
+    setToonNaarBeneden(!bijBodem && items.length > 0); // React bail-out bij gelijke waarde
+  }
+
+  function naarBeneden() {
+    const el = lijstRef.current;
+    if (!el) return;
+    stickRef.current = true;
+    el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+    setToonNaarBeneden(false);
   }
 
   // Auto-groeiende textarea (groeit met de inhoud tot een max; daarna intern scrollen).
@@ -274,7 +287,7 @@ export function WerkplekClient({ initialGesprekId, onGesprekAangemaakt, onGewijz
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="relative flex min-h-0 flex-1 flex-col">
       {/* Beknopte statusmelding voor schermlezers (niet de hele thread live maken → geen token-spam). */}
       <p className="sr-only" aria-live="polite">
         {bezig ? "Bezig met antwoorden…" : ""}
@@ -294,7 +307,7 @@ export function WerkplekClient({ initialGesprekId, onGesprekAangemaakt, onGewijz
                     key={v}
                     type="button"
                     onClick={() => void verstuur(v)}
-                    className="rounded-bubbel border border-line bg-paper px-3.5 py-2 text-left text-xs text-lint shadow-zacht transition-all hover:-translate-y-0.5 hover:border-lint/40 hover:shadow-kaart"
+                    className="rounded-bubbel border border-line bg-paper px-4 py-2.5 text-left text-sm text-lint shadow-zacht transition-all hover:-translate-y-0.5 hover:border-lint/40 hover:shadow-kaart focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-lint"
                   >
                     {v}
                   </button>
@@ -305,28 +318,48 @@ export function WerkplekClient({ initialGesprekId, onGesprekAangemaakt, onGewijz
 
           {items.map((item) =>
             item.type === "user" ? (
-              <div key={item.id} className="flex justify-end">
+              <div key={item.id} className="flex animate-rise justify-end">
                 <div className="max-w-[85%] whitespace-pre-wrap break-words rounded-bubbel bg-lint/10 px-4 py-2.5 text-sm text-ink">
                   {item.tekst}
                 </div>
               </div>
             ) : item.type === "antwoord" ? (
-              <div key={item.id} className="text-sm text-ink">
-                {item.denk && <DenkProces tekst={item.denk} actief={bezig && !item.tekst} />}
-                {item.tekst ? <Markdown tekst={item.tekst} /> : item.denk ? null : <Punten />}
-                {item.bronnen && item.bronnen.length > 0 && <Bronnen bronnen={item.bronnen} />}
+              <div key={item.id} className="group flex animate-rise gap-3">
+                <AssistentAvatar />
+                <div className="min-w-0 flex-1 text-sm text-ink">
+                  <p className="mb-1 text-xs font-medium text-muted">Assistent</p>
+                  {item.denk && <DenkProces tekst={item.denk} actief={bezig && !item.tekst} />}
+                  {item.tekst ? <Markdown tekst={item.tekst} /> : item.denk ? null : <Punten />}
+                  {item.bronnen && item.bronnen.length > 0 && <Bronnen bronnen={item.bronnen} />}
+                  {item.tekst && <KopieerKnop tekst={item.tekst} />}
+                </div>
               </div>
             ) : (
-              <AnnotatieChip
-                key={item.id}
-                doc={docs[item.slug]}
-                aantal={docs[item.slug]?.elementen.length}
-                onOpen={() => void openArtefact(item.slug)}
-              />
+              <div key={item.id} className="animate-rise">
+                <AnnotatieChip
+                  doc={docs[item.slug]}
+                  aantal={docs[item.slug]?.elementen.length}
+                  onOpen={() => void openArtefact(item.slug)}
+                />
+              </div>
             ),
           )}
         </div>
       </div>
+
+      {/* "Naar beneden"-pil: verschijnt als je weg van de bodem scrolt (bv. tijdens streamen). */}
+      {toonNaarBeneden && (
+        <button
+          type="button"
+          onClick={naarBeneden}
+          aria-label="Naar nieuwste bericht"
+          className="absolute bottom-24 left-1/2 z-10 flex h-9 w-9 -translate-x-1/2 items-center justify-center rounded-full border border-line bg-paper text-lint shadow-kaart transition-colors hover:border-lint/40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-lint"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <path d="M12 5v14M19 12l-7 7-7-7" />
+          </svg>
+        </button>
+      )}
 
       {/* Invoerbalk — gepind onderaan, gecentreerd, auto-groeiend */}
       <div className="shrink-0 bg-paper">
@@ -434,6 +467,61 @@ function Punten() {
       <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-muted" />
       <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-muted" />
     </span>
+  );
+}
+
+/** Klein avatar links van een agentantwoord (zelfde icoonstijl als de AnnotatieChip). */
+function AssistentAvatar() {
+  return (
+    <span
+      className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-lint/10 text-lint"
+      aria-hidden
+    >
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 8V4H8" />
+        <rect width="16" height="12" x="4" y="8" rx="2" />
+        <path d="M2 14h2M20 14h2M15 13v2M9 13v2" />
+      </svg>
+    </span>
+  );
+}
+
+/** Kopieert de letterlijke antwoordtekst; toont kort "Gekopieerd". Subtiel, hover-onthullend op desktop. */
+function KopieerKnop({ tekst }: { tekst: string }) {
+  const [gekopieerd, setGekopieerd] = useState(false);
+  async function kopieer() {
+    try {
+      await navigator.clipboard.writeText(tekst);
+      setGekopieerd(true);
+      setTimeout(() => setGekopieerd(false), 1500);
+    } catch {
+      /* clipboard geweigerd — stil */
+    }
+  }
+  return (
+    <button
+      type="button"
+      onClick={kopieer}
+      aria-label="Antwoord kopiëren"
+      className="mt-2 inline-flex items-center gap-1.5 rounded px-1.5 py-1 text-xs text-muted transition-opacity hover:text-lint focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-lint lg:opacity-0 lg:group-hover:opacity-100 lg:group-focus-within:opacity-100"
+    >
+      {gekopieerd ? (
+        <>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <path d="M20 6 9 17l-5-5" />
+          </svg>
+          Gekopieerd
+        </>
+      ) : (
+        <>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <rect width="14" height="14" x="8" y="8" rx="2" />
+            <path d="M4 16V4a2 2 0 0 1 2-2h10" />
+          </svg>
+          Kopiëren
+        </>
+      )}
+    </button>
   );
 }
 

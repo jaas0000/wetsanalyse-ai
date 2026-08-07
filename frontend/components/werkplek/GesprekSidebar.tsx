@@ -22,6 +22,8 @@ interface Props {
   onOpen: (id: string) => void;
   onHernoem: (id: string, titel: string) => void;
   onVerwijder: (id: string) => void;
+  /** Eerste gesprekken-fetch loopt nog: sidebar toont skeleton-rijen. */
+  laden?: boolean;
   /** Alleen mobiel: sluitknop voor de drawer. */
   onSluit?: () => void;
 }
@@ -35,6 +37,7 @@ export function GesprekSidebar({
   onOpen,
   onHernoem,
   onVerwijder,
+  laden,
   onSluit,
 }: Props) {
   const { data: session } = useSession();
@@ -111,6 +114,7 @@ export function GesprekSidebar({
           onOpen={onOpen}
           onHernoem={onHernoem}
           onVerwijder={onVerwijder}
+          laden={laden}
         />
       </div>
 

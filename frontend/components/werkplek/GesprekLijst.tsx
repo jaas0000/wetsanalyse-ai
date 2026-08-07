@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 
+import { Skeleton } from "@/components/ui/Skeleton";
 import type { GesprekSamenvatting } from "@/lib/types";
 
 function korteDatum(iso?: string): string {
@@ -21,11 +22,22 @@ interface Props {
   onOpen: (id: string) => void;
   onHernoem: (id: string, titel: string) => void;
   onVerwijder: (id: string) => void;
+  /** Eerste fetch loopt nog: toon skeleton-rijen i.p.v. de lege-staat. */
+  laden?: boolean;
 }
 
 /** De chatgeschiedenis in de sidebar: klik om een gesprek te heropenen, hover voor hernoemen/verwijderen. */
-export function GesprekLijst({ gesprekken, activeId, onOpen, onHernoem, onVerwijder }: Props) {
+export function GesprekLijst({ gesprekken, activeId, onOpen, onHernoem, onVerwijder, laden }: Props) {
   if (gesprekken.length === 0) {
+    if (laden) {
+      return (
+        <div className="flex flex-col gap-1 px-1 py-1" aria-hidden>
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-9 w-full" />
+          ))}
+        </div>
+      );
+    }
     return <p className="px-2 py-3 text-xs text-muted">Nog geen gesprekken.</p>;
   }
   return (

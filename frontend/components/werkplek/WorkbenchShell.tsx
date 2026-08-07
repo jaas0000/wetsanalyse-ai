@@ -16,9 +16,13 @@ export function WorkbenchShell() {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [mountKey, setMountKey] = useState(0);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [laden, setLaden] = useState(true); // eerste gesprekken-fetch loopt nog → sidebar-skeletons
 
   const verversLijst = useCallback(() => {
-    lijstGesprekken().then(setGesprekken).catch(() => {});
+    lijstGesprekken()
+      .then(setGesprekken)
+      .catch(() => {})
+      .finally(() => setLaden(false));
   }, []);
 
   useEffect(() => {
@@ -87,6 +91,7 @@ export function WorkbenchShell() {
           onOpen={openGesprek}
           onHernoem={hernoem}
           onVerwijder={verwijder}
+          laden={laden}
         />
       </aside>
 
@@ -102,6 +107,7 @@ export function WorkbenchShell() {
               onOpen={openGesprek}
               onHernoem={hernoem}
               onVerwijder={verwijder}
+              laden={laden}
               onSluit={() => setDrawerOpen(false)}
             />
           </div>
