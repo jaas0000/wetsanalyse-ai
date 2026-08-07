@@ -234,7 +234,10 @@ const TOOLS: ToolDef[] = [
     name: "list_berichten_admin",
     description: "Lijst alle berichten (incl. concepten). Handig om bestaande id's op te zoeken voor publiceer_bericht of update_bericht.",
     input: S({}),
-    run: () => apiFetch("GET", "/v1/admin/berichten"),
+    run: async () => {
+      const resp = await apiFetch("GET", "/v1/admin/berichten") as { items: unknown };
+      return resp.items;
+    },
   },
   {
     name: "update_bericht",
