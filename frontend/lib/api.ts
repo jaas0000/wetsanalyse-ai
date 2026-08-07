@@ -220,6 +220,17 @@ export async function getFeedback(offset = 0, limit = 50): Promise<FeedbackItem[
   return json<FeedbackItem[]>(res);
 }
 
+export async function getOngelezenFeedbackAantal(): Promise<number> {
+  const res = await fetch("/api/admin/feedback/ongelezen-aantal", { cache: "no-store" });
+  const data = await json<{ aantal: number }>(res);
+  return data.aantal;
+}
+
+export async function markeerFeedbackGezien(): Promise<void> {
+  const res = await fetch("/api/admin/feedback/markeer-gezien", { method: "POST" });
+  if (!res.ok) throw await parseError(res);
+}
+
 // --- Admin: LLM-modelprofielen + verbruik -----------------------------------
 
 export async function listProfiles(): Promise<LlmProfileOut[]> {

@@ -159,6 +159,14 @@ export function FeedbackButton() {
                   </div>
                 </fieldset>
 
+                {/* Paginacontext */}
+                <p className="mb-3 text-xs text-muted">
+                  <span className="font-medium text-ink">Pagina:</span>{" "}
+                  <span className="font-mono">
+                    {typeof window !== "undefined" ? window.location.pathname : ""}
+                  </span>
+                </p>
+
                 {/* Tekst */}
                 <div className="mb-4">
                   <label
