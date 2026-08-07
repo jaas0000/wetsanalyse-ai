@@ -34,10 +34,14 @@ def main() -> None:
     fernet  = base64.urlsafe_b64encode(os.urandom(32)).decode()
     auth    = base64.b64encode(os.urandom(32)).decode()
     db_url  = f"postgresql+asyncpg://wetsanalyse:{db_pass}@postgres:5432/wetsanalyse"
+    # graph-qa's checkpointer gebruikt psycopg (v3) i.p.v. SQLAlchemy/asyncpg → kale `postgresql://`-scheme.
+    # Zelfde DB als de API: de checkpoint-tabellen (checkpoints/checkpoint_*) botsen niet met de API-tabellen.
+    checkpoint_url = f"postgresql://wetsanalyse:{db_pass}@postgres:5432/wetsanalyse"
 
     print(f"Secrets schrijven naar {secrets_dir}/")
     write_secret(secrets_dir / "postgres_password",       db_pass)
     write_secret(secrets_dir / "database_url",            db_url)
+    write_secret(secrets_dir / "checkpoint_db_url",       checkpoint_url)
     write_secret(secrets_dir / "api_tokens",              f"frontend:{fe_tok}")
     write_secret(secrets_dir / "admin_tokens",            f"admin:{adm_tok}")
     write_secret(secrets_dir / "frontend_api_token",      fe_tok)
