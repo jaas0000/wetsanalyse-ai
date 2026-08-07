@@ -94,7 +94,7 @@ async def list_berichten_totaal(userid: str, ongelezen_only: bool = False) -> in
 
 
 async def ongelezen_aantal(userid: str) -> int:
-    """Aantal gepubliceerde berichten zonder leesbewijs voor deze user (gecapped op 99+)."""
+    """Aantal gepubliceerde berichten zonder leesbewijs voor deze user."""
     b = db.berichten
     lb = db.bericht_leesbewijzen
     u = db.users

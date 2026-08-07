@@ -26,7 +26,7 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from pydantic import BaseModel, Field
 
-from .. import api_tokens, app_settings, berichten as berichten_svc, profiles, usage, users, wetten
+from .. import api_tokens, app_settings, berichten as berichten_svc, feedback as feedback_svc, profiles, usage, users, wetten
 from ..auth import require_admin
 from ..deps import get_store
 from ..jobstore import JobStore
@@ -465,6 +465,7 @@ class AdminBerichtOut(BaseModel):
     type: str
     versie: str | None = None
     gepubliceerd: bool
+    gepubliceerd_op: str | None = None
     aangemaakt_door: str = ""
     created: str = ""
     updated: str = ""
@@ -482,6 +483,7 @@ class BerichtPublicatieIn(BaseModel):
 
 
 def _bericht_out(row: dict) -> AdminBerichtOut:
+    gp_op = row.get("gepubliceerd_op")
     return AdminBerichtOut(
         id=row["id"],
         titel=row["titel"],
@@ -489,6 +491,7 @@ def _bericht_out(row: dict) -> AdminBerichtOut:
         type=row["type"],
         versie=row.get("versie"),
         gepubliceerd=bool(row["gepubliceerd"]),
+        gepubliceerd_op=gp_op.isoformat() if gp_op else None,
         aangemaakt_door=row.get("aangemaakt_door", ""),
         created=row["created"].isoformat() if row.get("created") else "",
         updated=row["updated"].isoformat() if row.get("updated") else "",
@@ -534,3 +537,27 @@ async def verwijder_bericht(bericht_id: int):
     except berichten_svc.BerichtError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# --- gebruikersfeedback --------------------------------------------------------
+
+class FeedbackAdminOut(BaseModel):
+    id: int
+    client_id: str
+    userid: str
+    categorie: str
+    tekst: str
+    pagina: str | None = None
+    created: str
+
+
+@router.get("/feedback", response_model=list[FeedbackAdminOut])
+async def get_feedback(offset: int = Query(0, ge=0), limit: int = Query(50, ge=1, le=200)):
+    rows = await feedback_svc.lijst_feedback(offset=offset, limit=limit)
+    return [
+        FeedbackAdminOut(
+            **{k: v for k, v in row.items() if k != "created"},
+            created=row["created"].isoformat(),
+        )
+        for row in rows
+    ]

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Button } from "@/components/ui/Button";
+import { Button, LinkButton } from "@/components/ui/Button";
 import { ButtonRow } from "@/components/ui/ButtonRow";
 import { Card, Section } from "@/components/ui/Card";
 import { Melding } from "@/components/ui/Melding";
@@ -127,6 +127,11 @@ export function BeheerClient() {
   return (
     <div className="space-y-8">
       <BerichtenBeheerPanel />
+      <Section title="Gebruikersfeedback" subtitle="Ingezonden feedback van gebruikers">
+        <ButtonRow>
+          <LinkButton href="/beheer/feedback" variant="secondary">Bekijk alle feedback</LinkButton>
+        </ButtonRow>
+      </Section>
       <Section title="Modelprofielen" count={profielen?.length} subtitle="LLM-configuratie">
         {fout && <Melding type="fout" className="mb-3">{fout}</Melding>}
         <ButtonRow className="mb-4">
