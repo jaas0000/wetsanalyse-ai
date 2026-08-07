@@ -26,7 +26,7 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from pydantic import BaseModel, Field
 
-from .. import api_tokens, app_settings, berichten as berichten_svc, profiles, usage, users, wetten
+from .. import api_tokens, app_settings, berichten as berichten_svc, feedback as feedback_svc, profiles, usage, users, wetten
 from ..auth import require_admin
 from ..deps import get_store
 from ..jobstore import JobStore
@@ -534,3 +534,27 @@ async def verwijder_bericht(bericht_id: int):
     except berichten_svc.BerichtError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# --- gebruikersfeedback --------------------------------------------------------
+
+class FeedbackAdminOut(BaseModel):
+    id: int
+    client_id: str
+    userid: str
+    categorie: str
+    tekst: str
+    pagina: str | None = None
+    created: str
+
+
+@router.get("/feedback", response_model=list[FeedbackAdminOut])
+async def get_feedback(offset: int = Query(0, ge=0), limit: int = Query(50, ge=1, le=200)):
+    rows = await feedback_svc.lijst_feedback(offset=offset, limit=limit)
+    return [
+        FeedbackAdminOut(
+            **{k: v for k, v in row.items() if k != "created"},
+            created=row["created"].isoformat(),
+        )
+        for row in rows
+    ]

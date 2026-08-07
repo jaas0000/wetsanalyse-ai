@@ -186,6 +186,40 @@ export async function getArtikelInfo(bwbId: string, artikel: string): Promise<Ar
   return json<ArtikelInfo>(res);
 }
 
+// --- Gebruikersfeedback -------------------------------------------------------
+
+export async function stuurFeedback(body: {
+  categorie: string;
+  tekst: string;
+  pagina?: string;
+}): Promise<{ id: number }> {
+  const res = await fetch("/api/feedback", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return json<{ id: number }>(res);
+}
+
+// --- Admin: gebruikersfeedback -----------------------------------------------
+
+export interface FeedbackItem {
+  id: number;
+  userid: string;
+  categorie: string;
+  tekst: string;
+  pagina: string | null;
+  created: string;
+}
+
+export async function getFeedback(offset = 0, limit = 50): Promise<FeedbackItem[]> {
+  const res = await fetch(
+    `/api/admin/feedback?offset=${offset}&limit=${limit}`,
+    { cache: "no-store" },
+  );
+  return json<FeedbackItem[]>(res);
+}
+
 // --- Admin: LLM-modelprofielen + verbruik -----------------------------------
 
 export async function listProfiles(): Promise<LlmProfileOut[]> {

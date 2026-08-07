@@ -3,6 +3,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { auth } from "@/auth";
 import { Providers } from "@/components/Providers";
+import { FeedbackButton } from "@/components/FeedbackButton";
 import { SiteFooter } from "@/components/SiteFooter";
 import { SiteNav } from "@/components/SiteNav";
 import { sans, mono } from "./fonts";
@@ -95,6 +96,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         </header>
         <main className="mx-auto max-w-6xl px-6 py-10">{children}</main>
         <SiteFooter />
+        {session && <FeedbackButton />}
         </Providers>
       </body>
     </html>
