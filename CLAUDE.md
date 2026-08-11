@@ -170,6 +170,14 @@ van je Grafana volgen — géén eigen contactpunt). Je koppelt 'm aan je bestaa
 leeg om alles ongewijzigd met alléén JSON-logs te draaien. De volledige uitleg (env-vars, logschema,
 AVG-redactie, dashboard/alerting) staat in **`docs/observability.md`**.
 
+## Preview-omgevingen (per PR)
+
+Elke pull request krijgt automatisch een **geïsoleerde, ephemere full-stack** op de NAS (via Portainer),
+bereikbaar op `https://pr<N>.preview.ipalm.nl`, met een **verse database**; bij het sluiten van de PR wordt
+alles opgeruimd. Workflow `.github/workflows/preview.yml` + stack `deploy/preview/docker-compose.yml`;
+volledige setup (secrets/vars, wildcard-DNS/NPM, forks-uitsluiting) staat in **`deploy/preview/README.md`**.
+De Azure-variant is geparkeerd.
+
 ## Skills
 
 De wetsanalyse-skill staat in `.claude/skills/wetsanalyse/`.
