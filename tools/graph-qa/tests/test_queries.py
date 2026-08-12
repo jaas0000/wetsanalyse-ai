@@ -34,6 +34,26 @@ def test_get_lid_iri():
     assert "<https://ipalm.nl/bwb/BWBR0004770/artikel/9/lid/1>" in q.get_lid("BWBR0004770", "9", "1")
 
 
+def test_get_lid_levert_de_onderdelen_mee():
+    """Een definitielid is zonder zijn onderdelen leeg.
+
+    Artikel 2 lid 1 IW 1990 heeft als eigen tekst alleen "Deze wet verstaat onder:"; de definities
+    (a t/m t, waaronder 'belastingschuldige') zitten in de onderdelen. Kwamen die niet mee, dan ging
+    de agent het met raw_sparql-pogingen compenseren — acht beurten voor één definitievraag.
+    """
+    sparql = q.get_lid("BWBR0004770", "2", "1")
+    assert "bwb:bevat" in sparql, "onderdelen moeten worden opgehaald"
+    assert "GROUP_CONCAT" in sparql, "gebundeld, anders herhaalt de lidtekst per onderdeel"
+    assert "ORDER BY ?o" in sparql, "volgorde a, b, c, … moet vastliggen"
+
+
+def test_get_artikel_levert_directe_onderdelen_mee():
+    """Artikelen zonder leden hebben hun opsomming direct onder het artikel (heeftOnderdeel)."""
+    sparql = q.get_artikel("BWBR0019237", "9a")
+    assert "bwb:heeftOnderdeel" in sparql
+    assert "bwb:heeftLid" in sparql, "de leden blijven ook meekomen"
+
+
 def test_verwijzingen_met_en_zonder_lid():
     met = q.follow_verwijzingen("BWBR0004770", "9", "1")
     assert "/artikel/9/lid/1>" in met and "bwb:heeftVerwijzing" in met
