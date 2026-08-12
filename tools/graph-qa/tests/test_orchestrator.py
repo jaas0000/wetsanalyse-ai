@@ -216,3 +216,27 @@ def test_leeg_antwoord_levert_melding_geen_stilte():
     # de bronnen blijven gewoon meekomen
     assert any(e["type"] == "sources" for e in events)
     assert "done" in [e["type"] for e in events]
+
+
+def test_deelvraag_beurtlimiet_dwingt_antwoord_af():
+    """Raakt de deelvraag-lus zijn beurtlimiet, dan moet er alsnog een antwoord komen.
+
+    Eerder brak de lus alleen af als het model géén tools meer aanriep; bleef het zoeken, dan liep de
+    lus af met een leeg `antwoord` en zag de gebruiker alleen bronnen. Op de laatste beurt worden nu
+    geen tools meer aangeboden, zodat het model wel moet antwoorden op wat er is opgehaald.
+    """
+    # sub_max_turns=2: de eerste beurt zoekt nog, de tweede is de laatste en krijgt geen tools meer.
+    settings = make_settings(enable_planning=False, enable_decomposition=True, sub_max_turns=2)
+    graph = FakeGraph(result=f"<{ART_IRI}> bwb:tekst 'x' .")
+    llm = FakeLLM([
+        response([text_block("supervisor")], "end_turn"),                                    # supervisor
+        response([text_block('{"deelvragen": ["Wat is een belastingschuldige?"]}')], "end_turn"),  # decompose
+        response([tool_block("t1", "get_artikel", {"bwb_id": "BWBR0004770", "artikel": "9"})], "tool_use"),
+        response([text_block(f"Volgens {ART_IRI} is dat X.")], "end_turn"),  # laatste beurt: tools-loos
+    ])
+    events = _run(answer_stream("vraag", settings=settings, llm=llm, graph=graph))
+
+    tokens = "".join(e["content"] for e in events if e["type"] == "token")
+    assert "Volgens" in tokens, "de laatste beurt moet een echt antwoord opleveren"
+    assert "geen antwoord formuleren" not in tokens, "het finalize-vangnet mag niet nodig zijn"
+    assert any(e["type"] == "status" and "Beurtlimiet" in e.get("message", "") for e in events)

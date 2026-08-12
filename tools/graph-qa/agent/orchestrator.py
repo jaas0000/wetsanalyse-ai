@@ -618,8 +618,16 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
             msgs: list[dict[str, Any]] = [{"role": "user", "content": sub}]
             antwoord = ""
             for _turn in range(settings.sub_max_turns):
+                # Op de laatste toegestane beurt bieden we géén tools meer aan. Zonder dat kon het
+                # model blijven zoeken tot de lus afliep, waarna `antwoord` leeg bleef en de
+                # gebruiker alleen bronnen zag: de vraag werd midden in de zoektocht afgekapt. Nu is
+                # de laatste beurt gedwongen een antwoord op wat er is opgehaald.
+                laatste_beurt = _turn == settings.sub_max_turns - 1
+                if laatste_beurt:
+                    writer({"type": "status", "message": "Beurtlimiet bereikt — antwoord opstellen uit wat is gevonden"})
                 with llm.stream(
-                    model=model, max_tokens=4096, system=system, tools=schemas,
+                    model=model, max_tokens=4096, system=system,
+                    tools=[] if laatste_beurt else schemas,
                     messages=_trim_messages(_schoon_messages(msgs), settings.max_history_chars),
                 ) as stream:
                     first = True
@@ -646,6 +654,14 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
                     trace.append((tu["name"], result_text))
                     results.append({"type": "tool_result", "tool_use_id": tu["id"], "content": result_text})
                 msgs.append({"role": "user", "content": results})
+            if not antwoord.strip():
+                # Zou na het tools-loze vangnet hierboven niet meer moeten voorkomen; als het tóch
+                # gebeurt is dat een lege modelrespons en willen we het terugvinden.
+                logger.warning(
+                    "deelvraag zonder antwoord",
+                    extra={"deelvraag": sub[:120], "beurten": settings.sub_max_turns,
+                           "specialist": state.get("specialist"), "bronnen": len(trace)},
+                )
             findings.append({"vraag": sub, "antwoord": antwoord})
         upd: dict[str, Any] = {"sub_findings": findings, "source_trace": trace}
         if enkelvoudig:
