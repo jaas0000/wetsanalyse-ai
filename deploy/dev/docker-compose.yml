@@ -1,0 +1,124 @@
+# DEV-omgeving (dev.wetsanalyse.ipalm.nl) — één vaste, gedeelde stack naast productie.
+#
+# Draait op de docker-LXC (Proxmox, endpoint 3 in portainer.ipalm.nl) en wordt als string via de
+# Portainer-API gedeployd. Daarom: alle config via **stack-env** (geen `file:`-secrets — die kan een
+# string-deploy niet mounten; api én graph-qa lezen elk secret via `${NAME}` OF `${NAME}_FILE`).
+#
+# Bereikbaarheid: nginx-proxy-manager draait op een ANDERE LXC (101) en deelt dus geen docker-netwerk
+# met deze host. Proxyen op containernaam kan daarom niet — de frontend publiceert een hostpoort
+# (${HOST_PORT}) en NPM stuurt dev.wetsanalyse.ipalm.nl door naar <docker-lxc-ip>:${HOST_PORT}.
+# postgres/api/graph-qa blijven op het interne netwerk. GraphDB-MCP + LLM zijn externe diensten.
+
+services:
+
+  postgres:
+    image: postgres:17
+    container_name: ${STACK}-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER:     wetsanalyse
+      POSTGRES_DB:       wetsanalyse
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?zet POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wetsanalyse"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  api:
+    image: ghcr.io/palmw01/wetsanalyse-api:${IMAGE_TAG:-dev}
+    container_name: ${STACK}-api
+    restart: unless-stopped
+    environment:
+      WETSANALYSE_AUTH_REQUIRED: "1"
+      LLM_PROVIDER:              azure_ai
+      LLM_MODEL:                 ${LLM_MODEL:-claude-sonnet-4-6}
+      LLM_API_BASE:              ${LLM_API_BASE:?zet LLM_API_BASE}
+      LLM_API_KEY:               ${LLM_API_KEY:?zet LLM_API_KEY}
+      LLM_CONFIG_SECRET:         ${LLM_CONFIG_SECRET:?zet LLM_CONFIG_SECRET}
+      WETSANALYSE_API_TOKENS:    frontend:${API_TOKEN:?zet API_TOKEN}
+      WETSANALYSE_ADMIN_TOKENS:  admin:${ADMIN_TOKEN:?zet ADMIN_TOKEN}
+      DATABASE_URL:              postgresql+asyncpg://wetsanalyse:${POSTGRES_PASSWORD}@postgres:5432/wetsanalyse
+    networks:
+      - internal
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c 'import urllib.request,sys; sys.exit(0 if urllib.request.urlopen(\"http://127.0.0.1:3000/health\").status==200 else 1)'"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  graph-qa:
+    image: ghcr.io/palmw01/graph-qa:${IMAGE_TAG:-dev}
+    container_name: ${STACK}-graph-qa
+    restart: unless-stopped
+    environment:
+      AZURE_FOUNDRY_BASE_URL: ${LLM_API_BASE}/anthropic
+      AZURE_FOUNDRY_API_KEY:  ${LLM_API_KEY}
+      LLM_MODEL:              ${LLM_MODEL:-claude-sonnet-4-6}
+      GRAPHDB_MCP_URL:        ${GRAPHDB_MCP_URL:-https://graphdb-mcp.ipalm.nl/mcp}
+      GRAPHDB_TOKEN:          ${GRAPHDB_TOKEN:?zet GRAPHDB_TOKEN}
+      GRAPHDB_REPOSITORY_ID:  inning
+      QA_API_TOKEN:           ${QA_API_TOKEN:?zet QA_API_TOKEN}
+      SIMILARITY_INDEX:       ${SIMILARITY_INDEX:-bwb_similarity}
+      ENABLE_DECOMPOSITION:   "1"
+      # Gespreksgeheugen in de dev-eigen Postgres (psycopg-scheme → geen +asyncpg).
+      CHECKPOINT_DB_URL:      postgresql://wetsanalyse:${POSTGRES_PASSWORD}@postgres:5432/wetsanalyse
+      HOME:                   /tmp
+    networks:
+      - internal
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c 'import urllib.request,sys; sys.exit(0 if urllib.request.urlopen(\"http://127.0.0.1:8080/health\").status==200 else 1)'"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  frontend:
+    image: ghcr.io/palmw01/wetsanalyse-frontend:${IMAGE_TAG:-dev}
+    container_name: ${STACK}-frontend
+    restart: unless-stopped
+    environment:
+      NODE_ENV:             production
+      API_BASE_URL:         http://api:3000
+      GRAPH_QA_URL:         http://graph-qa:8080
+      AUTH_URL:             ${AUTH_URL:?zet AUTH_URL}
+      AUTH_TRUST_HOST:      "true"
+      API_TOKEN:            ${API_TOKEN}
+      ADMIN_API_TOKEN:      ${ADMIN_TOKEN}
+      AUTH_SECRET:          ${AUTH_SECRET:?zet AUTH_SECRET}
+      GRAPH_QA_TOKEN:       ${QA_API_TOKEN}
+    ports:
+      # Enige naar buiten geopende poort: NPM (andere LXC) proxyt hierheen over het LAN.
+      - "${HOST_PORT:-8090}:3000"
+    networks:
+      - internal
+    depends_on:
+      api:
+        condition: service_healthy
+      graph-qa:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "node -e 'fetch(\"http://127.0.0.1:3000/api/health\").then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))'"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+volumes:
+  pgdata:   # dev-database; blijft staan tussen deploys, wordt alleen door een expliciete destroy gewist
+
+networks:
+  internal:
+    driver: bridge
