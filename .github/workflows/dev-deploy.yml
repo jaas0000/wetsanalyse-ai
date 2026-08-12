@@ -107,12 +107,22 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
-      - name: Preflight (verplichte secrets/vars aanwezig?)
+      - name: Preflight (secrets aanwezig én Portainer bereikbaar?)
         run: |
           set -euo pipefail
           for v in PORTAINER_URL PORTAINER_API_KEY SEED LLM_API_BASE LLM_API_KEY GRAPHDB_TOKEN; do
             [ -n "${!v:-}" ] || { echo "::error::ontbrekende secret/var: $v (zie deploy/dev/README.md)"; exit 1; }
           done
+          # Auth vóór de deploy controleren: een verlopen API-key uitte zich anders verderop als een
+          # onbegrijpelijke jq-fout ("Cannot index string with string"), omdat /api/stacks dan een
+          # foutobject teruggeeft in plaats van een array.
+          code=$(curl -sS -o /tmp/stacks.json -w '%{http_code}' \
+                  -H "X-API-Key: $PORTAINER_API_KEY" "$PORTAINER_URL/api/stacks" || echo 000)
+          if [ "${code:0:1}" != "2" ] || ! jq -e 'type == "array"' /tmp/stacks.json >/dev/null 2>&1; then
+            echo "::error::Portainer weigert /api/stacks (HTTP $code) — is PORTAINER_API_KEY nog geldig voor $PORTAINER_URL?"
+            head -c 300 /tmp/stacks.json; exit 1
+          fi
+          echo "Portainer bereikbaar; $(jq 'length' /tmp/stacks.json) stack(s) zichtbaar."
 
       - name: Deploy naar Portainer
         run: |
@@ -130,7 +140,7 @@ jobs:
             --arg base "$LLM_API_BASE" --arg key "$LLM_API_KEY" --arg fernet "$FERNET" \
             --arg apitok "$API_TOK" --arg admtok "$ADM_TOK" --arg gtok "$GRAPHDB_TOKEN" --arg qatok "$QA_TOK" \
             --arg auth "$AUTH" --arg authurl "https://$HOSTNAME_" --arg port "$HOST_PORT" \
-            --arg mcp "${GRAPHDB_MCP_URL:-https://graphdb-mcp.ipalm.nl/mcp}" \
+            --arg mcp "${GRAPHDB_MCP_URL:-http://mcp-auth-proxy:8004/mcp}" \
             --arg sim "${SIMILARITY_INDEX:-bwb_similarity}" --arg model "${LLM_MODEL:-claude-sonnet-4-6}" \
             '[
               {name:"STACK",value:$stack},{name:"IMAGE_TAG",value:$tag},{name:"POSTGRES_PASSWORD",value:$pg},
@@ -151,14 +161,14 @@ jobs:
               '{stackFileContent:$c, env:$env, prune:true, pullImage:true}')
             code=$(curl -sS -o /tmp/resp.json -w '%{http_code}' -X PUT \
               -H "X-API-Key: $PORTAINER_API_KEY" -H "Content-Type: application/json" \
-              "$PORTAINER_URL/api/stacks/$SID?endpointId=$ENDPOINT_ID" --data-binary @<(echo "$BODY"))
+              "$PORTAINER_URL/api/stacks/$SID?endpointId=$ENDPOINT_ID" --data-binary @<(printf '%s' "$BODY"))
           else
             echo "Stack bestaat niet → aanmaken"
             BODY=$(jq -n --arg name "$STACK" --rawfile c deploy/dev/docker-compose.yml --argjson env "$ENV_JSON" \
               '{name:$name, stackFileContent:$c, env:$env, fromAppTemplate:false}')
             code=$(curl -sS -o /tmp/resp.json -w '%{http_code}' -X POST \
               -H "X-API-Key: $PORTAINER_API_KEY" -H "Content-Type: application/json" \
-              "$PORTAINER_URL/api/stacks/create/standalone/string?endpointId=$ENDPOINT_ID" --data-binary @<(echo "$BODY"))
+              "$PORTAINER_URL/api/stacks/create/standalone/string?endpointId=$ENDPOINT_ID" --data-binary @<(printf '%s' "$BODY"))
           fi
           echo "Portainer HTTP $code"
           if [ "${code:0:1}" != "2" ]; then echo "::error::Portainer deploy faalde (HTTP $code)"; cat /tmp/resp.json; exit 1; fi
