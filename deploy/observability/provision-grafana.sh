@@ -32,6 +32,12 @@ upsert_datasource() {
   if [ "$code" = "200" ]; then
     code=$(_http /tmp/ds.json "${AUTH[@]}" -X PUT -d "$body" "${GRAFANA_URL}/api/datasources/uid/${uid}")
     [ "${code:0:1}" = "2" ] && { echo "  datasource ${uid}: bijgewerkt"; return 0; }
+    # 403 "Cannot update read-only data source": de datasource komt uit file-provisioning
+    # (docker-compose.stack.yml levert ze mee sinds Grafana in de stack zit). Dat is de gewenste
+    # situatie — de definitie staat daar, niet hier — dus overslaan i.p.v. falen.
+    if [ "$code" = "403" ] && grep -q "read-only" /tmp/ds.json 2>/dev/null; then
+      echo "  datasource ${uid}: read-only (file-provisioned) — overgeslagen"; return 0
+    fi
     echo "::error::datasource ${uid}: PUT http=$code"; cat /tmp/ds.json; return 1
   fi
   code=$(_http /tmp/ds.json "${AUTH[@]}" -X POST -d "$body" "${GRAFANA_URL}/api/datasources")
