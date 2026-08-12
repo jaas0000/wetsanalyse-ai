@@ -64,6 +64,44 @@ services:
     depends_on:
       - graphdb
 
+  # Applicatie-consistente dump, elke nacht om 03:00 — vlak vóór de vzdump van 03:30, zodat de
+  # dump meelift naar de Synology. De vzdump zelf is filesystem-consistent (LVM-snapshot met
+  # fs-freeze), maar GraphDB kan daarbij midden in een schrijfactie zitten; een RDF-export is dat
+  # per definitie niet. Twee lagen dus: de dump voor zekerheid, de vzdump voor volledigheid.
+  graphdb-backup:
+    image: alpine:3.21
+    container_name: graphdb-backup
+    restart: unless-stopped
+    depends_on:
+      - graphdb
+    volumes:
+      - /var/lib/graphdb/backup:/backup
+    command:
+      - sh
+      - -c
+      - |
+        apk add --no-cache curl tzdata >/dev/null
+        cp /usr/share/zoneinfo/Europe/Amsterdam /etc/localtime
+        cat > /usr/local/bin/dump.sh << 'ENDOFDUMP'
+        #!/bin/sh
+        set -eu
+        REPO="$${GRAPHDB_REPOSITORY:-inning}"
+        OUT="/backup/$${REPO}-$$(date +%Y%m%d-%H%M).nq.gz"
+        # N-Quads houdt de named graphs vast (TriG/Turtle zou contexts verliezen).
+        curl -fsS -H 'Accept: application/n-quads' \
+          "http://graphdb:7200/repositories/$${REPO}/statements" | gzip -9 > "$$OUT.tmp"
+        # Pas hernoemen als de dump compleet is: een afgebroken run laat geen half bestand achter
+        # dat er als geldige back-up uitziet.
+        mv "$$OUT.tmp" "$$OUT"
+        echo "$$(date -Iseconds) dump gereed: $$OUT ($$(wc -c < "$$OUT") bytes)"
+        # Retentie: de laatste 7 dumps.
+        ls -1t /backup/$${REPO}-*.nq.gz 2>/dev/null | tail -n +8 | xargs -r rm -f
+        ENDOFDUMP
+        chmod +x /usr/local/bin/dump.sh
+        echo '0 3 * * * /usr/local/bin/dump.sh >> /backup/backup.log 2>&1' > /etc/crontabs/root
+        echo "backup-cron actief (03:00, retentie 7)"
+        exec crond -f -l 8
+
 networks:
   default:
     name: graphdb_default

@@ -81,9 +81,39 @@ context (`build: context: .`) die **niet in deze repo staat** — verhuis je de 
 die broncode mee (of opnieuw gebouwd worden). De aanroep liep via n8n, dat inmiddels uit het
 platform is; een directe POST naar `/import` volstaat.
 
-## Back-up
+## Back-up — twee lagen
 
-De data staat nu lokaal. Zet een periodieke dump terug naar de NAS, bijvoorbeeld via de
-GraphDB-API (`POST /rest/repositories/inning/statements/export` of een repository-dump) of door
-`/var/lib/graphdb/home` te rsyncen naar `/volume1/docker/graphdb/backup/`. Zonder dat is de
-enige kopie de oude NAS-map, die na de verhuizing bevriest.
+**1. RDF-dump, dagelijks 03:00** — service `graphdb-backup` in deze stack. Exporteert de repository
+als **N-Quads** (houdt de named graphs vast; TriG/Turtle zou de contexts verliezen) naar
+`/var/lib/graphdb/backup/inning-<datum>.nq.gz`, retentie 7. De dump schrijft naar `.tmp` en
+hernoemt pas bij succes, zodat een afgebroken run geen half bestand achterlaat dat er als geldige
+back-up uitziet. Log: `/var/lib/graphdb/backup/backup.log`.
+
+**2. vzdump, dagelijks 03:30** — de bestaande Proxmox-back-upjob draait met `--all` en pakt LXC 103
+dus automatisch mee, met retentie `keep-daily=7, keep-weekly=4` naar `synology-backup`. De volgorde
+is bewust: de dump van 03:00 ligt er al en lift mee naar de NAS.
+
+Waarom allebei: vzdump maakt een LVM-snapshot met fs-freeze — filesystem-consistent, maar GraphDB
+kan midden in een schrijfactie zitten. De RDF-export is per definitie applicatie-consistent. De
+vzdump geeft een complete LXC terug, de dump geeft gegarandeerd leesbare data.
+
+Handmatig een dump draaien:
+
+```bash
+docker exec graphdb-backup /usr/local/bin/dump.sh
+```
+
+### Herstellen
+
+Uit de **vzdump**: de hele LXC terug, inclusief afgeleide structuren.
+
+Uit de **RDF-dump**: maak een lege repository `inning` en laad de quads:
+
+```bash
+zcat inning-<datum>.nq.gz | curl -X POST -H 'Content-Type: application/n-quads' \
+  --data-binary @- http://192.168.10.23:7200/repositories/inning/statements
+```
+
+> Let op: een RDF-dump bevat de triples, maar niet de **afgeleide** structuren — met name de
+> similarity-index `bwb_similarity` (die graph-qa nodig heeft voor `semantic_search`) moet daarna
+> opnieuw gebouwd worden. Uit de vzdump komt die wél mee.
