@@ -1,0 +1,45 @@
+# BWB-importservice — laadt Nederlandse wetgeving (Basiswettenbestand) in de kennisgraaf.
+#
+# Verhuisd van de NAS (Portainer-stack 230) naar de docker-LXC. Twee verschillen met de oude opzet:
+#
+#  1. Geen n8n-netwerk meer. Op de NAS riep een n8n-workflow http://bwb-import:8000/import aan;
+#     n8n is uit het platform gehaald, dus de service hangt alleen nog aan het graaf-netwerk en
+#     wordt met een directe HTTP-call aangestuurd.
+#  2. Geen `build:`. Portainer kan een string-deploy niet bouwen (geen context). Het image
+#     `bwb-import:0.1` is op de LXC gebouwd uit de broncode van github.com/palmw01/n8n
+#     (map bwb-import/). Bij een codewijziging moet het image opnieuw gebouwd worden — zie README.
+#
+# De service is intern bereikbaar op http://bwb-import:8000 en publiceert bewust geen hostpoort:
+# importeren is een schrijfactie op de graaf en hoort niet van buiten aanroepbaar te zijn.
+
+services:
+  bwb-import:
+    image: bwb-import:0.1
+    container_name: bwb-import
+    restart: unless-stopped
+    environment:
+      GRAPHDB_URL:          http://graphdb:7200
+      GRAPHDB_REPOSITORY:   ${GRAPHDB_REPOSITORY:-inning}
+      GRAPHDB_BASE_IRI:     https://ipalm.nl/bwb/
+      GRAPHDB_ONTOLOGY_IRI: https://ipalm.nl/ns/bwb#
+      BWB_DEFAULT_ID:       ${BWB_DEFAULT_ID:-BWBR0004770}
+      BWB_VALIDATE_XSD:     "true"
+      # WTI-verrijking: citeertitels/afkortingen, rechtsgebieden (skos), grondslagen.
+      BWB_IMPORT_WTI:       "true"
+      # Ongetagde tekstverwijzingen ("artikel 3:2 Awb") herkennen als soort=tekstueel.
+      BWB_DETECT_TEKSTUELE_REFS: "true"
+      TZ: Europe/Amsterdam
+    networks:
+      - graaf
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c 'import urllib.request,sys; sys.exit(0 if urllib.request.urlopen(\"http://127.0.0.1:8000/health\").status==200 else 1)'"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+networks:
+  # Netwerk van de GraphDB-stack (deploy/graphdb/) — daar moet de graaf dus al draaien.
+  graaf:
+    external: true
+    name: ${GRAAF_NETWORK:-graphdb_default}
