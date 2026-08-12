@@ -6,37 +6,23 @@ structuur en schrijft RDF naar GraphDB (repository `inning`). Per wet **idempote
 
 Verhuisd van de NAS (Portainer-stack 230) na de migratie naar Proxmox.
 
-## Broncode staat elders
+## Broncode en image
 
-De service komt uit de **privérepo `palmw01/n8n`**, map `bwb-import/` — daar staan de Python-code,
-de XSD's, de tests en de Dockerfile. Deze map bevat alleen de compose voor de LXC.
+De broncode staat in **`tools/bwb-import/`** (Python, XSD's, tests). CI bouwt het image naar
+`ghcr.io/palmw01/bwb-import` via `.github/workflows/bwb-import-docker-publish.yml`, dat draait bij
+een push naar `master` die `tools/bwb-import/**` raakt: eerst de 79 unit-tests, dan build + push +
+Trivy-scan. Deze map bevat alleen de compose voor de LXC.
+
+> **Herkomst.** De code stond tot augustus 2026 in de privérepo `palmw01/n8n` en werd door een
+> n8n-workflow aangestuurd, met een handmatige Portainer-build. n8n is uit het platform verdwenen;
+> de code hoort nu bij de rest van het platform en de uitrol gaat via GHCR.
 
 Twee verschillen met de NAS-opzet:
 
-1. **Geen n8n-netwerk.** Daar riep een n8n-workflow `http://bwb-import:8000/import` aan; n8n is uit
-   het platform gehaald, dus de service hangt alleen nog aan `graphdb_default` en wordt met een
-   directe HTTP-call aangestuurd.
-2. **Geen `build:`.** Portainer kan bij een string-deploy niet bouwen (geen build-context). Het
-   image is op de LXC gebouwd via de Docker build-API.
-
-## Image (opnieuw) bouwen
-
-Nodig na elke codewijziging in `palmw01/n8n`. Vanaf een machine met de broncode:
-
-```bash
-cd <checkout>/bwb-import
-tar -czf /tmp/ctx.tar.gz --exclude=tests .
-curl -sS -X POST -H "X-API-Key: $PORTAINER_API_TOKEN" -H 'Content-Type: application/x-tar' \
-  --data-binary @/tmp/ctx.tar.gz \
-  "$PORTAINER_URL/api/endpoints/3/docker/build?t=bwb-import:0.1&dockerfile=Dockerfile"
-```
-
-Daarna de stack in Portainer opnieuw deployen zodat de container het nieuwe image pakt.
-
-> **Vervolgstap.** Netter is een GitHub Action in `palmw01/n8n` die het image naar GHCR pusht, zoals
-> api/frontend/graph-qa hier doen. De compose wordt dan een simpele image-pull en het handmatige
-> bouwen vervalt. De oude repo had al een `deploy-bwb.yml` die de NAS-stack herdeployde — die is na
-> de verhuizing sowieso stuk (verwijst naar endpoint 1 en stack 230).
+1. **Geen n8n-netwerk.** Daar riep een n8n-workflow `http://bwb-import:8000/import` aan; nu hangt de
+   service alleen aan `graphdb_default` en wordt hij met een directe HTTP-call aangestuurd.
+2. **Geen `build:`.** Portainer kan bij een string-deploy niet bouwen; de stack pullt het
+   GHCR-image.
 
 ## Gebruiken
 

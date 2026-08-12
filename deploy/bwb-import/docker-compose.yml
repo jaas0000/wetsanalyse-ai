@@ -5,16 +5,15 @@
 #  1. Geen n8n-netwerk meer. Op de NAS riep een n8n-workflow http://bwb-import:8000/import aan;
 #     n8n is uit het platform gehaald, dus de service hangt alleen nog aan het graaf-netwerk en
 #     wordt met een directe HTTP-call aangestuurd.
-#  2. Geen `build:`. Portainer kan een string-deploy niet bouwen (geen context). Het image
-#     `bwb-import:0.1` is op de LXC gebouwd uit de broncode van github.com/palmw01/n8n
-#     (map bwb-import/). Bij een codewijziging moet het image opnieuw gebouwd worden — zie README.
+#  2. Geen `build:`. De broncode staat nu in tools/bwb-import/ en CI bouwt het image naar GHCR
+#     (.github/workflows/bwb-import-docker-publish.yml) — net als api/frontend/graph-qa.
 #
 # De service is intern bereikbaar op http://bwb-import:8000 en publiceert bewust geen hostpoort:
 # importeren is een schrijfactie op de graaf en hoort niet van buiten aanroepbaar te zijn.
 
 services:
   bwb-import:
-    image: bwb-import:0.1
+    image: ghcr.io/palmw01/bwb-import:${IMAGE_TAG:-latest}
     container_name: bwb-import
     restart: unless-stopped
     environment:
