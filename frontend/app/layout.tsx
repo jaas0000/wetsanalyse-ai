@@ -31,7 +31,16 @@ export const viewport: Viewport = {
   themeColor: "#154273",
 };
 
-export default async function RootLayout({ children }: { children: React.ReactNode }) {
+/** `modal` is het parallelle slot dat de intercepting routes vullen (app/@modal/**). Het staat
+ *  buiten `AppMain`, want een dialog hoort over de hele app heen te liggen — niet in de
+ *  documentflow of de vol-bleed werkplek-container. */
+export default async function RootLayout({
+  children,
+  modal,
+}: {
+  children: React.ReactNode;
+  modal: React.ReactNode;
+}) {
   const session = await auth();
   return (
     <html lang="nl" className={`${sans.variable} ${mono.variable}`}>
@@ -40,6 +49,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           <SiteHeader ingelogd={!!session} />
           <AppMain>{children}</AppMain>
           <SiteFooter />
+          {modal}
         </Providers>
       </body>
     </html>

@@ -123,7 +123,7 @@ export function GesprekSidebar({
         {menuOpen && (
           <div className="absolute inset-x-3 bottom-full mb-1 overflow-hidden rounded-kaart border border-line bg-paper shadow-kaart">
             <Link
-              href="/account"
+              href="/instellingen/account"
               className="block px-3 py-2.5 text-sm text-ink transition-colors hover:bg-surface"
               onClick={() => setMenuOpen(false)}
             >
@@ -131,7 +131,7 @@ export function GesprekSidebar({
             </Link>
             {isBeheerder && (
               <Link
-                href="/beheer"
+                href="/instellingen/beheer/modelprofielen"
                 className="block px-3 py-2.5 text-sm text-ink transition-colors hover:bg-surface"
                 onClick={() => setMenuOpen(false)}
               >

@@ -18,8 +18,8 @@ type NavItem = { href: string; label: string; adminOnly?: boolean };
 
 const ITEMS: NavItem[] = [
   { href: "/workbench", label: "Werkruimte" },
-  { href: "/account", label: "Account" },
-  { href: "/beheer", label: "Beheer", adminOnly: true },
+  { href: "/instellingen/account", label: "Instellingen" },
+  { href: "/instellingen/beheer/modelprofielen", label: "Beheer", adminOnly: true },
 ];
 
 function isActive(pathname: string, href: string): boolean {

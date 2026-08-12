@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
-
+import { Dialog } from "@/components/ui/Dialog";
 import { DocumentPaneel } from "@/components/workbench/DocumentPaneel";
 import { ReviewQueue } from "@/components/workbench/ReviewQueue";
 import { DOCUMENT_STATUS_LABEL, DOCUMENT_STATUS_STYLE } from "@/lib/annotatie";
@@ -26,48 +25,11 @@ interface Props {
  *  brongetrouwe artikeltekst (links, letterlijke highlights) en de review-queue (rechts). Los van de
  *  chatstroom, zoals een Claude-artefact. */
 export function ArtefactPaneel({ doc, info, ontbrekend, actiefId, onKies, onBeslissing, onSluit }: Props) {
-  const paneelRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const opKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        onSluit();
-        return;
-      }
-      // Focus binnen het paneel houden (Tab-trap).
-      if (e.key === "Tab" && paneelRef.current) {
-        const f = paneelRef.current.querySelectorAll<HTMLElement>(
-          'a[href],button:not([disabled]),textarea,input,select,[tabindex]:not([tabindex="-1"])',
-        );
-        if (f.length === 0) return;
-        const first = f[0];
-        const last = f[f.length - 1];
-        const actief = document.activeElement;
-        if (e.shiftKey && (actief === first || actief === paneelRef.current)) {
-          e.preventDefault();
-          last.focus();
-        } else if (!e.shiftKey && actief === last) {
-          e.preventDefault();
-          first.focus();
-        }
-      }
-    };
-    window.addEventListener("keydown", opKey);
-    paneelRef.current?.focus();
-    return () => window.removeEventListener("keydown", opKey);
-  }, [onSluit]);
-
   const opschrift = `${info.citeertitel || doc.bwbId} — artikel ${info.artikel}${doc.lid ? ` lid ${doc.lid}` : ""}`;
 
   return (
-    <div className="fixed inset-0 z-40" role="dialog" aria-modal="true" aria-label={`Annotatie: ${opschrift}`}>
-      <div className="absolute inset-0 bg-ink/30" onClick={onSluit} />
-      {/* Desktop: rechter-paneel; mobiel: bottom-sheet (bijna volledig scherm). */}
-      <div
-        ref={paneelRef}
-        tabIndex={-1}
-        className="absolute inset-x-0 bottom-0 top-[8%] flex flex-col rounded-t-vorm bg-paper shadow-kaart outline-none animate-rise sm:inset-y-0 sm:right-0 sm:left-auto sm:top-0 sm:w-[min(46rem,92vw)] sm:rounded-none sm:rounded-l-vorm"
-      >
+    <Dialog label={`Annotatie: ${opschrift}`} variant="side" onSluit={onSluit}>
+      <>
         {/* Kop */}
         <div className="flex shrink-0 items-start justify-between gap-3 border-b border-line px-5 py-3.5 pt-[max(0.875rem,env(safe-area-inset-top))]">
           <div className="min-w-0">
@@ -123,7 +85,7 @@ export function ArtefactPaneel({ doc, info, ontbrekend, actiefId, onKies, onBesl
             </div>
           )}
         </div>
-      </div>
-    </div>
+      </>
+    </Dialog>
   );
 }

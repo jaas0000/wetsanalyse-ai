@@ -9,12 +9,10 @@ import { Tag } from "@/components/ui/Badge";
 import { deleteProfile, isApiError, listProfiles, setDefaultProfile, testProfile } from "@/lib/api";
 import type { LlmProfileOut, TestResult } from "@/lib/types";
 import { ProfileEditor } from "./ProfileEditor";
-import { UsersPanel } from "./UsersPanel";
-import { ApiTokensPanel } from "./ApiTokensPanel";
 
 type EditState = { open: false } | { open: true; profile: LlmProfileOut | null };
 
-export function BeheerClient() {
+export function ProfielenPanel() {
   const [profielen, setProfielen] = useState<LlmProfileOut[] | null>(null);
   const [fout, setFout] = useState<string | null>(null);
   const [edit, setEdit] = useState<EditState>({ open: false });
@@ -80,7 +78,7 @@ export function BeheerClient() {
   }
 
   return (
-    <div className="space-y-8">
+    <div>
       <Section title="Modelprofielen" count={profielen?.length} subtitle="LLM-configuratie">
         {fout && <Melding type="fout" className="mb-3">{fout}</Melding>}
         <ButtonRow className="mb-4">
@@ -145,10 +143,6 @@ export function BeheerClient() {
           </div>
         )}
       </Section>
-
-      <UsersPanel />
-
-      <ApiTokensPanel />
     </div>
   );
 }

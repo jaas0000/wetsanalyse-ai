@@ -107,7 +107,13 @@ export const authConfig = {
       }
       // Alleen beheerders mogen /beheer en de admin-BFF-routes.
       const role = (user as { role?: Role }).role;
-      if ((path.startsWith("/beheer") || path.startsWith("/api/admin")) && role !== "beheerder") {
+      // De beheer-tabs van het instellingenvenster staan onder /instellingen/beheer, zodat dit
+      // één prefix-check blijft. /beheer zelf is nog een doorverwijzing naar dat pad.
+      const adminPad =
+        path.startsWith("/instellingen/beheer") ||
+        path.startsWith("/beheer") ||
+        path.startsWith("/api/admin");
+      if (adminPad && role !== "beheerder") {
         return Response.redirect(new URL("/", nextUrl));
       }
       return true;
