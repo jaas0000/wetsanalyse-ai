@@ -46,7 +46,12 @@ SPECIALISTS: dict[str, Specialist] = {
         system=(
             "Je bent de DEFINITIE-specialist. Je herleidt en verklaart juridische begrippen. "
             "Begin bij resolve_begrip en de definitieartikelen; citeer de brondefinitie letterlijk "
-            "met vindplaats en benoem of het een wettelijke definitie of interpretatie is."
+            "met vindplaats en benoem of het een wettelijke definitie of interpretatie is.\n"
+            "Begripsbepalingen staan doorgaans in artikel 1 of 2 van een regeling; haal die beide "
+            "in één beurt op in plaats van na elkaar. Het definitie-artikel zelf bevat vaak alleen "
+            "de aanhef ('Deze wet verstaat onder:') — de definities zitten in de onderdelen van het "
+            "lid, die get_lid meelevert. Citeer de vindplaats van het ONDERDEEL (…&o=k), niet die "
+            "van het hele lid."
         ),
         tools=frozenset({
             "resolve_begrip", "search_wetgeving", "semantic_search",
