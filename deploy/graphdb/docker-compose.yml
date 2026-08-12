@@ -1,0 +1,69 @@
+# GraphDB — de BWB-kennisgraaf, op de docker-LXC (Proxmox, Portainer-endpoint 3).
+#
+# Verhuisd van de NAS: de data staat nu LOKAAL op de LXC (/var/lib/graphdb/home), niet op een
+# NFS-share. GraphDB's opslaglaag gebruikt geheugen-gemapte bestanden en file-locking; over NFS
+# levert dat traagheid op en in het slechtste geval stille indexcorruptie. De NAS blijft de plek
+# voor back-ups (zie README).
+#
+# GraphDB >= 11.2 heeft een INGEBOUWDE MCP-server op /mcp. Er is dus geen aparte MCP-container:
+# het nginx'je ervoor doet alleen de bearer-tokencontrole voor toegang van buiten.
+#
+# Het netwerk heet expliciet `graphdb_default`, zodat andere stacks (de dev-stack, een import)
+# er als extern netwerk op kunnen joinen en GraphDB intern op http://graphdb:7200 bereiken.
+
+services:
+  graphdb:
+    image: ontotext/graphdb:11.4.0
+    container_name: graphdb
+    restart: unless-stopped
+    ports:
+      - "7200:7200"                 # workbench-UI + SPARQL + ingebouwde MCP (/mcp)
+    environment:
+      # Let op het RAM van de LXC: GraphDB claimt de heap echt. Bij 4 GB draait de dev-stack
+      # ernaast krap — 8 GB is comfortabeler, anders -Xmx1500m.
+      GDB_JAVA_OPTS: >-
+        -Xms1g -Xmx${GRAPHDB_HEAP:-2g}
+    volumes:
+      - /var/lib/graphdb/home:/opt/graphdb/home
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:7200/rest/repositories || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  # Bearer-token-authenticatie voor externe toegang tot GraphDB's ingebouwde MCP.
+  mcp-auth-proxy:
+    image: nginx:alpine
+    container_name: mcp-auth-proxy
+    restart: unless-stopped
+    ports:
+      - "8004:8004"
+    command:
+      - sh
+      - -c
+      - |
+        cat > /etc/nginx/conf.d/mcp.conf << 'ENDOFNGINX'
+        map_hash_bucket_size 128;
+        server {
+            listen 8004;
+            location /mcp {
+                if ($$http_authorization !~ "^Bearer ${MCP_BEARER_TOKEN}$$") { return 401; }
+                proxy_pass http://graphdb:7200;
+                proxy_http_version 1.1;
+                proxy_set_header Connection "";
+                proxy_set_header Host $$host;
+                proxy_buffering off;
+                proxy_cache off;
+                proxy_read_timeout 3600s;
+            }
+            location / { return 404; }
+        }
+        ENDOFNGINX
+        exec nginx -g 'daemon off;'
+    depends_on:
+      - graphdb
+
+networks:
+  default:
+    name: graphdb_default

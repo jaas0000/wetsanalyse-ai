@@ -64,7 +64,10 @@ services:
       AZURE_FOUNDRY_BASE_URL: ${LLM_API_BASE}/anthropic
       AZURE_FOUNDRY_API_KEY:  ${LLM_API_KEY}
       LLM_MODEL:              ${LLM_MODEL:-claude-sonnet-4-6}
-      GRAPHDB_MCP_URL:        ${GRAPHDB_MCP_URL:-https://graphdb-mcp.ipalm.nl/mcp}
+      # GraphDB draait als aparte stack op dezelfde host; we praten intern via het gedeelde
+      # netwerk graphdb_default (geen omweg via de proxy, geen TLS). De publieke naam
+      # graphdb-mcp.ipalm.nl bestaat sinds de verhuizing van de NAS niet meer.
+      GRAPHDB_MCP_URL:        ${GRAPHDB_MCP_URL:-http://mcp-auth-proxy:8004/mcp}
       GRAPHDB_TOKEN:          ${GRAPHDB_TOKEN:?zet GRAPHDB_TOKEN}
       GRAPHDB_REPOSITORY_ID:  inning
       QA_API_TOKEN:           ${QA_API_TOKEN:?zet QA_API_TOKEN}
@@ -75,6 +78,7 @@ services:
       HOME:                   /tmp
     networks:
       - internal
+      - graaf
     depends_on:
       postgres:
         condition: service_healthy
@@ -122,3 +126,8 @@ volumes:
 networks:
   internal:
     driver: bridge
+  # Netwerk van de GraphDB-stack (deploy/graphdb/) — alleen graph-qa zit erop. Die stack moet
+  # dus eerst gedeployd zijn; anders faalt de dev-deploy op een ontbrekend extern netwerk.
+  graaf:
+    external: true
+    name: ${GRAAF_NETWORK:-graphdb_default}
