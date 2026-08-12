@@ -90,7 +90,7 @@ Traces → Tempo, logs → Loki, metrics → Prometheus/Mimir landen dan in je G
 Er staat een **kant-en-klare optionele backends-stack** in
 [`../deploy/observability/`](../deploy/observability/): **OTel-Collector + Tempo + Loki +
 Prometheus** (géén eigen Grafana — die koppel je aan je bestaande) op het gedeelde
-`homeinfra_internal`-netwerk. De collector ontvangt OTLP op 4317/4318 (intern) en routeert traces →
+`observability_default`-netwerk (de stack maakt het zelf aan; de dev-stack joint erop). De collector ontvangt OTLP op 4317/4318 (intern) en routeert traces →
 Tempo, logs → Loki, metrics → Prometheus. Wijs daarna elke app-stack naar
 `http://otel-collector:4318` en voeg Tempo/Loki/Prometheus als datasources toe aan je bestaande
 Grafana. Volledige stappen: [`deploy/observability/README.md`](../deploy/observability/README.md).

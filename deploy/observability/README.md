@@ -1,18 +1,25 @@
-# Observability-backends (optioneel) — voor je bestaande Grafana
+# Observability-stack
 
-Een **optionele** stack die de OTLP-ingest-backends levert die je nog mist, om de instrumentatie van
-API/frontend/MCP zichtbaar te maken in je **bestaande** Grafana (`unpoller-grafana`). Deze stack bevat
-**geen eigen Grafana** — je hebt er al één.
+Maakt de instrumentatie van api/frontend/graph-qa zichtbaar: OTLP-ingest, opslag en **Grafana**.
+Draait op de docker-LXC (Portainer-endpoint 3, stack `observability`).
 
 ```
-API / frontend / MCP  ──OTLP──►  otel-collector ──►  Tempo   (traces)
-                                                 ├─►  Loki    (logs)
-                                                 └─►  Prometheus (metrics)
-                                                          ▲
-                              bestaande unpoller-grafana ─┘ (3 datasources)
+api / frontend / graph-qa  ──OTLP──►  otel-collector ──►  Tempo   (traces)
+                                                      ├─►  Loki    (logs)
+                                                      └─►  Prometheus (metrics)
+                                                               ▲
+                                                     Grafana ──┘ (3 datasources)
+                                              grafana.ipalm.nl
+docker-logs ──► Alloy ──► Loki
 ```
 
-Componenten (alle op `homeinfra_internal`, geen host-poorten, geen NPM-route — intern zoals Postgres):
+> **Grafana hoort sinds augustus 2026 bij deze stack.** Eerder leunde alles op de bestaande
+> `unpoller-grafana` op de NAS; die is met de rest van de NAS-opzet verdwenen. De drie datasources
+> komen nu als **file-provisioning** uit de compose — daardoor zijn ze in de UI read-only, en dat is
+> de bedoeling: de definitie hoort in de stack, niet in de database van Grafana.
+
+Componenten (alle op `observability_default`; alleen Grafana publiceert een hostpoort, omdat NPM op
+een andere LXC draait en geen docker-netwerk deelt):
 - **otel-collector** (`otel/opentelemetry-collector-contrib`) — ontvangt OTLP op 4317/4318. Leidt met
   de **`spanmetrics`- en `servicegraph`-connectors** ook RED-metrics per service én topologie-edges
   (`traces_service_graph_request_total`) uit de traces af; die voeden het Node Graph-panel en de
@@ -20,16 +27,25 @@ Componenten (alle op `homeinfra_internal`, geen host-poorten, geen NPM-route —
 - **tempo** — traces, query op `http://tempo:3200`.
 - **loki** — logs, query op `http://loki:3100`.
 - **prometheus** — metrics, query op `http://prometheus:9090` (scrapet de collector op `:8889`).
+- **alloy** — leest de docker-logs van `wetsanalyse-dev-*`, `graphdb`, `bwb-import` en
+  `mcp-auth-proxy` en shipt ze naar Loki (JSON-parse → `detected_level`, `trace_id`, `categorie`).
+- **grafana** — UI op poort 3001 (host) → `https://grafana.ipalm.nl` via nginx-proxy-manager.
 
 > Homelab-schaal (lokale opslag, korte retentie: traces 48u, logs 7d, metrics 15d). Pas de retentie
 > in `tempo.yaml` / `loki-config.yaml` / de prometheus-`command` aan naar smaak. Voor productie de
 > componenten schalen/splitsen (object storage i.p.v. filesystem).
 
-## 1. Deployen (Portainer)
+## 1. Deployen
 
-Deploy als Portainer-stack (git of upload). De config-bestanden (`otel-collector-config.yaml`,
-`tempo.yaml`, `loki-config.yaml`, `prometheus.yml`) worden als volume gemount — houd ze naast de
-compose. Enige stack-env: `PROXY_NETWORK` (default `homeinfra_internal`).
+Via `.github/workflows/deploy-observability.yml` (handmatig of bij wijzigingen in
+`deploy/observability/**`). Die stuurt `docker-compose.stack.yml` als string naar de Portainer-API;
+de configs zitten **inline** in de compose, dus er hoeft niets gemount te worden.
+
+Stack-env: `OBS_NETWORK` (default `observability_default`), `GRAFANA_ADMIN_PASSWORD` (verplicht,
+`secrets.GRAFANA_ADMIN_PASSWORD`) en `GRAFANA_ROOT_URL` (default `https://grafana.ipalm.nl`).
+
+Het netwerk wordt door **deze** stack aangemaakt; de dev-stack joint er als extern netwerk op. Deploy
+observability dus vóór een dev-deploy, anders faalt die op een ontbrekend netwerk.
 
 ## 2. De app-stacks laten exporteren
 
@@ -43,18 +59,15 @@ OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
 De API-image bevat de `otel`-extra al (default in `api/Dockerfile`); `OTEL_SERVICE_NAME` staat per app
 al goed.
 
-## 3. Datasources toevoegen aan je bestaande Grafana
+## 3. Datasources
 
-Twee manieren (zie `grafana-datasources.yaml` voor de exacte waarden):
+Die zijn er al: de compose provisioneert `wa-prometheus`, `wa-loki` en `wa-tempo` mee, inclusief de
+correlaties (van een logregel naar de trace via `trace_id`, van een span naar de logs, en de nodeGraph
+uit de servicegraph-metrics). Omdat het **file-provisioning** is, zijn ze in de UI read-only —
+aanpassen doe je in `docker-compose.stack.yml`.
 
-- **A — via de UI (aanbevolen, niets aan de unpoller-stack wijzigen):** Grafana →
-  *Connections → Data sources → Add*, en voeg toe:
-  - Prometheus → `http://prometheus:9090`
-  - Loki → `http://loki:3100`
-  - Tempo → `http://tempo:3200`
-- **B — via provisioning:** mount `grafana-datasources.yaml` in de `unpoller-grafana`-container onder
-  `/etc/grafana/provisioning/datasources/wetsanalyse.yaml` en herstart Grafana. Vereist een kleine
-  aanpassing aan de unpoller-stack (extra volume-mount).
+`grafana-datasources.yaml` staat er nog als losse referentie voor wie de stack aan een *andere*
+Grafana wil hangen; voor deze opzet is hij niet nodig.
 
 ## 4. Verifiëren
 
@@ -74,7 +87,8 @@ Doe een chat en een keuzelijst-/structuur-ophaal in de webapp, dan in Grafana �
   schrijven (named volumes worden als root aangemaakt). Internal-only containers zonder host-mounts →
   laag risico; hard je desgewenst later met een pre-chown-init.
 - **Loki OTLP:** vereist `allow_structured_metadata: true` (staat aan in `loki-config.yaml`) en Loki 3.x.
-- **Geen auth op de backends:** ze zijn alleen intern bereikbaar op `homeinfra_internal`. Zet ze niet
+- **Geen auth op de backends:** ze zijn alleen intern bereikbaar op `observability_default` (geen
+  hostpoorten). Alleen Grafana is van buiten benaderbaar, met zijn eigen login. Zet de backends niet
   achter NPM/host-poorten.
 
 ## 5. Dashboards importeren

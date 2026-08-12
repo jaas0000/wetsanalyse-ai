@@ -8,9 +8,10 @@ Een **agent-platform** voor **Wetsanalyse**: het gestructureerd, brongetrouw en 
 van Nederlandse wet- en regelgeving volgens de methode Wetsanalyse (Ausems, Bulles & Lokin) en het
 Juridisch Analyseschema (JAS). De kern is een gedeployde dienst — de **wetsanalyse-API**, de
 **webapp met de werkplek** en de eigen **QA/annotatie-agent (`tools/graph-qa/`, "de Juridische
-Assistent")** op de **BWB-kennisgraaf** — die draait op Azure Container Apps én Portainer. De graaf
-wordt gevuld door de **BWB-importer** (in de `palmw01/graphdb`-repo), die de wettekst rechtstreeks bij
-overheid.nl ophaalt — er is geen aparte wettenbank-MCP meer.
+Assistent")** op de **BWB-kennisgraaf** — die draait op de docker-LXC van Proxmox (Portainer,
+endpoint 3) en op Azure Container Apps. De graaf wordt gevuld door de **BWB-importer**
+(`tools/bwb-import/`), die de wettekst rechtstreeks bij overheid.nl ophaalt — er is geen aparte
+wettenbank-MCP meer.
 
 Brongetrouwheid is niet onderhandelbaar: werk alleen met letterlijk opgehaalde wettekst, citeer
 letterlijk, en houd elke markering/begrip/regel/annotatie herleidbaar naar artikel + lid +
@@ -57,14 +58,25 @@ expliciet gemaakt in plaats van schijnzekerheid.
    Endpoints: `POST /v1/chat` (SSE) en `GET /v1/artikel`. De werkplek praat er **direct** mee (SSE);
    de persistente review-state loopt via de API (`/v1/annotatie/*`). Deployt via CI naar Azure
    Container Apps én een Portainer-stack (image `ghcr.io/palmw01/graph-qa`). Eigen `CLAUDE.md` + `README.md`.
-4. **`analyses/`** — output van het skill-spoor: per **werkgebied** (kennisdomein met **meerdere
+4. **`tools/bwb-import/`** — de **BWB-importer**: haalt de wettekst op bij
+   `repository.officiele-overheidspublicaties.nl`, valideert tegen de officiële XSD's, parseert de
+   structuur (regeling → hoofdstuk/afdeling → artikel → lid → onderdeel, met verwijzingen) en schrijft
+   RDF naar GraphDB, repository `inning`. Met `BWB_IMPORT_WTI=true` komt de WTI-verrijking mee:
+   verantwoordelijke organisatie, wetsfamilie, grondslagen, rechtsgebieden, citeertitels. Per wet
+   **idempotent**. Stond tot augustus 2026 in de privérepo `palmw01/n8n`; CI bouwt nu
+   `ghcr.io/palmw01/bwb-import`. Stack: `deploy/bwb-import/`.
+5. **De kennisgraaf zelf** (`deploy/graphdb/`) — GraphDB 11.4 met de repository `inning`, plus een
+   nginx'je dat het bearer-token controleert. **GraphDB ≥ 11.2 heeft de MCP-server ingebouwd** op
+   `/mcp`, dus er is geen aparte MCP-container. Data lokaal op de LXC (`/var/lib/graphdb/home`);
+   dagelijkse RDF-dump om 03:00 die meelift in de vzdump van 03:30.
+6. **`analyses/`** — output van het skill-spoor: per **werkgebied** (kennisdomein met **meerdere
    bronnen** — een bron = `bwbId`+`artikel`+`lid?`, niet één artikel) een map met het eindrapport en de
    `werk/`-tussenbestanden. Activiteit 2 markeert per bron. De map heet naar de werkgebied-naam
    (kebab-case); bij ontbreken valt ze terug op de eerste bron (`<bwbid>-art<nr>[-lidN]`).
 
 ### Legacy / oorsprong — het skill-spoor (gedeelde inhoudsbron)
 
-5. **`.claude/skills/wetsanalyse/`** — de inhoudelijke skill die de analyse **interactief in Claude
+7. **`.claude/skills/wetsanalyse/`** — de inhoudelijke skill die de analyse **interactief in Claude
    Code** uitvoert (activiteit 2: markeren + classificeren in JAS-klassen) en een `rapport.json`
    oplevert (HTML-viewer; Markdown als export). De skill *gebruikt* de MCP als bron.
 
@@ -156,26 +168,40 @@ vier hendels (Context, Tools, Loop, Governance) in plaats van het model te verde
 
 ## Observability
 
-Alle draaiende onderdelen (API, frontend, MCP, graph-qa) zijn **geïnstrumenteerd, niet bemeterd**:
+Alle draaiende onderdelen (API, frontend, graph-qa) zijn **geïnstrumenteerd, niet bemeterd**:
 ze emitteren gestructureerde JSON-logs (één gedeelde vorm, bv. `frontend/lib/logger.ts`)
 en kunnen OpenTelemetry (traces/metrics/logs) naar een **configureerbaar OTLP-endpoint** sturen
 (`OTEL_EXPORTER_OTLP_ENDPOINT`; leeg = alleen logs, nul overhead). Eén trace-id verbindt de keten
-frontend → API → MCP/graph-qa. Een **optionele verzamelstack staat in `deploy/observability/`**:
+frontend → API → graph-qa. De **verzamelstack staat in `deploy/observability/`** en draait op de
+docker-LXC (Portainer-endpoint 3, stack `observability`):
 OTel-Collector (met **spanmetrics/servicegraph-connectors** die topologie-edges uit de traces
 afleiden) + Tempo + Loki + Prometheus, plus **Alloy** dat de stdout-logs van frontend en MCP
-naar Loki shipt, **twee kant-en-klare Grafana-dashboards** (`grafana-dashboard-wetsanalyse.json` =
+naar Loki shipt, **Grafana zelf** (grafana.ipalm.nl; de datasources komen als file-provisioning uit
+de stack, dus ze zijn in de UI read-only), **twee kant-en-klare Grafana-dashboards** (`grafana-dashboard-wetsanalyse.json` =
 trends; `grafana-dashboard-topologie.json` = *"systeemtopologie"*: de live keten die oplicht op basis
 van de trace-servicegraph) en **alerting** (`alerting/`; 3 regels die het default notification-beleid
-van je Grafana volgen — géén eigen contactpunt). Je koppelt 'm aan je bestaande Grafana; laat het endpoint
-leeg om alles ongewijzigd met alléén JSON-logs te draaien. De volledige uitleg (env-vars, logschema,
-AVG-redactie, dashboard/alerting) staat in **`docs/observability.md`**.
+van je Grafana volgen — géén eigen contactpunt). Laat `OTEL_EXPORTER_OTLP_ENDPOINT` leeg om een
+onderdeel ongewijzigd met alléén JSON-logs te draaien. Deployen gaat via
+`.github/workflows/deploy-observability.yml`, dashboards via `provision-grafana.sh`. De volledige
+uitleg (env-vars, logschema, AVG-redactie, dashboard/alerting) staat in **`docs/observability.md`**.
 
-## Preview-omgevingen (per PR)
+> **Historie.** Tot juli 2026 leunde deze stack op de NAS: het gedeelde netwerk `homeinfra_internal`
+> en de bestaande `unpoller-grafana`. Beide verdwenen met de verhuizing naar Proxmox; de stack maakt
+> nu zijn eigen netwerk (`observability_default`) en brengt Grafana mee. Het topologie-dashboard had
+> ooit een jobs-tabel op een read-only jobstore-datasource (`wa-postgres`); die is samen met de
+> analyse-pijplijn verdwenen — dat paneel bestaat niet meer.
 
-Elke pull request krijgt automatisch een **geïsoleerde, ephemere full-stack** op de NAS (via Portainer),
-bereikbaar op `https://pr<N>.preview.ipalm.nl`, met een **verse database**; bij het sluiten van de PR wordt
-alles opgeruimd. Workflow `.github/workflows/preview.yml` + stack `deploy/preview/docker-compose.yml`;
-volledige setup (secrets/vars, wildcard-DNS/NPM, forks-uitsluiting) staat in **`deploy/preview/README.md`**.
+## Dev-omgeving
+
+Eén vaste, gedeelde omgeving op **https://dev.wetsanalyse.ipalm.nl** met een eigen database, naast de
+graaf en de observability-stack op dezelfde docker-LXC. **Handmatig uitrollen**: Actions → *dev-deploy*
+→ *Run workflow* → kies de branch die je op dev wilt zien; `destroy: true` breekt stack, database en
+proxyhost weer af. Workflow `.github/workflows/dev-deploy.yml` + stack `deploy/dev/docker-compose.yml`;
+setup en de volgorde-afhankelijkheden (graaf en observability eerst, want hun netwerken zijn extern)
+staan in **`deploy/dev/README.md`**.
+
+De eerdere per-PR-previews (`pr<N>.preview.ipalm.nl`) zijn vervallen: meerdere full-stacks tegelijk
+passen niet op de LXC, en één bewust gekozen dev-omgeving bleek in de praktijk wat er nodig was.
 De Azure-variant is geparkeerd.
 
 ## Skills
