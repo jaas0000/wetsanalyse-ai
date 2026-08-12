@@ -156,7 +156,18 @@ def get_lid(bwb_id: str, artikel: str, lid: str) -> str:
         FILTER(STRSTARTS(STR(?o), "{NS}"))
         OPTIONAL {{ ?o bwb:nummer ?on }}
         OPTIONAL {{ ?o bwb:tekst ?ot }}
-        BIND(CONCAT(COALESCE(?on, ""), " ", COALESCE(?ot, "")) AS ?regel)
+        OPTIONAL {{ ?o bwb:jci ?oj }}
+        # De jci van het onderdeel zélf meegeven, niet die van het lid: anders citeert de agent
+        # "onderdeel k" maar verwijst de vindplaats naar het hele definitielid. Ook geneste
+        # onderdelen hebben er een (…&o=aa&o=1).
+        #
+        # Zonder de datumstaart (&z=…&g=…): die is voor 25 onderdelen ~700 tekens aan herhaling en
+        # staat al in de jci van het lid hierboven. Wat overblijft is een geldige jci-verwijzing.
+        BIND(IF(BOUND(?oj),
+                IF(CONTAINS(?oj, "&z="), STRBEFORE(?oj, "&z="), ?oj),
+                "") AS ?ojk)
+        BIND(CONCAT(COALESCE(?on, ""), " ", COALESCE(?ot, ""),
+                    IF(?ojk != "", CONCAT(" [", ?ojk, "]"), "")) AS ?regel)
       }} ORDER BY ?o }}
   }}
 }} GROUP BY ?nummer ?tekst ?jci"""

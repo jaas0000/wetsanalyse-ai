@@ -45,6 +45,8 @@ def test_get_lid_levert_de_onderdelen_mee():
     assert "bwb:bevat" in sparql, "onderdelen moeten worden opgehaald"
     assert "GROUP_CONCAT" in sparql, "gebundeld, anders herhaalt de lidtekst per onderdeel"
     assert "ORDER BY ?o" in sparql, "volgorde a, b, c, … moet vastliggen"
+    assert "bwb:jci ?oj" in sparql, "elk onderdeel krijgt zijn eigen vindplaats"
+    assert 'STRBEFORE(?oj, "&z=")' in sparql, "zonder de datumstaart; die staat al in de lid-jci"
 
 
 def test_get_artikel_levert_directe_onderdelen_mee():
