@@ -77,7 +77,12 @@ services:
       OTEL_SERVICE_NAME:      graph-qa
       QA_API_TOKEN:           ${QA_API_TOKEN:?zet QA_API_TOKEN}
       SIMILARITY_INDEX:       ${SIMILARITY_INDEX:-bwb_similarity}
-      ENABLE_DECOMPOSITION:   "1"
+      # Uit: dan draait de pure agentische lus (supervisor → agent ⇄ tools → verify → finalize) en
+      # bepaalt de agent zelf zijn stappen. Met decompositie ligt er een vast recept overheen
+      # (splits de vraag → los elk stuk op → vat samen) waarin solve_node zijn eigen, met de hand
+      # nagebouwde agent-lus draait — een tweede implementatie met eigen vangnetten, die daardoor
+      # uiteen kan lopen met agent_node. Aan te zetten als multi-hop-vragen het nodig blijken.
+      ENABLE_DECOMPOSITION:   ${ENABLE_DECOMPOSITION:-0}
       # Gespreksgeheugen in de dev-eigen Postgres (psycopg-scheme → geen +asyncpg).
       CHECKPOINT_DB_URL:      postgresql://wetsanalyse:${POSTGRES_PASSWORD}@postgres:5432/wetsanalyse
       HOME:                   /tmp
