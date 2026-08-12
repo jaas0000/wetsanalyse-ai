@@ -37,7 +37,9 @@ jobs:
         with:
           package: wetsanalyse-api
           keep-n-tagged: 5
-          exclude-tags: latest
+          # latest nooit verwijderen; `dev` is de levende dev-omgeving (dev-deploy.yml) — die zou de
+          # retentie anders onder de draaiende dev-stack vandaan halen.
+          exclude-tags: latest,dev
           delete-untagged: true
           validate: true
           dry-run: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}

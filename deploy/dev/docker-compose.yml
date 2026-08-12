@@ -1,17 +1,13 @@
-# Per-PR PREVIEW-stack (Portainer, ephemeer) — één geïsoleerde full-stack per pull request.
+# DEV-omgeving (dev.wetsanalyse.ipalm.nl) — één vaste, gedeelde stack naast productie.
 #
-# Anders dan de productie-stacks (aparte git-stacks per service, secrets als host-bestanden) is dit
-# ÉÉN standalone-compose die de Portainer-API als string deployt (`/stacks/create/standalone/string`).
-# Daarom: alle config via **stack-env** (geen `file:`-secrets — die kan een string-deploy niet mounten;
-# api én graph-qa lezen elk secret via `${NAME}` OF `${NAME}_FILE`, dus platte env volstaat).
+# Draait op de docker-LXC (Proxmox, endpoint 3 in portainer.ipalm.nl) en wordt als string via de
+# Portainer-API gedeployd. Daarom: alle config via **stack-env** (geen `file:`-secrets — die kan een
+# string-deploy niet mounten; api én graph-qa lezen elk secret via `${NAME}` OF `${NAME}_FILE`).
 #
-# Isolatie: de Portainer-stacknaam = compose-projectnaam `preview-pr<N>`, dus containers, netwerken en
-# het volume worden automatisch geprefixt → twee PR's botsen nooit. De workflow genereert de per-PR
-# secrets (POSTGRES_PASSWORD/AUTH_SECRET/tokens via `openssl rand`) en zet de image-tag op `pr-<N>`.
-#
-# Bereikbaarheid: alleen de frontend zit óók op het gedeelde `proxy`-netwerk, zodat nginx-proxy-manager
-# de host `pr<N>.preview.ipalm.nl` → `${STACK}-frontend:3000` (https) kan proxyen. postgres/api/graph-qa
-# blijven op het interne netwerk. GraphDB-MCP + LLM zijn externe (publieke) diensten → gewoon outbound.
+# Bereikbaarheid: nginx-proxy-manager draait op een ANDERE LXC (101) en deelt dus geen docker-netwerk
+# met deze host. Proxyen op containernaam kan daarom niet — de frontend publiceert een hostpoort
+# (${HOST_PORT}) en NPM stuurt dev.wetsanalyse.ipalm.nl door naar <docker-lxc-ip>:${HOST_PORT}.
+# postgres/api/graph-qa blijven op het interne netwerk. GraphDB-MCP + LLM zijn externe diensten.
 
 services:
 
@@ -35,7 +31,7 @@ services:
       start_period: 10s
 
   api:
-    image: ghcr.io/palmw01/wetsanalyse-api:${IMAGE_TAG:-latest}
+    image: ghcr.io/palmw01/wetsanalyse-api:${IMAGE_TAG:-dev}
     container_name: ${STACK}-api
     restart: unless-stopped
     environment:
@@ -61,7 +57,7 @@ services:
       start_period: 20s
 
   graph-qa:
-    image: ghcr.io/palmw01/graph-qa:${IMAGE_TAG:-latest}
+    image: ghcr.io/palmw01/graph-qa:${IMAGE_TAG:-dev}
     container_name: ${STACK}-graph-qa
     restart: unless-stopped
     environment:
@@ -74,7 +70,7 @@ services:
       QA_API_TOKEN:           ${QA_API_TOKEN:?zet QA_API_TOKEN}
       SIMILARITY_INDEX:       ${SIMILARITY_INDEX:-bwb_similarity}
       ENABLE_DECOMPOSITION:   "1"
-      # Gespreksgeheugen in de preview-eigen Postgres (psycopg-scheme → geen +asyncpg).
+      # Gespreksgeheugen in de dev-eigen Postgres (psycopg-scheme → geen +asyncpg).
       CHECKPOINT_DB_URL:      postgresql://wetsanalyse:${POSTGRES_PASSWORD}@postgres:5432/wetsanalyse
       HOME:                   /tmp
     networks:
@@ -90,7 +86,7 @@ services:
       start_period: 15s
 
   frontend:
-    image: ghcr.io/palmw01/wetsanalyse-frontend:${IMAGE_TAG:-latest}
+    image: ghcr.io/palmw01/wetsanalyse-frontend:${IMAGE_TAG:-dev}
     container_name: ${STACK}-frontend
     restart: unless-stopped
     environment:
@@ -103,9 +99,11 @@ services:
       ADMIN_API_TOKEN:      ${ADMIN_TOKEN}
       AUTH_SECRET:          ${AUTH_SECRET:?zet AUTH_SECRET}
       GRAPH_QA_TOKEN:       ${QA_API_TOKEN}
+    ports:
+      # Enige naar buiten geopende poort: NPM (andere LXC) proxyt hierheen over het LAN.
+      - "${HOST_PORT:-8090}:3000"
     networks:
       - internal
-      - proxy   # zodat nginx-proxy-manager de frontend kan bereiken (pr<N>.preview.ipalm.nl → :3000)
     depends_on:
       api:
         condition: service_healthy
@@ -119,11 +117,8 @@ services:
       start_period: 15s
 
 volumes:
-  pgdata:   # per-stack geprefixt → geïsoleerd; de teardown prunet 'm
+  pgdata:   # dev-database; blijft staan tussen deploys, wordt alleen door een expliciete destroy gewist
 
 networks:
   internal:
     driver: bridge
-  proxy:
-    external: true
-    name: ${PROXY_NETWORK:-homeinfra_internal}

@@ -1,0 +1,255 @@
+# DEV-omgeving — https://dev.wetsanalyse.ipalm.nl
+#
+# Eén vaste, gedeelde stack (postgres + api + graph-qa + frontend) naast productie, op de docker-LXC
+# van Proxmox (Portainer-endpoint 3). Handmatig gestart: kies in de Actions-UI de branch die je op dev
+# wilt zien. Zo blijft dev een bewuste keuze en overschrijft een merge naar master niet stilletjes
+# waar je aan werkt.
+#
+# `destroy: true` breekt de stack af en wist de dev-database.
+#
+# LET OP: de schrijvende Portainer-/NPM-calls zijn niet lokaal te testen; de eerste run is de
+# live-validatie. Zie deploy/dev/README.md voor de eenmalige setup (DNS, certificaat, LXC-ruimte).
+
+name: dev-deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      destroy:
+        description: "Stack + database verwijderen in plaats van deployen"
+        type: boolean
+        default: false
+
+concurrency:
+  group: dev-deploy
+  cancel-in-progress: false   # nooit halverwege een deploy afkappen
+
+env:
+  OWNER: ${{ github.repository_owner }}
+  STACK: wetsanalyse-dev
+  IMAGE_TAG: dev
+  ENDPOINT_ID: ${{ vars.DEV_PORTAINER_ENDPOINT_ID || '3' }}
+  HOSTNAME_: ${{ vars.DEV_HOSTNAME || 'dev.wetsanalyse.ipalm.nl' }}
+  HOST_PORT: ${{ vars.DEV_HOST_PORT || '8090' }}
+  FORWARD_HOST: ${{ vars.DEV_FORWARD_HOST || '192.168.10.23' }}
+
+jobs:
+  # --- Bouw de 3 dev-images (tag `dev`) ------------------------------------------------------------
+  build:
+    if: ${{ !inputs.destroy }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        include:
+          - image: wetsanalyse-api
+            context: .
+            file: api/Dockerfile
+          - image: wetsanalyse-frontend
+            context: frontend
+            file: frontend/Dockerfile
+          - image: graph-qa
+            context: tools/graph-qa
+            file: tools/graph-qa/Dockerfile
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
+      - name: Log in bij GHCR
+        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Buildtijd bepalen
+        id: buildtime
+        run: echo "ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+      - name: Build en push (tag dev)
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.file }}
+          push: true
+          tags: ghcr.io/${{ env.OWNER }}/${{ matrix.image }}:${{ env.IMAGE_TAG }}
+          # Zelfde build-args als de productie-workflows, zodat dev echte build-info toont.
+          build-args: |
+            GIT_SHA=${{ github.sha }}
+            BUILD_TIME=${{ steps.buildtime.outputs.ts }}
+          cache-from: type=gha,scope=dev-${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=dev-${{ matrix.image }}
+
+  # --- Deploy de dev-stack via de Portainer-API ----------------------------------------------------
+  deploy:
+    needs: build
+    if: ${{ !inputs.destroy }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    environment:
+      name: dev
+      url: https://${{ vars.DEV_HOSTNAME || 'dev.wetsanalyse.ipalm.nl' }}
+    env:
+      PORTAINER_URL: ${{ secrets.PORTAINER_URL }}
+      PORTAINER_API_KEY: ${{ secrets.PORTAINER_API_KEY }}
+      SEED: ${{ secrets.PREVIEW_SECRET_SEED }}
+      LLM_API_BASE: ${{ vars.LLM_API_BASE }}
+      LLM_API_KEY: ${{ secrets.AZURE_AI_KEY }}
+      LLM_MODEL: ${{ vars.LLM_MODEL }}
+      GRAPHDB_TOKEN: ${{ secrets.GRAPHDB_TOKEN }}
+      GRAPHDB_MCP_URL: ${{ vars.GRAPHDB_MCP_URL }}
+      SIMILARITY_INDEX: ${{ vars.GRAPH_QA_SIMILARITY_INDEX }}
+      NPM_URL: ${{ vars.NPM_URL }}
+      NPM_IDENTITY: ${{ secrets.NPM_IDENTITY }}
+      NPM_SECRET: ${{ secrets.NPM_SECRET }}
+      NPM_CERT_ID: ${{ vars.NPM_CERT_ID }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Preflight (verplichte secrets/vars aanwezig?)
+        run: |
+          set -euo pipefail
+          for v in PORTAINER_URL PORTAINER_API_KEY SEED LLM_API_BASE LLM_API_KEY GRAPHDB_TOKEN; do
+            [ -n "${!v:-}" ] || { echo "::error::ontbrekende secret/var: $v (zie deploy/dev/README.md)"; exit 1; }
+          done
+
+      - name: Deploy naar Portainer
+        run: |
+          set -euo pipefail
+          # Deterministische, niet-gecommitte dev-secrets: stabiel over re-deploys (een nieuw
+          # DB-wachtwoord zou de bestaande postgres-volume-auth breken). HMAC(seed, "<label>-dev").
+          hx() { printf '%s' "$1-dev" | openssl dgst -sha256 -hmac "$SEED" | awk '{print $NF}'; }
+          # Fernet-key = urlsafe base64 van 32 bytes (HMAC-sha256 = precies 32 bytes).
+          fernet() { printf '%s' "$1-dev" | openssl dgst -sha256 -hmac "$SEED" -binary | openssl base64 -A | tr '+/' '-_'; }
+          PG=$(hx pg); API_TOK=$(hx api); ADM_TOK=$(hx adm); QA_TOK=$(hx qa); AUTH=$(hx auth); FERNET=$(fernet fernet)
+
+          # env-array voor de Portainer-stack (compose interpoleert ${VAR}); geheimen alleen hier, nooit gelogd.
+          ENV_JSON=$(jq -n \
+            --arg stack "$STACK" --arg tag "$IMAGE_TAG" --arg pg "$PG" \
+            --arg base "$LLM_API_BASE" --arg key "$LLM_API_KEY" --arg fernet "$FERNET" \
+            --arg apitok "$API_TOK" --arg admtok "$ADM_TOK" --arg gtok "$GRAPHDB_TOKEN" --arg qatok "$QA_TOK" \
+            --arg auth "$AUTH" --arg authurl "https://$HOSTNAME_" --arg port "$HOST_PORT" \
+            --arg mcp "${GRAPHDB_MCP_URL:-https://graphdb-mcp.ipalm.nl/mcp}" \
+            --arg sim "${SIMILARITY_INDEX:-bwb_similarity}" --arg model "${LLM_MODEL:-claude-sonnet-4-6}" \
+            '[
+              {name:"STACK",value:$stack},{name:"IMAGE_TAG",value:$tag},{name:"POSTGRES_PASSWORD",value:$pg},
+              {name:"LLM_API_BASE",value:$base},{name:"LLM_API_KEY",value:$key},{name:"LLM_CONFIG_SECRET",value:$fernet},
+              {name:"API_TOKEN",value:$apitok},{name:"ADMIN_TOKEN",value:$admtok},{name:"GRAPHDB_TOKEN",value:$gtok},
+              {name:"QA_API_TOKEN",value:$qatok},{name:"AUTH_SECRET",value:$auth},{name:"AUTH_URL",value:$authurl},
+              {name:"HOST_PORT",value:$port},{name:"GRAPHDB_MCP_URL",value:$mcp},
+              {name:"SIMILARITY_INDEX",value:$sim},{name:"LLM_MODEL",value:$model}
+            ]')
+
+          # Bestaat de stack al? (naam → id)
+          SID=$(curl -sS -H "X-API-Key: $PORTAINER_API_KEY" "$PORTAINER_URL/api/stacks" \
+                 | jq -r --arg n "$STACK" '.[] | select(.Name==$n) | .Id' | head -n1)
+
+          if [ -n "$SID" ] && [ "$SID" != "null" ]; then
+            echo "Stack bestaat (id=$SID) → update"
+            BODY=$(jq -n --rawfile c deploy/dev/docker-compose.yml --argjson env "$ENV_JSON" \
+              '{stackFileContent:$c, env:$env, prune:true, pullImage:true}')
+            code=$(curl -sS -o /tmp/resp.json -w '%{http_code}' -X PUT \
+              -H "X-API-Key: $PORTAINER_API_KEY" -H "Content-Type: application/json" \
+              "$PORTAINER_URL/api/stacks/$SID?endpointId=$ENDPOINT_ID" --data-binary @<(echo "$BODY"))
+          else
+            echo "Stack bestaat niet → aanmaken"
+            BODY=$(jq -n --arg name "$STACK" --rawfile c deploy/dev/docker-compose.yml --argjson env "$ENV_JSON" \
+              '{name:$name, stackFileContent:$c, env:$env, fromAppTemplate:false}')
+            code=$(curl -sS -o /tmp/resp.json -w '%{http_code}' -X POST \
+              -H "X-API-Key: $PORTAINER_API_KEY" -H "Content-Type: application/json" \
+              "$PORTAINER_URL/api/stacks/create/standalone/string?endpointId=$ENDPOINT_ID" --data-binary @<(echo "$BODY"))
+          fi
+          echo "Portainer HTTP $code"
+          if [ "${code:0:1}" != "2" ]; then echo "::error::Portainer deploy faalde (HTTP $code)"; cat /tmp/resp.json; exit 1; fi
+
+      - name: Wachten tot de 4 containers draaien
+        run: |
+          set -euo pipefail
+          DOCKER="$PORTAINER_URL/api/endpoints/$ENDPOINT_ID/docker"
+          want="$STACK-postgres $STACK-api $STACK-graph-qa $STACK-frontend"
+          for a in $(seq 1 20); do
+            running=$(curl -sS -H "X-API-Key: $PORTAINER_API_KEY" "$DOCKER/containers/json" \
+                       | jq -r '.[].Names[]?' | tr -d '/')
+            missing=""
+            for c in $want; do echo "$running" | grep -qx "$c" || missing="$missing $c"; done
+            [ -z "$missing" ] && { echo "Alle containers draaien."; exit 0; }
+            echo "wacht op:$missing (poging $a)"; sleep 15
+          done
+          echo "::error::niet alle dev-containers draaien na de deploy:$missing"; exit 1
+
+      - name: NPM-proxyhost (optioneel — dev-host → docker-LXC:${HOST_PORT}, https)
+        if: ${{ env.NPM_URL != '' && env.NPM_IDENTITY != '' }}
+        run: bash deploy/dev/npm-host.sh create "$HOSTNAME_" "$FORWARD_HOST" "$HOST_PORT"
+
+      - name: Samenvatting
+        run: |
+          {
+            echo "### 🚧 Dev-omgeving bijgewerkt"
+            echo
+            echo "- **URL:** https://$HOSTNAME_"
+            echo "- **Branch:** \`$GITHUB_REF_NAME\` (\`${GITHUB_SHA:0:7}\`)"
+            echo "- **Stack:** \`$STACK\` op Portainer-endpoint \`$ENDPOINT_ID\`"
+            echo
+            echo "Eerste keer: ga naar \`/setup\` voor de eerste beheerder."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # --- Afbreken (handmatig, destroy: true) ---------------------------------------------------------
+  destroy:
+    if: ${{ inputs.destroy }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      PORTAINER_URL: ${{ secrets.PORTAINER_URL }}
+      PORTAINER_API_KEY: ${{ secrets.PORTAINER_API_KEY }}
+      NPM_URL: ${{ vars.NPM_URL }}
+      NPM_IDENTITY: ${{ secrets.NPM_IDENTITY }}
+      NPM_SECRET: ${{ secrets.NPM_SECRET }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Portainer-stack verwijderen (idempotent)
+        run: |
+          set -euo pipefail
+          SID=$(curl -sS -H "X-API-Key: $PORTAINER_API_KEY" "$PORTAINER_URL/api/stacks" \
+                 | jq -r --arg n "$STACK" '.[] | select(.Name==$n) | .Id' | head -n1)
+          if [ -z "$SID" ] || [ "$SID" = "null" ]; then echo "Geen stack $STACK — niets te doen."; exit 0; fi
+          code=$(curl -sS -o /tmp/del.json -w '%{http_code}' -X DELETE \
+            -H "X-API-Key: $PORTAINER_API_KEY" \
+            "$PORTAINER_URL/api/stacks/$SID?endpointId=$ENDPOINT_ID&external=false")
+          echo "delete HTTP $code"; [ "${code:0:1}" = "2" ] || { cat /tmp/del.json; exit 1; }
+
+      - name: Dev-volume verwijderen (stack-delete laat volumes staan)
+        run: |
+          set -euo pipefail
+          # Portainer's stack-delete verwijdert containers/netwerken, maar géén volumes: de
+          # dev-database zou anders als weesdata achterblijven en bij een nieuwe deploy met een
+          # ander wachtwoord terugkomen. Daarom expliciet via de Docker-API.
+          DOCKER="$PORTAINER_URL/api/endpoints/$ENDPOINT_ID/docker"
+          FILTER=$(jq -nc --arg p "$STACK" '{label:["com.docker.compose.project=\($p)"]}')
+          rm_volume() {
+            code=$(curl -sS -o /dev/null -w '%{http_code}' -X DELETE \
+              -H "X-API-Key: $PORTAINER_API_KEY" "$DOCKER/volumes/$1")
+            echo "  volume $1 → HTTP $code"
+            [ "${code:0:1}" = "2" ] || [ "$code" = "404" ]
+          }
+          # De containers verdwijnen niet altijd meteen → een paar rondes proberen (409 = nog in gebruik).
+          for attempt in 1 2 3 4 5 6; do
+            VOLS=$(curl -sS -H "X-API-Key: $PORTAINER_API_KEY" --get --data-urlencode "filters=$FILTER" \
+                    "$DOCKER/volumes" | jq -r '.Volumes[]?.Name')
+            if [ -z "$VOLS" ]; then
+              # Vangnet voor het geval de compose-labels ontbreken: de vaste naam proberen.
+              rm_volume "${STACK}_pgdata" || true
+              echo "Geen volumes meer voor $STACK."; exit 0
+            fi
+            ok=1
+            for v in $VOLS; do rm_volume "$v" || ok=0; done
+            [ "$ok" = "1" ] && { echo "Volumes opgeruimd."; exit 0; }
+            echo "Nog niet vrij — opnieuw over 10s (poging $attempt)"; sleep 10
+          done
+          echo "::warning::volume(s) van $STACK niet opgeruimd — handmatig controleren in Portainer"
+
+      - name: NPM-proxyhost verwijderen (optioneel)
+        if: ${{ env.NPM_URL != '' && env.NPM_IDENTITY != '' }}
+        run: bash deploy/dev/npm-host.sh delete "$HOSTNAME_"

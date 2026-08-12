@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
-# Maak/verwijder een nginx-proxy-manager proxy-host voor een preview (https via een bestaande
-# wildcard-cert). OPTIONEEL — draait alleen als NPM_URL gezet is. De NPM-API varieert licht per versie;
-# verifieer/pas aan bij de eerste run (kan niet vanuit de dev-sandbox getest worden).
+# Maak/verwijder een nginx-proxy-manager proxy-host voor de dev-omgeving (https via een bestaand
+# certificaat). OPTIONEEL — draait alleen als NPM_URL gezet is. De NPM-API varieert licht per versie;
+# verifieer/pas aan bij de eerste run (niet lokaal te testen).
+#
+# NPM draait op een andere LXC dan de docker-host, dus <forward_host> is het IP van die docker-host
+# (bv. 192.168.10.23) met de gepubliceerde poort — niet een containernaam.
 #
 # Gebruik:  npm-host.sh create <host> <forward_host> <forward_port>
 #           npm-host.sh delete <host>
-# Env:  NPM_URL, NPM_IDENTITY, NPM_SECRET, NPM_CERT_ID (id van de *.preview-wildcard-cert in NPM).
+# Env:  NPM_URL, NPM_IDENTITY, NPM_SECRET, NPM_CERT_ID (id van het certificaat in NPM).
 set -euo pipefail
 
 ACTION="${1:?create|delete}"; HOST="${2:?host}"
