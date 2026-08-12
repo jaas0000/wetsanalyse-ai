@@ -194,3 +194,25 @@ def test_geen_planning_geen_plan_status():
     llm = FakeLLM([response([text_block("Direct antwoord.")], "end_turn")])
     events = _run(answer_stream("vraag", settings=settings, llm=llm, graph=graph))
     assert not any(e["type"] == "status" and "Aanpak" in e.get("message", "") for e in events)
+
+
+def test_leeg_antwoord_levert_melding_geen_stilte():
+    """Een lege antwoordbeurt mag nooit als stilte bij de gebruiker landen.
+
+    De frontend toonde dan zijn fallback "(geen antwoord)" naast een lijst bronnen, zonder spoor in
+    de logs. finalize_node vangt dat nu af met een expliciete melding (en een warning-logregel).
+    """
+    settings = make_settings(enable_planning=False)
+    graph = FakeGraph(result=f"<{ART_IRI}> bwb:tekst 'x' .")
+    llm = FakeLLM([
+        response([tool_block("t1", "get_artikel", {"bwb_id": "BWBR0004770", "artikel": "9"})], "tool_use"),
+        response([text_block("   ")], "end_turn"),   # lege tekstbeurt → answer blijft leeg
+    ])
+    events = _run(answer_stream("vraag", settings=settings, llm=llm, graph=graph))
+
+    tokens = "".join(e["content"] for e in events if e["type"] == "token")
+    assert tokens.strip(), "finalize moet een melding streamen bij een leeg antwoord"
+    assert "geen antwoord formuleren" in tokens
+    # de bronnen blijven gewoon meekomen
+    assert any(e["type"] == "sources" for e in events)
+    assert "done" in [e["type"] for e in events]

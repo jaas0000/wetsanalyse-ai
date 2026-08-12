@@ -510,6 +510,34 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
 
     def finalize_node(state: State) -> dict[str, Any]:
         writer = get_stream_writer()
+
+        # Vangnet tegen een stil leeg antwoord. Dat kan gebeuren als de agent een lege tekstbeurt
+        # levert, of nadat correct_node het antwoord heeft gewist voor een grounding-correctie die
+        # daarna niets oplevert. De gebruiker zag dan alleen de bronnen en de frontend-fallback
+        # "(geen antwoord)" — zonder spoor in de logs. Liever een eerlijke melding, en altijd een
+        # logregel zodat het volgende geval terug te vinden is.
+        antwoord = state.get("answer", "") or ""
+        if not antwoord.strip():
+            reden = "grounding-correctie leverde geen antwoord" if state.get("corrected") else "lege antwoordbeurt"
+            logger.warning(
+                "leeg antwoord in finalize",
+                extra={
+                    "reden": reden,
+                    "turns": state.get("turns", 0),
+                    "specialist": state.get("specialist"),
+                    "grounded": state.get("grounded", True),
+                    "unsupported": state.get("unsupported", []),
+                    "bronnen": len(state.get("source_trace", []) or []),
+                },
+            )
+            antwoord = (
+                "Ik kon op basis van de geraadpleegde bronnen geen antwoord formuleren. "
+                "De gevonden bronnen staan hieronder; stel de vraag eventueel gerichter "
+                "(bijvoorbeeld met een specifiek artikel of lid)."
+            )
+            writer({"type": "token", "content": antwoord})
+            state = {**state, "answer": antwoord}
+
         sources = collect_sources(state.get("source_trace", []))
         if settings.curate_sources:
             sources = curate_sources(sources, state.get("answer", ""))
