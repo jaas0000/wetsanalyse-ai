@@ -24,6 +24,27 @@ Twee verschillen met de NAS-opzet:
 2. **Geen `build:`.** Portainer kan bij een string-deploy niet bouwen; de stack pullt het
    GHCR-image.
 
+## Wekelijkse herimport
+
+De stack draait een cron-container (`bwb-import-cron`) die elke **maandag om 06:00** alle
+geconfigureerde regelingen opnieuw importeert — dezelfde cadans als de oude n8n-workflow, die met
+n8n verdween zonder vervanging. Zonder die herhaling veroudert de graaf stilzwijgend: een
+wetswijziging is dan pas zichtbaar als iemand handmatig importeert, terwijl brongetrouwheid juist de
+kernbelofte van het platform is.
+
+De lijst staat expliciet in de stack-env `BWB_IDS` (default: de zeven regelingen die nu in de graaf
+zitten) in plaats van "alles wat in de graaf staat" — anders leidt een lege of beschadigde graaf
+stilzwijgend tot een lege lijst. De import is per wet idempotent (named-graph `PUT`), dus opnieuw
+draaien is veilig en verwijderde artikelen verdwijnen mee.
+
+Handmatig draaien zonder tot maandag te wachten:
+
+```bash
+docker exec bwb-import-cron /usr/local/bin/herimport.sh
+```
+
+Het resultaat komt in de containerlogs en dus (via Alloy) in Loki.
+
 ## Gebruiken
 
 De service publiceert bewust **geen hostpoort**: importeren is een schrijfactie op de graaf en hoort

@@ -13,7 +13,9 @@
 
 services:
   bwb-import:
-    image: ghcr.io/palmw01/bwb-import:${IMAGE_TAG:-latest}
+    # Zodra bwb-import-docker-publish.yml op master heeft gedraaid staat het image in GHCR; tot die
+    # tijd draait de op de LXC gebouwde `bwb-import:0.1`. Overschrijf met stack-env BWB_IMAGE.
+    image: ${BWB_IMAGE:-bwb-import:0.1}
     container_name: bwb-import
     restart: unless-stopped
     environment:
@@ -36,6 +38,53 @@ services:
       timeout: 5s
       retries: 3
       start_period: 15s
+
+  # Wekelijkse herimport. Op de NAS deed een n8n-workflow dit elke maandag om 06:00; die is met n8n
+  # verdwenen en er kwam niets voor terug — de graaf zou dus stilletjes verouderen terwijl
+  # brongetrouwheid de kernbelofte van het platform is. Een wetswijziging is niet zichtbaar tot
+  # iemand handmatig herimporteert.
+  #
+  # De import is per wet idempotent (named-graph PUT), dus opnieuw draaien is veilig: verdwenen
+  # artikelen verdwijnen mee, ongewijzigde wetten leveren dezelfde graaf op.
+  bwb-import-cron:
+    image: alpine:3.21
+    container_name: bwb-import-cron
+    restart: unless-stopped
+    depends_on:
+      - bwb-import
+    environment:
+      # De te onderhouden regelingen. Expliciet in plaats van "alles wat in de graaf zit", zodat een
+      # lege of beschadigde graaf niet stilzwijgend tot een lege lijst leidt.
+      BWB_IDS: ${BWB_IDS:-BWBR0002320,BWBR0004766,BWBR0004770,BWBR0005537,BWBR0018472,BWBR0019237,BWBR0024096}
+      TZ: Europe/Amsterdam
+    command:
+      - sh
+      - -c
+      - |
+        apk add --no-cache curl tzdata >/dev/null
+        cp /usr/share/zoneinfo/Europe/Amsterdam /etc/localtime
+        cat > /usr/local/bin/herimport.sh << 'ENDOFIMPORT'
+        #!/bin/sh
+        set -eu
+        # Komma-gescheiden lijst → JSON-array.
+        IDS=$$(echo "$$BWB_IDS" | tr ',' '\n' | sed 's/^/"/; s/$$/"/' | paste -sd, -)
+        echo "$$(date -Iseconds) herimport gestart: $$BWB_IDS"
+        # Ruime timeout: zeven regelingen ophalen, valideren en wegschrijven duurt ~20s, maar een
+        # trage bron mag de run niet halverwege afkappen.
+        curl -fsS --max-time 3600 -X POST http://bwb-import:8000/import \
+          -H 'Content-Type: application/json' \
+          -d "{\"bwb_ids\": [$$IDS]}" \
+          | head -c 2000
+        echo
+        echo "$$(date -Iseconds) herimport klaar"
+        ENDOFIMPORT
+        chmod +x /usr/local/bin/herimport.sh
+        # Maandag 06:00, zoals de oude n8n-trigger.
+        echo '0 6 * * 1 /usr/local/bin/herimport.sh 2>&1' > /etc/crontabs/root
+        echo "herimport-cron actief (maandag 06:00) voor: $$BWB_IDS"
+        exec crond -f -l 8
+    networks:
+      - graaf
 
 networks:
   # Netwerk van de GraphDB-stack (deploy/graphdb/) — daar moet de graaf dus al draaien.
