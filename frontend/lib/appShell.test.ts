@@ -21,3 +21,12 @@ describe("isAppShellPad", () => {
     }
   });
 });
+
+// De footer moet dezelfde regel volgen als de header: hij dook eerder op achter de
+// instellingen-dialog, omdat die de URL verandert terwijl de werkplek eronder blijft staan.
+describe("app-shell: alle chrome volgt dezelfde regel", () => {
+  it("geldt voor header, main én footer op de instellingen", () => {
+    expect(isAppShellPad("/instellingen")).toBe(true);
+    expect(isAppShellPad("/instellingen/beheer/api-tokens")).toBe(true);
+  });
+});

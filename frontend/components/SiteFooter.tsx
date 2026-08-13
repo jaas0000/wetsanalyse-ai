@@ -2,12 +2,15 @@
 
 import { usePathname } from "next/navigation";
 
-/** Globale site-footer. Weggelaten op de assistent-/werkplek-pagina (`/workbench`): dat is een
- *  vol-hoogte, chat-first scherm (invoerbalk gepind onderaan) waar een footer alleen ruimte inneemt —
- *  zeker op mobiel. Op alle andere pagina's (normale documentflow) staat de footer gewoon onderaan. */
+import { isAppShellPad } from "@/lib/appShell";
+
+/** Globale site-footer. Weggelaten op de app-shell-paden (`/workbench`, `/instellingen`): dat zijn
+ *  vol-hoogte schermen (invoerbalk gepind onderaan, dialog over de app) waar een footer alleen ruimte
+ *  inneemt — zeker op mobiel. Op de overige pagina's (normale documentflow) staat hij gewoon onderaan.
+ *  Zonder deze regel dook de footer op achter de instellingen-dialog, want die verandert wél de URL. */
 export function SiteFooter() {
   const pathname = usePathname();
-  if (pathname === "/workbench") return null;
+  if (isAppShellPad(pathname)) return null;
 
   return (
     <footer className="mx-auto max-w-6xl px-6 pb-10 pt-4 text-xs text-faint">

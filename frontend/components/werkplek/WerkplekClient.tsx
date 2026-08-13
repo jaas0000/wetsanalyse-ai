@@ -56,6 +56,8 @@ export function WerkplekClient({ initialGesprekId, onGesprekAangemaakt, onGewijz
   const [docs, setDocs] = useState<Record<string, AnnotatieDocument>>({});
   const [infos, setInfos] = useState<Record<string, GraafArtikel>>({});
   const [invoer, setInvoer] = useState("");
+  // Niet-blokkerende melding als het opslaan van een beurt faalt (de chat loopt door).
+  const [bewaarFout, setBewaarFout] = useState<string | null>(null);
   const [bezig, setBezig] = useState(false);
   const [actiefId, setActiefId] = useState<string | undefined>();
   const [artefactSlug, setArtefactSlug] = useState<string | undefined>();
@@ -157,12 +159,15 @@ export function WerkplekClient({ initialGesprekId, onGesprekAangemaakt, onGewijz
     setArtefactSlug(slug);
   }
 
-  /** Persisteer één beurt (best-effort; een mislukte opslag mag de chat niet blokkeren). */
+  /** Persisteer één beurt. Mislukken mag de chat niet blokkeren — maar ook niet stil gebeuren:
+   *  de beurt staat dan wél in beeld en is na herladen weg. Eén onopvallende melding boven de thread
+   *  is genoeg; per beurt een foutregel zou het gesprek onleesbaar maken. */
   async function persisteer(gid: string, rol: "user" | "assistant", velden: Record<string, unknown>) {
     try {
       await voegBerichtToe(gid, { rol, ...velden });
-    } catch {
-      /* stil — de UI toont de beurt sowieso */
+      setBewaarFout(null);
+    } catch (e) {
+      setBewaarFout(foutTekst(e));
     }
   }
 
@@ -292,6 +297,12 @@ export function WerkplekClient({ initialGesprekId, onGesprekAangemaakt, onGewijz
       <p className="sr-only" aria-live="polite">
         {bezig ? "Bezig met antwoorden…" : ""}
       </p>
+      {bewaarFout && (
+        <div role="status" className="shrink-0 border-b border-fout/30 bg-fout/10 px-4 py-2 text-center text-[0.8125rem] text-fout">
+          Dit gesprek wordt op dit moment niet bewaard ({bewaarFout}). Wat je hier ziet verdwijnt bij
+          het herladen.
+        </div>
+      )}
       {/* Thread — enige scrollende gebied; berichten in een gecentreerde leeskolom */}
       <div ref={lijstRef} onScroll={onThreadScroll} className="min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto max-w-3xl space-y-6 px-4 py-8">
