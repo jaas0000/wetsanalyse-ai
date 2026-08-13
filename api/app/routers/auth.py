@@ -19,6 +19,7 @@ POST /v1/auth/2fa/disable         — schakel 2FA uit — X-User-Id
 from __future__ import annotations
 
 from datetime import datetime
+from time import monotonic
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from pydantic import BaseModel, Field
@@ -98,10 +99,48 @@ class PasswordChangeIn(BaseModel):
 # --- helpers -------------------------------------------------------------------
 
 async def huidige_userid(x_user_id: str | None = Header(default=None)) -> str:
-    """De ingelogde gebruiker, door de BFF uit de sessie in `X-User-Id` gezet."""
+    """De ingelogde gebruiker, door de BFF uit de sessie in `X-User-Id` gezet.
+
+    Let op: dit vertrouwt de header. Gebruik `actieve_userid` voor endpoints met gebruikersdata —
+    die controleert óók of het account nog bestaat en actief is.
+    """
     if not x_user_id:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Geen gebruikerscontext.")
     return x_user_id
+
+
+# Korte cache op de actief-status, zodat de check niet elke request een DB-hit kost. De grens is
+# bewust kort: deactiveren moet snel doorwerken. De frontend herverifieert zelf elke ~5 minuten;
+# deze laag zit daar ruim onder.
+_ACTIEF_TTL_S = 30.0
+_actief_cache: dict[str, tuple[float, bool]] = {}
+
+
+def vergeet_actief(userid: str) -> None:
+    """Cache-invalidatie na een statuswijziging (deactiveren, verwijderen, rolwijziging)."""
+    _actief_cache.pop(userid, None)
+
+
+async def actieve_userid(userid: str = Depends(huidige_userid)) -> str:
+    """De ingelogde gebruiker, mits het account nog bestaat en actief is.
+
+    Zonder deze check houdt een gedeactiveerde gebruiker toegang tot zijn documenten en gesprekken
+    zolang de BFF de header blijft sturen — de api had daar geen eigen slot op, terwijl `/v1/auth/me`
+    en het admin-pad dat wél hebben.
+    """
+    nu = monotonic()
+    gecached = _actief_cache.get(userid)
+    if gecached is not None and nu - gecached[0] < _ACTIEF_TTL_S:
+        if not gecached[1]:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Account niet (meer) actief.")
+        return userid
+
+    user = await users.get_user(userid)
+    actief = user is not None and user.active
+    _actief_cache[userid] = (nu, actief)
+    if not actief:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Account niet (meer) actief.")
+    return userid
 
 
 # --- registratie + login -------------------------------------------------------

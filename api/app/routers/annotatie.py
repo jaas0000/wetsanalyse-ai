@@ -30,7 +30,7 @@ from ..auth import require_client
 from ..db import utcnow
 from ..deps import get_annotatie_store
 from ..validation import GELDIGE_JAS_KLASSEN
-from .auth import huidige_userid
+from .auth import actieve_userid
 
 router = APIRouter(prefix="/annotatie", tags=["annotatie"])
 
@@ -47,7 +47,7 @@ async def _document_or_404(store: AnnotatieStore, slug: str, user_id: str) -> An
 @router.post("/documenten", status_code=status.HTTP_201_CREATED, response_model=AnnotatieDocument)
 async def maak_document(
     req: DocumentCreate,
-    user_id: str = Depends(huidige_userid),
+    user_id: str = Depends(actieve_userid),
     client_id: str = Depends(require_client),
     store: AnnotatieStore = Depends(get_annotatie_store),
 ):
@@ -68,7 +68,7 @@ async def maak_document(
 async def lijst_documenten(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
-    user_id: str = Depends(huidige_userid),
+    user_id: str = Depends(actieve_userid),
     store: AnnotatieStore = Depends(get_annotatie_store),
 ):
     docs = await store.lijst_documenten(user_id, limit, offset)
@@ -84,7 +84,7 @@ async def lijst_documenten(
 @router.get("/documenten/{slug}", response_model=AnnotatieDocument)
 async def haal_document(
     slug: str,
-    user_id: str = Depends(huidige_userid),
+    user_id: str = Depends(actieve_userid),
     store: AnnotatieStore = Depends(get_annotatie_store),
 ):
     return await _document_or_404(store, slug, user_id)
@@ -93,7 +93,7 @@ async def haal_document(
 @router.delete("/documenten/{slug}", status_code=status.HTTP_204_NO_CONTENT)
 async def verwijder_document(
     slug: str,
-    user_id: str = Depends(huidige_userid),
+    user_id: str = Depends(actieve_userid),
     store: AnnotatieStore = Depends(get_annotatie_store),
 ):
     await _document_or_404(store, slug, user_id)
@@ -104,7 +104,7 @@ async def verwijder_document(
 async def zet_elementen(
     slug: str,
     req: ElementenInvoer,
-    user_id: str = Depends(huidige_userid),
+    user_id: str = Depends(actieve_userid),
     client_id: str = Depends(require_client),
     store: AnnotatieStore = Depends(get_annotatie_store),
 ):
@@ -138,7 +138,7 @@ async def beslis(
     slug: str,
     element_id: str,
     req: BeslissingInvoer,
-    user_id: str = Depends(huidige_userid),
+    user_id: str = Depends(actieve_userid),
     client_id: str = Depends(require_client),
     store: AnnotatieStore = Depends(get_annotatie_store),
 ):
@@ -198,7 +198,7 @@ async def beslis(
 @router.get("/documenten/{slug}/audit", response_model=list[AuditRecord])
 async def haal_audit(
     slug: str,
-    user_id: str = Depends(huidige_userid),
+    user_id: str = Depends(actieve_userid),
     store: AnnotatieStore = Depends(get_annotatie_store),
 ):
     await _document_or_404(store, slug, user_id)

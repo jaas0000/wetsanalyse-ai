@@ -19,6 +19,7 @@ async def client(monkeypatch):
     from app.deps import get_gesprek_store
     from app.gesprek_contracts import Gesprek
     from app.gesprek_store import GesprekStore
+    from conftest import maak_testgebruikers
 
     get_settings.cache_clear()
     get_gesprek_store.cache_clear()
@@ -26,6 +27,7 @@ async def client(monkeypatch):
 
     db.init_engine("sqlite+aiosqlite://")
     await db.create_all()
+    await maak_testgebruikers("gebruiker-a", "gebruiker-b")
 
     # Gesprek van een andere gebruiker — moet voor gebruiker-a onzichtbaar zijn (404).
     await GesprekStore().maak_gesprek(Gesprek(id="andermans", user_id="gebruiker-b", titel="Van B"))
@@ -111,3 +113,34 @@ async def test_verwijderen(client):
     await client.post(f"{BASIS}/{gid}/berichten", json={"rol": "user", "tekst": "hoi"}, headers=A)
     assert (await client.delete(f"{BASIS}/{gid}", headers=A)).status_code == 204
     assert (await client.get(f"{BASIS}/{gid}", headers=A)).status_code == 404
+
+
+async def test_onbekende_gebruiker_401(client):
+    """Een X-User-Id die geen account is, komt er niet in.
+
+    De header is vertrouwd (de BFF zet 'm uit de sessie), maar de api had daar geen eigen slot op.
+    Wie het client-token heeft, kon zo elke identiteit aannemen.
+    """
+    onbekend = {"X-User-Id": "bestaat-niet"}
+    assert (await client.get(BASIS, headers=onbekend)).status_code == 401
+    assert (await client.post(BASIS, json={"titel": "x"}, headers=onbekend)).status_code == 401
+
+
+async def test_gedeactiveerde_gebruiker_verliest_toegang(client):
+    """Deactiveren moet meteen bijten, niet pas als de sessie verloopt.
+
+    Op gebruiker-b: die is analist. Gebruiker-a is de eerste beheerder en wordt beschermd door de
+    invariant dat de laatste actieve beheerder niet gedeactiveerd kan worden.
+    """
+    from app import users
+    from app.routers.auth import vergeet_actief
+
+    gemaakt = await client.post(BASIS, json={"titel": "van b"}, headers=B)
+    gid = gemaakt.json()["id"]
+    assert (await client.get(f"{BASIS}/{gid}", headers=B)).status_code == 200
+
+    await users.patch_user("gebruiker-b", active=False)
+    vergeet_actief("gebruiker-b")  # in productie doet de admin-router dit
+
+    assert (await client.get(f"{BASIS}/{gid}", headers=B)).status_code == 401
+    assert (await client.get(BASIS, headers=B)).status_code == 401

@@ -26,6 +26,7 @@ from ..llm.litellm_client import build_llm_client
 from ..llm_profile import LlmProfile
 from ..ratelimit import rate_limited_admin_test
 from ..secrets_crypto import SecretsCryptoError, crypto_beschikbaar
+from .auth import vergeet_actief
 
 logger = logging.getLogger(__name__)
 
@@ -235,6 +236,8 @@ async def wijzig_user(userid: str, body: UserPatchIn):
         user = await users.patch_user(userid, role=body.role, active=body.active)
     except users.UserError as e:
         raise HTTPException(status_code=409, detail=str(e))
+    # Deactiveren moet meteen bijten, niet pas als de actief-cache verloopt.
+    vergeet_actief(userid)
     return _user_to_out(user)
 
 
@@ -253,6 +256,7 @@ async def verwijder_user(userid: str):
         await users.delete_user(userid)
     except users.UserError as e:
         raise HTTPException(status_code=409, detail=str(e))
+    vergeet_actief(userid)
 
 
 # --- genereerbare API-tokens ---------------------------------------------------

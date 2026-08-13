@@ -25,7 +25,7 @@ from ..gesprek_contracts import (
     Bericht, BerichtInvoer, Gesprek, GesprekCreate, GesprekPatch, GesprekSamenvatting,
 )
 from ..gesprek_store import GesprekStore
-from .auth import huidige_userid
+from .auth import actieve_userid
 
 router = APIRouter(prefix="/gesprekken", tags=["gesprekken"], dependencies=[Depends(require_client)])
 
@@ -41,7 +41,7 @@ async def _gesprek_or_404(store: GesprekStore, gesprek_id: str, user_id: str) ->
 @router.post("", status_code=status.HTTP_201_CREATED, response_model=Gesprek)
 async def maak_gesprek(
     req: GesprekCreate,
-    user_id: str = Depends(huidige_userid),
+    user_id: str = Depends(actieve_userid),
     store: GesprekStore = Depends(get_gesprek_store),
 ):
     gesprek = Gesprek(id=uuid.uuid4().hex[:16], user_id=user_id, titel=req.titel)
@@ -53,7 +53,7 @@ async def maak_gesprek(
 async def lijst_gesprekken(
     limit: int = Query(100, ge=1, le=200),
     offset: int = Query(0, ge=0),
-    user_id: str = Depends(huidige_userid),
+    user_id: str = Depends(actieve_userid),
     store: GesprekStore = Depends(get_gesprek_store),
 ):
     return await store.lijst_samenvattingen(user_id, limit, offset)
@@ -62,7 +62,7 @@ async def lijst_gesprekken(
 @router.get("/{gesprek_id}", response_model=Gesprek)
 async def haal_gesprek(
     gesprek_id: str,
-    user_id: str = Depends(huidige_userid),
+    user_id: str = Depends(actieve_userid),
     store: GesprekStore = Depends(get_gesprek_store),
 ):
     return await _gesprek_or_404(store, gesprek_id, user_id)
@@ -72,7 +72,7 @@ async def haal_gesprek(
 async def voeg_bericht_toe(
     gesprek_id: str,
     req: BerichtInvoer,
-    user_id: str = Depends(huidige_userid),
+    user_id: str = Depends(actieve_userid),
     store: GesprekStore = Depends(get_gesprek_store),
 ):
     await _gesprek_or_404(store, gesprek_id, user_id)
@@ -83,7 +83,7 @@ async def voeg_bericht_toe(
 async def hernoem_gesprek(
     gesprek_id: str,
     req: GesprekPatch,
-    user_id: str = Depends(huidige_userid),
+    user_id: str = Depends(actieve_userid),
     store: GesprekStore = Depends(get_gesprek_store),
 ):
     await _gesprek_or_404(store, gesprek_id, user_id)
@@ -94,7 +94,7 @@ async def hernoem_gesprek(
 @router.delete("/{gesprek_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def verwijder_gesprek(
     gesprek_id: str,
-    user_id: str = Depends(huidige_userid),
+    user_id: str = Depends(actieve_userid),
     store: GesprekStore = Depends(get_gesprek_store),
 ):
     await _gesprek_or_404(store, gesprek_id, user_id)

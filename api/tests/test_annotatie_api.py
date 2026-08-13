@@ -16,6 +16,7 @@ async def client(monkeypatch):
     from app.annotatie_store import AnnotatieStore
     from app.config import get_settings
     from app.deps import get_annotatie_store
+    from conftest import maak_testgebruikers
 
     get_settings.cache_clear()
     get_annotatie_store.cache_clear()
@@ -23,6 +24,7 @@ async def client(monkeypatch):
 
     db.init_engine("sqlite+aiosqlite://")
     await db.create_all()
+    await maak_testgebruikers("gebruiker-a", "gebruiker-b")
 
     # Document van een andere GEBRUIKER — moet voor "gebruiker-a" onzichtbaar zijn (404).
     await AnnotatieStore().maak_document(

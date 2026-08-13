@@ -10,11 +10,11 @@ Na de pivot naar de chat-werkruimte bedient de API vijf dingen:
 
 1. **Het JAS-annotatiedomein van de werkplek** (`/v1/annotatie/*`): documenten/elementen/beslissingen
    + append-only auditlog. De agent stelt voor, de mens beslist; de API bewaart de review-state.
-   **Per-gebruiker gescopet** via de vertrouwde `X-User-Id`-header (`huidige_userid`, net als de
+   **Per-gebruiker gescopet** via de vertrouwde `X-User-Id`-header (`actieve_userid`, net als de
    gesprekken; 404 op andermans document). De bearer-`client_id` blijft als herkomst in de audit.
 2. **De chatgeschiedenis van de werkplek** (`/v1/gesprekken/*`): gesprekken + geordende berichten
    (`gesprek_contracts.py`/`gesprek_store.py`/`routers/gesprekken.py`). Net als het annotatie-domein
-   **per-gebruiker gescopet** via de vertrouwde `X-User-Id`-header (`huidige_userid`, hergebruikt uit
+   **per-gebruiker gescopet** via de vertrouwde `X-User-Id`-header (`actieve_userid`, hergebruikt uit
    de auth-router; 404 op andermans gesprek). Een bericht kan naar een annotatie-document verwijzen
    (`annotatie_slug`); de review-state zelf blijft in het annotatie-domein.
 3. **Login + gebruikersbeheer** (`/v1/auth/*` + `/v1/admin/users`): de API is de identiteitsbron van
@@ -104,7 +104,11 @@ loggen. Zie `docs/observability.md`.
 ## Garanties (niet aan tornen)
 
 - **Per-gebruiker isolatie.** Elk annotatie-document én elk **gesprek** is per-gebruiker gescopet via
-  de vertrouwde `X-User-Id`-header (`huidige_userid`) — 404 op andermans slug/id (lekt niet).
+  de vertrouwde `X-User-Id`-header — 404 op andermans slug/id (lekt niet). De dependency is
+  **`actieve_userid`** (`routers/auth.py`): die controleert bovendien dat het account nog bestaat en
+  actief is, met een cache van 30s. `huidige_userid` leest alleen de header en is er voor endpoints
+  die hun eigen bewijs vragen (wachtwoord, 2FA-code). Deactiveren/verwijderen bijt meteen doordat de
+  admin-router `vergeet_actief()` aanroept.
 - **De admin-laag is altijd auth-plichtig.** `/v1/admin/*` heeft geen `AUTH_REQUIRED`-bypass; zonder
   admin-tokens geeft alles 401. De plaintext-API-key komt nooit terug in een respons (alleen
   `api_key_set`); het opslaan vereist een geconfigureerde Fernet-master-key.
