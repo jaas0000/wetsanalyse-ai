@@ -8,6 +8,16 @@
         "WETSANALYSE_ADMIN_TOKEN": "${WETSANALYSE_ADMIN_TOKEN}"
       }
     },
+    "proxmox": {
+      "command": "node",
+      "args": ["tools/proxmox-mcp/dist/index.js"],
+      "env": {
+        "PROXMOX_URL": "https://proxmox.ipalm.nl",
+        "PROXMOX_TOKEN_ID": "mcp@pve!claude",
+        "PROXMOX_TOKEN_SECRET": "${PROXMOX_TOKEN_SECRET}",
+        "PROXMOX_NODE": "pve01"
+      }
+    },
     "grafana": {
       "command": "docker",
       "args": [
