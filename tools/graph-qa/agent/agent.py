@@ -158,8 +158,15 @@ async def answer_stream(
                 yield {"type": "conversation_id", "conversation_id": conversation_id}
             yield {"type": "done"}
 
-    except Exception as exc:
+    except Exception:
+        # Gesaniteerde melding naar de client, volledige fout alleen in het log — zoals de api dat
+        # bij de modelprovider-test doet. De ruwe exception van een LLM- of MCP-fout bevat
+        # request-details (endpoints, payload-fragmenten) die niet in de browser thuishoren.
         logger.error("agent-fout", exc_info=True)
-        yield {"type": "error", "message": f"Agent-fout: {exc}"}
+        yield {
+            "type": "error",
+            "message": "Er ging iets mis bij het beantwoorden. Probeer het opnieuw; "
+                       "blijft het misgaan, dan staat de oorzaak in het server-log.",
+        }
     finally:
         graph.close()

@@ -70,3 +70,42 @@ def test_eindtekst_streamt_verbatim():
     events = _run(answer_stream("vraag", settings=settings, llm=llm, graph=graph))
     text = "".join(e["content"] for e in events if e["type"] == "token")
     assert text == "Regel een.\n\nRegel twee."
+
+
+def test_agentfout_lekt_geen_interne_details():
+    """Een mislukte beurt levert een gesaniteerde melding, geen ruwe exception.
+
+    De ruwe fout van een LLM- of MCP-aanroep bevat request-details (endpoints, payload-fragmenten).
+    Die horen in het server-log, niet in de browser — de api saniteert de modelprovider-test om
+    dezelfde reden.
+    """
+    import asyncio
+
+    from agent.agent import answer_stream
+    from fakes import FakeGraph, make_settings
+
+    class KapotteLLM:
+        def stream(self, **kw):  # noqa: ANN003
+            raise RuntimeError("connect naar https://intern.example/v1/messages mislukt: key=abc123")
+
+        def create(self, **kw):  # noqa: ANN003
+            raise RuntimeError("connect naar https://intern.example/v1/messages mislukt: key=abc123")
+
+    async def verzamel():
+        return [e async for e in answer_stream(
+            "vraag", settings=make_settings(enable_planning=False), llm=KapotteLLM(), graph=FakeGraph(result="")
+        )]
+
+    events = _run_events(verzamel)
+    fouten = [e for e in events if e.get("type") == "error"]
+    assert fouten, "een mislukte beurt moet een error-event opleveren"
+    bericht = fouten[0]["message"]
+    assert "intern.example" not in bericht
+    assert "abc123" not in bericht
+    assert "server-log" in bericht
+
+
+def _run_events(coro_fn):
+    import asyncio
+
+    return asyncio.run(coro_fn())
