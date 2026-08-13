@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { InstellingenInhoud, isAdminTab, tabUitPad } from "@/components/instellingen/InstellingenInhoud";
@@ -5,8 +6,11 @@ import { InstellingenInhoud, isAdminTab, tabUitPad } from "@/components/instelli
 export const metadata = { title: "Instellingen · Wetsanalyse" };
 
 /** De volledige instellingenpagina: wat je krijgt bij een directe link, een refresh of navigatie
- *  van buiten de werkplek. Vanuit de werkplek onderschept `app/@modal/(.)instellingen/…` dit pad en
- *  toont dezelfde inhoud als dialog. */
+ *  van buiten de werkplek. Vanuit de app onderschept `app/@modal/(.)instellingen/…` dit pad en toont
+ *  dezelfde inhoud als dialog over de werkplek heen.
+ *
+ *  Deze pagina draait in de app-shell (zie `lib/appShell.ts`): geen globale logobalk, volle hoogte.
+ *  Daarom draagt ze zelf de kop met de weg terug. */
 export default async function InstellingenPagina({
   params,
 }: {
@@ -21,9 +25,17 @@ export default async function InstellingenPagina({
   if (isAdminTab(actief) && !isBeheerder) redirect("/");
 
   return (
-    <div className="animate-rise mx-auto max-w-4xl">
-      <h1 className="mb-6 font-display text-3xl font-semibold text-lint">Instellingen</h1>
-      <div className="flex min-h-[28rem] overflow-hidden rounded-vorm border border-line bg-paper">
+    <div className="flex h-full flex-col bg-surface">
+      <div className="flex shrink-0 items-center justify-between gap-3 border-b border-line bg-paper px-5 py-3.5 pt-[max(0.875rem,env(safe-area-inset-top))]">
+        <h1 className="font-display text-base font-semibold text-lint">Instellingen</h1>
+        <Link
+          href="/workbench"
+          className="rounded-kaart px-2.5 py-1.5 text-sm text-muted transition-colors hover:bg-surface hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-lint"
+        >
+          Terug naar de werkplek
+        </Link>
+      </div>
+      <div className="mx-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col overflow-hidden bg-paper">
         <InstellingenInhoud actief={actief} isBeheerder={isBeheerder} />
       </div>
     </div>

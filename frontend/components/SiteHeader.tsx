@@ -5,13 +5,14 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { SiteNav } from "@/components/SiteNav";
+import { isAppShellPad } from "@/lib/appShell";
 
-/** Globale kop (Rijkshuisstijl-logobalk + navigatie). Weggelaten op de werkplek (`/workbench`): dat is
- *  een vol-hoogte chat-app met een eigen sidebar die het logo bovenin draagt — de globale balk zou daar
- *  dubbelop zijn. Op alle andere pagina's staat de kop gewoon bovenaan. */
+/** Globale kop (Rijkshuisstijl-logobalk + navigatie). Weggelaten op de app-shell-paden (`/workbench`
+ *  en `/instellingen`): dat is een vol-hoogte chat-app met een eigen sidebar die het logo bovenin
+ *  draagt — de globale balk zou daar dubbelop zijn. Op alle andere pagina's staat de kop bovenaan. */
 export function SiteHeader({ ingelogd }: { ingelogd: boolean }) {
   const pathname = usePathname();
-  if (pathname === "/workbench") return null;
+  if (isAppShellPad(pathname)) return null;
 
   return (
     <header className="relative z-30">
