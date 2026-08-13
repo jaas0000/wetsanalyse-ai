@@ -48,7 +48,10 @@ chown -R 1000:1000 /var/lib/graphdb/home
 
 ### 3. Stack deployen
 
-Via Portainer (`portainer.ipalm.nl`, endpoint 3) als stack `graphdb`, met deze env:
+Via `.github/workflows/deploy-graaf.yml` (handmatig of bij wijzigingen in `deploy/graphdb/**`).
+Die deployt de graphdb-stack en de importer in de juiste volgorde — GraphDB eerst, want die maakt het
+netwerk `graphdb_default` waar de andere stacks op joinen — en controleert daarna of de repository
+`inning` antwoordt. Handmatig via Portainer (`portainer.ipalm.nl`, endpoint 3) kan ook, met deze env:
 
 | var | waarde |
 |---|---|
@@ -74,12 +77,8 @@ in nginx-proxy-manager een host `graphdb-mcp.ipalm.nl` → `192.168.10.23:8004` 
 
 ## BWB's importeren
 
-Op de NAS staat stack **`bwb-import`** (id 230): een eigen importservice op
-`http://bwb-import:8000/import` die naar `graphdb:7200`, repository `inning` schrijft, met
-`BWB_IMPORT_WTI=true` voor de organisatie-/wetsfamilie-verrijking. Die stack bouwt uit een lokale
-context (`build: context: .`) die **niet in deze repo staat** — verhuis je de import mee, dan moet
-die broncode mee (of opnieuw gebouwd worden). De aanroep liep via n8n, dat inmiddels uit het
-platform is; een directe POST naar `/import` volstaat.
+De importservice draait naast de graaf op dezelfde LXC: stack **`bwb-import`**, broncode in
+`tools/bwb-import/`, image via GHCR. Zie `deploy/bwb-import/README.md` voor het aanroepen.
 
 ## Back-up — twee lagen
 
@@ -103,7 +102,12 @@ Handmatig een dump draaien:
 docker exec graphdb-backup /usr/local/bin/dump.sh
 ```
 
-### Herstellen
+### Herstellen — geverifieerd
+
+> **Restore-test 13 aug 2026.** De dump van die nacht (03:00) is teruggeladen in een tijdelijke
+> repository: **388.161 triples, gelijk aan productie**, en een steekproef op artikel 2 lid 1
+> onderdeel k leverde de juiste definitie op. Herladen duurde 7,5 seconde. Een back-up die je niet
+> hebt teruggezet is een aanname; deze is dat niet meer.
 
 Uit de **vzdump**: de hele LXC terug, inclusief afgeleide structuren.
 

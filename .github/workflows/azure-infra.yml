@@ -1,16 +1,17 @@
 # Voorziet de volledige Azure-infrastructuur via Bicep (idempotent).
-# Draait alleen bij wijzigingen in deploy/azure/** (Bicep-template, gen-deploy.py, etc.)
-# of handmatig via workflow_dispatch.
 # Per-component image-updates gaan via az containerapp update in de eigen docker-publish workflows.
+#
+# GEPARKEERD (13 aug 2026): het platform draait op Proxmox. Deze workflow liep sinds 6 augustus
+# vast op een Azure-deployment die als "DeploymentActive" blijft hangen, en gaf bij elke push naar
+# master een rode CI zonder dat iemand er iets mee deed. Daarom alleen nog handmatig.
+#
+# Let op: parkeren stopt de workflow, niet de rekening. Draaien er nog resources in rg-wetsanalyse
+# (PostgreSQL-server, Container Apps Environment, drie container-apps), dan kosten die door —
+# controleer dat in de Azure-portal en ruim op wat niet meer nodig is.
 
 name: azure-infra
 
 on:
-  push:
-    branches: [master]
-    paths:
-      - "deploy/azure/**"
-      - ".github/workflows/azure-infra.yml"
   workflow_dispatch:
 
 jobs:
