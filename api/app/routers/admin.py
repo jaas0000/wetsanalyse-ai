@@ -15,18 +15,21 @@ POST   /v1/admin/profiles/{name}/test     — test de verbinding (kleine LLM-cal
 
 from __future__ import annotations
 
+import asyncio
 import logging
+from datetime import datetime
+from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from pydantic import BaseModel, Field
 
-from .. import api_tokens, profiles, users
+from .. import api_tokens, berichten as berichten_svc, feedback as feedback_svc, profiles, users
 from ..auth import require_admin
 from ..llm.litellm_client import build_llm_client
 from ..llm_profile import LlmProfile
 from ..ratelimit import rate_limited_admin_test
 from ..secrets_crypto import SecretsCryptoError, crypto_beschikbaar
-from .auth import vergeet_actief
+from .auth import huidige_beheerder, vergeet_actief
 
 logger = logging.getLogger(__name__)
 
@@ -314,3 +317,173 @@ async def trek_api_token_in(token_id: str, admin_id: str = Depends(require_admin
     logger.info("API-token ingetrokken", extra={
         "categorie": "security", "token_id": token_id, "door": admin_id,
     })
+
+
+# --- berichtensysteem ---------------------------------------------------------
+
+class AdminBerichtOut(BaseModel):
+    id: int
+    titel: str
+    inhoud: str
+    type: str
+    versie: str | None = None
+    gepubliceerd: bool
+    gepubliceerd_op: str | None = None
+    aangemaakt_door: str = ""
+    created: str = ""
+    updated: str = ""
+
+
+class BerichtAanmakenIn(BaseModel):
+    titel: str = Field(max_length=256)
+    inhoud: str = Field(max_length=10000)
+    type: Literal["info", "update", "waarschuwing", "kritiek"] = "info"
+    versie: str | None = Field(default=None, max_length=32)
+
+
+class BerichtPublicatieIn(BaseModel):
+    gepubliceerd: bool
+
+
+def _bericht_out(row: dict) -> AdminBerichtOut:
+    gp_op = row.get("gepubliceerd_op")
+    return AdminBerichtOut(
+        id=row["id"],
+        titel=row["titel"],
+        inhoud=row["inhoud"],
+        type=row["type"],
+        versie=row.get("versie"),
+        gepubliceerd=bool(row["gepubliceerd"]),
+        gepubliceerd_op=gp_op.isoformat() if gp_op else None,
+        aangemaakt_door=row.get("aangemaakt_door", ""),
+        created=row["created"].isoformat() if row.get("created") else "",
+        updated=row["updated"].isoformat() if row.get("updated") else "",
+    )
+
+
+class AdminBerichtenPaginaOut(BaseModel):
+    items: list[AdminBerichtOut]
+    totaal: int
+    pagina: int
+    per_pagina: int
+
+
+@router.get("/berichten", response_model=AdminBerichtenPaginaOut)
+async def lijst_berichten(
+    pagina: int = Query(default=1, ge=1),
+    # Default ruim gehouden (i.t.t. de 20 van de analist-route): tools/wetsanalyse-admin-mcp
+    # roept dit endpoint ongepagineerd aan voor de "release notes schrijven"-workflow en
+    # heeft geen offset/limit-parameter om verder te bladeren — een kleinere default zou
+    # oudere berichten stil onbereikbaar maken voor die tool.
+    per_pagina: int = Query(default=100, ge=1, le=500),
+):
+    offset = (pagina - 1) * per_pagina
+    rows, totaal = await asyncio.gather(
+        berichten_svc.list_alle_berichten(offset=offset, limit=per_pagina),
+        berichten_svc.list_alle_berichten_totaal(),
+    )
+    return AdminBerichtenPaginaOut(
+        items=[_bericht_out(r) for r in rows],
+        totaal=totaal,
+        pagina=pagina,
+        per_pagina=per_pagina,
+    )
+
+
+@router.post("/berichten", response_model=AdminBerichtOut, status_code=status.HTTP_201_CREATED)
+async def maak_bericht(body: BerichtAanmakenIn, admin_id: str = Depends(require_admin)):
+    row = await berichten_svc.maak_bericht(
+        body.titel, body.inhoud, body.type, body.versie, admin_id
+    )
+    return _bericht_out(row)
+
+
+@router.put("/berichten/{bericht_id}", response_model=AdminBerichtOut)
+async def bewerk_bericht(bericht_id: int, body: BerichtAanmakenIn):
+    try:
+        row = await berichten_svc.update_bericht(bericht_id, body.titel, body.inhoud, body.type, body.versie)
+    except berichten_svc.BerichtError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return _bericht_out(row)
+
+
+@router.patch("/berichten/{bericht_id}/publicatie", response_model=AdminBerichtOut)
+async def zet_publicatie(bericht_id: int, body: BerichtPublicatieIn):
+    try:
+        row = await berichten_svc.set_gepubliceerd(bericht_id, body.gepubliceerd)
+    except berichten_svc.BerichtError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return _bericht_out(row)
+
+
+@router.delete("/berichten/{bericht_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def verwijder_bericht(bericht_id: int):
+    try:
+        await berichten_svc.verwijder_bericht(bericht_id)
+    except berichten_svc.BerichtError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# --- gebruikersfeedback --------------------------------------------------------
+
+class FeedbackAdminOut(BaseModel):
+    id: int
+    client_id: str
+    userid: str
+    categorie: str
+    tekst: str
+    pagina: str | None = None
+    created: str
+
+
+class OngelezenFeedbackOut(BaseModel):
+    aantal: int
+
+
+class MarkeerGezienIn(BaseModel):
+    tot: datetime | None = None
+
+
+class FeedbackAdminPaginaOut(BaseModel):
+    items: list[FeedbackAdminOut]
+    totaal: int
+
+
+@router.delete("/feedback/{feedback_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def verwijder_feedback(feedback_id: int):
+    try:
+        await feedback_svc.verwijder_feedback(feedback_id)
+    except feedback_svc.FeedbackError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get("/feedback/ongelezen-aantal", response_model=OngelezenFeedbackOut)
+async def get_ongelezen_feedback_aantal(userid: str = Depends(huidige_beheerder)):
+    aantal = await feedback_svc.ongelezen_feedback_aantal(userid)
+    return OngelezenFeedbackOut(aantal=aantal)
+
+
+@router.post("/feedback/markeer-gezien", status_code=status.HTTP_204_NO_CONTENT)
+async def post_markeer_feedback_gezien(
+    body: MarkeerGezienIn = MarkeerGezienIn(), userid: str = Depends(huidige_beheerder)
+):
+    await feedback_svc.markeer_feedback_gezien(userid, tot=body.tot)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get("/feedback", response_model=FeedbackAdminPaginaOut)
+async def get_feedback(offset: int = Query(0, ge=0), limit: int = Query(50, ge=1, le=200)):
+    rows, totaal = await asyncio.gather(
+        feedback_svc.lijst_feedback(offset=offset, limit=limit),
+        feedback_svc.lijst_feedback_totaal(),
+    )
+    items = [
+        FeedbackAdminOut(
+            **{k: v for k, v in row.items() if k != "created"},
+            created=row["created"].isoformat(),
+        )
+        for row in rows
+    ]
+    return FeedbackAdminPaginaOut(items=items, totaal=totaal)

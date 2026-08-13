@@ -143,6 +143,23 @@ async def actieve_userid(userid: str = Depends(huidige_userid)) -> str:
     return userid
 
 
+async def huidige_beheerder(userid: str = Depends(huidige_userid)) -> str:
+    """De ingelogde gebruiker, mits het een bestaand, actief beheerdersaccount is.
+
+    Defense-in-depth naast de admin-bearer: `require_admin` levert een los token-label, geen
+    `users.userid`, dus die laag alleen bewijst niet dat de meegestuurde `X-User-Id` ook echt een
+    beheerder is. Nodig voor endpoints die per-beheerder state bijhouden (bv. `feedback_gezien_op`).
+
+    Bewust op `huidige_userid` en niet op `actieve_userid`: elke afwijzing is hier **403**, of het
+    account nu ontbreekt, inactief is of geen beheerder — een 401 op "bestaat niet" tegenover 403 op
+    "geen beheerder" zou dit endpoint tot user-enumeratie-orakel maken.
+    """
+    user = await users.get_user(userid)
+    if user is None or not user.active or user.role != "beheerder":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Geen beheerder.")
+    return userid
+
+
 # --- registratie + login -------------------------------------------------------
 
 @router.get("/setup-status", response_model=SetupStatus)

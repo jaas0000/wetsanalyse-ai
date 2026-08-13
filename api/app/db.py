@@ -20,6 +20,7 @@ from sqlalchemy import (
     DateTime,
     Float,
     Index,
+    PrimaryKeyConstraint,
     Integer,
     MetaData,
     String,
@@ -79,8 +80,58 @@ users = Table(
     # Sessie-epoch: JWT-sessies met een `loginAt` vóór deze tijd zijn ongeldig (revocatie bij
     # wachtwoordwijziging/-reset). NULL = nooit gewijzigd → geen revocatie.
     Column("sessions_valid_from", _DT, nullable=True),
+    # Tijdstip waarop een beheerder de feedbacklijst voor het laatst bekeek; NULL = nooit.
+    # Declaratief hier (nieuwe DB's via create_all) én idempotent via ALTER in reconcile_schema
+    # (bestaande DB's). Zonder deze Column-declaratie crasht elke query die de kolom aanraakt met
+    # AttributeError, ook al bestaat ze in de echte database — SQLAlchemy Core kent haar pas via
+    # het Table-object.
+    Column("feedback_gezien_op", _DT, nullable=True),
     Column("created", _DT, nullable=False),
     Column("updated", _DT, nullable=False),
+)
+
+# --- Berichtensysteem -----------------------------------------------------------
+# Release notes en aankondigingen: beheerders schrijven berichten (concept → gepubliceerd),
+# analisten lezen ze. Leesbewijzen zijn (bericht, user)-paren.
+berichten = Table(
+    "berichten",
+    metadata,
+    Column("id",              Integer, primary_key=True, autoincrement=True),
+    Column("titel",           Text, nullable=False, default=""),
+    Column("inhoud",          Text, nullable=False, default=""),
+    Column("type",            String(16), nullable=False, default="info"),
+    Column("versie",          String(32), nullable=True),
+    Column("gepubliceerd",    Boolean, nullable=False, default=False),
+    Column("gepubliceerd_op", _DT, nullable=True),
+    Column("aangemaakt_door", String(128), nullable=False, default=""),
+    Column("created",         _DT, nullable=False),
+    Column("updated",         _DT, nullable=False),
+    Index("ix_berichten_gepubliceerd_created", "gepubliceerd", "created"),
+)
+
+bericht_leesbewijzen = Table(
+    "bericht_leesbewijzen",
+    metadata,
+    Column("bericht_id", Integer, nullable=False),
+    Column("userid",     String(64), nullable=False),
+    Column("gelezen_op", _DT, nullable=False),
+    PrimaryKeyConstraint("bericht_id", "userid"),
+)
+
+# Gebruikersfeedback vanuit de webapp. Elke rij is onwijzigbaar; beheerders lezen via
+# /v1/admin/feedback.
+user_feedback = Table(
+    "user_feedback",
+    metadata,
+    Column("id",        Integer, primary_key=True, autoincrement=True),
+    Column("client_id", String(128), nullable=False),
+    Column("userid",    String(128), nullable=False),
+    Column("categorie", String(32),  nullable=False),
+    Column("tekst",     Text,        nullable=False),
+    # Pad waar de feedback vandaan kwam, zodat een melding te plaatsen is.
+    Column("pagina",    Text,        nullable=True),
+    Column("created",   _DT,         nullable=False),
+    Index("ix_user_feedback_created", "created"),
 )
 
 # Genereerbare API-tokens voor programmatische admin-toegang (bv. de admin-MCP), náást de

@@ -14,7 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from . import __version__, db, observability
 from .config import get_settings
-from .routers import admin, annotatie, auth, catalog, gesprekken
+from .routers import admin, annotatie, auth, berichten, catalog, feedback, gesprekken
 
 # Configureer logging + OpenTelemetry vóór iets anders logt (idempotent; OTel is no-op zonder endpoint).
 observability.setup(get_settings())
@@ -100,6 +100,8 @@ app.include_router(catalog.router, prefix="/v1")
 app.include_router(admin.router, prefix="/v1")
 app.include_router(auth.router, prefix="/v1")
 app.include_router(annotatie.router, prefix="/v1")
+app.include_router(berichten.router, prefix="/v1")
+app.include_router(feedback.router, prefix="/v1")
 app.include_router(gesprekken.router, prefix="/v1")
 
 
