@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { ButtonRow } from "@/components/ui/ButtonRow";
-import { Card, Section } from "@/components/ui/Card";
+import { Card } from "@/components/ui/Card";
+import { SettingGroup } from "@/components/ui/SettingRow";
 import { Field, Input, Select } from "@/components/ui/Field";
 import { Melding } from "@/components/ui/Melding";
 import { Tag } from "@/components/ui/Badge";
@@ -99,7 +100,7 @@ export function UsersPanel() {
   }
 
   return (
-    <Section title="Gebruikers" count={users?.length} subtitle="Toegang tot de webapp">
+    <SettingGroup titel="Gebruikers" count={users?.length} omschrijving="Wie toegang heeft tot de webapp.">
       {fout && (
         <Melding type="fout" className="mb-3">
           {fout}
@@ -151,7 +152,7 @@ export function UsersPanel() {
             <option value="beheerder">beheerder</option>
           </Select>
         </Field>
-        <Button type="submit" className="w-full sm:w-auto">Gebruiker toevoegen</Button>
+        <Button type="submit" size="sm" className="w-full sm:w-auto">Gebruiker toevoegen</Button>
       </form>
 
       {users === null ? (
@@ -161,7 +162,7 @@ export function UsersPanel() {
       ) : (
         <div className="space-y-3">
           {users.map((u) => (
-            <Card key={u.userid} className="p-4">
+            <Card key={u.userid} className="p-3">
               <div className="flex flex-wrap items-center gap-3">
                 <span className="font-display font-semibold text-ink">{u.userid}</span>
                 <span className="text-sm text-muted">{u.email}</span>
@@ -195,6 +196,6 @@ export function UsersPanel() {
           ))}
         </div>
       )}
-    </Section>
+    </SettingGroup>
   );
 }

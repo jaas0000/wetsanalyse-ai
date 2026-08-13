@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { ButtonRow } from "@/components/ui/ButtonRow";
-import { Card, Section } from "@/components/ui/Card";
+import { Card } from "@/components/ui/Card";
+import { SettingGroup } from "@/components/ui/SettingRow";
 import { Field, Input } from "@/components/ui/Field";
 import { Melding } from "@/components/ui/Melding";
 import { Tag } from "@/components/ui/Badge";
@@ -66,10 +67,10 @@ export function ApiTokensPanel() {
   }
 
   return (
-    <Section
-      title="API-tokens"
+    <SettingGroup
+      titel="API-tokens"
       count={tokens?.length}
-      subtitle="Programmatische admin-toegang (bv. de admin-MCP)"
+      omschrijving="Programmatische admin-toegang, bijvoorbeeld voor de admin-MCP."
     >
       {fout && (
         <Melding type="fout" className="mb-3">
@@ -112,7 +113,7 @@ export function ApiTokensPanel() {
             />
           </Field>
         </div>
-        <Button type="submit" className="w-full sm:w-auto">
+        <Button size="sm" type="submit" className="w-full sm:w-auto">
           Token genereren
         </Button>
       </form>
@@ -124,7 +125,7 @@ export function ApiTokensPanel() {
       ) : (
         <div className="space-y-3">
           {tokens.map((t) => (
-            <Card key={t.id} className="p-4">
+            <Card key={t.id} className="p-3">
               <div className="flex flex-wrap items-center gap-3">
                 <span className="font-display font-semibold text-ink">{t.label || "(geen label)"}</span>
                 <code className="rounded bg-paper px-1.5 py-0.5 font-mono text-xs text-muted">{t.token_prefix}…</code>
@@ -147,6 +148,6 @@ export function ApiTokensPanel() {
           ))}
         </div>
       )}
-    </Section>
+    </SettingGroup>
   );
 }

@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { ButtonRow } from "@/components/ui/ButtonRow";
-import { Card, Section } from "@/components/ui/Card";
+import { Card } from "@/components/ui/Card";
+import { SettingGroup } from "@/components/ui/SettingRow";
 import { Melding } from "@/components/ui/Melding";
 import { Tag } from "@/components/ui/Badge";
 import { deleteProfile, isApiError, listProfiles, setDefaultProfile, testProfile } from "@/lib/api";
@@ -79,10 +80,10 @@ export function ProfielenPanel() {
 
   return (
     <div>
-      <Section title="Modelprofielen" count={profielen?.length} subtitle="LLM-configuratie">
+      <SettingGroup titel="Modelprofielen" count={profielen?.length} omschrijving="LLM-configuratie. De API-key wordt versleuteld bewaard en nooit getoond.">
         {fout && <Melding type="fout" className="mb-3">{fout}</Melding>}
         <ButtonRow className="mb-4">
-          <Button onClick={() => setEdit({ open: true, profile: null })}>Nieuw profiel</Button>
+          <Button size="sm" onClick={() => setEdit({ open: true, profile: null })}>Nieuw profiel</Button>
         </ButtonRow>
 
         {profielen === null ? (
@@ -94,7 +95,7 @@ export function ProfielenPanel() {
             {profielen.map((p) => {
               const test = tests[p.name];
               return (
-                <Card key={p.name} className="p-4">
+                <Card key={p.name} className="p-3">
                   <div className="flex flex-wrap items-center gap-3">
                     <span className="font-display font-semibold text-ink">{p.name}</span>
                     {p.is_default && (
@@ -142,7 +143,7 @@ export function ProfielenPanel() {
             })}
           </div>
         )}
-      </Section>
+      </SettingGroup>
     </div>
   );
 }

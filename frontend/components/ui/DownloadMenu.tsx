@@ -32,7 +32,7 @@ export function DownloadMenu({ items, label = "Download" }: { items: DownloadIte
   }, []);
 
   const summary =
-    "inline-flex min-h-[48px] cursor-pointer select-none items-center justify-center gap-2 whitespace-nowrap rounded-button border border-lint bg-paper px-5 py-2 text-sm font-medium text-lint transition-colors hover:bg-surface marker:content-none [&::-webkit-details-marker]:hidden focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-lint";
+    "inline-flex min-h-[40px] coarse:min-h-[48px] cursor-pointer select-none items-center justify-center gap-2 whitespace-nowrap rounded-button border border-lint bg-paper px-4 py-2 text-sm font-medium text-lint transition-colors hover:bg-surface marker:content-none [&::-webkit-details-marker]:hidden focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-lint";
 
   const rowBase =
     "block w-full rounded-field px-3 py-2 text-left text-sm transition-colors hover:bg-surface focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-lint";

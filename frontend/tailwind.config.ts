@@ -1,4 +1,5 @@
 import type { Config } from "tailwindcss";
+import plugin from "tailwindcss/plugin";
 
 const config: Config = {
   content: [
@@ -76,7 +77,14 @@ const config: Config = {
       },
     },
   },
-  plugins: [],
+  plugins: [
+    // `coarse:` richt zich op aanraakbediening. Daarmee kunnen knoppen en velden compact zijn met
+    // een muis (40px) en toch de 44–48px raakvlakgrootte houden op touch, waar die eis vandaan komt.
+    // Tailwind 3.4 heeft hier nog geen ingebouwde variant voor; die komt pas in v4.
+    plugin(({ addVariant }) => {
+      addVariant("coarse", "@media (pointer: coarse)");
+    }),
+  ],
 };
 
 export default config;

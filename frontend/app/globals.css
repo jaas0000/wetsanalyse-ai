@@ -50,28 +50,19 @@
 html {
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
-  /* Responsieve typografie volgens de Rijkshuisstijl: 100% desktop, 90% tablet,
-     80% mobiel. Eén hefboom: schaalt alle rem-gebaseerde tekst en spacing mee. */
+  /* Eén tekstschaal op elk scherm.
+     Eerder verkleinde deze 100% → 90% (tablet) → 80% (mobiel). Dat werkte tegen de controls in: die
+     staan op vaste pixelhoogtes en schalen dus níét mee, waardoor op mobiel ~11px tekst in een 48px
+     knop belandde. Bovendien is kleinere tekst op een klein scherm precies verkeerd om. De controls
+     passen zich nu aan het invoerapparaat aan (de `coarse`-variant in tailwind.config.ts) in plaats
+     van de tekst aan de schermbreedte. */
   font-size: 100%;
 }
 
-@media (max-width: 1023px) {
-  html {
-    font-size: 90%;
-  }
-}
-
-@media (max-width: 639px) {
-  html {
-    font-size: 80%;
-  }
-}
-
-/* iOS/Safari zoomt bij focus in op invoervelden met een lettergrootte < 16px. Omdat de veldgroottes
-   hier rem-gebaseerd zijn en op mobiel meeschalen (80%), komen ze onder die drempel. Op touch-
-   apparaten forceren we daarom 16px op tekstvelden. `!important` is nodig omdat Tailwinds
-   text-sm/-base utility-classes (specificiteit 0,1,0) anders van een kale element-selector winnen.
-   Desktop (fijne pointer, geen focus-zoom) blijft ongemoeid. */
+/* iOS/Safari zoomt bij focus in op invoervelden met een lettergrootte < 16px. `text-sm` (14px) zit
+   daaronder, dus op touch-apparaten forceren we 16px op tekstvelden. `!important` is nodig omdat
+   Tailwinds text-sm/-base utility-classes (specificiteit 0,1,0) anders van een kale element-selector
+   winnen. Desktop (fijne pointer, geen focus-zoom) blijft ongemoeid. */
 @media (pointer: coarse) {
   input:not([type="checkbox"]):not([type="radio"]),
   textarea,

@@ -112,10 +112,10 @@ export function ProfileEditor({ profile, onDone, onCancel }: Props) {
         {fout && <Melding type="fout">{fout}</Melding>}
 
         <ButtonRow className="pt-2">
-          <Button type="button" variant="ghost" onClick={onCancel} disabled={bezig}>
+          <Button size="sm" type="button" variant="ghost" onClick={onCancel} disabled={bezig}>
             Annuleren
           </Button>
-          <Button type="submit" disabled={bezig}>
+          <Button size="sm" type="submit" disabled={bezig}>
             {bezig ? "Bezig met opslaan…" : "Opslaan"}
           </Button>
         </ButtonRow>
