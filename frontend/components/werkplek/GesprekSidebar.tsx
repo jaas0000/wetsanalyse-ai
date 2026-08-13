@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { signOut, useSession } from "next-auth/react";
 
+import { BerichtenPanel } from "@/components/BerichtenPanel";
+import { FeedbackDialoog } from "@/components/FeedbackDialoog";
 import { GesprekLijst } from "@/components/werkplek/GesprekLijst";
 import { wisDisclaimer } from "@/lib/api";
 import type { GesprekSamenvatting } from "@/lib/types";
@@ -42,6 +44,7 @@ export function GesprekSidebar({
 }: Props) {
   const { data: session } = useSession();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const isBeheerder = session?.user?.role === "beheerder";
   const naam = session?.user?.userid ?? session?.user?.email ?? "";
@@ -78,16 +81,22 @@ export function GesprekSidebar({
             className="block h-auto w-[8.5rem]"
           />
         </Link>
-        {onSluit && (
-          <button
-            type="button"
-            onClick={onSluit}
-            aria-label="Menu sluiten"
-            className="rounded-lg p-2 text-muted transition-colors hover:text-ink lg:hidden"
-          >
-            ✕
-          </button>
-        )}
+        <div className="flex items-center">
+          {/* Berichten (release notes). Mobiel klapt het paneel binnen de drawer uit (rechts
+              uitgelijnd); vanaf lg staat de sidebar vast en klapt het naar rechts over de chat heen,
+              want links ervan is geen ruimte. */}
+          <BerichtenPanel positie="right-0 lg:right-auto lg:left-0" />
+          {onSluit && (
+            <button
+              type="button"
+              onClick={onSluit}
+              aria-label="Menu sluiten"
+              className="rounded-lg p-2 text-muted transition-colors hover:text-ink lg:hidden"
+            >
+              ✕
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="px-3 pb-2 pt-3">
@@ -140,6 +149,16 @@ export function GesprekSidebar({
             )}
             <button
               type="button"
+              onClick={() => {
+                setMenuOpen(false);
+                setFeedbackOpen(true);
+              }}
+              className="block w-full px-3 py-2.5 text-left text-sm text-ink transition-colors hover:bg-surface"
+            >
+              Feedback geven
+            </button>
+            <button
+              type="button"
               onClick={() => void uitloggen()}
               className="block w-full px-3 py-2.5 text-left text-sm text-fout transition-colors hover:bg-fout/10"
             >
@@ -167,6 +186,8 @@ export function GesprekSidebar({
           </svg>
         </button>
       </div>
+
+      {feedbackOpen && <FeedbackDialoog onSluit={() => setFeedbackOpen(false)} />}
     </div>
   );
 }

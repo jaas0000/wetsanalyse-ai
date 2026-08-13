@@ -6,8 +6,9 @@ chat-achtig gespreksvenster voor **vragen én JAS-annotatie**, live tegen graph-
 home (`/`) leidt daarheen door.
 
 > **Scope: chat-werkruimte.** De app bestaat uit de werkplek, de login-flow en het
-> instellingenvenster (account, modelprofielen, gebruikers, API-tokens). Analyses aanmaken/reviewen/
-> rapporteren hoort niet tot de functionaliteit.
+> instellingenvenster (account, berichten, en voor beheerders modelprofielen, gebruikers,
+> API-tokens, berichtenbeheer en feedback). Analyses aanmaken/reviewen/rapporteren hoort niet tot
+> de functionaliteit.
 
 Lees ook de projectroot-`CLAUDE.md` en `../api/CLAUDE.md` — de API is de bron van waarheid voor de
 datacontracten en de state machine; deze app is een **dunne, server-getokende schil** eroverheen.
@@ -64,7 +65,8 @@ De **harde scheidingslijn**: alles met een token is server-only.
 - `components/` — presentatie. `components/werkplek/` + `components/workbench/` = de chat-werkruimte
   (zie §*Werkplek*). `components/admin/` levert de beheertabs (achter het admin-token):
   **`ProfielenPanel`** met de modelprofiel-editor (`ProfileEditor`), **`UsersPanel`**
-  (gebruikersbeheer) en **`ApiTokensPanel`**. `components/account/` + `components/auth/` dragen de login/2fa/setup-flow.
+  (gebruikersbeheer), **`ApiTokensPanel`**, **`BerichtenBeheerPanel`** (+ `BerichtEditor`) en
+  **`FeedbackLijstClient`**. `components/berichten/` heeft het leesbare archief. `components/account/` + `components/auth/` dragen de login/2fa/setup-flow.
   `components/instellingen/` is het instellingenvenster zelf (`InstellingenDialog` = de dialoogschil,
   `InstellingenInhoud` = de tabs; de tabdefinities en de pad-helpers staan in `lib/instellingen.ts`,
   bewust **géén** `"use client"`-module zodat Server Components ze mogen importeren).
@@ -120,6 +122,21 @@ staan. Voeg je een app-shell-pad toe, doe dat daar; niet met een losse `pathname
 - **Config:** `GRAPH_QA_URL` (intern, default `http://graph-qa:8080`, via `graphQaBaseUrl()`) +
   `GRAPH_QA_TOKEN(_FILE)` — de frontend moet graph-qa op het gedeelde docker-netwerk kunnen
   bereiken (`lib/config.ts`).
+
+### Berichten en feedback
+
+Twee kleine domeinen die aan de app-shell hangen, niet aan de oude paginanavigatie:
+
+- **Berichten** (release notes) — `BerichtenPanel` is de bel in de **sidebar-kop** met een
+  ongelezen-badge; het archief is de niet-admin tab `/instellingen/berichten`. Let op de naamval:
+  `Bericht`/`BerichtInvoer` in `lib/types.ts` zijn **chatbeurten**, `BerichtOut` en familie zijn
+  release notes — twee losstaande API-domeinen (`/v1/gesprekken/…/berichten` vs `/v1/berichten`).
+- **Feedback** — `FeedbackDialoog` opent vanuit het gebruikersmenu onderin de sidebar. Bewust
+  **geen zwevende knop** zoals elders gebruikelijk: die valt over de chat-invoer van de werkplek.
+  De ongelezen-teller voor beheerders zit als badge op de feedbacktab (`TabDef.badge`).
+
+Beide panelen halen hun teller periodiek/bij openen op en falen **stil**: een hapering mag de
+werkplek niet blokkeren, de badge is een hint.
 
 ## Observability
 

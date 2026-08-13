@@ -3,7 +3,7 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { isAdminTab, padVanTab, tabUitPad } from "./instellingen";
+import { INSTELLINGEN_TABS, isAdminTab, padVanTab, tabUitPad } from "./instellingen";
 
 const WORTEL = join(__dirname, "..");
 const lees = (p: string) => readFileSync(join(WORTEL, p), "utf8");
@@ -39,9 +39,24 @@ describe("isAdminTab", () => {
   it("markeert alleen de beheer-tabs", () => {
     expect(isAdminTab("account")).toBe(false);
     expect(isAdminTab("beveiliging")).toBe(false);
-    for (const t of ["modelprofielen", "gebruikers", "api-tokens"] as const) {
+    expect(isAdminTab("berichten")).toBe(false);
+    for (const t of ["modelprofielen", "gebruikers", "api-tokens", "berichtenbeheer", "feedback"] as const) {
       expect(isAdminTab(t)).toBe(true);
     }
+  });
+
+  // De rolgate in auth.config.ts is één prefix-check op /instellingen/beheer. Een admin-tab die
+  // buiten dat pad gaat wonen, is dus onbewaakt: de tabkolom verbergt hem wel voor een analist,
+  // maar de directe URL komt er ongehinderd door. Daarom hier de koppeling zelf bewaken in plaats
+  // van een lijstje tabnamen — die veroudert bij elke nieuwe tab.
+  it("elke admin-tab staat onder beheer/ (anders valt de rolgate weg)", () => {
+    for (const tab of INSTELLINGEN_TABS) {
+      expect(tab.admin, `tab '${tab.key}' (pad '${tab.pad}')`).toBe(tab.pad.startsWith("beheer/"));
+    }
+  });
+
+  it("auth.config.ts bewaakt die prefix nog steeds", () => {
+    expect(lees("auth.config.ts")).toContain('path.startsWith("/instellingen/beheer")');
   });
 });
 

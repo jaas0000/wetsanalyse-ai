@@ -7,6 +7,9 @@ export interface TabDef {
   key: string;
   label: string;
   content: ReactNode;
+  /** Aantal openstaande items; > 0 toont een telbadge achter het label. De tab blijft toegankelijk
+   *  benoemd via `label` — de badge zelf is `aria-hidden` en dus geen ruis voor schermlezers. */
+  badge?: number;
 }
 
 // Toegankelijke tablist in Rijkshuisstijl: lintblauw onderlijn-indicator op de actieve tab.
@@ -86,6 +89,14 @@ export function Tabs({
               }
             >
               {t.label}
+              {t.badge !== undefined && t.badge > 0 && (
+                <span
+                  aria-hidden
+                  className="ml-1.5 inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-accent px-1 text-[0.6rem] font-bold leading-none text-paper"
+                >
+                  {t.badge > 99 ? "99+" : t.badge}
+                </span>
+              )}
             </button>
           );
         })}

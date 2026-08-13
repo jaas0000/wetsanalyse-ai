@@ -8,9 +8,12 @@
 export const INSTELLINGEN_TABS = [
   { key: "account", pad: "account", label: "Account", admin: false },
   { key: "beveiliging", pad: "beveiliging", label: "Beveiliging", admin: false },
+  { key: "berichten", pad: "berichten", label: "Berichten", admin: false },
   { key: "modelprofielen", pad: "beheer/modelprofielen", label: "Modelprofielen", admin: true },
   { key: "gebruikers", pad: "beheer/gebruikers", label: "Gebruikers", admin: true },
   { key: "api-tokens", pad: "beheer/api-tokens", label: "API-tokens", admin: true },
+  { key: "berichtenbeheer", pad: "beheer/berichten", label: "Berichten beheren", admin: true },
+  { key: "feedback", pad: "beheer/feedback", label: "Feedback", admin: true },
 ] as const;
 
 export type TabKey = (typeof INSTELLINGEN_TABS)[number]["key"];

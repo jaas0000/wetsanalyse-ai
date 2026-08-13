@@ -3,7 +3,7 @@
 Headless HTTP-backend voor de **Wetsanalyse-werkplek** — een kerncomponent van het agent-platform,
 onder de [frontend](../frontend). De API bedient het **JAS-annotatiedomein** van de werkplek
 (documenten/elementen/beslissingen + append-only auditlog), het **login-/gebruikersbeheer** (de API is
-de identiteitsbron), het **LLM-modelprofielbeheer** en de **profiel-keuzelijst**.
+de identiteitsbron), het **LLM-modelprofielbeheer**, de **profiel-keuzelijst**, de **berichten** (release notes) en de **gebruikersfeedback**.
 
 > **De QA/annotatie-agent is een aparte dienst.** `tools/graph-qa/` beantwoordt de vragen, stelt
 > de JAS-annotaties voor en levert de wettekst uit de graaf; de werkplek praat er direct mee (SSE).

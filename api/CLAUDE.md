@@ -6,7 +6,7 @@ zelfstandige, Dockeriseerbare dienst die je via HTTP (Postman/Swagger) bevraagt 
 
 ## Scope: wat deze API nog doet
 
-Na de pivot naar de chat-werkruimte bedient de API vijf dingen:
+De API bedient zeven dingen:
 
 1. **Het JAS-annotatiedomein van de werkplek** (`/v1/annotatie/*`): documenten/elementen/beslissingen
    + append-only auditlog. De agent stelt voor, de mens beslist; de API bewaart de review-state.
@@ -21,6 +21,12 @@ Na de pivot naar de chat-werkruimte bedient de API vijf dingen:
    de webapp (userid + wachtwoord, rollen, optionele TOTP-2FA).
 4. **LLM-modelprofielbeheer** (`/v1/admin/profiles`).
 5. De **profiel-keuzelijst** voor de UI (`/v1/profiles`).
+6. **Berichten** (`/v1/berichten/*` + `/v1/admin/berichten/*`): release notes die beheerders
+   publiceren en analisten lezen, met leesbewijzen per (bericht, user).
+7. **Gebruikersfeedback** (`/v1/feedback` + `/v1/admin/feedback/*`): onwijzigbare meldingen uit de
+   webapp. Elke beheerder heeft een eigen `feedback_gezien_op`, dus de ongelezen-teller is niet
+   gedeeld. De admin-endpoints die per-beheerder state schrijven lopen via `huidige_beheerder` —
+   defense-in-depth naast de admin-bearer, die immers een token-label levert en geen `userid`.
 
 > **De QA/annotatie-agent is een aparte dienst.** `tools/graph-qa/` heeft een eigen toollaag en
 > LLM-config; de werkplek praat er direct mee (SSE). Wettekst komt daar vandaan

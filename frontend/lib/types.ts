@@ -302,3 +302,60 @@ export interface BerichtInvoer {
   annotatie_slug?: string;
   ontbrekend?: OntbrekendItem[];
 }
+
+// --- Berichtensysteem --------------------------------------------------------
+//
+// LET OP — twee soorten "bericht" in deze codebase, met eigen API-domeinen:
+//   • `Bericht` / `BerichtInvoer` hierboven = een **chatbeurt** in de werkplek
+//     (`/v1/gesprekken/{id}/berichten`).
+//   • `BerichtOut` en de rest hieronder = een **release note / aankondiging** die een beheerder
+//     publiceert en analisten lezen (`/v1/berichten`).
+// De namen komen uit de API; ze verwijzen naar niets gemeenschappelijks.
+
+export type BerichtType = "info" | "update" | "waarschuwing" | "kritiek";
+
+/** Gepubliceerd bericht met leesstatus (voor analisten). */
+export interface BerichtOut {
+  id: number;
+  titel: string;
+  inhoud: string;
+  type: BerichtType;
+  versie: string | null;
+  gepubliceerd: boolean;
+  gepubliceerd_op: string | null;
+  gelezen: boolean;
+  created: string;
+  updated: string;
+}
+
+/** Bericht zonder leesstatus (voor admin-beheerlijst). */
+export type AdminBerichtOut = Omit<BerichtOut, "gelezen"> & { aangemaakt_door: string };
+
+export interface OngelezenAantalOut {
+  aantal: number;
+}
+
+export interface BerichtenPaginaOut {
+  items: BerichtOut[];
+  totaal: number;
+  pagina: number;
+  per_pagina: number;
+}
+
+export interface AdminBerichtenPaginaOut {
+  items: AdminBerichtOut[];
+  totaal: number;
+  pagina: number;
+  per_pagina: number;
+}
+
+export interface BerichtAanmakenIn {
+  titel: string;
+  inhoud: string;
+  type: BerichtType;
+  versie?: string | null;
+}
+
+export interface BerichtPublicatieIn {
+  gepubliceerd: boolean;
+}

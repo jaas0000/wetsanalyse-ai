@@ -17,11 +17,17 @@ import type {
   UserOut,
 } from "./types";
 import type {
+  AdminBerichtenPaginaOut,
+  AdminBerichtOut,
   AgentDoel,
   AnnotatieDocument,
   AuditRecord,
   Bericht,
+  BerichtAanmakenIn,
+  BerichtenPaginaOut,
   BerichtInvoer,
+  BerichtOut,
+  BerichtPublicatieIn,
   BeslissingInvoer,
   Bron,
   DocumentCreate,
@@ -29,6 +35,7 @@ import type {
   Gesprek,
   GesprekSamenvatting,
   GraafArtikel,
+  OngelezenAantalOut,
   OntbrekendItem,
   VoorstelElement,
 } from "./types";
@@ -417,3 +424,132 @@ export async function haalArtikelGraaf(bwbId: string, artikel: string, lid?: str
   return json<GraafArtikel>(res);
 }
 
+// --- Gebruikersfeedback -------------------------------------------------------
+
+export async function stuurFeedback(body: {
+  categorie: string;
+  tekst: string;
+  pagina?: string;
+}): Promise<{ id: number }> {
+  const res = await fetch("/api/feedback", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return json<{ id: number }>(res);
+}
+
+// --- Admin: gebruikersfeedback -----------------------------------------------
+
+export interface FeedbackItem {
+  id: number;
+  client_id: string;
+  userid: string;
+  categorie: string;
+  tekst: string;
+  pagina: string | null;
+  created: string;
+}
+
+export interface FeedbackPaginaOut {
+  items: FeedbackItem[];
+  totaal: number;
+}
+
+export async function getFeedback(offset = 0, limit = 50): Promise<FeedbackPaginaOut> {
+  const res = await fetch(
+    `/api/admin/feedback?offset=${offset}&limit=${limit}`,
+    { cache: "no-store" },
+  );
+  return json<FeedbackPaginaOut>(res);
+}
+
+export async function getOngelezenFeedbackAantal(): Promise<number> {
+  const res = await fetch("/api/admin/feedback/ongelezen-aantal", { cache: "no-store" });
+  const data = await json<{ aantal: number }>(res);
+  return data.aantal;
+}
+
+export async function markeerFeedbackGezien(tot?: string): Promise<void> {
+  const res = await fetch("/api/admin/feedback/markeer-gezien", {
+    method: "POST",
+    headers: tot ? { "Content-Type": "application/json" } : {},
+    body: tot ? JSON.stringify({ tot }) : undefined,
+  });
+  if (!res.ok) throw await parseError(res);
+}
+
+export async function verwijderFeedback(id: number): Promise<void> {
+  const res = await fetch(`/api/admin/feedback/${encodeURIComponent(id)}`, { method: "DELETE" });
+  if (!res.ok) throw await parseError(res);
+}
+
+// --- Berichtensysteem (analist) ----------------------------------------------
+
+export async function listBerichten(): Promise<BerichtOut[]> {
+  const data = await json<BerichtenPaginaOut>(
+    await fetch("/api/berichten?ongelezen=true&per_pagina=100", { cache: "no-store" }),
+  );
+  return data.items;
+}
+
+export async function listBerichtenPagina(pagina: number): Promise<BerichtenPaginaOut> {
+  return json<BerichtenPaginaOut>(
+    await fetch(`/api/berichten?pagina=${pagina}`, { cache: "no-store" }),
+  );
+}
+
+export async function getOngelezenAantal(): Promise<OngelezenAantalOut> {
+  return json<OngelezenAantalOut>(
+    await fetch("/api/berichten/ongelezen-aantal", { cache: "no-store" }),
+  );
+}
+
+export async function markeerAllesGelezen(): Promise<void> {
+  const res = await fetch("/api/berichten/lees-alles", { method: "POST" });
+  if (!res.ok) throw await parseError(res);
+}
+
+// --- Berichtensysteem (admin) ------------------------------------------------
+
+export async function listAlleBerichten(pagina = 1, perPagina = 20): Promise<AdminBerichtenPaginaOut> {
+  return json<AdminBerichtenPaginaOut>(
+    await fetch(`/api/admin/berichten?pagina=${pagina}&per_pagina=${perPagina}`, { cache: "no-store" }),
+  );
+}
+
+export async function maakBericht(body: BerichtAanmakenIn): Promise<AdminBerichtOut> {
+  return json<AdminBerichtOut>(
+    await fetch("/api/admin/berichten", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+  );
+}
+
+export async function updateBericht(id: number, body: BerichtAanmakenIn): Promise<AdminBerichtOut> {
+  return json<AdminBerichtOut>(
+    await fetch(`/api/admin/berichten/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+  );
+}
+
+export async function zetPublicatie(id: number, gepubliceerd: boolean): Promise<AdminBerichtOut> {
+  const body: BerichtPublicatieIn = { gepubliceerd };
+  return json<AdminBerichtOut>(
+    await fetch(`/api/admin/berichten/${id}/publicatie`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+  );
+}
+
+export async function verwijderBericht(id: number): Promise<void> {
+  const res = await fetch(`/api/admin/berichten/${id}`, { method: "DELETE" });
+  if (!res.ok) throw await parseError(res);
+}
