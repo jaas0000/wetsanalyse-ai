@@ -28,7 +28,7 @@ jobs:
         working-directory: tools/bwb-import
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - uses: actions/setup-python@e348410e00f449ece2581cb5f4ca8f2c211d2ee7 # v5
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.13"
           cache: pip
@@ -90,7 +90,7 @@ jobs:
 
       - name: Upload Trivy-resultaten naar Security-tab
         if: always()
-        uses: github/codeql-action/upload-sarif@7188fc363630916deb702c7fdcf4e481b751f97a # v4
+        uses: github/codeql-action/upload-sarif@5595ccaf912efad79be6eef63a5619ff05969be3 # v4
         with:
           sarif_file: trivy-results.sarif
 

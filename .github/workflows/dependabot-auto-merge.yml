@@ -1,0 +1,41 @@
+# Auto-merge voor Dependabot-PR's die patch/minor zijn of uit een van onze
+# expliciete groepen komen (zie `.github/dependabot.yml` → `groups.patch-and-minor`).
+# Semver-majors gaan HIER NIET vanzelf door — die verdienen menselijke review.
+#
+# Voorwaarde: Settings → General → "Allow auto-merge" moet AAN staan op de repo,
+# anders faalt `gh pr merge --auto` met "auto-merge is not allowed for this repository".
+# Verder wordt de PR pas werkelijk gemerged als de required checks groen zijn — de
+# `--auto`-flag zet enkel de intentie klaar.
+
+name: Dependabot auto-merge
+
+on: pull_request
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  auto-merge:
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dependabot metadata
+        id: meta
+        uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      # Zet auto-merge aan zodra de PR een patch of minor is, óf hij komt uit onze
+      # `patch-and-minor`-groep (grouped PRs rapporteren `update-type` van het
+      # laagste-risico item; onze config bundelt uitsluitend patch+minor dus dat is
+      # veilig). Majors én de zeldzame overige groepen slaan we over.
+      - name: Enable auto-merge (patch/minor / patch-and-minor group)
+        if: |
+          steps.meta.outputs.update-type == 'version-update:semver-patch' ||
+          steps.meta.outputs.update-type == 'version-update:semver-minor' ||
+          steps.meta.outputs.dependency-group == 'patch-and-minor'
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh pr merge --auto --squash "$PR_URL"

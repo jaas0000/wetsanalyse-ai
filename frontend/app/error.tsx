@@ -22,6 +22,10 @@ export default function Error({ error, reset }: { error: Error & { digest?: stri
         {error.digest && <p className="mt-2 font-mono text-xs text-faint">Referentie: {error.digest}</p>}
         <div className="mt-5 flex items-center gap-3">
           <Button onClick={() => reset()}>Opnieuw proberen</Button>
+          {/* Bewust een HARDE navigatie, geen router.push: we staan in een error boundary, dus de
+              client-state is juist wat kapot is. Een soft navigatie houdt die state vast en kan
+              meteen weer omvallen. */}
+          {/* eslint-disable-next-line @next/next/no-location-assign-relative-destination */}
           <Button variant="secondary" onClick={() => (window.location.href = "/")}>
             Naar overzicht
           </Button>
