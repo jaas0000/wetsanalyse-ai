@@ -2,7 +2,7 @@
 
 De **JAS-annotatielaag** legt de geaccordeerde activiteit-2-markeringen van een analyse als RDF vast in
 GraphDB, zodat ze herbruikbaar worden voor QA (graph-qa) en volgende analyses — de *virtuous loop*.
-Geschreven door het api-schrijfpad `api/app/graph_write.py` (Fase 2 / WS4); gelezen door graph-qa's
+Te schrijven door een api-schrijfpad (Fase 2 / WS4, nog niet gebouwd); gelezen door graph-qa's
 tool `get_jas_annotaties`. Bewust **minimaal** en losstaand van de begrippen/SKOS-laag (buiten scope).
 
 ## Namespace

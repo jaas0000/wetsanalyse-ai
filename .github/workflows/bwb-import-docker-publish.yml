@@ -1,10 +1,6 @@
 # Bouwt de BWB-importservice-image (wetgeving → kennisgraaf) en pusht naar GHCR.
 # Draait bij wijzigingen in tools/bwb-import/ op master en bij versietags (v*).
 # Spiegelt .github/workflows/graph-qa-docker-publish.yml.
-#
-# De code stond tot augustus 2026 in de privérepo palmw01/n8n en werd daar met een handmatige
-# Portainer-build uitgerold; sinds de verhuizing naar de docker-LXC hoort hij hier en gaat de
-# uitrol via GHCR — geen handmatige builds meer.
 
 name: bwb-import-docker-publish
 

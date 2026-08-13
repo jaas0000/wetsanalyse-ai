@@ -13,11 +13,6 @@ api / frontend / graph-qa  ──OTLP──►  otel-collector ──►  Tempo 
 docker-logs ──► Alloy ──► Loki
 ```
 
-> **Grafana hoort sinds augustus 2026 bij deze stack.** Eerder leunde alles op de bestaande
-> `unpoller-grafana` op de NAS; die is met de rest van de NAS-opzet verdwenen. De drie datasources
-> komen nu als **file-provisioning** uit de compose — daardoor zijn ze in de UI read-only, en dat is
-> de bedoeling: de definitie hoort in de stack, niet in de database van Grafana.
-
 Componenten (alle op `observability_default`; alleen Grafana publiceert een hostpoort, omdat NPM op
 een andere LXC draait en geen docker-netwerk deelt):
 - **otel-collector** (`otel/opentelemetry-collector-contrib`) — ontvangt OTLP op 4317/4318. Leidt met
@@ -29,7 +24,9 @@ een andere LXC draait en geen docker-netwerk deelt):
 - **prometheus** — metrics, query op `http://prometheus:9090` (scrapet de collector op `:8889`).
 - **alloy** — leest de docker-logs van `wetsanalyse-dev-*`, `graphdb`, `bwb-import` en
   `mcp-auth-proxy` en shipt ze naar Loki (JSON-parse → `detected_level`, `trace_id`, `categorie`).
-- **grafana** — UI op poort 3001 (host) → `https://grafana.ipalm.nl` via nginx-proxy-manager.
+- **grafana** — UI op poort 3001 (host) → `https://grafana.ipalm.nl` via nginx-proxy-manager. De drie
+  datasources komen als **file-provisioning** uit de compose en zijn daardoor in de UI read-only. Dat
+  is de bedoeling: de definitie hoort in de stack, niet in de database van Grafana.
 
 > Homelab-schaal (lokale opslag, korte retentie: traces 48u, logs 7d, metrics 15d). Pas de retentie
 > in `tempo.yaml` / `loki-config.yaml` / de prometheus-`command` aan naar smaak. Voor productie de

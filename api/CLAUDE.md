@@ -22,17 +22,9 @@ Na de pivot naar de chat-werkruimte bedient de API vijf dingen:
 4. **LLM-modelprofielbeheer** (`/v1/admin/profiles`).
 5. De **profiel-keuzelijst** voor de UI (`/v1/profiles`).
 
-> **De analyse-pijplijn is verwijderd.** De oude `/v1/projects`-werkstroom (analyses aanmaken/
-> reviewen/rapporteren), de act-2-generatie-engine (orchestrator, agent⇄tools-worker, GraphDB-bron,
-> harde brongetrouwheid-/JAS-gate, de jobstore/rondes en de JAS-promotie naar de graaf) is uit de API
-> gehaald toen niets die backend nog aanriep. De brongetrouwe QA/annotatie-agent zelf is een **aparte
-> dienst** (`tools/graph-qa/`) met een eigen toollaag en LLM-config; de werkplek praat er direct mee
-> (SSE) en is hier niet gewijzigd. Herbouw van een agentische analyse-flow gebeurt later, elders.
-
-> **Geen wettenbank-MCP meer.** De werkplek haalt wettekst uit de graaf (graph-qa `GET /v1/artikel`),
-> dus de wet-keuzelijst, de structuur/artikel-lookups en de wet-catalogus zijn uit de API verwijderd
-> (met `wettenbank.py`/`wet_info.py`/`wetten.py`/`wet_catalog.py`). De wettenbank-MCP-service blijft
-> bestaan als databron voor het skill-spoor en de graaf-ingestie — niet als API-afhankelijkheid.
+> **De QA/annotatie-agent is een aparte dienst.** `tools/graph-qa/` heeft een eigen toollaag en
+> LLM-config; de werkplek praat er direct mee (SSE). Wettekst komt daar vandaan
+> (`GET /v1/artikel`), niet uit deze API.
 
 ## Architectuur (app/)
 
@@ -191,8 +183,7 @@ nodig voor de canonieke JAS-klassenlijst).
 
 De stack mount één host-map op `/run/secrets` in zowel de **api**- als de **postgres**-container. Het
 pad komt uit de **GitHub Actions repo-variabele `SECRETS_DIR`**; de CI geeft die door aan Portainer.
-Zet `SECRETS_DIR` exact op je host-pad, bijv. op een Synology NAS:
-`/volume1/docker/wetsanalyse-api/secrets`.
+Zet `SECRETS_DIR` exact op je host-pad, bijvoorbeeld `/var/lib/wetsanalyse-api/secrets`.
 
 Bestanden op de **host zelf** (niet via een laptop-mount):
 

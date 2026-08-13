@@ -4,7 +4,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 /** Rendert een agent-antwoord als (GitHub-flavored) Markdown. Geen rauwe HTML (geen rehype-raw), dus
- *  veilig; links laten we alleen door voor http(s) en openen extern. (Verhuisd uit ChatAssistent.) */
+ *  veilig; links laten we alleen door voor http(s) en openen extern. */
 export function Markdown({ tekst }: { tekst: string }) {
   return (
     <div className="space-y-3 break-words text-[0.9375rem] leading-relaxed text-ink [overflow-wrap:anywhere]">

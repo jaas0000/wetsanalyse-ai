@@ -1,9 +1,8 @@
 # GraphDB — de BWB-kennisgraaf, op de docker-LXC (Proxmox, Portainer-endpoint 3).
 #
-# Verhuisd van de NAS: de data staat nu LOKAAL op de LXC (/var/lib/graphdb/home), niet op een
-# NFS-share. GraphDB's opslaglaag gebruikt geheugen-gemapte bestanden en file-locking; over NFS
-# levert dat traagheid op en in het slechtste geval stille indexcorruptie. De NAS blijft de plek
-# voor back-ups (zie README).
+# De data staat LOKAAL op de LXC (/var/lib/graphdb/home), niet op een NFS-share: GraphDB's
+# opslaglaag gebruikt geheugen-gemapte bestanden en file-locking, en over NFS levert dat traagheid
+# op en in het slechtste geval stille indexcorruptie. De NAS is de plek voor back-ups (zie README).
 #
 # GraphDB >= 11.2 heeft een INGEBOUWDE MCP-server op /mcp. Er is dus geen aparte MCP-container:
 # het nginx'je ervoor doet alleen de bearer-tokencontrole voor toegang van buiten.
@@ -56,8 +55,8 @@ services:
             location /mcp {
                 if ($$http_authorization !~ "^Bearer ${MCP_BEARER_TOKEN}$$") { return 401; }
                 # Clienttoken gecontroleerd → vervang de header door het GraphDB-service-account.
-                # GraphDB heeft sinds 13 aug 2026 security aan; de proxy is het enige pad naar de
-                # MCP en injecteert de credentials, zodat de clients ze niet hoeven te kennen.
+                # De proxy is het enige pad naar de MCP en injecteert de credentials, zodat de
+                # clients ze niet hoeven te kennen.
                 proxy_set_header Authorization "Basic ${GRAPHDB_BASIC}";
                 proxy_pass http://graphdb:7200;
                 proxy_http_version 1.1;

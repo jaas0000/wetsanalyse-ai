@@ -23,11 +23,9 @@ jobs:
       PORTAINER_URL: ${{ secrets.PORTAINER_URL }}
       PORTAINER_API_KEY: ${{ secrets.PORTAINER_API_KEY }}
       PORTAINER_STACK_ID: ${{ vars.PORTAINER_OBSERVABILITY_STACK_ID }}
-      # Docker-LXC op Proxmox. Was endpoint 1 op de NAS-Portainer; die instantie zit sinds de
-      # verhuizing niet meer achter portainer.ipalm.nl en heeft geen wetsanalyse-stacks meer.
+      # Docker-LXC op Proxmox (endpoint 3).
       PORTAINER_ENDPOINT_ID: ${{ vars.DEV_PORTAINER_ENDPOINT_ID || '3' }}
-      # De stack maakt zijn eigen netwerk aan (observability_default) i.p.v. te leunen op het
-      # gedeelde homeinfra_internal van de NAS, dat op de LXC niet bestaat.
+      # De stack maakt zijn eigen netwerk aan; app-stacks joinen daar als extern netwerk op.
       OBS_NETWORK: ${{ vars.OBS_NETWORK || 'observability_default' }}
       GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
       GRAFANA_ROOT_URL: ${{ vars.GRAFANA_ROOT_URL || 'https://grafana.ipalm.nl' }}
@@ -40,7 +38,7 @@ jobs:
         if: ${{ env.PORTAINER_API_KEY != '' && env.PORTAINER_STACK_ID != '' }}
         run: |
           set -euo pipefail
-          [ -n "${GRAFANA_ADMIN_PASSWORD:-}" ] || { echo "::error::secrets.GRAFANA_ADMIN_PASSWORD ontbreekt (Grafana zit sinds de verhuizing in deze stack)"; exit 1; }
+          [ -n "${GRAFANA_ADMIN_PASSWORD:-}" ] || { echo "::error::secrets.GRAFANA_ADMIN_PASSWORD ontbreekt (Grafana hoort bij deze stack)"; exit 1; }
           jq -n --rawfile compose deploy/observability/docker-compose.stack.yml \
             --arg net "$OBS_NETWORK" --arg gfpw "$GRAFANA_ADMIN_PASSWORD" --arg gfurl "$GRAFANA_ROOT_URL" \
             '{stackFileContent:$compose,

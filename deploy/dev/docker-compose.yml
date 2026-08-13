@@ -69,7 +69,6 @@ services:
       LLM_MODEL:              ${LLM_MODEL:-claude-sonnet-4-6}
       # GraphDB draait als aparte stack op dezelfde host; we praten intern via het gedeelde
       # netwerk graphdb_default (geen omweg via de proxy, geen TLS). De publieke naam
-      # graphdb-mcp.ipalm.nl bestaat sinds de verhuizing van de NAS niet meer.
       GRAPHDB_MCP_URL:        ${GRAPHDB_MCP_URL:-http://mcp-auth-proxy:8004/mcp}
       GRAPHDB_TOKEN:          ${GRAPHDB_TOKEN:?zet GRAPHDB_TOKEN}
       GRAPHDB_REPOSITORY_ID:  inning

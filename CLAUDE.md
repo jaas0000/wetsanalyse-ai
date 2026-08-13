@@ -9,46 +9,39 @@ van Nederlandse wet- en regelgeving volgens de methode Wetsanalyse (Ausems, Bull
 Juridisch Analyseschema (JAS). De kern is een gedeployde dienst — de **wetsanalyse-API**, de
 **webapp met de werkplek** en de eigen **QA/annotatie-agent (`tools/graph-qa/`, "de Juridische
 Assistent")** op de **BWB-kennisgraaf** — die draait op de docker-LXC van Proxmox (Portainer,
-endpoint 3) en op Azure Container Apps. De graaf wordt gevuld door de **BWB-importer**
-(`tools/bwb-import/`), die de wettekst rechtstreeks bij overheid.nl ophaalt — er is geen aparte
-wettenbank-MCP meer.
+endpoint 3). De graaf wordt gevuld door de **BWB-importer** (`tools/bwb-import/`), die de wettekst
+rechtstreeks bij overheid.nl ophaalt.
 
 Brongetrouwheid is niet onderhandelbaar: werk alleen met letterlijk opgehaalde wettekst, citeer
-letterlijk, en houd elke markering/begrip/regel/annotatie herleidbaar naar artikel + lid +
-`bronreferentie` (jci-uri). Het platform is een hulpmiddel voor de jurist, geen vervanger — de AI
-produceert, de mens beoordeelt en corrigeert; interpretatiekeuzes (incl. twijfel en aannames) worden
-expliciet gemaakt in plaats van schijnzekerheid.
+letterlijk, en houd elke markering/annotatie herleidbaar naar artikel + lid + `bronreferentie`
+(jci-uri). Het platform is een hulpmiddel voor de jurist, geen vervanger — de AI produceert, de mens
+beoordeelt en corrigeert; interpretatiekeuzes (incl. twijfel en aannames) worden expliciet gemaakt in
+plaats van schijnzekerheid.
 
-> **Legacy / oorsprong.** Het project begon als een **interactieve Claude Code-skill** in de CLI
-> (`.claude/skills/wetsanalyse`). Dat skill-spoor bestaat nog en is de **gedeelde
-> inhoudsbron** (`references/`/`scripts/`) die het platform op runtime hergebruikt — maar het is niet
-> langer de kern. De skill-werkstroom staat verderop (§*De wetsanalyse-skill*).
-
-> **Scope nu: alleen activiteit 2.** Begrippen (activiteit 3) en de RegelSpraak-formaliseringsfase
-> zijn **verwijderd** uit de engine, de webapp en het skill-spoor — die worden later opnieuw
-> opgebouwd op een agentische basis. Het platform levert nu activiteit 2 (markeren + classificeren
-> in JAS-klassen); alle contracten/rapporten dragen `scope: "act2"`. graph-qa's begrip-definitie-QA
-> (`definitie`-specialist over de graaf) staat hier los van en blijft.
+> **Scope: activiteit 2.** Het platform levert het markeren + classificeren in JAS-klassen; alle
+> contracten dragen `scope: "act2"`. Begrippen (activiteit 3) en de RegelSpraak-formalisering horen
+> niet tot de huidige functionaliteit — die worden later op agentische basis gebouwd. graph-qa's
+> begrip-definitie-QA (de `definitie`-specialist over de graaf) staat daar los van.
 
 ### Platform-componenten
 
 1. **`api/`** — headless FastAPI-backend (PostgreSQL-opslag, per-client bearer-auth) voor de werkplek.
-   Bedient het **annotatie-domein** (`/v1/annotatie/*`: documenten/elementen/beslissingen + append-only
-   auditlog), het **login-/gebruikersbeheer** (de API is de identiteitsbron van de webapp), het
+   Bedient het **annotatie-domein** (`/v1/annotatie/*`: documenten/elementen/beslissingen +
+   append-only auditlog), de **chatgeschiedenis** (`/v1/gesprekken/*`), het
+   **login-/gebruikersbeheer** (de API is de identiteitsbron van de webapp), het
    **LLM-modelprofielbeheer** (`/v1/admin/*`; de env-`LLM_*`-waarden seeden alleen het eerste
-   default-profiel) en de **profiel-keuzelijst** (`/v1/profiles`). De oude
-   `/v1/projects`-analyse-pijplijn (generatie-engine, GraphDB-bron, review-lus, rapport, JAS-promotie)
-   is **verwijderd** nadat de webapp erop uit ging. Eigen `CLAUDE.md` + `README.md`.
+   default-profiel) en de **profiel-keuzelijst** (`/v1/profiles`). Annotatie-documenten en gesprekken
+   zijn **per gebruiker gescopet**. Eigen `CLAUDE.md` + `README.md`.
 2. **`frontend/`** — Next.js-webapp (BFF) bovenop de API. De app **is de werkplek** (`/workbench`, de
    *Assistent-pagina*): één chat-achtig gespreksvenster voor **vragen én JAS-annotatie**, live tegen
-   graph-qa (SSE); de home leidt daarheen door. Daarnaast een uitgekleed **`/beheer`-scherm**
-   (modelprofielen, gebruikers, API-tokens; achter een apart admin-token). De analyse-webapp (analyses
-   aanmaken/reviewen/rapporteren) is **uit de frontend verwijderd**. De hele webapp zit achter een
-   **login met userid + wachtwoord** (Auth.js; e-mail verplicht/uniek maar geen inlog-identiteit; de
-   API is de identiteitsbron; rollen `beheerder`/`analist`; eenmalige eerste-beheerder-registratie via
-   `/setup`; optionele TOTP-2FA via `/account`). De UI volgt de **Rijkshuisstijl** (Belastingdienst-
-   stijlvak: lintblauw, Fira-fonts, het officiële Belastingdienst-logo en JAS-klassekleuren uit
-   `docs/wetsanalyse/wa-table.png`). Eigen `CLAUDE.md` + `README.md`.
+   graph-qa (SSE); de home leidt daarheen door. Account, beheer en instellingen openen als
+   **dialoog over de werkplek heen** (`/instellingen/*`, intercepting routes) in plaats van als eigen
+   pagina's; de beheertab (modelprofielen, gebruikers, API-tokens) zit achter een apart admin-token.
+   De hele webapp zit achter een **login met userid + wachtwoord** (Auth.js; e-mail verplicht/uniek
+   maar geen inlog-identiteit; de API is de identiteitsbron; rollen `beheerder`/`analist`; eenmalige
+   eerste-beheerder-registratie via `/setup`; optionele TOTP-2FA). De UI volgt de **Rijkshuisstijl**
+   (Belastingdienst-stijlvak: lintblauw, Fira-fonts, het officiële Belastingdienst-logo en
+   JAS-klassekleuren uit `docs/wetsanalyse/wa-table.png`). Eigen `CLAUDE.md` + `README.md`.
 3. **`tools/graph-qa/`** — de eigen **QA/annotatie-agent** ("de Juridische Assistent") die vragen over
    wet- en regelgeving beantwoordt door de BWB-**kennisgraaf** (GraphDB via MCP) te bevragen en het
    antwoord **brongetrouw** te onderbouwen (grounding + bronnen uit de tool-trace). Eén **unified
@@ -56,115 +49,91 @@ expliciet gemaakt in plaats van schijnzekerheid.
    (specialisten `definitie`/`duiding`/`algemeen`: agent ⇄ tools → verify → finalize) of de
    **annotatie-worker** (ophaal → annoteer → **Critic** → advance, met aandacht-niveau 🟢🟡🔴).
    Endpoints: `POST /v1/chat` (SSE) en `GET /v1/artikel`. De werkplek praat er **direct** mee (SSE);
-   de persistente review-state loopt via de API (`/v1/annotatie/*`). Deployt via CI naar Azure
-   Container Apps én een Portainer-stack (image `ghcr.io/palmw01/graph-qa`). Eigen `CLAUDE.md` + `README.md`.
+   de persistente review-state loopt via de API (`/v1/annotatie/*`). Image `ghcr.io/palmw01/graph-qa`.
+   Eigen `CLAUDE.md` + `README.md`.
 4. **`tools/bwb-import/`** — de **BWB-importer**: haalt de wettekst op bij
    `repository.officiele-overheidspublicaties.nl`, valideert tegen de officiële XSD's, parseert de
    structuur (regeling → hoofdstuk/afdeling → artikel → lid → onderdeel, met verwijzingen) en schrijft
    RDF naar GraphDB, repository `inning`. Met `BWB_IMPORT_WTI=true` komt de WTI-verrijking mee:
    verantwoordelijke organisatie, wetsfamilie, grondslagen, rechtsgebieden, citeertitels. Per wet
-   **idempotent**. Stond tot augustus 2026 in de privérepo `palmw01/n8n`; CI bouwt nu
-   `ghcr.io/palmw01/bwb-import`. Stack: `deploy/bwb-import/`.
+   **idempotent** (named-graph `PUT`), dus herimporteren is veilig. Image
+   `ghcr.io/palmw01/bwb-import`; stack `deploy/bwb-import/` met een wekelijkse herimport.
 5. **De kennisgraaf zelf** (`deploy/graphdb/`) — GraphDB 11.4 met de repository `inning`, plus een
-   nginx'je dat het bearer-token controleert. **GraphDB ≥ 11.2 heeft de MCP-server ingebouwd** op
-   `/mcp`, dus er is geen aparte MCP-container. Data lokaal op de LXC (`/var/lib/graphdb/home`);
-   dagelijkse RDF-dump om 03:00 die meelift in de vzdump van 03:30.
-6. **`analyses/`** — output van het skill-spoor: per **werkgebied** (kennisdomein met **meerdere
-   bronnen** — een bron = `bwbId`+`artikel`+`lid?`, niet één artikel) een map met het eindrapport en de
-   `werk/`-tussenbestanden. Activiteit 2 markeert per bron. De map heet naar de werkgebied-naam
-   (kebab-case); bij ontbreken valt ze terug op de eerste bron (`<bwbid>-art<nr>[-lidN]`).
+   nginx'je dat het bearer-token controleert en het GraphDB-service-account injecteert. **GraphDB
+   ≥ 11.2 heeft de MCP-server ingebouwd** op `/mcp`, dus er is geen aparte MCP-container.
+   GraphDB-security staat aan. Data lokaal op de LXC (`/var/lib/graphdb/home`); dagelijkse RDF-dump om
+   03:00 die meelift in de vzdump van 03:30.
+6. **`.claude/skills/wetsanalyse/`** — de inhoudelijke skill: de operationele uitwerking van de
+   JAS-methode (de dertien klassen, het volg-beleid voor verwijzingen, de reviewcontracten) plus de
+   scripts eromheen. Zie §*De wetsanalyse-skill*.
 
-### Legacy / oorsprong — het skill-spoor (gedeelde inhoudsbron)
+### Ondersteunende tools
 
-7. **`.claude/skills/wetsanalyse/`** — de inhoudelijke skill die de analyse **interactief in Claude
-   Code** uitvoert (activiteit 2: markeren + classificeren in JAS-klassen) en een `rapport.json`
-   oplevert (HTML-viewer; Markdown als export). De skill *gebruikt* de MCP als bron.
-
-De skill levert de `references/`/`scripts/` die **óók het platform** (de API-engine) op runtime
-gebruikt: één inhoudelijke bron van waarheid voor de JAS-methode. graph-qa staat hier
-los van — dat werkt op de GraphDB-kennisgraaf met zijn eigen toollaag en prompts.
+- **`tools/wetsanalyse-admin-mcp/`** — stdio-MCP die de admin-API (`/v1/admin/*`) als tools ontsluit.
+- **`tools/proxmox-mcp/`** — read-only MCP op de Proxmox-API (17 tools, uitsluitend GET).
 
 ## De onderdelen hangen via paden samen
 
 Dit is een verzameling losse onderdelen, geen monorepo met één buildsysteem. Het bindmiddel
 zijn **projectrelatieve paden**, zodat de map portabel is tussen machines/OS'en:
 
-- `.mcp.json` → twee **sessie-tools** (de wettenbank-MCP is verwijderd): `wetsanalyse-admin`
-  (stdio-server die de admin-API `/v1/admin/*` als tools ontsluit; token via `WETSANALYSE_ADMIN_TOKEN`
-  — zie `tools/wetsanalyse-admin-mcp/README.md`) en `grafana` (de officiële `mcp/grafana`-server voor
-  het inrichten van datasources/dashboards; `GRAFANA_URL` + `GRAFANA_SERVICE_ACCOUNT_TOKEN=${GRAFANA_TOKEN}`).
+- `.mcp.json` → drie **sessie-tools**: `wetsanalyse-admin` (token via `WETSANALYSE_ADMIN_TOKEN` — zie
+  `tools/wetsanalyse-admin-mcp/README.md`), `proxmox` (read-only; `PROXMOX_TOKEN_SECRET`) en
+  `grafana` (de officiële `mcp/grafana`-server voor datasources/dashboards; `GRAFANA_URL` +
+  `GRAFANA_SERVICE_ACCOUNT_TOKEN=${GRAFANA_TOKEN}`).
 - `.claude/settings.json` → **gedeeld en gecommit**: bevat een `PreToolUse`-hook die
-  `scripts/write_guard.py` aanroept bij elke Write/Edit-tool. De guard beschermt beide sporen:
-  hij blokkeert schrijven naar `analyses/**/werk/**/feedback.json` (uitsluitend de review-server
-  schrijft dat) en het overschrijven van een `analyse.json` in `werk/` zodra de
-  ronde **voltooid** is — d.w.z. zodra `feedback.json` in de ronde-map bestaat (gereviewde
-  rondes zijn immutabel; correcties vóór de review mogen wél).
-- `.claude/settings.local.json` → `enabledMcpjsonServers` (bv. `["grafana"]`) plus een
-  **machine-lokale** allowlist en de tokens (`WETSANALYSE_ADMIN_TOKEN`, `GRAFANA_TOKEN`). Dit bestand is **gitignored** (`.gitignore`), dus het reist niet mee en is per definitie
-  niet gedeeld: een andere machine/analist bouwt z'n eigen lijst gewoon opnieuw op via de
-  permissieprompts. De allowlist is bewust krap en portabel gehouden — de grants voor
-  `review_server.py` en `rapport_server.py` gebruiken wildcards i.p.v. absolute paden — zodat
-  er in de praktijk geen absolute paden meer in staan om te patchen.
+  `.claude/skills/wetsanalyse/scripts/write_guard.py` aanroept bij elke Write/Edit-tool. De guard
+  blokkeert schrijven naar `analyses/**/werk/**/feedback.json` (uitsluitend de review-server schrijft
+  dat) en het overschrijven van een `analyse.json` in `werk/` zodra de ronde **voltooid** is — d.w.z.
+  zodra `feedback.json` in de ronde-map bestaat (gereviewde rondes zijn immutabel; correcties vóór de
+  review mogen wél). De hook is **cwd-relatief**: draai Write/Edit vanaf de projectroot of met
+  absolute paden.
+- `.claude/settings.local.json` → `enabledMcpjsonServers` plus een **machine-lokale** allowlist en de
+  tokens (`WETSANALYSE_ADMIN_TOKEN`, `PROXMOX_TOKEN_SECRET`, `GRAFANA_TOKEN`). Dit bestand is
+  **gitignored**, dus het reist niet mee: een andere machine/analist bouwt z'n eigen lijst opnieuw op
+  via de permissieprompts. De allowlist is bewust krap en portabel — de grants gebruiken wildcards
+  in plaats van absolute paden.
 
 Let op bij hernoemen/verplaatsen van de projectmap: een padmismatch leidt hooguit tot een extra
 permissieprompt (geen stille breuk). Draai daarna `claude mcp list` → verwacht `✓ Connected`.
-Bij twijfel naar achtergebleven absolute paden:
-`grep -rn -e "admin-willard" -e ":/Users" --include="*.json" --include="*.py" . | grep -v node_modules`.
 
 ## Veelgebruikte commando's
 
 Per onderdeel gelden eigen commando's — zie de respectievelijke `CLAUDE.md`/`README.md`
-(`api/`, `frontend/`, `tools/graph-qa/`, `tools/wetsanalyse-admin-mcp/`). Sessie-MCP-gezondheid vanuit
-de projectroot: `claude mcp list` (verwacht `grafana`/`wetsanalyse-admin` → ✓ Connected).
+(`api/`, `frontend/`, `tools/graph-qa/`, `tools/bwb-import/`, `tools/wetsanalyse-admin-mcp/`).
+Sessie-MCP-gezondheid vanuit de projectroot: `claude mcp list`.
 
-## De wetsanalyse-skill: werkstroom en checkpoints
+## De wetsanalyse-skill
 
-De skill (`.claude/skills/wetsanalyse/SKILL.md`) is de gezaghebbende beschrijving. De
-kernstructuur die meerdere bestanden raakt:
+`.claude/skills/wetsanalyse/SKILL.md` is de gezaghebbende beschrijving. Twee dingen om te weten:
 
-- **Stap 1** haalde tekst op via de wettenbank-MCP (`wettenbank_zoek`/`_structuur`/`_artikel`). **Die
-  MCP is verwijderd**, dus deze interactieve fetch-stap werkt niet meer; het skill-spoor blijft als
-  gedeelde inhoudsbron (`references/`/`scripts/`). De platform-runtime haalt wettekst uit de graaf.
-- **Stap 1b — verwijzingen inventariseren & volgen** (`references/verwijzingen-volgen.md`): de
-  uitgaande verwijzingen van de bepaling opsporen (de MCP geeft getagde intref/extref per lid;
-  natuurlijke-taalverwijzingen herkent de skill zelf), classificeren naar functie en volgens
-  beleid volgen (diepte-cap 1 + relevantie-gate; delegaties bounded). Ze worden vastgelegd als
-  `verwijzingen`-array in `analyse.json` (aparte as náást de markeringen) en horen bij het
-  activiteit-2 checkpoint.
-- **Activiteit 2 → checkpoint → rapport.** Na activiteit 2
-  is er een **iteratief human-in-the-loop review**: de skill schrijft
-  `werk/activiteit-2/ronde-{N}/analyse.json`, draait eerst `scripts/validate_analyse.py`
-  als mechanische pre-check (ongeldige JAS-klassen, ontbrekende id's e.d.; exit 2 blokkeert
-  tot correctie), start daarna `scripts/review_server.py` (lokale webpagina op poort 3118,
-  alleen stdlib; vanaf ronde 2 met `--ronde N --vorige <ronde-N-1>`), pauzeert, en verwerkt
-  daarna `werk/activiteit-2/ronde-{N}/feedback.json`. Is er feedback, dan schrijft de
-  skill een volgende ronde en herhaalt — tot de analist akkoord is zonder opmerkingen
-  (veiligheidscap: max. 6 rondes). De skill gaat **niet** zelf door zonder bevestiging van
-  de analist. De datacontracten en de lus staan in `references/review-checkpoints.md`.
-- De review-stops worden alleen overgeslagen als `WETSANALYSE_NO_REVIEW=1` in de omgeving staat
-  (uitsluitend voor geautomatiseerde evals).
-- **Het rapport wordt gegenereerd, niet overgetypt.** `scripts/build_rapport_json.py`
-  combineert de gevalideerde `analyse.json`'s van de hoogste reviewronde tot één
-  `rapport.json` — de primaire bron. De skill vult de vrije tekstvelden (reviewlog-
-  samenvattingen, aandachtspunten voor multidisciplinaire validatie) via de flags van
-  hetzelfde script in. Daarna start de skill `scripts/rapport_server.py` (lokale HTML-viewer
-  op poort 3119), waarna de analist de §4-velden desgewenst bijstelt en via de knop
-  "Markdown schrijven" een `.md`-exportbestand naast de `rapport.json` laat wegschrijven.
-  `scripts/render_rapport.py` blijft beschikbaar als standalone MD-generator maar maakt geen
-  deel meer uit van de normale skill-flow.
+**De skill is de canonieke inhoudsbron.** `scripts/validate_analyse.py` bevat de dertien JAS-klassen
+in hun canonieke weergave-volgorde, en de API laadt dat script **op runtime** in
+(`api/app/validation.py` → `GELDIGE_JAS_KLASSEN`; daarom kopieert `api/Dockerfile` de skill mee).
+Wijzig je de klassenlijst, dan wijzig je hem hier — niet op een tweede plek. `tools/graph-qa/` heeft
+een eigen kopie met een drift-guard-test ertegen.
 
-Inhoudelijke regels die je moet kennen voordat je classificeert:
-`references/jas-klassen-referentie.md` (de dertien JAS-klassen — verzin er geen) en
-`references/verwijzingen-volgen.md`
-(het volg-beleid voor cross-referenties: functies, diepte/relevantie-grens, bounded delegaties;
-een gevolgde delegatie/definitie kan promoveren tot een eigen bron in het werkgebied). Het
-datacontract van `analyse.json`/`rapport.json` (werkgebied + bronnen) staat in
-`references/review-checkpoints.md`.
+**De interactieve werkstroom heeft geen tekstbron.** Stap 1 haalde wettekst op via een
+wettenbank-MCP die niet meer bestaat; de skill kan dus niet end-to-end draaien. De inhoudelijke
+`references/` blijven wel de operationele uitwerking van de methode:
 
-Komt een analyse onbetrouwbaar uit (verzonnen tekst, niet-bestaande klasse, overgeslagen
-review, niet-convergerende lus — géén gewone review-feedback), dan is
-`references/harness-diagnose.md` de troubleshooting-ingang: het diagnosticeert de skill via
-vier hendels (Context, Tools, Loop, Governance) in plaats van het model te verdenken.
+- `references/jas-klassen-referentie.md` — de dertien JAS-klassen. Verzin er geen bij.
+- `references/verwijzingen-volgen.md` — het volg-beleid voor cross-referenties: functies,
+  diepte-cap 1 + relevantie-gate, bounded delegaties. Een gevolgde delegatie/definitie kan
+  promoveren tot een eigen bron in het werkgebied.
+- `references/review-checkpoints.md` — het datacontract van `analyse.json`/`rapport.json`
+  (werkgebied + bronnen) en de human-in-the-loop reviewlus: schrijf een ronde, valideer mechanisch,
+  toon hem via `scripts/review_server.py` (poort 3118), verwerk `feedback.json`, herhaal tot de
+  analist akkoord is (cap: 6 rondes). Nooit zelf doorgaan zonder bevestiging.
+- `references/harness-diagnose.md` — de ingang bij onbetrouwbare output (verzonnen tekst,
+  niet-bestaande klasse, overgeslagen review, niet-convergerende lus). Diagnosticeert via vier
+  hendels (Context, Tools, Loop, Governance) in plaats van het model te verdenken.
+
+Een analyse landt in `analyses/<werkgebied>/`: per **werkgebied** (een kennisdomein met **meerdere
+bronnen** — een bron = `bwbId`+`artikel`+`lid?`, niet één artikel) het eindrapport plus de
+`werk/`-tussenbestanden. Het rapport wordt **gegenereerd, niet overgetypt**:
+`scripts/build_rapport_json.py` combineert de gevalideerde rondes tot één `rapport.json`, en
+`scripts/rapport_server.py` (poort 3119) toont die met een knop om Markdown weg te schrijven.
 
 ## Observability
 
@@ -173,44 +142,41 @@ ze emitteren gestructureerde JSON-logs (één gedeelde vorm, bv. `frontend/lib/l
 en kunnen OpenTelemetry (traces/metrics/logs) naar een **configureerbaar OTLP-endpoint** sturen
 (`OTEL_EXPORTER_OTLP_ENDPOINT`; leeg = alleen logs, nul overhead). Eén trace-id verbindt de keten
 frontend → API → graph-qa. De **verzamelstack staat in `deploy/observability/`** en draait op de
-docker-LXC (Portainer-endpoint 3, stack `observability`):
-OTel-Collector (met **spanmetrics/servicegraph-connectors** die topologie-edges uit de traces
-afleiden) + Tempo + Loki + Prometheus, plus **Alloy** dat de stdout-logs van frontend en MCP
-naar Loki shipt, **Grafana zelf** (grafana.ipalm.nl; de datasources komen als file-provisioning uit
-de stack, dus ze zijn in de UI read-only), **twee kant-en-klare Grafana-dashboards** (`grafana-dashboard-wetsanalyse.json` =
-trends; `grafana-dashboard-topologie.json` = *"systeemtopologie"*: de live keten die oplicht op basis
-van de trace-servicegraph) en **alerting** (`alerting/`; 3 regels die het default notification-beleid
-van je Grafana volgen — géén eigen contactpunt). Laat `OTEL_EXPORTER_OTLP_ENDPOINT` leeg om een
-onderdeel ongewijzigd met alléén JSON-logs te draaien. Deployen gaat via
+docker-LXC (Portainer-endpoint 3, stack `observability`): OTel-Collector (met
+**spanmetrics/servicegraph-connectors** die topologie-edges uit de traces afleiden) + Tempo + Loki +
+Prometheus, plus **Alloy** dat stdout-logs naar Loki shipt en **Grafana zelf** (grafana.ipalm.nl; de
+datasources komen als file-provisioning uit de stack en zijn in de UI dus read-only). Twee
+kant-en-klare dashboards (`grafana-dashboard-wetsanalyse.json` = trends;
+`grafana-dashboard-topologie.json` = *"systeemtopologie"*: de live keten die oplicht op basis van de
+trace-servicegraph) en **alerting** (`alerting/`; 3 regels die het default notification-beleid van je
+Grafana volgen — géén eigen contactpunt). Deployen via
 `.github/workflows/deploy-observability.yml`, dashboards via `provision-grafana.sh`. De volledige
 uitleg (env-vars, logschema, AVG-redactie, dashboard/alerting) staat in **`docs/observability.md`**.
 
-> **Historie.** Tot juli 2026 leunde deze stack op de NAS: het gedeelde netwerk `homeinfra_internal`
-> en de bestaande `unpoller-grafana`. Beide verdwenen met de verhuizing naar Proxmox; de stack maakt
-> nu zijn eigen netwerk (`observability_default`) en brengt Grafana mee. Het topologie-dashboard had
-> ooit een jobs-tabel op een read-only jobstore-datasource (`wa-postgres`); die is samen met de
-> analyse-pijplijn verdwenen — dat paneel bestaat niet meer.
+## Uitrollen
 
-## Dev-omgeving
+**Dev** — één vaste, gedeelde omgeving op **https://dev.wetsanalyse.ipalm.nl** met een eigen database,
+naast de graaf en de observability-stack op dezelfde docker-LXC. Handmatig: Actions → *dev-deploy* →
+*Run workflow* → kies de branch; `destroy: true` breekt stack, database en proxyhost weer af.
+Workflow `.github/workflows/dev-deploy.yml` + stack `deploy/dev/docker-compose.yml`; setup en de
+volgorde-afhankelijkheden (graaf en observability eerst, want hun netwerken zijn extern) staan in
+**`deploy/dev/README.md`**.
 
-Eén vaste, gedeelde omgeving op **https://dev.wetsanalyse.ipalm.nl** met een eigen database, naast de
-graaf en de observability-stack op dezelfde docker-LXC. **Handmatig uitrollen**: Actions → *dev-deploy*
-→ *Run workflow* → kies de branch die je op dev wilt zien; `destroy: true` breekt stack, database en
-proxyhost weer af. Workflow `.github/workflows/dev-deploy.yml` + stack `deploy/dev/docker-compose.yml`;
-setup en de volgorde-afhankelijkheden (graaf en observability eerst, want hun netwerken zijn extern)
-staan in **`deploy/dev/README.md`**.
+**De graaf** — `.github/workflows/deploy-graaf.yml` rolt de graphdb-stack en de importer in de juiste
+volgorde uit (GraphDB eerst: die maakt het netwerk `graphdb_default` waar de rest op joint).
 
-De eerdere per-PR-previews (`pr<N>.preview.ipalm.nl`) zijn vervallen: meerdere full-stacks tegelijk
-passen niet op de LXC, en één bewust gekozen dev-omgeving bleek in de praktijk wat er nodig was.
-De Azure-variant is geparkeerd.
-
-## Skills
-
-De wetsanalyse-skill staat in `.claude/skills/wetsanalyse/`.
+**Images** — `{api,frontend,graph-qa,bwb-import}-docker-publish.yml` bouwen bij een push naar master
+naar GHCR, met pip-audit/npm-audit vooraf en een Trivy-gate achteraf. Ze publiceren alleen; het
+uitrollen is een aparte, expliciete stap.
 
 ## Referentiedocumentatie
 
-`docs/` bevat de methodische onderbouwing (niet code): `docs/wetsanalyse/handleiding.pages.md`,
-`docs/wetsanalyse/leidraad.pages.md`, `docs/wetsanalyse/wetsanalyse-boek.md` en
-`docs/wetsanalyse/wetsanalyse-rijk/` (hoofdstukken over JAS en het kader). Raadpleeg deze bij
-inhoudelijke vragen over de methode; de skill-`references/` zijn de operationele samenvatting daarvan.
+`docs/` bevat de methodische onderbouwing (niet code):
+
+- `docs/wetsanalyse/` — het bronmateriaal van de methode: `handleiding.pages.md`,
+  `leidraad.pages.md`, `wetsanalyse-boek.md`, `WetsTaal.md`, de JAS-tabel `wa-table.png` en
+  `wetsanalyse-rijk/` (hoofdstukken over JAS en het kader). Raadpleeg deze bij inhoudelijke vragen
+  over de methode; de skill-`references/` zijn de operationele samenvatting daarvan.
+- `docs/regelspraak/` — de RegelSpraak-specificaties (PDF), voor de latere formaliseringsfase.
+- `docs/wetsanalyse-workbench/` — het plan achter de werkplek + de JAS-annotatie-ontologie.
+- `docs/observability.md` en `docs/schrijfrichtlijn-assistent.md`.

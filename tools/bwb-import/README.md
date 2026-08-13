@@ -114,9 +114,8 @@ ORDER BY DESC(?score)
 
 `luc:query` volgt de Lucene-syntax: `AND`/`OR`/`NOT`, `"exacte frase"`,
 `wildcard*` en veldzoeken als `titel:invordering` (zonder veldprefix zoek je
-in alle velden). De AI-agent-workflow
-(`../workflows/ai-agent-graphdb-kennisgraaf.json`) heeft dit patroon in zijn
-system-prompt en gebruikt de index voor alle tekstuele zoekvragen.
+in alle velden). graph-qa's `search_wetgeving`-tool gebruikt deze index voor
+alle tekstuele zoekvragen.
 
 ## WTI-verrijking (optioneel)
 
@@ -205,7 +204,3 @@ De service draait als container op de **docker-LXC** van Proxmox, stack `bwb-imp
 (zie `deploy/bwb-import/`). Het image `ghcr.io/palmw01/bwb-import` wordt door
 `.github/workflows/bwb-import-docker-publish.yml` gebouwd en gepusht bij een push
 naar `master` die `tools/bwb-import/**` raakt.
-
-> **Herkomst.** Deze code stond tot augustus 2026 in de privérepo `palmw01/n8n` en
-> werd door een n8n-workflow aangestuurd. n8n is uit het platform verdwenen; de code
-> hoort nu bij de rest van het platform en de aanroep is een directe HTTP-call.

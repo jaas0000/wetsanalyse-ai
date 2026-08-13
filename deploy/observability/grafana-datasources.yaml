@@ -1,15 +1,15 @@
-# OPTIONEEL — Grafana-datasource-provisioning voor je BESTAANDE Grafana (unpoller-grafana).
-# Twee manieren om de drie backends aan Grafana te koppelen:
+# OPTIONEEL — datasource-provisioning voor een ANDERE Grafana dan die in deze stack.
+# De stack brengt zijn eigen Grafana mee (docker-compose.stack.yml) en provisioneert de drie
+# datasources daar al. Dit bestand is voor wie de backends aan een bestaande Grafana wil hangen:
 #
-#   A) Via de UI (minst intrusief): Connections -> Data sources -> Add data source, en voeg
-#      Prometheus/Loki/Tempo toe met de URL's hieronder. Niets aan de unpoller-stack wijzigen.
+#   A) Via de UI: Connections -> Data sources -> Add data source, en voeg Prometheus/Loki/Tempo
+#      toe met de URL's hieronder.
 #
-#   B) Via provisioning: mount dit bestand in de unpoller-grafana-container onder
+#   B) Via provisioning: mount dit bestand in die Grafana-container onder
 #      /etc/grafana/provisioning/datasources/wetsanalyse.yaml (read-only) en herstart Grafana.
-#      Dit vereist een kleine aanpassing aan de unpoller-stack (een extra volume-mount).
 #
-# De URL's zijn de interne hostnamen op het homeinfra_internal-netwerk (waar unpoller-grafana óók
-# op zit), dus Grafana bereikt ze rechtstreeks.
+# De URL's zijn de interne hostnamen op het observability-netwerk; die Grafana moet er dus op
+# joinen om ze te bereiken.
 
 apiVersion: 1
 datasources:

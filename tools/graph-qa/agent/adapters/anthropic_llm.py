@@ -1,7 +1,7 @@
 """
 LLMPort-adapter voor Anthropic via Azure AI Foundry.
 
-Verhuisd uit de agent-loop: hier zit de enige plek die de concrete Anthropic-client
+Hier zit de enige plek die de concrete Anthropic-client
 en de Azure-Foundry-details (base_url, api-version) kent.
 """
 from __future__ import annotations

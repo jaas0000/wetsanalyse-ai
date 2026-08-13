@@ -5,12 +5,9 @@ onder de [frontend](../frontend). De API bedient het **JAS-annotatiedomein** van
 (documenten/elementen/beslissingen + append-only auditlog), het **login-/gebruikersbeheer** (de API is
 de identiteitsbron), het **LLM-modelprofielbeheer** en de **profiel-keuzelijst**.
 
-> **De analyse-pijplijn is verwijderd.** De oude `/v1/projects`-werkstroom (analyses aanmaken/reviewen/
-> rapporteren, de act-2-generatie-engine, GraphDB-bron en JAS-promotie) zat niet langer achter een UI en
-> is uit de API gehaald. Wat blijft is wat de werkplek + login + `/beheer` nodig hebben. De
-> brongetrouwe QA/annotatie-agent zelf is een **aparte dienst** (`tools/graph-qa/`) waar de werkplek
-> direct mee praat (SSE); die is hier niet gewijzigd. De werkplek haalt wettekst uit de graaf (graph-qa
-> `GET /v1/artikel`), dus de wet-keuzelijst/-catalogus en de wettenbank-MCP zitten niet meer in de API.
+> **De QA/annotatie-agent is een aparte dienst.** `tools/graph-qa/` beantwoordt de vragen, stelt
+> de JAS-annotaties voor en levert de wettekst uit de graaf; de werkplek praat er direct mee (SSE).
+> Deze API bewaart de review-state en bedient login en beheer.
 
 ## Hoe het past in het project
 

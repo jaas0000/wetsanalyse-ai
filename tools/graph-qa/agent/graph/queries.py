@@ -1,7 +1,7 @@
 """
 Geparametriseerde SPARQL-bouwers voor de kennisgraaf.
 
-Deze module is de code-vorm van de recepten die voorheen als proza in de
+Deze module is de code-vorm van de queryrecepten; ze stonden eerder als proza in de
 system-prompt stonden: de eigen-IRI-ruimte-filters die owl:sameAs-tweelingen
 ontdubbelen, de directe artikel-/lid-IRI-patronen, de Lucene-FTS en de
 verwijzings-/SKOS-vormen. De invoer wordt gevalideerd/ge-escaped zodat het model

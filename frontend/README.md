@@ -4,21 +4,17 @@ Next.js (App Router) + TypeScript-frontend. De app **is de werkplek**: een chat-
 tegen de graph-qa-agent (login/beheer lopen via de [Wetsanalyse-API](../api)). De home leidt door naar
 `/workbench`.
 
-> **De analyse-webapp is verwijderd.** Analyses aanmaken/reviewen/rapporteren zit niet meer in de
-> frontend; alleen de werkplek + login + een uitgekleed `/beheer` (modelprofielen, gebruikers,
-> API-tokens) blijft. Ook de api-`/v1/projects`-backend is verwijderd — de API bedient nu het
-> annotatie-domein, login/beheer en de profiel-keuzelijst.
-
 **De werkplek** (`/workbench`, de *Assistent-pagina*): één gespreksvenster met **twee
 werkwijzen** — **vragen** aan de Juridische Assistent (brongetrouwe Q&A over de kennisgraaf) en
 **JAS-annotatie** (de agent stelt JAS-elementen voor → de jurist reviewt per element:
 approve/edit/reject/comment). Die pagina praat live met de graph-qa-agent (SSE) en bewaart de
 review-state via de API. De home (`/`) leidt hierheen door.
 
-Daarnaast een uitgekleed **`/beheer`-scherm** voor het LLM-beheer: de modelprofielen die de
-agent aansturen (toevoegen/bewerken/verwijderen, default kiezen, verbinding testen),
-**gebruikers** en **API-tokens**. Het beheer loopt via aparte `/api/admin/*`-routes met een
-**apart admin-token** (zie hieronder).
+**Het instellingenvenster** (`/instellingen/*`) opent als dialoog over de werkplek heen en draagt
+account (wachtwoord, 2FA) plus — voor beheerders — het beheer: de modelprofielen die de agent
+aansturen (toevoegen/bewerken/verwijderen, default kiezen, verbinding testen), **gebruikers** en
+**API-tokens**. Het beheer loopt via aparte `/api/admin/*`-routes met een **apart admin-token**
+(zie hieronder). `/beheer` en `/account` blijven als redirect bestaan.
 
 ## Architectuur — BFF met server-side token
 
@@ -42,7 +38,7 @@ alternatief voor Rijksoverheid Sans, met responsive typografie (100/90/80% op de
 Alle design tokens staan centraal — CSS-variabelen in `app/globals.css` → Tailwind in
 `tailwind.config.ts` — en de primitives in `components/ui/` (48px-knoppen/velden, platte cards,
 `Vormelement`-signatuur). De **JAS-klassekleuren** (`lib/jas.ts`) zijn de exacte labelkleuren uit
-de officiële JAS-tabel `docs/wetsanalyse/wa-table.png`; de job-state-kleuren staan in `lib/states.ts`.
+de officiële JAS-tabel `docs/wetsanalyse/wa-table.png`.
 
 > Kleur en typografie lopen via de tokens — geen losse hex-waarden in componenten. Het officiële
 > logo-asset (`public/belastingdienst-logo.svg`) blijft ongewijzigd.
@@ -143,7 +139,8 @@ commentaarregels in `docker-compose.yml`).
 
 ## Types up-to-date houden (optioneel)
 
-`lib/types.ts` is met de hand afgeleid van `api/app/contracts.py` en is de bron-van-waarheid. Wil
+`lib/types.ts` is met de hand afgeleid van `api/app/annotatie_contracts.py` (+ `gesprek_contracts.py`)
+en is de bron-van-waarheid. Wil
 je tegen het live OpenAPI-schema controleren:
 
 ```bash

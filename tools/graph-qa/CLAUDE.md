@@ -3,7 +3,8 @@
 Werkgids bij het aanpassen van deze agent. Het *wat* en *hoe start ik het* staat in `README.md`; dit
 bestand beschrijft *hoe de code in elkaar zit* en welke eigenschappen je niet mag breken.
 
-> **Write-guard:** de repo-hook `scripts/write_guard.py` wordt **relatief aan je shell-cwd**
+> **Write-guard:** de repo-hook `.claude/skills/wetsanalyse/scripts/write_guard.py` wordt
+> **relatief aan je shell-cwd**
 > aangeroepen. Blijf met je shell op de **projectroot** (`wetsanalyse-ai/`) of gebruik absolute paden;
 > na een `cd tools/graph-qa` faalt elke Write/Edit met "can't open file …/graph-qa/.claude/…".
 
@@ -149,10 +150,9 @@ cd tools/graph-qa && .venv/bin/python eval/run_eval.py --offline
 
 ## Deployment & integratie
 
-- **CI:** `.github/workflows/graph-qa-docker-publish.yml` (test → build → GHCR → **Portainer-redeploy
-  én Azure Container App-update**). De Portainer-stap is gated op repo-var `PORTAINER_GRAPH_QA_STACK_ID`;
-  de Azure-stap draait op `master` als de `AZURE_*`-secrets gezet zijn. Beide gebruiken
-  `AZURE_FOUNDRY_BASE_URL` (repo-var, mét `/anthropic`) — verplicht, anders faalt de compose-guard.
+- **CI:** `.github/workflows/graph-qa-docker-publish.yml` (test → build → GHCR, met een Trivy-gate).
+  De workflow publiceert alleen het image; uitrollen is een aparte stap. De compose-guard vereist
+  `AZURE_FOUNDRY_BASE_URL` (repo-var, mét `/anthropic`) — dat is de LLM-provider, niet een deploydoel.
 - **Secrets** zijn host-bestanden die via `*_FILE`-env worden ingelezen (`config._read_secret`); een
   named volume houdt de checkpointer-db durabel. Zie `deploy/README.md`.
 - **Werkplek-integratie:** de werkplek (frontend `/workbench`) belt `POST /v1/chat` **rechtstreeks**

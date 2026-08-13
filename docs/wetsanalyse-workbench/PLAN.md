@@ -85,7 +85,7 @@ grounding, patroon-afwijking). Géén ondoorzichtig kwaliteitscijfer → een **d
 
 ### Deliverable 0 — Architectuur-artifact (HTML) — GELEVERD
 Visie + architectuur + datamodel + review-workflow + fasering, visueel/deelbaar. Repo-kopie
-`docs/wetsanalyse-workbench/architectuur-artifact.html` + claude.ai-Artifact; graph-qa-deck aangevuld.
+architectuur-artifact (claude.ai-Artifact) + graph-qa-deck aangevuld.
 
 ### Fase 1 — MVP: dun agent→review-segment (verticaal, alle 3 lagen)
 Het eindtoestand-hart in het klein, end-to-end:

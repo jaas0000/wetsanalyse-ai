@@ -5,11 +5,10 @@ Next.js (App Router) + TypeScript-webapp bovenop de graph-qa-agent (en, voor log
 chat-achtig gespreksvenster voor **vragen én JAS-annotatie**, live tegen graph-qa (§*Werkplek*). De
 home (`/`) leidt daarheen door.
 
-> **Scope: chat-werkruimte.** De analyse-webapp (analyses aanmaken, projectenlijst, review-lus,
-> rapport) is **uit de frontend verwijderd**; alleen de werkplek + login + een uitgekleed `/beheer`
-> (modelprofielen, gebruikers, API-tokens) blijft. De api-`/v1/projects`-analyse-backend is inmiddels
-> **óók verwijderd** (de API bedient nu het annotatie-domein, login/beheer en de profiel-keuzelijst).
-> Begrippen (activiteit 3) en RegelSpraak zijn eerder al verwijderd.
+> **Scope: chat-werkruimte.** De app bestaat uit de werkplek, de login-flow en het
+> instellingenvenster (account, modelprofielen, gebruikers, API-tokens). Analyses aanmaken/reviewen/
+> rapporteren hoort niet tot de functionaliteit.
+
 Lees ook de projectroot-`CLAUDE.md` en `../api/CLAUDE.md` — de API is de bron van waarheid voor de
 datacontracten en de state machine; deze app is een **dunne, server-getokende schil** eroverheen.
 Operationele details (lokaal draaien, env-vars, deployment) staan in de `README.md`; dit bestand
@@ -50,26 +49,33 @@ De **harde scheidingslijn**: alles met een token is server-only.
   (`verifyCredentials`/`getAccountStatus`/`getSetupStatus`) die de login-flow gebruikt.
 - `lib/api.ts` — alle client-side fetch-helpers naar `/api/**`. Eén plek voor het foutcontract
   (`parseError` → `ApiError` met `retryAfter`); gebruik `isApiError()` in de UI.
-- `lib/types.ts` — **met de hand afgeleid van `../api/app/contracts.py`** (+ `annotatie_contracts.py`
-  + `gesprek_contracts.py`) en de bron-van-waarheid voor de TS-kant. Wijzigt het API-contract, werk dit bestand bij (verifieer
+- `lib/types.ts` — **met de hand afgeleid van `../api/app/annotatie_contracts.py`**
+  (+ `gesprek_contracts.py`) en de bron-van-waarheid voor de TS-kant. Wijzigt het API-contract, werk dit bestand bij (verifieer
   desgewenst tegen `openapi-typescript http://localhost:3000/openapi.json` — zie de README).
   `lib/jas.ts` is de afgeleide presentatie-helper voor de JAS-klasse-weergave (kleur + label uit
   `docs/wetsanalyse/wa-table.png`); brongetrouw geldt ook in de UI — verzin er geen klassen bij.
 - `app/**/page.tsx` (Server Components) — data ophalen via `lib/server.ts`; interactie delegeren naar
   een `*Client.tsx` Client Component. `app/page.tsx` (home) doet server-side een `redirect("/workbench")`.
-  De werkplek zit in `app/workbench/page.tsx`, het beheer in `app/beheer/page.tsx`, het account in
-  `app/account/page.tsx`, en de auth-schermen in `app/login/*` + `app/setup` + `app/disclaimer`.
+  De werkplek zit in `app/workbench/page.tsx` en de auth-schermen in `app/login/*` + `app/setup` +
+  `app/disclaimer`. Account en beheer leven in het **instellingenvenster**:
+  `app/instellingen/[[...tab]]/page.tsx` als volle pagina, en `app/@modal/(.)instellingen/…` als
+  intercepting route die hem als dialoog over de werkplek heen opent. `app/beheer` en `app/account`
+  blijven bestaan als redirect naar de bijbehorende tab.
 - `components/` — presentatie. `components/werkplek/` + `components/workbench/` = de chat-werkruimte
-  (zie §*Werkplek*). `components/admin/` is het uitgeklede `/beheer`-scherm (achter het admin-token):
-  **`BeheerClient`** met modelprofielen (`ProfileEditor`), **`UsersPanel`** (gebruikersbeheer) en
-  **`ApiTokensPanel`**. `components/account/` + `components/auth/` dragen de login/2fa/setup-flow.
+  (zie §*Werkplek*). `components/admin/` levert de beheertabs (achter het admin-token):
+  **`ProfielenPanel`** met de modelprofiel-editor (`ProfileEditor`), **`UsersPanel`**
+  (gebruikersbeheer) en **`ApiTokensPanel`**. `components/account/` + `components/auth/` dragen de login/2fa/setup-flow.
+  `components/instellingen/` is het instellingenvenster zelf (`InstellingenDialog` = de dialoogschil,
+  `InstellingenInhoud` = de tabs; de tabdefinities en de pad-helpers staan in `lib/instellingen.ts`,
+  bewust **géén** `"use client"`-module zodat Server Components ze mogen importeren).
   `components/ui/` zijn de primitives.
 - **Vormgeving (Rijkshuisstijl, Belastingdienst-stijlvak)** — alle design tokens centraal:
   CSS-variabelen in `app/globals.css` → Tailwind in `tailwind.config.ts` (lintblauw `#154273` +
-  hemelblauw `#007bc7` op wit, Fira Sans/Mono als vrij alternatief voor Rijksoverheid Sans,
-  responsive 100/90/80 via root-font-size). `components/ui/` zijn de primitives (48px-knoppen/velden,
-  platte cards, gecentreerde logobalk met het officiële `public/belastingdienst-logo.svg`,
-  `Vormelement`-signatuur). **Knoppen zijn mobile-first**: `Button`/`LinkButton` zijn bewust
+  hemelblauw `#007bc7` op wit, Fira Sans/Mono als vrij alternatief voor Rijksoverheid Sans).
+  De root-font-size is overal 100%: schaal met de Tailwind-tekstklassen, niet met een globale
+  krimp. `components/ui/` zijn de primitives (40px-knoppen/velden die onder de `coarse:`-variant
+  — `@media (pointer: coarse)`, zie `tailwind.config.ts` — naar 48px groeien voor aanraakbediening,
+  platte cards, gecentreerde logobalk met het officiële `public/belastingdienst-logo.svg`). **Knoppen zijn mobile-first**: `Button`/`LinkButton` zijn bewust
   breedte-neutraal (`inline-flex shrink-0`); actie-rijen lopen via `components/ui/ButtonRow.tsx`
   (mobiel volle-breedte gestapeld, `sm:` naast elkaar). Staat een knop buiten een `ButtonRow`
   (bv. naast een invoerveld), geef hem dan `className="w-full sm:w-auto"` en laat de container op
@@ -80,9 +86,11 @@ De **harde scheidingslijn**: alles met een token is server-only.
 ## Werkplek — de Assistent-pagina (`/workbench`)
 
 De **Assistent-pagina** (`app/workbench/page.tsx`, titel "Assistent") → `components/werkplek/WorkbenchShell.tsx`:
-een **volledige chat-app-shell** (Claude/ChatGPT-achtig, in Belastingdienst-huisstijl). Op `/workbench`
-wijkt de globale chrome: `components/SiteHeader.tsx` (null op `/workbench`) + `components/AppMain.tsx`
-(daar vol-bleed `h-[100dvh]`); `SiteFooter` was al null. De shell is twee kolommen:
+een **volledige chat-app-shell** (Claude/ChatGPT-achtig, in Belastingdienst-huisstijl). Op de
+**app-shell-paden** wijkt de globale chrome: `SiteHeader`, `AppMain` (vol-bleed `h-[100dvh]`) en
+`SiteFooter` vragen alle drie `isAppShellPad(pathname)` uit `lib/appShell.ts` — dat dekt `/workbench`
+**én** `/instellingen*`, want de intercepting route wijzigt de URL terwijl de werkplek eronder blijft
+staan. Voeg je een app-shell-pad toe, doe dat daar; niet met een losse `pathname === …`-check. De shell is twee kolommen:
 - **Links de sidebar** (`GesprekSidebar` + `GesprekLijst`): bovenin het Belastingdienst-logo, een
   "Nieuw gesprek"-knop, de **chatgeschiedenis** (per-gebruiker gepersisteerd), en onderin een
   **instellingen/gebruiker**-blok (Account/Beheer + uitloggen). Op `<lg` is dit een off-canvas drawer
@@ -110,7 +118,8 @@ wijkt de globale chrome: `components/SiteHeader.tsx` (null op `/workbench`) + `c
   de vertrouwde `X-User-Id` uit de sessie (annotatie-documenten zijn **per-gebruiker gescopet**, net als
   de gesprekken). Types in `lib/types.ts` (afgeleid van `api/app/annotatie_contracts.py`).
 - **Config:** `GRAPH_QA_URL` (intern, default `http://graph-qa:8080`, via `graphQaBaseUrl()`) +
-  `GRAPH_QA_TOKEN(_FILE)` — de frontend moet graph-qa op `homeinfra_internal` kunnen bereiken (`lib/config.ts`).
+  `GRAPH_QA_TOKEN(_FILE)` — de frontend moet graph-qa op het gedeelde docker-netwerk kunnen
+  bereiken (`lib/config.ts`).
 
 ## Observability
 
@@ -145,10 +154,10 @@ tokens/secrets/inhoud loggen. In de vitest-node-omgeving wordt `server-only` ges
   verifieert server→server bij de API (`lib/server.ts → verifyCredentials` → `/v1/auth/verify`). De
   **API blijft de identiteitsbron** (users-tabel met `userid` als sleutel, wachtwoord-hash, TOTP);
   de BFF houdt alleen de sessie. Rollen: **`beheerder`** (mag `/beheer` + `/api/admin/*`) en
-  **`analist`** (de rest) — afgedwongen in de `authorized`-callback én server-side in
-  `app/beheer/page.tsx`. De eerste keer (lege users-tabel) maakt `/setup` eenmalig de eerste
-  beheerder; daarna sluit die route. **Gebruikersbeheer** zit in `/beheer` (`UsersPanel`, achter het
-  admin-token). **2FA (TOTP)** is optioneel en self-service in `/account`; verdere gebruikers maakt
+  **`analist`** (de rest) — afgedwongen in de `authorized`-callback (edge) én server-side in
+  `app/instellingen/[[...tab]]/page.tsx` (`isAdminTab(actief) && !isBeheerder` → redirect). De eerste keer (lege users-tabel) maakt `/setup` eenmalig de eerste
+  beheerder; daarna sluit die route. **Gebruikersbeheer** zit in de beheertab (`UsersPanel`, achter het
+  admin-token). **2FA (TOTP)** is optioneel en self-service in de accounttab; verdere gebruikers maakt
   een beheerder aan met een eenmalig tijdelijk wachtwoord. De account/2fa-BFF-routes zetten de
   ingelogde identiteit als vertrouwde `X-User-Id`-header (uit de sessie, nooit uit browser-input).
   Let op: Auth.js' eigen routes leven onder `/api/auth/*` — daar geen eigen BFF-route bijzetten

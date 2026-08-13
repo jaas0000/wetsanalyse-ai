@@ -1,41 +1,32 @@
-# BWB-importservice op de docker-LXC
+# BWB-importservice
 
 Laadt Nederlandse wetgeving (Basiswettenbestand) in de kennisgraaf: haalt de XML op bij
 `repository.officiele-overheidspublicaties.nl`, valideert tegen de officiële XSD's, parseert de
 structuur en schrijft RDF naar GraphDB (repository `inning`). Per wet **idempotent**.
 
-Verhuisd van de NAS (Portainer-stack 230) na de migratie naar Proxmox.
+Draait op de docker-LXC naast de graaf, op het netwerk `graphdb_default`.
 
 ## Broncode en image
 
 De broncode staat in **`tools/bwb-import/`** (Python, XSD's, tests). CI bouwt het image naar
 `ghcr.io/palmw01/bwb-import` via `.github/workflows/bwb-import-docker-publish.yml`, dat draait bij
-een push naar `master` die `tools/bwb-import/**` raakt: eerst de 79 unit-tests, dan build + push +
+een push naar `master` die `tools/bwb-import/**` raakt: eerst de unit-tests, dan build + push +
 Trivy-scan. Deze map bevat alleen de compose voor de LXC.
 
-> **Herkomst.** De code stond tot augustus 2026 in de privérepo `palmw01/n8n` en werd door een
-> n8n-workflow aangestuurd, met een handmatige Portainer-build. n8n is uit het platform verdwenen;
-> de code hoort nu bij de rest van het platform en de uitrol gaat via GHCR.
-
-Twee verschillen met de NAS-opzet:
-
-1. **Geen n8n-netwerk.** Daar riep een n8n-workflow `http://bwb-import:8000/import` aan; nu hangt de
-   service alleen aan `graphdb_default` en wordt hij met een directe HTTP-call aangestuurd.
-2. **Geen `build:`.** Portainer kan bij een string-deploy niet bouwen; de stack pullt het
-   GHCR-image.
+De stack heeft bewust **geen `build:`** — Portainer kan bij een string-deploy niet bouwen. De default
+`BWB_IMAGE` is het op de LXC gebouwde `bwb-import:0.1`; zodra de publish-workflow op master heeft
+gedraaid, zet je `BWB_IMAGE=ghcr.io/palmw01/bwb-import:latest` als stack-env.
 
 ## Wekelijkse herimport
 
 De stack draait een cron-container (`bwb-import-cron`) die elke **maandag om 06:00** alle
-geconfigureerde regelingen opnieuw importeert — dezelfde cadans als de oude n8n-workflow, die met
-n8n verdween zonder vervanging. Zonder die herhaling veroudert de graaf stilzwijgend: een
-wetswijziging is dan pas zichtbaar als iemand handmatig importeert, terwijl brongetrouwheid juist de
-kernbelofte van het platform is.
+geconfigureerde regelingen opnieuw importeert. Zonder die herhaling veroudert de graaf stilzwijgend:
+een wetswijziging is dan pas zichtbaar als iemand handmatig importeert, terwijl brongetrouwheid juist
+de kernbelofte van het platform is.
 
-De lijst staat expliciet in de stack-env `BWB_IDS` (default: de zeven regelingen die nu in de graaf
-zitten) in plaats van "alles wat in de graaf staat" — anders leidt een lege of beschadigde graaf
-stilzwijgend tot een lege lijst. De import is per wet idempotent (named-graph `PUT`), dus opnieuw
-draaien is veilig en verwijderde artikelen verdwijnen mee.
+De lijst staat expliciet in de stack-env `BWB_IDS` in plaats van "alles wat in de graaf staat" —
+anders leidt een lege of beschadigde graaf stilzwijgend tot een lege lijst. De import is per wet
+idempotent (named-graph `PUT`), dus opnieuw draaien is veilig en verwijderde artikelen verdwijnen mee.
 
 Handmatig draaien zonder tot maandag te wachten:
 
@@ -60,8 +51,11 @@ r = u.urlopen(u.Request('http://127.0.0.1:8000/import', method='POST',
 print(json.dumps(json.load(r), indent=2, ensure_ascii=False))"
 ```
 
-Een batch gaat met `{"bwb_ids": ["BWBR...", "BWBR..."]}`. Zeven regelingen herimporteren duurde
+Een batch gaat met `{"bwb_ids": ["BWBR...", "BWBR..."]}`. Zeven regelingen herimporteren duurt
 ongeveer 20 seconden.
+
+Schrijven naar de graaf vereist het GraphDB-service-account (`GRAPHDB_SVC_USER`/
+`GRAPHDB_SVC_PASSWORD` als stack-env); zie `deploy/graphdb/README.md`.
 
 ## Wat er in de graaf komt
 
@@ -77,11 +71,9 @@ verwijzingen) levert `BWB_IMPORT_WTI=true` de verrijking uit het WTI-bestand:
 | `citeertitel` / `afkorting` | officiële titels |
 | `type` | o.a. `eli:LegalResource`, `bwb:MinisterieleRegeling` |
 
-Op de NAS stond `BWB_IMPORT_WTI` op `false`; hier staat het aan.
+## Welke regelingen erin zitten
 
-## Stand (12 aug 2026)
-
-Zeven regelingen in `inning`, 388.161 triples:
+De zeven regelingen uit `BWB_IDS`, samen ongeveer 388.000 triples:
 
 | BWB-id | regeling |
 |---|---|

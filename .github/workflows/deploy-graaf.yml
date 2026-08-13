@@ -4,9 +4,6 @@
 # Twee losse stacks in één workflow omdat ze samen horen en dezelfde volgorde-afhankelijkheid delen:
 # de graphdb-stack maakt het netwerk `graphdb_default` aan, waar bwb-import én de dev-stack op joinen.
 # Deployen we bwb-import eerst, dan faalt die op een ontbrekend extern netwerk.
-#
-# Deze stacks stonden tot 13 aug 2026 alleen met de hand via de Portainer-API — waardoor de compose in
-# de repo en de draaiende stack ongemerkt uiteen konden lopen.
 
 name: deploy-graaf
 

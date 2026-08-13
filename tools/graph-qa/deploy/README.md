@@ -64,21 +64,6 @@ loopt via een checkpointer. Backend-keuze (voorrang), zie `agent/agent.py:_check
 Een gesprek verwijderen in de werkplek wist ook het agent-geheugen: de BFF roept
 `DELETE /v1/conversations/{id}` aan (naast de API-berichten-delete).
 
-**Azure Container Apps** (de `az containerapp update`-stap in de publish-workflow): het lokale
-bestandssysteem is ephemeer en de app kan schalen → de SQLite-optie verliest geheugen bij herstart/
-scale-out. Zet daarom een Postgres-URL als container-app-secret + env (eenmalig; de workflow raakt alleen
-de image aan):
-
-```bash
-az containerapp secret set  -n wetsanalyse-graph-qa -g rg-wetsanalyse \
-  --secrets checkpoint-db-url="postgresql://<user>:<pass>@<host>:5432/<db>"
-az containerapp update      -n wetsanalyse-graph-qa -g rg-wetsanalyse \
-  --set-env-vars CHECKPOINT_DB_URL=secretref:checkpoint-db-url
-```
-
-(`_read_secret` leest `CHECKPOINT_DB_URL` óók als kale env-var — een `_FILE` is op Container Apps niet
-nodig.) Zonder een bereikbare Postgres blijft het geheugen per-instance/ephemeer.
-
 ## CI-driven deploy
 
 Zet `secrets.PORTAINER_URL` + `secrets.PORTAINER_API_KEY` en `vars.PORTAINER_GRAPH_QA_STACK_ID`
