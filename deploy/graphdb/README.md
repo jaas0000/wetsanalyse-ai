@@ -80,6 +80,38 @@ in nginx-proxy-manager een host `graphdb-mcp.ipalm.nl` → `192.168.10.23:8004` 
 De importservice draait naast de graaf op dezelfde LXC: stack **`bwb-import`**, broncode in
 `tools/bwb-import/`, image via GHCR. Zie `deploy/bwb-import/README.md` voor het aanroepen.
 
+## Beveiliging
+
+**GraphDB-security staat aan** (13 aug 2026). Daarvoor was de graaf binnen het LAN open én
+schrijfbaar: `192.168.10.23:7200` gaf iedereen op het netwerk lees- en schrijftoegang. Van buiten was
+het dicht via een basic-auth in nginx-proxy-manager, maar dat was een noodgreep voor de buitendeur,
+geen slot op de graaf zelf.
+
+Twee accounts:
+
+| account | rechten | gebruikt door |
+|---|---|---|
+| `admin` | `ROLE_ADMIN` | beheer via de workbench-UI (`graphdb.ipalm.nl`) |
+| `wetsanalyse` | lezen + schrijven op `inning` | de auth-proxy, de back-upcron en de importer |
+
+De wachtwoorden staan **niet in de repo**: ze komen als stack-env (`GRAPHDB_SVC_USER`/
+`GRAPHDB_SVC_PASSWORD`, plus `GRAPHDB_BASIC` = base64 van `user:wachtwoord` voor de nginx-header).
+Bewaar ze in Vaultwarden.
+
+Wie praat hoe met de graaf:
+
+- **graph-qa** → `mcp-auth-proxy:8004` met zijn bearer-token; de proxy controleert dat token en
+  **vervangt** de header door het service-account. De agent kent de GraphDB-credentials dus niet.
+- **de importer en de back-upcron** → rechtstreeks `graphdb:7200` met het service-account.
+- **de healthcheck** → met dezelfde credentials; zonder dat gaf `/rest/repositories` 401 en zou de
+  container onterecht unhealthy zijn.
+- **jij** → `graphdb.ipalm.nl`, GraphDB's eigen loginscherm. De NPM-basic-auth is weggehaald: die
+  botste met de GraphDB-login (twee `Authorization`-headers op één pad) en is overbodig nu de graaf
+  zichzelf bewaakt.
+
+> **Security weer uitzetten** (als iets vastloopt): `curl -u admin:<wachtwoord> -X POST
+> http://192.168.10.23:7200/rest/security -H 'Content-Type: application/json' -d 'false'`.
+
 ## Back-up — twee lagen
 
 **1. RDF-dump, dagelijks 03:00** — service `graphdb-backup` in deze stack. Exporteert de repository

@@ -21,6 +21,9 @@ services:
     environment:
       GRAPHDB_URL:          http://graphdb:7200
       GRAPHDB_REPOSITORY:   ${GRAPHDB_REPOSITORY:-inning}
+      # GraphDB-security staat aan (13 aug 2026): schrijven vereist het service-account.
+      GRAPHDB_USER:         ${GRAPHDB_SVC_USER:?zet GRAPHDB_SVC_USER}
+      GRAPHDB_PASSWORD:     ${GRAPHDB_SVC_PASSWORD:?zet GRAPHDB_SVC_PASSWORD}
       GRAPHDB_BASE_IRI:     https://ipalm.nl/bwb/
       GRAPHDB_ONTOLOGY_IRI: https://ipalm.nl/ns/bwb#
       BWB_DEFAULT_ID:       ${BWB_DEFAULT_ID:-BWBR0004770}

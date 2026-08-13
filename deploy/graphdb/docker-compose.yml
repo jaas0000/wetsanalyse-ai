@@ -23,10 +23,16 @@ services:
       # ernaast krap — 8 GB is comfortabeler, anders -Xmx1500m.
       GDB_JAVA_OPTS: >-
         -Xms1g -Xmx${GRAPHDB_HEAP:-2g}
+      # Service-account voor de healthcheck (en dezelfde credentials die de proxy en de importer
+      # gebruiken). GraphDB-security staat aan: zonder deze waarden komt niemand er meer in.
+      GDB_USER: ${GRAPHDB_SVC_USER:?zet GRAPHDB_SVC_USER}
+      GDB_PASSWORD: ${GRAPHDB_SVC_PASSWORD:?zet GRAPHDB_SVC_PASSWORD}
     volumes:
       - /var/lib/graphdb/home:/opt/graphdb/home
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:7200/rest/repositories || exit 1"]
+      # Met GraphDB-security aan geeft /rest/repositories 401 zonder credentials — de healthcheck
+      # zou de container dan onterecht als unhealthy markeren.
+      test: ["CMD-SHELL", "wget -qO- --user=$${GDB_USER} --password=$${GDB_PASSWORD} http://localhost:7200/rest/repositories || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -49,6 +55,10 @@ services:
             listen 8004;
             location /mcp {
                 if ($$http_authorization !~ "^Bearer ${MCP_BEARER_TOKEN}$$") { return 401; }
+                # Clienttoken gecontroleerd → vervang de header door het GraphDB-service-account.
+                # GraphDB heeft sinds 13 aug 2026 security aan; de proxy is het enige pad naar de
+                # MCP en injecteert de credentials, zodat de clients ze niet hoeven te kennen.
+                proxy_set_header Authorization "Basic ${GRAPHDB_BASIC}";
                 proxy_pass http://graphdb:7200;
                 proxy_http_version 1.1;
                 proxy_set_header Connection "";
@@ -74,6 +84,9 @@ services:
     restart: unless-stopped
     depends_on:
       - graphdb
+    environment:
+      GDB_USER: ${GRAPHDB_SVC_USER:?zet GRAPHDB_SVC_USER}
+      GDB_PASSWORD: ${GRAPHDB_SVC_PASSWORD:?zet GRAPHDB_SVC_PASSWORD}
     volumes:
       - /var/lib/graphdb/backup:/backup
     command:
@@ -88,7 +101,7 @@ services:
         REPO="$${GRAPHDB_REPOSITORY:-inning}"
         OUT="/backup/$${REPO}-$$(date +%Y%m%d-%H%M).nq.gz"
         # N-Quads houdt de named graphs vast (TriG/Turtle zou contexts verliezen).
-        curl -fsS -H 'Accept: application/n-quads' \
+        curl -fsS -u "$${GDB_USER}:$${GDB_PASSWORD}" -H 'Accept: application/n-quads' \
           "http://graphdb:7200/repositories/$${REPO}/statements" | gzip -9 > "$$OUT.tmp"
         # Pas hernoemen als de dump compleet is: een afgebroken run laat geen half bestand achter
         # dat er als geldige back-up uitziet.
