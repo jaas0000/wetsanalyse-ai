@@ -165,6 +165,21 @@ volgorde-afhankelijkheden (graaf en observability eerst, want hun netwerken zijn
 **De graaf** — `.github/workflows/deploy-graaf.yml` rolt de graphdb-stack en de importer in de juiste
 volgorde uit (GraphDB eerst: die maakt het netwerk `graphdb_default` waar de rest op joint).
 
+**Productie** — vijf losse Portainer-stacks met een **volgorde-afhankelijkheid via de netwerken**:
+
+| # | stack | maakt | joint op | hostpoort |
+|---|---|---|---|---|
+| 1 | `deploy/postgres/` | `wetsanalyse_internal` | — | nee |
+| 2 | `deploy/graphdb/` | `graphdb_default` | — | 7200 + 8004 |
+| 3 | `deploy/observability/` | `observability_default` | — | 3001 (Grafana) |
+| 4 | `api/`, `tools/graph-qa/` | — | de netwerken hierboven | api 8081; graph-qa geen |
+| 5 | `frontend/` | — | `wetsanalyse_internal` + observability | 8080 |
+
+De eerste drie maken de netwerken; deployt een latere stack eerder, dan faalt hij op een ontbrekend
+extern netwerk. **nginx-proxy-manager draait op een andere LXC** en deelt dus geen docker-netwerk:
+wie publiek moet zijn publiceert een hostpoort en NPM forwardt naar `<docker-lxc-ip>:<poort>`.
+graph-qa is bewust intern-only.
+
 **Images** — `{api,frontend,graph-qa,bwb-import}-docker-publish.yml` bouwen bij een push naar master
 naar GHCR, met pip-audit/npm-audit vooraf en een Trivy-gate achteraf. Ze publiceren alleen; het
 uitrollen is een aparte, expliciete stap.

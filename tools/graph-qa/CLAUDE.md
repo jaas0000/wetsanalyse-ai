@@ -115,8 +115,8 @@ de SSE), timing-safe token-check.
 - **Brongetrouwheid.** Bronnen én grounding komen uit de **tool-trace**, nooit uit een regex over
   modeltekst. Als iets niet uit een tool kwam, is het geen bron en niet gegrond.
 - **`GRAPHDB_TOKEN` is verplicht.** Afgedwongen bij startup (lifespan) én per request (`make_graph →
-  require_graph`). De GraphDB-REST staat open/writable, dus de token is de enige poort — maak dit niet
-  optioneel.
+  require_graph`). Het token is de sleutel voor de auth-proxy, die hem vervangt door het
+  GraphDB-service-account; de agent kent die credentials zelf niet. Maak dit niet optioneel.
 - **Geen vrije SPARQL voor het model.** Nieuwe retrieval = een **getypeerde tool** in `tools/` met een
   bouwer in `graph/queries.py`. `raw_sparql` blijft de afgeschermde ontsnapping.
 - **DI, geen globale clients.** Afhankelijkheden achter een poort + adapter, zodat ze faken te zijn.
@@ -164,8 +164,9 @@ cd tools/graph-qa && .venv/bin/python eval/run_eval.py --offline
 
 - `semantic_search` vereist een bestaande GraphDB-similarity-index (`SIMILARITY_INDEX`); ontbreekt die,
   dan degradeert de tool naar `search_wetgeving`. Achtergrond: `docs/embeddings-runbook.md`.
-- De GraphDB-REST staat open + writable zonder auth — de read-only guard in `mcp_client.py` is een
-  tweede net, geen slot. Openstaand punt (achter auth zetten).
+- GraphDB draait met security aan en de agent komt er alleen via de auth-proxy in. De read-only
+  guard in `mcp_client.py` (`_reject_updates`) blijft een tweede net: het service-account mág
+  schrijven op `inning`, dus de guard is wat een schrijf-SPARQL vanuit de agent tegenhoudt.
 - **SSE-client-disconnect:** de LangGraph-nodes zijn synchroon en draaien in de default-executor; een
   `run_in_executor`-future is niet annuleerbaar. Valt de client midden in de stream weg, dan loopt een
   in-flight LLM-call (timeout 120s) of MCP-call in de achtergrondthread nog dóór tot hij klaar is —

@@ -1,17 +1,17 @@
 # graph-qa — deployment (Portainer, intern)
 
 De graph-qa-agent draait als intern-only Portainer-stack. De **werkplek** (frontend `/workbench`) belt
-hem rechtstreeks op `POST /v1/chat` (SSE) via een server-side BFF-route — server→server over het gedeelde
-Docker-netwerk. **Geen host-poort, geen publieke NPM-host nodig.** Image van GHCR via
+hem rechtstreeks op `POST /v1/chat` (SSE) via een server-side BFF-route — server→server over het
+gedeelde netwerk `wetsanalyse_internal`. **Geen host-poort, geen publieke NPM-host nodig.** Image van GHCR via
 `.github/workflows/graph-qa-docker-publish.yml`.
 
 ## 1. Host-secrets (eenmalig, op de host)
 
-Twee bestanden in `SECRETS_DIR` (Synology: `/volume1/docker/secrets/graph-qa`), leesbaar voor de
+Twee bestanden in `SECRETS_DIR` (default `/opt/secrets/graph-qa`), leesbaar voor de
 non-root container-user (uid 10001) → **chmod 644**:
 
 ```bash
-SECRETS_DIR=/volume1/docker/secrets/graph-qa
+SECRETS_DIR=/opt/secrets/graph-qa
 sudo mkdir -p "$SECRETS_DIR"
 echo -n "<GRAPHDB_TOKEN>"        | sudo tee "$SECRETS_DIR/graphdb_token"        >/dev/null
 echo -n "<AZURE_FOUNDRY_API_KEY>"| sudo tee "$SECRETS_DIR/azure_foundry_api_key">/dev/null
@@ -27,13 +27,21 @@ De waarden staan in `tools/graph-qa/.env`. **Geen chat-secret nodig:** de servic
 ## 2. Stack
 
 `deploy/docker-compose.yml`. Niet-geheime stack-env (Portainer of CI):
-`GRAPH_QA_IMAGE`, `PROXY_NETWORK` (default `homeinfra_internal`), `SECRETS_DIR`,
-`AZURE_FOUNDRY_BASE_URL`, `LLM_MODEL`, `GRAPHDB_MCP_URL`, `SIMILARITY_INDEX` (`bwb_similarity`),
-`OTEL_EXPORTER_OTLP_ENDPOINT` (optioneel). Secrets via `*_FILE` → `/run/secrets`. Gespreksgeheugen: zie §4.
+`GRAPH_QA_IMAGE`, `SECRETS_DIR`, `AZURE_FOUNDRY_BASE_URL`, `LLM_MODEL`, `GRAPHDB_MCP_URL`,
+`SIMILARITY_INDEX` (`bwb_similarity`), `OTEL_EXPORTER_OTLP_ENDPOINT` (optioneel). Secrets via
+`*_FILE` → `/run/secrets`. Gespreksgeheugen: zie §4.
 
-**Health:** de container heeft een healthcheck op `/health`; de CI-deploy faalt als de container niet
-`(healthy)` wordt. Optioneel een externe health-URL: NPM proxy-host `graph-qa.ipalm.nl` →
-`graph-qa:8080` + `vars.GRAPH_QA_HEALTH_URL=https://graph-qa.ipalm.nl/health`.
+De stack joint op **drie externe netwerken**, die dus alle drie moeten bestaan:
+
+| netwerk | env | van wie | waarvoor |
+|---|---|---|---|
+| `wetsanalyse_internal` | `WA_NETWORK` | `deploy/postgres/` | de frontend belt graph-qa; graph-qa belt postgres |
+| `graphdb_default` | `GRAAF_NETWORK` | `deploy/graphdb/` | de MCP achter `mcp-auth-proxy:8004` |
+| `observability_default` | `OBS_NETWORK` | `deploy/observability/` | OTLP naar de collector |
+
+**Health:** de container heeft een healthcheck op `/health`; een deploy faalt als de container niet
+`(healthy)` wordt. Van buiten is de agent bewust niet bereikbaar — controleer dus op de host:
+`docker exec graph-qa python -c "import urllib.request;print(urllib.request.urlopen('http://127.0.0.1:8080/health').status)"`.
 
 ## 3. Werkplek koppelen
 
@@ -55,7 +63,7 @@ loopt via een checkpointer. Backend-keuze (voorrang), zie `agent/agent.py:_check
    **horizontaal veilig**. **Verplicht zodra graph-qa >1 replica draait.** In deze stack: leg het
    host-secret `checkpoint_db_url` (§1) — het compose-bestand wijst er al naar via
    `CHECKPOINT_DB_URL_FILE`. De graph-qa-stack moet op hetzelfde netwerk als de postgres-stack zitten
-   (`homeinfra_internal`, default) zodat `postgres:5432` bereikbaar is. Zelfde DB als de API; de
+   (`wetsanalyse_internal`, default) zodat `postgres:5432` bereikbaar is. Zelfde DB als de API; de
    checkpoint-tabellen (`checkpoints`/`checkpoint_*`) botsen niet met de API-tabellen — `setup()` maakt
    ze idempotent aan bij de eerste start.
 2. **Geen URL** → `CHECKPOINT_DB_PATH` op het durabele **`graph_qa_data`-volume** (`/data`, `AsyncSqliteSaver`).
@@ -64,9 +72,10 @@ loopt via een checkpointer. Backend-keuze (voorrang), zie `agent/agent.py:_check
 Een gesprek verwijderen in de werkplek wist ook het agent-geheugen: de BFF roept
 `DELETE /v1/conversations/{id}` aan (naast de API-berichten-delete).
 
-## CI-driven deploy
+## Deployvolgorde
 
-Zet `secrets.PORTAINER_URL` + `secrets.PORTAINER_API_KEY` en `vars.PORTAINER_GRAPH_QA_STACK_ID`
-(+ `vars.LLM_MODEL`, `vars.GRAPHDB_MCP_URL`, `vars.AZURE_FOUNDRY_BASE_URL`, `vars.GRAPH_QA_SECRETS_DIR`,
-optioneel `vars.GRAPH_QA_SIMILARITY_INDEX`/`vars.GRAPH_QA_HEALTH_URL`). Dan redeployt de workflow bij
-elke wijziging in `tools/graph-qa/**` op digest, met container-health-gate.
+`postgres` → `graphdb` → `observability` → **graph-qa** → `frontend`. De eerste drie maken de
+netwerken waar deze stack op joint; de frontend verwijst naar `graph-qa:8080`.
+
+De publish-workflow bouwt alleen het image naar GHCR (met Trivy-gate); de stack-update doe je daarna
+via Portainer of de Portainer-API.

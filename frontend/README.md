@@ -117,23 +117,28 @@ in `deploy/observability/`, die frontend-stdout-logs via Alloy naar Loki shipt).
 ## Docker / deployment
 
 Multi-stage `Dockerfile` (standalone, non-root) + `docker-compose.yml` voor de Portainer-stack
-achter Nginx Proxy Manager, identiek aan de API/MCP-stijl. CI:
-`.github/workflows/frontend-docker-publish.yml` (test → build → GHCR → Trivy → Portainer-redeploy).
+achter Nginx Proxy Manager, identiek aan de API-stijl. CI:
+`.github/workflows/frontend-docker-publish.yml` (test → build → GHCR → Trivy). De workflow
+publiceert alleen het image; de stack-update is een aparte stap.
+
+De stack joint op `wetsanalyse_internal` (van `deploy/postgres/`) en `observability_default`, en
+**publiceert een hostpoort** (`HOST_PORT`, default 8080): NPM draait op een andere LXC en deelt geen
+docker-netwerk, dus proxyen op containernaam kan niet.
 
 Eénmalig op de host (in `SECRETS_DIR`, gedeeld met de API-stack), alle mode 644:
 `frontend_api_token` met een tokenwaarde uit de API-tokenlijst, `frontend_admin_token` met een
-tokenwaarde uit de **admin**-tokenlijst (voor `/beheer`), en `frontend_auth_secret` voor de
+tokenwaarde uit de **admin**-tokenlijst (voor de beheertab), en `frontend_auth_secret` voor de
 login-sessie (`openssl rand -base64 32`). De container-entrypoint laadt dat laatste bestand in
 `AUTH_SECRET` (`AUTH_SECRET_FILE=/run/secrets/frontend_auth_secret`), zodat het — net als de andere
 tokens — een bestand blijft en niet als plain env in Portainer staat. 2FA hergebruikt de
 API-secret `llm_config_secret` (geen extra frontend-bestand). Zet daarnaast de stack-env
 **`AUTH_URL`** op de publieke origin (bv. `https://wetsanalyse.ipalm.nl`) — verplicht achter NPM,
 anders redirecten login/logout naar het interne `0.0.0.0:3000`. In NPM een Proxy Host
-`wetsanalyse.ipalm.nl` → `wetsanalyse-frontend:3000`, met **proxy buffering uit** voor SSE (zie de
+`wetsanalyse.ipalm.nl` → `<docker-lxc-ip>:${HOST_PORT}`, met **proxy buffering uit** voor SSE (zie de
 commentaarregels in `docker-compose.yml`).
 
 > **Toegang.** De hele webapp zit achter een login met **userid + wachtwoord** (Auth.js);
-> niet-ingelogde bezoekers landen op `/login`. `/beheer` (LLM-beheer + gebruikersbeheer) is
+> niet-ingelogde bezoekers landen op `/login`. De beheertabs (LLM-beheer + gebruikersbeheer) zijn
 > bovendien rol-afgeschermd tot **beheerders**. Een losse NPM Access List is dus niet meer nodig;
 > de eerste beheerder maak je eenmalig via `/setup`.
 

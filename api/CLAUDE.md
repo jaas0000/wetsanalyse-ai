@@ -169,15 +169,19 @@ uv run pytest -q               # unit-tests (fakes; geen netwerk)
 recreate een api-image-redeploy de DB nooit. De API verbindt cross-stack op `postgres:5432` met een
 **bounded connect-retry** bij cold start (`main.py` → `_init_db_met_retry`, knoppen
 `WETSANALYSE_DB_CONNECT_RETRIES`/`_BACKOFF`). De host-secrets (incl.
-`postgres_user`/`postgres_password`/`database_url`) zijn gedeeld via `SECRETS_DIR`. Migratie +
-volume-behoud: zie `deploy/postgres/README.md`.
+`postgres_user`/`postgres_password`/`database_url`) zijn gedeeld via `SECRETS_DIR`. Die stack maakt
+óók het gedeelde netwerk `wetsanalyse_internal` waar deze stack op joint — deploy hem dus eerst; zie
+`deploy/postgres/README.md`.
 
-Docker-image + Portainer-stack achter NPM, net als de MCP (`docker-compose.yml`). De dienst is
+Docker-image + Portainer-stack (`docker-compose.yml`). De stack publiceert een hostpoort
+(`HOST_PORT`, default 8081) omdat NPM op een andere LXC draait en geen docker-netwerk deelt; die
+poort is alleen nodig als de API van buiten bereikbaar moet zijn (bv. voor de admin-MCP op
+`wetsanalyse-api.ipalm.nl`). De frontend praat server→server over het interne netwerk. De dienst is
 **horizontaal veilig** te schalen (stateless request-afhandeling; de opslag is de gedeelde DB). De
 containers draaien **non-root** en **PostgreSQL draait met authenticatie**. Alle secrets staan als
 bestanden op de host (`*_FILE`-patroon). Build vanaf de **projectroot**:
-`docker build -f api/Dockerfile -t wetsanalyse-api .` (de image heeft de skill-`references/scripts`
-nodig voor de canonieke JAS-klassenlijst).
+`docker build -f api/Dockerfile -t wetsanalyse-api .` (de image heeft de skill-`scripts` nodig voor
+de canonieke JAS-klassenlijst — `validation.py` laadt `validate_analyse.py` op runtime in).
 
 ### Secrets op de host (eenmalig, vóór de eerste stack-start)
 
