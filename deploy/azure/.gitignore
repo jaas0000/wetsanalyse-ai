@@ -1,0 +1,4 @@
+# Bevat de gegenereerde secrets van een deployment — nooit committen.
+params.json
+# Licentiebestanden horen niet in de repo.
+*.license
