@@ -31,6 +31,26 @@ Zonder `--license-file` slaagt de deployment wél; je houdt dan een lege, read-o
 
 ## Deployen
 
+### Via GitHub Actions (aanbevolen)
+
+Actions → **azure-infra** → *Run workflow*, met drie keuzes:
+
+| actie | wat het doet |
+|---|---|
+| `wat-if` *(default)* | Azure toont welke resources zouden ontstaan of wijzigen. Maakt niets aan — de enige manier om de template tegen je echte subscription te toetsen (quota, regio, rechten). |
+| `deploy` | rolt de stack uit. De samenvatting aan het eind bevat de webapp-URL en de vervolgstappen. |
+| `afbreken` | verwijdert de hele resource group. Vraagt om de naam ter bevestiging. |
+
+Benodigde repo-secrets: `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`,
+`AZURE_CLIENT_SECRET`, `AZURE_AI_KEY` en `GRAPHDB_LICENSE_B64` (de licentie als
+`base64 -w0 graphdb.license`). Repo-vars: `LLM_API_BASE`, optioneel `LLM_MODEL`,
+`AZURE_RESOURCE_GROUP` en `AZURE_LOCATION`.
+
+De publish-workflows raken Azure **niet** aan — die zouden bij elke master-push naar een lege
+resource group praten. Een image-update is hier dus een nieuwe `deploy`.
+
+### Met de hand
+
 ```bash
 az login
 az group create --name rg-wetsanalyse --location westeurope

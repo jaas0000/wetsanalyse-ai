@@ -184,6 +184,12 @@ graph-qa is bewust intern-only.
 naar GHCR, met pip-audit/npm-audit vooraf en een Trivy-gate achteraf. Ze publiceren alleen; het
 uitrollen is een aparte, expliciete stap.
 
+**Azure (standby)** — `deploy/azure/` beschrijft een zelfstandige kopie op Container Apps, mét eigen
+GraphDB en importer. Bedoeld om klaar te staan, niet te draaien: `azure-infra.yml` is handmatig en
+kent `wat-if` (valideert, maakt niets aan), `deploy` en `afbreken`. Zolang niemand die start, kost
+het niets. Zie `deploy/azure/README.md` — let vooral op de GraphDB-licentie, zonder welke de graaf
+read-only opkomt.
+
 ## Referentiedocumentatie
 
 `docs/` bevat de methodische onderbouwing (niet code):
