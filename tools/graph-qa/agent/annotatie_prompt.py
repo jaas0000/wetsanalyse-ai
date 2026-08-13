@@ -69,15 +69,22 @@ AANDACHT-NIVEAU per element — géén verzonnen zekerheidscijfer, maar een oord
 - "geel": twijfel of een aandachtspunt — jurist moet even kijken (bv. plausibel alternatief, grensgeval).
 - "rood": waarschijnlijk fout — verkeerde klasse of niet-onderbouwd fragment.
 
-ONTBREKEND: benoem JAS-klassen die waarschijnlijk óók in de tekst voorkomen maar niet zijn gemarkeerd (met een korte reden). Verzin niets buiten de aangeleverde tekst.
+ONTBREKEND: benoem JAS-klassen die waarschijnlijk óók in de tekst voorkomen maar niet zijn gemarkeerd (met een korte reden). Neem waar mogelijk het LETTERLIJKE fragment op dat gemarkeerd zou moeten worden — dan kan het meteen worden toegevoegd. Verzin niets buiten de aangeleverde tekst.
+
+ACTIE per element — niet alleen wát er mis is, maar wat ermee moet gebeuren:
+- "behoud": laat het element zoals het is (ook bij "geel": een aandachtspunt voor de jurist, geen correctie).
+- "vervang": er is een betere klasse en/of een beter begrensd fragment. Geef die dan ook op in `voorstel_klasse` en/of `voorstel_tekst`; een `voorstel_tekst` MOET letterlijk in de artikeltekst staan.
+- "verwijder": dit hoort helemaal geen JAS-element te zijn. Alleen bij "rood".
 
 UITVOER — geef UITSLUITEND geldige JSON terug, zonder omliggende tekst of code-fences, in deze vorm:
 {{"oordelen": [
-  {{"index": <0-based index van het element>, "aandacht": "<groen|geel|rood>", "motivatie": "<één korte zin>"}}
+  {{"id": "<het id van het element>", "aandacht": "<groen|geel|rood>", "motivatie": "<één korte zin>",
+    "actie": "<behoud|vervang|verwijder>", "voorstel_klasse": "<optioneel, een van de dertien>",
+    "voorstel_tekst": "<optioneel, letterlijk fragment>"}}
 ], "ontbrekend": [
-  {{"klasse": "<een van: {klassen}>", "reden": "<korte reden>"}}
+  {{"klasse": "<een van: {klassen}>", "reden": "<korte reden>", "tekst": "<optioneel, letterlijk fragment>"}}
 ]}}
-Geef voor ELK aangeleverd element precies één oordeel (met de juiste index). `ontbrekend` mag leeg zijn."""
+Geef voor ELK aangeleverd element precies één oordeel, met het `id` zoals het is aangeleverd. `ontbrekend` mag leeg zijn."""
 
 
 def critic_userprompt(voorstellen: list[dict], artikeltekst: str) -> str:
@@ -85,11 +92,16 @@ def critic_userprompt(voorstellen: list[dict], artikeltekst: str) -> str:
     for i, v in enumerate(voorstellen):
         alt = ", ".join(a.get("klasse", "") for a in v.get("alternatieven", []) if a.get("klasse"))
         alt_tekst = f" | alternatieven: {alt}" if alt else ""
-        regels.append(f'[{i}] klasse={v.get("klasse", "")} | tekst="{v.get("tekst", "")}"{alt_tekst}')
+        # Zowel het id (waarop het oordeel wordt gekoppeld) als de positie: valt het id weg in de
+        # respons, dan is er nog een terugval. Zie `_verwerk_critic`.
+        eigen_id = v.get("id", "") or f"pos-{i}"
+        regels.append(
+            f'[{i}] id={eigen_id} | klasse={v.get("klasse", "")} | tekst="{v.get("tekst", "")}"{alt_tekst}'
+        )
     lijst = "\n".join(regels) if regels else "(geen voorstellen)"
     return (
-        "Beoordeel de onderstaande voorgestelde JAS-elementen tegen de artikeltekst. Geef per index een "
-        "aandacht-niveau + motivatie, en noem waarschijnlijk ontbrekende elementen.\n\n"
+        "Beoordeel de onderstaande voorgestelde JAS-elementen tegen de artikeltekst. Geef per element "
+        "een aandacht-niveau, een motivatie en een actie, en noem waarschijnlijk ontbrekende elementen.\n\n"
         f"--- VOORSTELLEN ---\n{lijst}\n--- EINDE VOORSTELLEN ---\n\n"
         f"--- ARTIKELTEKST ---\n{artikeltekst}\n--- EINDE ARTIKELTEKST ---"
     )

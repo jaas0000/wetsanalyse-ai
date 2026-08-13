@@ -234,7 +234,15 @@ class State(TypedDict, total=False):
     sub_findings: list[dict[str, str]]
     # Annotatie: de gegronde voorstellen (als dicts) die annoteer_node maakt; critic_node scoort ze
     # met een aandacht-niveau en emit ze dán pas als `element`-events.
+    #
+    # Alle annotatie-velden zijn last-value-wins (géén operator.add-reducer): elke node levert de
+    # volledige lijst. Met een append-reducer zou de Critic-feedback over rondes heen stapelen en
+    # zou een herziening zijn eigen vorige oordeel als actueel aanzien.
     voorstellen: list[dict[str, Any]]
+    verworpen_fragmenten: list[dict[str, Any]]   # niet-gegronde citaten, als feedback voor een herziening
+    critic_feedback: list[dict[str, Any]]        # [{id, aandacht, motivatie, actie, voorstel_*}]
+    critic_ontbrekend: list[dict[str, Any]]
+    critic_gefaald: bool
 
 
 def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGraph:
@@ -396,7 +404,7 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
             messages=[{"role": "user", "content": annotatie_userprompt(doel.get("bwbId", ""), aanduiding, corpus, doel.get("lid", ""))}],
         )
         llm_text = "".join(b.text for b in resp.content if b.type == "text")
-        voorstellen, _verworpen = _verwerk(llm_text, corpus, doel.get("bwbId", ""), aanduiding, doel.get("lid", ""))
+        voorstellen, verworpen = _verwerk(llm_text, corpus, doel.get("bwbId", ""), aanduiding, doel.get("lid", ""))
 
         # Stuur de opgehaalde tekst mee zodat de frontend precies dít toont (één bron, ook voor divisies).
         doel_uit = {**doel, "leden_teksten": [{"lid": doel.get("lid", ""), "tekst": corpus}]}
@@ -405,8 +413,15 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
             plek = f"artikel {aanduiding}" + (f" lid {doel['lid']}" if doel.get("lid") else "")
             leeg = f"Ik vond geen JAS-elementen om te markeren in {plek}."
             writer({"type": "token", "content": leeg})
-            return {"answer": leeg, "voorstellen": [], "messages": [{"role": "assistant", "content": leeg}]}
-        return {"voorstellen": [v.model_dump() for v in voorstellen], "answer": ""}
+            return {"answer": leeg, "voorstellen": [], "verworpen_fragmenten": [],
+                    "messages": [{"role": "assistant", "content": leeg}]}
+        # De verworpen fragmenten gaan mee de state in: de herzieningsronde (zie `route_na_critic`)
+        # kan het model daarmee zijn eigen bijna-goede citaten laten repareren.
+        return {
+            "voorstellen": [v.model_dump() for v in voorstellen],
+            "verworpen_fragmenten": [x.model_dump() for x in verworpen],
+            "answer": "",
+        }
 
     def critic_node(state: State) -> dict[str, Any]:
         """Critic-pas: controleert de gegronde voorstellen vóór de jurist en zet per element een
@@ -423,8 +438,9 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
         corpus = _corpus_uit_trace(state.get("source_trace", []))
         aanduiding = doel.get("artikel") or doel.get("nummer") or ""
 
-        oordelen: dict[int, tuple[str, str]] = {}
+        oordelen: dict[str, Any] = {}
         ontbrekend: list[Any] = []
+        gefaald = False
         try:
             resp = llm.create(
                 model=model,
@@ -434,13 +450,17 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
                 messages=[{"role": "user", "content": critic_userprompt(voorstellen, corpus)}],
             )
             crit_text = "".join(b.text for b in resp.content if b.type == "text")
-            oordelen, ontbrekend = _verwerk_critic(crit_text, len(voorstellen))
+            oordelen, ontbrekend = _verwerk_critic(crit_text, [str(v.get("id", "")) for v in voorstellen])
         except Exception:  # noqa: BLE001 — Critic mag de annotatie nooit breken
+            gefaald = True
             logger.warning("critic: beoordeling mislukt; elementen zonder aandacht doorgelaten", exc_info=True)
 
         met_aandacht = 0
-        for i, v in enumerate(voorstellen):
-            aandacht, motivatie = oordelen.get(i, ("", ""))
+        feedback: list[dict[str, Any]] = []
+        for v in voorstellen:
+            oordeel = oordelen.get(str(v.get("id", "")))
+            aandacht = oordeel.aandacht if oordeel else ""
+            motivatie = oordeel.motivatie if oordeel else ""
             # Deterministische regel: aanwezige alternatieven = disambiguatie = minimaal 'geel'.
             if v.get("alternatieven") and aandacht in ("", "groen"):
                 aandacht = "geel"
@@ -449,6 +469,8 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
             v["critic"] = motivatie
             if aandacht in ("geel", "rood"):
                 met_aandacht += 1
+            if oordeel is not None:
+                feedback.append({"id": v.get("id", ""), **oordeel.model_dump()})
             writer({"type": "element", "element": v})
 
         writer({"type": "ontbrekend", "items": [o.model_dump() for o in ontbrekend]})
@@ -467,7 +489,16 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
         geheugen = f"[Annotatie {plek}] Ik markeerde {len(voorstellen)} JAS-elementen: {elems}" + (
             " (…)" if len(voorstellen) > 12 else "."
         )
-        return {"answer": samenvatting, "messages": [{"role": "assistant", "content": geheugen}]}
+        # `voorstellen` expliciet teruggeven: eerder werkten de aandacht-velden alleen door omdat het
+        # dezelfde dict-objecten waren. Dat is fragiel zodra er meerdere rondes over de state lopen.
+        return {
+            "answer": samenvatting,
+            "voorstellen": voorstellen,
+            "critic_feedback": feedback,
+            "critic_ontbrekend": [o.model_dump() for o in ontbrekend],
+            "critic_gefaald": gefaald,
+            "messages": [{"role": "assistant", "content": geheugen}],
+        }
 
     def tools_node(state: State) -> dict[str, Any]:
         writer = get_stream_writer()

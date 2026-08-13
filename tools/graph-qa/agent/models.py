@@ -65,6 +65,9 @@ class AnnotatieVoorstel(BaseModel):
     server-side ingevuld door de brongetrouwheid-check (nooit door het model).
     """
 
+    # Stabiel id, hier toegekend (niet door het model). De Critic verwijst ernaar en de api matcht
+    # erop bij een volgende ronde; op positie koppelen breekt zodra een herziening iets toevoegt.
+    id: str = ""
     klasse: str
     tekst: str
     lid: str = ""
@@ -76,12 +79,39 @@ class AnnotatieVoorstel(BaseModel):
     critic: str = ""                   # korte Critic-motivatie bij het aandacht-niveau
 
 
+class CriticOordeel(BaseModel):
+    """Wat de Critic van één voorstel vindt, inclusief wat de annoteerder ermee moet doen.
+
+    Zonder `actie`/`voorstel_*` is een herzieningsronde onmogelijk: dan weet de annoteerder wél dat
+    er iets mis is, maar niet wat.
+    """
+
+    aandacht: str = ""                 # groen | geel | rood
+    motivatie: str = ""
+    actie: str = "behoud"              # behoud | vervang | verwijder
+    voorstel_klasse: str = ""
+    voorstel_tekst: str = ""
+
+
 class OntbrekendItem(BaseModel):
     """Een door de Critic vermoed ontbrekend element: een JAS-klasse die waarschijnlijk óók in de tekst
-    zit maar niet is gemarkeerd. Suggestief (geen span/bron) — de jurist beoordeelt."""
+    zit maar niet is gemarkeerd. `tekst` is optioneel — staat er een letterlijk fragment bij, dan kan
+    een herzieningsronde het element daadwerkelijk toevoegen in plaats van alleen een klasse te roepen."""
 
     klasse: str
     reden: str = ""
+    tekst: str = ""
+
+
+class VerworpenFragment(BaseModel):
+    """Een voorstel dat de grondingscheck niet haalde.
+
+    Werd eerder alleen geteld en weggegooid. Juist deze informatie laat het model zichzelf
+    corrigeren: "dit citaat staat niet letterlijk in de tekst" is een aanwijzing, geen fout."""
+
+    klasse: str
+    tekst: str
+    reden: str                         # ongeldige_klasse | niet_letterlijk
 
 
 # --- Artikeltekst uit de graaf (workbench-documentpaneel) ---------------------

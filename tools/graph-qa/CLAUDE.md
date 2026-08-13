@@ -110,6 +110,23 @@ shutdown (`observability.shutdown()`). Beveiliging: CORS-credentials nooit samen
 in de origin-lijst telt als wildcard), per-IP rate-limit (dependency, geen middleware — anders buffert
 de SSE), timing-safe token-check.
 
+### De annotatie-keten
+
+`ophaal (agent ⇄ tools) → annoteer → critic`. Drie dingen die je moet kennen voordat je hieraan werkt:
+
+- **Elk voorstel draagt een `id`** dat `_verwerk` toekent (niet het model). De Critic koppelt zijn
+  oordeel daarop; op positie koppelen brak zodra een ronde een element toevoegde of wegliet. Geeft
+  het model een `id` mee, dan blijft dat behouden — zo matcht de api het bij een volgende ronde op
+  hetzelfde element en blijven de beslissingen van de jurist staan.
+- **Verworpen fragmenten gaan niet verloren.** `_verwerk` geeft ze terug met een reden
+  (`niet_letterlijk` of `ongeldige_klasse`) in plaats van ze te tellen. Een bijna-goed citaat is met
+  die aanwijzing prima te repareren — dat is de goedkoopste kwaliteitswinst in de keten.
+- **De Critic geeft instructies, geen klachten.** Naast `aandacht` + `motivatie` levert hij
+  `actie` (`behoud|vervang|verwijder`) met een `voorstel_klasse`/`voorstel_tekst`. `verwijder` mag
+  alleen bij rood, en `vervang` zonder voorstel degradeert naar `behoud` — anders is het geen
+  opdracht. Die normalisatie zit in `_verwerk_critic`, niet in de prompt: op een model vertrouwen
+  voor een veiligheidsregel is geen veiligheidsregel.
+
 ## Kern-invarianten (niet breken)
 
 - **Brongetrouwheid.** Bronnen én grounding komen uit de **tool-trace**, nooit uit een regex over

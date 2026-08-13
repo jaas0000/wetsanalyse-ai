@@ -175,3 +175,56 @@ def test_gewone_vraag_blijft_antwoord_geen_annotatie():
     assert not any(e["type"] in ("doel", "element") for e in events)
     tokens = "".join(e["content"] for e in events if e["type"] == "token")
     assert "Zes weken" in tokens
+
+
+def test_elementen_dragen_een_stabiel_id_en_critic_koppelt_daarop():
+    """Zonder id koppelt de Critic op positie, en dan landt een oordeel op het verkeerde element
+    zodra een herzieningsronde iets toevoegt of weglaat. Dit is de basis onder die lus."""
+    elementen = json.dumps({"elementen": [
+        {"id": "el-aaa", "klasse": "Rechtssubject", "tekst": "De ontvanger", "lid": "1"},
+        {"id": "el-bbb", "klasse": "Rechtsbetrekking", "tekst": "verleent uitstel van betaling", "lid": "1"},
+    ]})
+    # Bewust in omgekeerde volgorde: op positie zou dit de oordelen verwisselen.
+    critic = json.dumps({"oordelen": [
+        {"id": "el-bbb", "aandacht": "rood", "motivatie": "te grof", "actie": "vervang",
+         "voorstel_klasse": "Rechtsfeit"},
+        {"id": "el-aaa", "aandacht": "groen", "motivatie": "helder"},
+    ], "ontbrekend": []})
+
+    llm = FakeLLM([
+        response([text_block("WORKERS: annotatie\nPLAN: annoteer art 9 lid 1")], "end_turn"),
+        response([tool_block("t1", "get_lid", {"bwb_id": "BWBR0004770", "artikel": "9", "lid": "1"})], "tool_use"),
+        response([text_block('{"bwbId":"BWBR0004770","artikel":"9","lid":"1"}')], "end_turn"),
+        response([text_block(elementen)], "end_turn"),
+        response([text_block(critic)], "end_turn"),
+    ])
+    events = _run(answer_stream(
+        "annoteer artikel 9 lid 1 van de Invorderingswet 1990",
+        settings=make_settings(enable_decomposition=True), llm=llm, graph=FakeGraph(result=LID_TSV),
+    ))
+
+    els = {e["element"]["id"]: e["element"] for e in events if e["type"] == "element"}
+    assert set(els) == {"el-aaa", "el-bbb"}, "de id's uit de annoteer-stap moeten doorstromen"
+    assert els["el-aaa"]["aandacht"] == "groen"
+    assert els["el-bbb"]["aandacht"] == "rood", "op id gekoppeld, niet op volgorde"
+
+
+def test_verworpen_fragment_breekt_de_annotatie_niet():
+    """Een citaat dat niet letterlijk in de tekst staat wordt verworpen; de rest komt gewoon door."""
+    elementen = json.dumps({"elementen": [
+        {"klasse": "Rechtssubject", "tekst": "De ontvanger", "lid": "1"},
+        {"klasse": "Voorwaarde", "tekst": "een zin die nergens staat", "lid": "1"},
+    ]})
+    llm = FakeLLM([
+        response([text_block("WORKERS: annotatie\nPLAN: annoteer art 9 lid 1")], "end_turn"),
+        response([tool_block("t1", "get_lid", {"bwb_id": "BWBR0004770", "artikel": "9", "lid": "1"})], "tool_use"),
+        response([text_block('{"bwbId":"BWBR0004770","artikel":"9","lid":"1"}')], "end_turn"),
+        response([text_block(elementen)], "end_turn"),
+        response([text_block(json.dumps({"oordelen": [], "ontbrekend": []}))], "end_turn"),
+    ])
+    events = _run(answer_stream(
+        "annoteer artikel 9 lid 1 van de Invorderingswet 1990",
+        settings=make_settings(enable_decomposition=True), llm=llm, graph=FakeGraph(result=LID_TSV),
+    ))
+    els = [e["element"] for e in events if e["type"] == "element"]
+    assert [el["klasse"] for el in els] == ["Rechtssubject"]

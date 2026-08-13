@@ -9,15 +9,19 @@ from __future__ import annotations
 import json
 import logging
 import re
+import uuid
 from collections.abc import Iterator
 from typing import Any
 
 from .jas_klassen import GELDIGE_JAS_KLASSEN
-from .models import AnnotatieAlternatief, AnnotatieVoorstel, OntbrekendItem
+from .models import (
+    AnnotatieAlternatief, AnnotatieVoorstel, CriticOordeel, OntbrekendItem, VerworpenFragment,
+)
 
 logger = logging.getLogger("graph_qa.annotatie")
 
 _AANDACHT = {"groen", "geel", "rood"}
+_ACTIES = {"behoud", "vervang", "verwijder"}
 
 _WS = re.compile(r"\s+")
 
@@ -89,15 +93,19 @@ def _parse_elementen(text: str) -> list[dict[str, Any]]:
 
 def _verwerk(
     llm_text: str, corpus: str, bwb_id: str, artikel: str, scope_lid: str | None = None
-) -> tuple[list[AnnotatieVoorstel], int]:
+) -> tuple[list[AnnotatieVoorstel], list[VerworpenFragment]]:
     """Parse de LLM-JSON, valideer klasse + brongetrouwheid, bereken vindplaats.
 
     Is een `scope_lid` gezet (annotatie tot één lid), dan wint dat voor de vindplaats — elke markering
     verwijst dan naar dat lid, ook als het model het lid-veld leeg laat.
+
+    Geeft naast de gegronde voorstellen de VERWORPEN fragmenten terug. Die gingen eerder als kale
+    teller verloren, terwijl ze de bruikbaarste feedback voor een herzieningsronde zijn: een bijna
+    goed citaat is met de aanwijzing "dit staat niet letterlijk in de tekst" prima te repareren.
     """
     norm_corpus = _normaliseer(corpus)
     voorstellen: list[AnnotatieVoorstel] = []
-    verworpen = 0
+    verworpen: list[VerworpenFragment] = []
     rauw = _parse_elementen(llm_text)
     if not rauw and llm_text.strip():
         logger.warning("annotatie: geen element-objecten uit de respons gehaald")
@@ -109,7 +117,10 @@ def _verwerk(
         idx = norm_corpus.find(norm_frag) if norm_frag else -1
         # Verwerp ongeldige klasse of niet-onderbouwd fragment: nooit stil doorlaten.
         if klasse not in GELDIGE_JAS_KLASSEN or idx < 0:
-            verworpen += 1
+            verworpen.append(VerworpenFragment(
+                klasse=klasse, tekst=fragment,
+                reden="ongeldige_klasse" if klasse not in GELDIGE_JAS_KLASSEN else "niet_letterlijk",
+            ))
             continue
         lid = str(scope_lid).strip() if scope_lid and str(scope_lid).strip() else str(e.get("lid", "")).strip()
         alts = [
@@ -118,8 +129,12 @@ def _verwerk(
             if isinstance(a, dict) and str(a.get("klasse", "")).strip() in GELDIGE_JAS_KLASSEN
         ]
         vindplaats = f"{bwb_id} art. {artikel}" + (f" lid {lid}" if lid else "")
+        # Een id uit een eerdere ronde behouden (herziening van een bestaand element); anders een
+        # nieuw id. Zo blijft de koppeling met de Critic én met de api-elementen intact.
+        bestaand_id = str(e.get("id", "")).strip()
         voorstellen.append(
             AnnotatieVoorstel(
+                id=bestaand_id or uuid.uuid4().hex[:12],
                 klasse=klasse,
                 tekst=fragment,
                 lid=lid,
@@ -132,15 +147,21 @@ def _verwerk(
     return voorstellen, verworpen
 
 
-def _verwerk_critic(llm_text: str, aantal: int) -> tuple[dict[int, tuple[str, str]], list[OntbrekendItem]]:
-    """Parse het Critic-JSON: per element-index een (aandacht, motivatie) en een ontbrekend-lijst.
+def _verwerk_critic(llm_text: str, ids: list[str]) -> tuple[dict[str, CriticOordeel], list[OntbrekendItem]]:
+    """Parse het Critic-JSON: per element-id een oordeel + een ontbrekend-lijst.
 
-    Robuust tegen proza/afkapping (fast-path hele-JSON, anders de gebalanceerde {…}-objecten). Ongeldige
-    aandacht-waarden of indices buiten bereik worden genegeerd (leeg gelaten). Nooit exceptions naar de
-    caller — de Critic mag de annotatie niet breken.
+    Koppelt op `id`, met `index` (positie in `ids`) als terugval — een model dat het id-veld vergeet
+    verliest zo niet stilzwijgend álles. Op positie alleen koppelen kan niet meer: zodra een
+    herzieningsronde een element toevoegt of weglaat, schuiven de indices en landt een oordeel op het
+    verkeerde element.
+
+    Robuust tegen proza/afkapping (fast-path hele-JSON, anders de gebalanceerde {…}-objecten).
+    Ongeldige aandacht-waarden, onbekende id's en indices buiten bereik worden genegeerd. Nooit
+    exceptions naar de caller — de Critic mag de annotatie niet breken.
     """
-    oordelen: dict[int, tuple[str, str]] = {}
+    oordelen: dict[str, CriticOordeel] = {}
     ontbrekend: list[OntbrekendItem] = []
+    geldige_ids = set(ids)
 
     data: dict[str, Any] | None = None
     raw = (llm_text or "").strip()
@@ -169,24 +190,57 @@ def _verwerk_critic(llm_text: str, aantal: int) -> tuple[dict[int, tuple[str, st
                 continue
             if not isinstance(d, dict):
                 continue
-            if "index" in d and "aandacht" in d:
+            if ("id" in d or "index" in d) and "aandacht" in d:
                 oordeel_objs.append(d)
             elif "klasse" in d and "reden" in d:
                 ontbrekend_objs.append(d)
 
     for o in oordeel_objs:
-        try:
-            idx = int(o.get("index"))
-        except (TypeError, ValueError):
-            continue
+        element_id = str(o.get("id", "")).strip()
+        if element_id not in geldige_ids:
+            # Terugval: positie in de aangeboden lijst.
+            try:
+                idx = int(o.get("index"))
+            except (TypeError, ValueError):
+                continue
+            if not (0 <= idx < len(ids)):
+                continue
+            element_id = ids[idx]
+
         aandacht = str(o.get("aandacht", "")).strip().lower()
-        if aandacht not in _AANDACHT or not (0 <= idx < aantal):
+        if aandacht not in _AANDACHT:
             continue
-        oordelen[idx] = (aandacht, str(o.get("motivatie", "")).strip())
+
+        actie = str(o.get("actie", "behoud")).strip().lower()
+        if actie not in _ACTIES:
+            actie = "behoud"
+        voorstel_klasse = str(o.get("voorstel_klasse", "")).strip()
+        if voorstel_klasse and voorstel_klasse not in GELDIGE_JAS_KLASSEN:
+            voorstel_klasse = ""
+        voorstel_tekst = str(o.get("voorstel_tekst", "")).strip()
+
+        # Weggooien is de zwaarste ingreep: alleen bij een expliciet rood oordeel. En vervangen
+        # zonder te zeggen wát het moet worden is geen instructie maar een klacht.
+        if actie == "verwijder" and aandacht != "rood":
+            actie = "vervang"
+        if actie == "vervang" and not (voorstel_klasse or voorstel_tekst):
+            actie = "behoud"
+
+        oordelen[element_id] = CriticOordeel(
+            aandacht=aandacht,
+            motivatie=str(o.get("motivatie", "")).strip(),
+            actie=actie,
+            voorstel_klasse=voorstel_klasse,
+            voorstel_tekst=voorstel_tekst,
+        )
 
     for o in ontbrekend_objs:
         klasse = str(o.get("klasse", "")).strip()
         if klasse in GELDIGE_JAS_KLASSEN:
-            ontbrekend.append(OntbrekendItem(klasse=klasse, reden=str(o.get("reden", "")).strip()))
+            ontbrekend.append(OntbrekendItem(
+                klasse=klasse,
+                reden=str(o.get("reden", "")).strip(),
+                tekst=str(o.get("tekst", "")).strip(),
+            ))
 
     return oordelen, ontbrekend
