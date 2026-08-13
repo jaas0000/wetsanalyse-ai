@@ -17,6 +17,14 @@ from .annotatie_contracts import AnnotatieDocument, AnnotatieElement, AuditRecor
 
 # Sentinel: het document bestaat (en is van de client) maar het gevraagde element niet.
 GEEN_ELEMENT = object()
+# Sentinel: de meegegeven `If-Match` komt niet overeen met de huidige staat (→ 412).
+CONFLICT = object()
+
+
+def etag_van(doc: AnnotatieDocument) -> str:
+    """Zwakke ETag uit `updated`. Bewust geen aparte versiekolom: `updated` wordt binnen dezelfde
+    transactie gezet als de elementen, dus het is even betrouwbaar en kost geen migratie."""
+    return f'W/"{doc.updated.isoformat() if doc.updated else "0"}"'
 
 
 def _naar_document(row) -> AnnotatieDocument:
@@ -71,29 +79,24 @@ class AnnotatieStore:
             )).all()
         return [_naar_document(r) for r in rows]
 
-    async def vervang_elementen(self, slug: str, elementen: list[AnnotatieElement]) -> None:
-        async with db.get_engine().begin() as conn:
-            await conn.execute(
-                update(db.annotatie_documenten)
-                .where(db.annotatie_documenten.c.slug == slug)
-                .values(elementen=[e.model_dump(mode="json") for e in elementen], updated=db.utcnow())
-            )
-
-    async def beslis_op_element(
+    async def muteer_document(
         self,
         slug: str,
         user_id: str,
-        element_id: str,
-        toepassen: Callable[[AnnotatieElement], None],
+        muteer: Callable[[AnnotatieDocument], object | None],
+        if_match: str | None = None,
     ) -> AnnotatieDocument | None | object:
-        """Pas een human-decision ATOMAIR toe op één element: laad het document met een row-lock
-        (`with_for_update`), toets eigenaarschap, muteer het element via `toepassen` en schrijf de
-        volledige array in DEZELFDE transactie weg. Zo kunnen twee gelijktijdige besluiten op
-        verschillende elementen elkaar niet meer overschrijven (lost update + audit-divergentie).
+        """Het ENIGE schrijfpad naar `elementen`. Laadt met een row-lock, toetst eigenaarschap en
+        `If-Match`, laat `muteer` de elementenlijst herschikken en schrijft in DEZELFDE transactie weg.
 
-        Retourneert het bijgewerkte document, `None` (onbekend/niet-eigenaar → 404) of `GEEN_ELEMENT`
-        (element bestaat niet → 404). `toepassen` muteert het element in-place (en kan de diff/lifecycle
-        zetten). Op SQLite is `with_for_update` een no-op maar serialiseert de transactie de write.
+        Eén pad met één slot, want twee gelijktijdige schrijvers op dezelfde JSON-kolom overschrijven
+        elkaar anders volledig (lost update). Er stond hier eerder ook een `vervang_elementen` zónder
+        lock; die is weg — een destructief pad dat blijft rondslingeren wordt vroeg of laat gebruikt.
+
+        `muteer` mag een sentinel teruggeven (bv. `GEEN_ELEMENT`) om de mutatie af te breken; die komt
+        dan ongewijzigd terug en er wordt niets geschreven. Retourneert verder het bijgewerkte
+        document, `None` (onbekend of niet-eigenaar → 404) of `CONFLICT` (ETag-mismatch → 412).
+        Op SQLite is `with_for_update` een no-op, maar serialiseert de transactie de schrijfactie.
         """
         now = db.utcnow()
         async with db.get_engine().begin() as conn:
@@ -107,10 +110,11 @@ class AnnotatieStore:
             doc = _naar_document(row)
             if doc.user_id != user_id:
                 return None
-            el = next((x for x in doc.elementen if x.id == element_id), None)
-            if el is None:
-                return GEEN_ELEMENT
-            toepassen(el)
+            if if_match is not None and if_match != etag_van(doc):
+                return CONFLICT
+            uitkomst = muteer(doc)
+            if uitkomst is not None:
+                return uitkomst
             await conn.execute(
                 update(db.annotatie_documenten)
                 .where(db.annotatie_documenten.c.slug == slug)
@@ -118,6 +122,24 @@ class AnnotatieStore:
             )
         doc.updated = now
         return doc
+
+    async def beslis_op_element(
+        self,
+        slug: str,
+        user_id: str,
+        element_id: str,
+        toepassen: Callable[[AnnotatieElement], None],
+    ) -> AnnotatieDocument | None | object:
+        """Pas een human-decision atomair toe op één element. Dunne wrapper om `muteer_document`."""
+
+        def muteer(doc: AnnotatieDocument):
+            el = next((x for x in doc.elementen if x.id == element_id), None)
+            if el is None:
+                return GEEN_ELEMENT
+            toepassen(el)
+            return None
+
+        return await self.muteer_document(slug, user_id, muteer)
 
     async def zet_status(self, slug: str, status: str) -> None:
         async with db.get_engine().begin() as conn:
@@ -143,12 +165,31 @@ class AnnotatieStore:
                 element_id=element_id, detail=detail or {}, tijdstip=db.utcnow(),
             ))
 
-    async def lees_audit(self, slug: str) -> list[AuditRecord]:
+    async def schrijf_auditregels(self, slug: str, client_id: str, actor: str, regels: list[tuple]) -> None:
+        """Meerdere auditregels in één insert: `[(actie, element_id, detail), …]`.
+
+        Een agent-ronde raakt tientallen elementen; per regel een aparte transactie openen zou de
+        schrijfactie onnodig oprekken en het log kunnen laten scheuren als er halverwege iets misgaat.
+        """
+        if not regels:
+            return
+        nu = db.utcnow()
+        async with db.get_engine().begin() as conn:
+            await conn.execute(insert(db.annotatie_audit), [
+                {
+                    "document_slug": slug, "client_id": client_id, "actor": actor,
+                    "actie": actie, "element_id": element_id, "detail": detail or {}, "tijdstip": nu,
+                }
+                for actie, element_id, detail in regels
+            ])
+
+    async def lees_audit(self, slug: str, limit: int = 200, offset: int = 0) -> list[AuditRecord]:
         async with db.get_engine().connect() as conn:
             rows = (await conn.execute(
                 select(db.annotatie_audit)
                 .where(db.annotatie_audit.c.document_slug == slug)
                 .order_by(db.annotatie_audit.c.id)
+                .limit(limit).offset(offset)
             )).all()
         return [
             AuditRecord(

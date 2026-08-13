@@ -19,13 +19,13 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response, status
 
 from ..annotatie_contracts import (
     AnnotatieDocument, AnnotatieElement, AuditRecord, Beslissing, BeslissingInvoer, BeslissingType,
-    DocumentCreate, DocumentSamenvatting, ElementenInvoer, Lifecycle,
+    DocumentCreate, DocumentSamenvatting, ElementInvoer, ElementenInvoer, Lifecycle,
 )
-from ..annotatie_store import GEEN_ELEMENT, AnnotatieStore
+from ..annotatie_store import CONFLICT, GEEN_ELEMENT, AnnotatieStore, etag_van
 from ..auth import require_client
 from ..db import utcnow
 from ..deps import get_annotatie_store
@@ -33,6 +33,57 @@ from ..validation import GELDIGE_JAS_KLASSEN
 from .auth import actieve_userid
 
 router = APIRouter(prefix="/annotatie", tags=["annotatie"])
+
+# Velden die een agent-ronde inhoudelijk mag bijwerken op een niet-bevroren element.
+_INHOUD_VELDEN = ("klasse", "tekst", "lid", "toelichting", "vindplaats")
+
+
+def _sleutel(tekst: str, lid: str) -> tuple[str, str]:
+    """Terugvalsleutel voor clients die (nog) geen element-id meesturen: genormaliseerde tekst + lid.
+    Bewust ZONDER klasse — een herziening mag juist de klasse veranderen en moet dan hetzelfde
+    element treffen, niet een duplicaat maken."""
+    return (" ".join(tekst.split()).casefold(), lid or "")
+
+
+def _is_bevroren(el: AnnotatieElement) -> bool:
+    """Mag de agent dit element nog inhoudelijk wijzigen?
+
+    Nee zodra de jurist eraan te pas kwam: een eigen element of een element waarover al besloten is.
+    Dat is de kern van 'de mens heeft het laatste woord' — zonder deze regel wist een volgende
+    agent-ronde stilzwijgend een goedkeuring of een handmatige correctie.
+    """
+    return el.herkomst == "mens" or bool(el.beslissingen)
+
+
+def _uit_invoer(e: ElementInvoer, element_id: str) -> AnnotatieElement:
+    """Nieuw agent-element uit een voorstel. Heeft de Critic een aandacht-niveau gezet, dan is het al
+    door de Critic gezien → lifecycle `critic_checked`, anders `voorgesteld`."""
+    return AnnotatieElement(
+        id=element_id, klasse=e.klasse, tekst=e.tekst, lid=e.lid,
+        toelichting=e.toelichting, vindplaats=e.vindplaats,
+        herkomst="agent",
+        lifecycle=Lifecycle.critic_checked if e.aandacht is not None else Lifecycle.voorgesteld,
+        alternatieven=e.alternatieven, aandacht=e.aandacht, critic=e.critic,
+        critic_rondes=list(e.critic_rondes), anker=e.anker,
+    )
+
+
+def _voeg_critic_toe(el: AnnotatieElement, e: ElementInvoer) -> bool:
+    """Zet het Critic-oordeel op een bestaand element. Geeft terug of er iets veranderde.
+
+    Mag ook op een bevroren element: dat de Critic er later nog iets van vond is informatie die de
+    jurist wil zien — het raakt zijn besluit niet.
+    """
+    veranderd = False
+    if e.aandacht is not None and (el.aandacht != e.aandacht or el.critic != e.critic):
+        el.aandacht, el.critic = e.aandacht, e.critic
+        veranderd = True
+    bekend = {r.ronde for r in el.critic_rondes}
+    for ronde in e.critic_rondes:
+        if ronde.ronde not in bekend:
+            el.critic_rondes.append(ronde)
+            veranderd = True
+    return veranderd
 
 
 async def _document_or_404(store: AnnotatieStore, slug: str, user_id: str) -> AnnotatieDocument:
@@ -104,33 +155,116 @@ async def verwijder_document(
 async def zet_elementen(
     slug: str,
     req: ElementenInvoer,
+    response: Response,
     user_id: str = Depends(actieve_userid),
     client_id: str = Depends(require_client),
     store: AnnotatieStore = Depends(get_annotatie_store),
+    if_match: str | None = Header(default=None, alias="If-Match"),
 ):
-    """Zet de voorgestelde elementen (van de agent). Ongeldige klasse / leeg fragment wordt verworpen."""
-    await _document_or_404(store, slug, user_id)
-    elementen: list[AnnotatieElement] = []
+    """De uitkomst van één agent-ronde SAMENVOEGEN met wat er al staat.
+
+    Bewust een merge en geen vervanging: de agent kan meerdere rondes draaien (annoteerder ⇄ Critic)
+    en de jurist werkt in hetzelfde document. Vervangen wiste eerder alle beslissingen, levenscyclus
+    en element-id's — met een auditlog dat daarna naar niet-bestaande id's verwees.
+
+    Matcht op `id`, met de genormaliseerde tekst als terugval voor clients die nog geen id sturen.
+    Elementen waar de jurist aan te pas kwam zijn bevroren (§`_is_bevroren`); die krijgen hooguit een
+    nieuw Critic-oordeel. Ongeldige klasse of leeg fragment wordt verworpen (stil, met een teller in
+    de audit — de agent grondt zelf al en dit is het vangnet).
+    """
     verworpen = 0
-    for e in req.elementen:
-        if e.klasse not in GELDIGE_JAS_KLASSEN or not e.tekst.strip():
-            verworpen += 1
-            continue
-        # Heeft de Critic een aandacht-niveau gezet, dan is het element al door de Critic gezien →
-        # lifecycle `critic_checked`; anders `voorgesteld`.
-        lifecycle = Lifecycle.critic_checked if e.aandacht is not None else Lifecycle.voorgesteld
-        elementen.append(AnnotatieElement(
-            id=uuid.uuid4().hex[:12], klasse=e.klasse, tekst=e.tekst, lid=e.lid,
-            toelichting=e.toelichting, vindplaats=e.vindplaats,
-            herkomst="agent", lifecycle=lifecycle, alternatieven=e.alternatieven,
-            aandacht=e.aandacht, critic=e.critic,
-        ))
-    await store.vervang_elementen(slug, elementen)
-    await store.schrijf_audit(
-        slug, client_id, user_id, "elementen-voorgesteld",
-        detail={"aantal": len(elementen), "verworpen": verworpen},
-    )
-    return await store.laad_document(slug)
+    regels: list[tuple] = []
+
+    def merge(doc: AnnotatieDocument):
+        nonlocal verworpen
+        op_id = {el.id: el for el in doc.elementen}
+        # Terugvalindex: alleen agent-elementen, want een mens-element mag nooit stilzwijgend door
+        # een agent-voorstel worden overgenomen enkel omdat de tekst toevallig gelijk is.
+        op_sleutel: dict[tuple[str, str], list[AnnotatieElement]] = {}
+        for el in doc.elementen:
+            if el.herkomst == "agent":
+                op_sleutel.setdefault(_sleutel(el.tekst, el.lid), []).append(el)
+        gezien: set[str] = set()
+
+        for e in req.elementen:
+            if e.klasse not in GELDIGE_JAS_KLASSEN or not e.tekst.strip():
+                verworpen += 1
+                continue
+
+            el = op_id.get(e.id) if e.id else None
+            if el is None:
+                kandidaten = op_sleutel.get(_sleutel(e.tekst, e.lid)) or []
+                el = next((k for k in kandidaten if k.id not in gezien), None)
+
+            if el is None:
+                nieuw = _uit_invoer(e, e.id or uuid.uuid4().hex[:12])
+                doc.elementen.append(nieuw)
+                op_id[nieuw.id] = nieuw
+                gezien.add(nieuw.id)
+                regels.append(("element-voorgesteld", nieuw.id, {
+                    "ronde": req.ronde, "klasse": nieuw.klasse, "tekst": nieuw.tekst,
+                    "lid": nieuw.lid, "aandacht": nieuw.aandacht.value if nieuw.aandacht else None,
+                }))
+                continue
+
+            gezien.add(el.id)
+            if _is_bevroren(el):
+                if _voeg_critic_toe(el, e):
+                    regels.append(("critic-suggestie", el.id, {
+                        "ronde": req.ronde, "aandacht": e.aandacht.value if e.aandacht else None,
+                        "motivatie": e.critic,
+                    }))
+                continue
+
+            diff = {
+                veld: {"voor": getattr(el, veld), "na": getattr(e, veld)}
+                for veld in _INHOUD_VELDEN
+                if getattr(e, veld) != getattr(el, veld)
+            }
+            for veld in diff:
+                setattr(el, veld, getattr(e, veld))
+            if e.alternatieven:
+                el.alternatieven = e.alternatieven
+            critic_bij = _voeg_critic_toe(el, e)
+            if e.anker is not None:
+                el.anker = e.anker
+            if diff:
+                el.gewijzigd_door = "agent"
+                el.lifecycle = Lifecycle.critic_checked if el.aandacht is not None else Lifecycle.voorgesteld
+                regels.append(("element-herzien", el.id, {"ronde": req.ronde, "diff": diff}))
+            elif critic_bij:
+                el.lifecycle = Lifecycle.critic_checked if el.aandacht is not None else el.lifecycle
+
+        if req.trek_ontbrekende_in:
+            behouden = []
+            for el in doc.elementen:
+                if el.id in gezien or _is_bevroren(el):
+                    behouden.append(el)
+                else:
+                    regels.append(("element-ingetrokken", el.id,
+                                   {"ronde": req.ronde, "klasse": el.klasse, "tekst": el.tekst}))
+            doc.elementen = behouden
+        return None
+
+    uitkomst = await store.muteer_document(slug, user_id, merge, if_match=if_match)
+    if uitkomst is None:
+        raise HTTPException(status_code=404, detail=f"Onbekend annotatie-document: {slug}")
+    if uitkomst is CONFLICT:
+        raise HTTPException(status_code=412, detail="Het document is inmiddels gewijzigd.")
+
+    doc: AnnotatieDocument = uitkomst  # type: ignore[assignment]
+    telling = {a: sum(1 for r in regels if r[0] == a) for a in
+               ("element-voorgesteld", "element-herzien", "element-ingetrokken", "critic-suggestie")}
+    await store.schrijf_auditregels(slug, client_id, user_id, [
+        ("elementen-voorgesteld", None, {
+            "ronde": req.ronde, "aangeboden": len(req.elementen), "verworpen": verworpen,
+            "nieuw": telling["element-voorgesteld"], "herzien": telling["element-herzien"],
+            "ingetrokken": telling["element-ingetrokken"], "suggesties": telling["critic-suggestie"],
+        }),
+        *regels,
+    ])
+    response.headers["ETag"] = etag_van(doc)
+    return doc
 
 
 @router.post("/documenten/{slug}/elementen/{element_id}/beslissing", response_model=AnnotatieDocument)
@@ -166,7 +300,9 @@ async def beslis(
                     diff[veld] = {"voor": getattr(el, veld), "na": nieuw}
                     setattr(el, veld, nieuw)
             el.lifecycle = Lifecycle.edited
-            el.herkomst = "mens"
+            # NIET `herkomst` — dat blijft wie het element aanmaakte. Een edit door de jurist maakt
+            # er geen mens-element van; anders is later niet meer te zien dat de agent het voorstelde.
+            el.gewijzigd_door = "mens"
             el.diff = diff
         elif req.type == BeslissingType.approve:
             el.lifecycle = Lifecycle.human_approved
@@ -198,8 +334,12 @@ async def beslis(
 @router.get("/documenten/{slug}/audit", response_model=list[AuditRecord])
 async def haal_audit(
     slug: str,
+    limit: int = Query(200, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
     user_id: str = Depends(actieve_userid),
     store: AnnotatieStore = Depends(get_annotatie_store),
 ):
+    """Append-only tijdlijn, oudste eerst. Gepagineerd: sinds elke agent-ronde per element een regel
+    schrijft loopt dit bij een lange review in de honderden."""
     await _document_or_404(store, slug, user_id)
-    return await store.lees_audit(slug)
+    return await store.lees_audit(slug, limit, offset)

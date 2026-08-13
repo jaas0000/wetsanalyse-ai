@@ -77,10 +77,26 @@ De API bedient zeven dingen:
   `ReviewReason`). `annotatie_store.py` — `AnnotatieStore` (aparte store op dezelfde engine).
   `routers/annotatie.py` — `/v1/annotatie/*`, per-gebruiker gescopet (`huidige_userid` + `_document_or_404`;
   `require_client` blijft de bearer-poort + audit-herkomst).
-  Levenscyclus: document aanmaken → `PUT elementen` (voorstellen van de agent; klasse gevalideerd tegen
-  `validation.GELDIGE_JAS_KLASSEN`) → per element een human-decision (approve/edit/reject/comment;
-  edit/reject vereisen `review_reason`; edit berekent een `diff`) → `GET audit`. Elke actie schrijft
-  één auditregel. **Geen graaf-mutatie** vanuit dit domein.
+  Levenscyclus: document aanmaken → `PUT elementen` (de uitkomst van één agent-ronde) → per element
+  een human-decision (approve/edit/reject/comment; edit/reject vereisen `review_reason`; edit berekent
+  een `diff`) → `GET audit`. **Geen graaf-mutatie** vanuit dit domein.
+
+  **`PUT elementen` is een MERGE, geen vervanging.** De agent kan meerdere rondes draaien
+  (annoteerder ⇄ Critic) en de jurist werkt in hetzelfde document; vervangen wiste eerder alle
+  beslissingen, levenscyclus en element-id's. Matchen gaat op `id`, met de genormaliseerde tekst +
+  lid als terugval voor clients zonder id. Een element waar de jurist aan te pas kwam (`herkomst ==
+  "mens"` of met beslissingen) is **inhoudelijk bevroren**: de agent mag er alleen nog een
+  Critic-oordeel bij zetten. Agent-elementen die in de nieuwe ronde ontbreken worden ingetrokken.
+  Optioneel `If-Match` tegen de `ETag` uit de respons → 412 bij een tussentijdse wijziging.
+
+  **Herkomst is gesplitst.** `herkomst` = wie het element aanmaakte (onveranderlijk), `gewijzigd_door`
+  = wie het daarna aanpaste. Een edit door de jurist maakt van een agent-element dus geen
+  mens-element. Rijen van vóór die splitsing worden lazy gerepareerd door een `model_validator`.
+
+  **Audit per element.** Naast de ronde-samenvatting (`elementen-voorgesteld`) schrijft elke ronde
+  `element-voorgesteld` / `element-herzien` (met diff) / `element-ingetrokken` / `critic-suggestie`,
+  elk mét element-id en inhoud — anders is een ronde achteraf niet te reconstrueren. `GET audit` is
+  daarom gepagineerd.
 - `routers/admin.py` — **`/v1/admin/*`** achter `require_admin`: modelprofielen-CRUD (write-only
   API-key, `api_key_set` nooit de key zelf), default zetten, verbinding testen; het gebruikersbeheer
   (`/users` CRUD, de laatste actieve beheerder is beschermd); en de genereerbare API-tokens
@@ -110,7 +126,10 @@ loggen. Zie `docs/observability.md`.
 - **De admin-laag is altijd auth-plichtig.** `/v1/admin/*` heeft geen `AUTH_REQUIRED`-bypass; zonder
   admin-tokens geeft alles 401. De plaintext-API-key komt nooit terug in een respons (alleen
   `api_key_set`); het opslaan vereist een geconfigureerde Fernet-master-key.
-- **Append-only auditlog.** Elke annotatie-actie schrijft één auditregel; de tijdlijn is `ORDER BY id`.
+- **Append-only auditlog.** Elke annotatie-actie schrijft auditregels; de tijdlijn is `ORDER BY id`.
+- **Eén schrijfpad naar `elementen`.** Alles loopt via `AnnotatieStore.muteer_document` met
+  `with_for_update()`. Er stond hier ook een `vervang_elementen` zónder lock; die is weg — een
+  destructief pad dat blijft rondslingeren wordt vroeg of laat gebruikt.
 - **JAS-klassen zijn canoniek.** Een voorgesteld element wordt gevalideerd tegen
   `validation.GELDIGE_JAS_KLASSEN` — verzin er geen bij.
 - **Secrets zijn bestanden.** Alle secrets (admin-tokens, client-tokens, DB-credentials, Fernet-key)

@@ -140,6 +140,37 @@ export interface Beslissing {
   wijziging: Record<string, unknown>;
 }
 
+/** Eén Critic-oordeel binnen de herzieningslus, met de instructie die eruit volgde. */
+export interface CriticRonde {
+  ronde: number;
+  aandacht?: Aandacht | null;
+  motivatie: string;
+  actie: string;              // behoud | vervang | verwijder
+  voorstel_klasse: string;
+  voorstel_tekst: string;
+  tijd: string;
+}
+
+/** Critic-oordeel op een element dat de JURIST maakte. Advies; wordt nooit toegepast. */
+export interface CriticSuggestie {
+  aandacht?: Aandacht | null;
+  motivatie: string;
+  voorstel_klasse: string;
+  voorstel_tekst: string;
+  status: string;             // open | geaccepteerd | afgewezen
+  tijd: string;
+}
+
+/** Waar een fragment stond toen het werd gemaakt: exacte offsets + quote-met-context als vangnet. */
+export interface Anker {
+  lid: string;
+  start: number;
+  eind: number;
+  voor: string;
+  na: string;
+  bron_hash: string;
+}
+
 export interface AnnotatieElement {
   id: string;
   klasse: string;
@@ -147,11 +178,17 @@ export interface AnnotatieElement {
   lid: string;
   toelichting: string;
   vindplaats: string;
+  /** Wie het element AANMAAKTE (agent | mens) — verandert nooit. */
   herkomst: string;
+  /** Wie het daarna inhoudelijk aanpaste ("" | agent | mens). */
+  gewijzigd_door: string;
   lifecycle: Lifecycle;
   alternatieven: Alternatief[];
   aandacht?: Aandacht | null;
   critic?: string;
+  critic_rondes: CriticRonde[];
+  critic_suggestie?: CriticSuggestie | null;
+  anker?: Anker | null;
   diff: Record<string, { voor: unknown; na: unknown }>;
   beslissingen: Beslissing[];
 }
@@ -241,6 +278,9 @@ export interface GraafArtikel {
 
 /** Eén voorgesteld element uit de graph-qa annotatie-SSE (nog niet gepersisteerd). */
 export interface VoorstelElement {
+  /** Stabiel id van de agent. Hierop matcht de server bij een volgende ronde, zodat beslissingen en
+   *  levenscyclus behouden blijven. Ontbreekt het, dan valt de server terug op de tekst. */
+  id?: string;
   klasse: string;
   tekst: string;
   lid: string;

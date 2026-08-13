@@ -81,18 +81,32 @@ async def test_document_lifecycle_en_audit(client):
         "type": "edit", "review_reason": "interpretatie", "wijziging": {"toelichting": "duidelijker"},
     })).json()
     el1_obj = next(e for e in doc["elementen"] if e["id"] == el1)
-    assert el1_obj["lifecycle"] == "edited" and el1_obj["herkomst"] == "mens"
+    # `herkomst` blijft "agent" — dat is WIE HET AANMAAKTE. Een edit door de jurist zet
+    # `gewijzigd_door`; anders was na één correctie niet meer te zien dat de agent het voorstelde.
+    assert el1_obj["lifecycle"] == "edited"
+    assert el1_obj["herkomst"] == "agent" and el1_obj["gewijzigd_door"] == "mens"
     assert el1_obj["diff"]["toelichting"]["na"] == "duidelijker"
 
     # reject zonder review_reason → 422
     assert (await client.post(f"{BASIS}/{slug}/elementen/{el0}/beslissing",
                               json={"type": "reject"})).status_code == 422
 
-    # audit is append-only en op volgorde: aangemaakt, elementen-voorgesteld, approve, edit
+    # audit is append-only en op volgorde. Naast de ronde-samenvatting staat er per element een
+    # regel MET id en inhoud — zonder dat is achteraf niet te reconstrueren wat een ronde deed.
     audit = (await client.get(f"{BASIS}/{slug}/audit")).json()
     acties = [a["actie"] for a in audit]
-    assert acties == ["document-aangemaakt", "elementen-voorgesteld", "beslissing-approve", "beslissing-edit"]
-    assert audit[1]["detail"]["aantal"] == 2 and audit[1]["detail"]["verworpen"] == 1
+    assert acties[0] == "document-aangemaakt"
+    assert acties[1] == "elementen-voorgesteld"
+    assert acties[2:4] == ["element-voorgesteld", "element-voorgesteld"]
+    assert acties[4:] == ["beslissing-approve", "beslissing-edit"]
+
+    samenvatting = audit[1]["detail"]
+    assert samenvatting["aangeboden"] == 3 and samenvatting["verworpen"] == 1
+    assert samenvatting["nieuw"] == 2 and samenvatting["ronde"] == 0
+
+    per_element = {a["element_id"]: a["detail"] for a in audit if a["actie"] == "element-voorgesteld"}
+    assert set(per_element) == {el0, el1}
+    assert per_element[el0]["klasse"] and per_element[el0]["tekst"]
 
 
 async def test_aandacht_persisteert_en_zet_critic_checked(client):
@@ -161,3 +175,136 @@ async def test_beslis_op_element_atomair_behoudt_andere_besluiten(client):
     assert await store.beslis_op_element("bestaat-niet", "gebruiker-a", el0, keur_goed) is None
     assert await store.beslis_op_element(slug, "gebruiker-b", el0, keur_goed) is None
     assert await store.beslis_op_element(slug, "gebruiker-a", "geen-el", keur_goed) is GEEN_ELEMENT
+
+
+# --- de merge: een tweede agent-ronde mag nooit werk van de jurist wissen --------------------
+#
+# Dit was tot voor kort een echte bug: PUT verving de hele elementenlijst met verse uuid's, zodat
+# elke volgende ronde alle beslissingen, levenscyclus en diffs weggooide — en het auditlog naar
+# id's verwees die niet meer bestonden. Er was geen enkele test die twee keer PUT deed.
+
+async def _put(client, slug, elementen, **extra):
+    return await client.put(f"{BASIS}/{slug}/elementen", json={"elementen": elementen, **extra})
+
+
+async def test_tweede_ronde_behoudt_ids_en_beslissingen(client):
+    slug = await _maak_doc(client)
+    doc = (await _put(client, slug, [
+        {"klasse": "Rechtssubject", "tekst": "de ontvanger", "lid": "1"},
+        {"klasse": "Voorwaarde", "tekst": "indien betaling uitblijft", "lid": "1"},
+    ])).json()
+    ids = {e["tekst"]: e["id"] for e in doc["elementen"]}
+
+    # De jurist keurt er één goed.
+    await client.post(f"{BASIS}/{slug}/elementen/{ids['de ontvanger']}/beslissing", json={"type": "approve"})
+
+    # Tweede ronde: de agent stuurt dezelfde elementen opnieuw, nu mét id's en een Critic-oordeel.
+    doc = (await _put(client, slug, [
+        {"id": ids["de ontvanger"], "klasse": "Rechtssubject", "tekst": "de ontvanger", "lid": "1",
+         "aandacht": "groen", "critic": "helder"},
+        {"id": ids["indien betaling uitblijft"], "klasse": "Voorwaarde",
+         "tekst": "indien betaling uitblijft", "lid": "1", "aandacht": "geel", "critic": "grens?"},
+    ], ronde=1)).json()
+
+    op_id = {e["id"]: e for e in doc["elementen"]}
+    assert set(op_id) == set(ids.values()), "id's moeten stabiel blijven"
+    goedgekeurd = op_id[ids["de ontvanger"]]
+    assert goedgekeurd["lifecycle"] == "human_approved", "de goedkeuring mag niet verdwijnen"
+    assert len(goedgekeurd["beslissingen"]) == 1
+    # Het Critic-oordeel komt er wél bij: dat raakt het besluit niet en de jurist wil het zien.
+    assert goedgekeurd["aandacht"] == "groen"
+
+
+async def test_beslist_element_is_inhoudelijk_bevroren(client):
+    slug = await _maak_doc(client)
+    doc = (await _put(client, slug, [{"klasse": "Voorwaarde", "tekst": "indien betaling uitblijft"}])).json()
+    el = doc["elementen"][0]["id"]
+    await client.post(f"{BASIS}/{slug}/elementen/{el}/beslissing", json={"type": "approve"})
+
+    # De agent probeert klasse én tekst te veranderen op een element waarover al besloten is.
+    doc = (await _put(client, slug, [
+        {"id": el, "klasse": "Rechtsfeit", "tekst": "iets anders", "aandacht": "rood", "critic": "twijfel"},
+    ], ronde=1)).json()
+
+    na = doc["elementen"][0]
+    assert na["klasse"] == "Voorwaarde" and na["tekst"] == "indien betaling uitblijft"
+    assert na["aandacht"] == "rood", "een nieuw Critic-oordeel mag er wel bij"
+
+
+async def test_verdwenen_agent_element_wordt_ingetrokken(client):
+    slug = await _maak_doc(client)
+    doc = (await _put(client, slug, [
+        {"klasse": "Rechtssubject", "tekst": "de ontvanger"},
+        {"klasse": "Voorwaarde", "tekst": "indien betaling uitblijft"},
+    ])).json()
+    blijft = next(e["id"] for e in doc["elementen"] if e["tekst"] == "de ontvanger")
+
+    doc = (await _put(client, slug, [
+        {"id": blijft, "klasse": "Rechtssubject", "tekst": "de ontvanger"},
+    ], ronde=1)).json()
+    assert [e["id"] for e in doc["elementen"]] == [blijft]
+
+    acties = [a["actie"] for a in (await client.get(f"{BASIS}/{slug}/audit")).json()]
+    assert "element-ingetrokken" in acties
+
+
+async def test_herziening_past_bestaand_element_aan(client):
+    """De kern van de Critic-lus: dezelfde id, andere klasse, met een diff in de audit."""
+    slug = await _maak_doc(client)
+    doc = (await _put(client, slug, [{"klasse": "Rechtsfeit", "tekst": "indien betaling uitblijft"}])).json()
+    el = doc["elementen"][0]["id"]
+
+    doc = (await _put(client, slug, [
+        {"id": el, "klasse": "Voorwaarde", "tekst": "indien betaling uitblijft",
+         "aandacht": "groen", "critic": "na herziening juist"},
+    ], ronde=1)).json()
+
+    assert doc["elementen"][0]["id"] == el
+    assert doc["elementen"][0]["klasse"] == "Voorwaarde"
+    assert doc["elementen"][0]["gewijzigd_door"] == "agent"
+
+    herzien = [a for a in (await client.get(f"{BASIS}/{slug}/audit")).json() if a["actie"] == "element-herzien"]
+    assert herzien and herzien[0]["detail"]["diff"]["klasse"] == {"voor": "Rechtsfeit", "na": "Voorwaarde"}
+
+
+async def test_zelfde_ronde_nogmaals_is_idempotent(client):
+    slug = await _maak_doc(client)
+    payload = [{"klasse": "Rechtssubject", "tekst": "de ontvanger", "lid": "1"}]
+    eerst = (await _put(client, slug, payload)).json()
+    # Zonder id's: de terugval op tekst+lid moet hetzelfde element vinden, geen duplicaat maken.
+    opnieuw = (await _put(client, slug, payload)).json()
+    assert len(opnieuw["elementen"]) == 1
+    assert opnieuw["elementen"][0]["id"] == eerst["elementen"][0]["id"]
+
+
+async def test_if_match_beschermt_tegen_een_tussentijdse_wijziging(client):
+    slug = await _maak_doc(client)
+    r = await _put(client, slug, [{"klasse": "Rechtssubject", "tekst": "de ontvanger"}])
+    etag = r.headers["ETag"]
+    assert etag
+
+    # Iemand anders wijzigt het document tussendoor.
+    el = r.json()["elementen"][0]["id"]
+    await client.post(f"{BASIS}/{slug}/elementen/{el}/beslissing", json={"type": "comment", "comment": "hm"})
+
+    verouderd = await client.put(f"{BASIS}/{slug}/elementen",
+                                 json={"elementen": [{"klasse": "Voorwaarde", "tekst": "x"}]},
+                                 headers={"If-Match": etag})
+    assert verouderd.status_code == 412
+    # Zonder de header blijft het gewoon werken (terugwaarts compatibel).
+    assert (await _put(client, slug, [{"klasse": "Voorwaarde", "tekst": "x"}])).status_code == 200
+
+
+async def test_legacy_element_met_mens_herkomst_wordt_gerepareerd(client):
+    """Rijen van vóór de scheiding: een edit zette destijds `herkomst` op "mens"."""
+    from app.annotatie_contracts import AnnotatieElement
+
+    el = AnnotatieElement.model_validate({
+        "id": "oud1", "klasse": "Voorwaarde", "tekst": "t", "herkomst": "mens",
+        "beslissingen": [{"type": "edit", "actor": "gebruiker-a"}],
+    })
+    assert el.herkomst == "agent" and el.gewijzigd_door == "mens"
+
+    # Een écht mens-element (geen beslissingen) blijft ongemoeid.
+    eigen = AnnotatieElement.model_validate({"id": "e1", "klasse": "Voorwaarde", "tekst": "t", "herkomst": "mens"})
+    assert eigen.herkomst == "mens" and eigen.gewijzigd_door == ""

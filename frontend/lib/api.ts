@@ -273,11 +273,17 @@ export async function verwijderDocument(slug: string): Promise<void> {
   if (!res.ok) throw await parseError(res);
 }
 
-export async function zetElementen(slug: string, elementen: VoorstelElement[]): Promise<AnnotatieDocument> {
+export async function zetElementen(
+  slug: string,
+  elementen: VoorstelElement[],
+  ronde = 0,
+): Promise<AnnotatieDocument> {
+  // De server MERGET dit met wat er al staat (op id, anders op tekst); `ronde` komt in de audit
+  // zodat achteraf te zien is welke agent-ronde welk element opleverde.
   const res = await fetch(`/api/annotatie/documenten/${pathSegment(slug)}/elementen`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ elementen }),
+    body: JSON.stringify({ elementen, ronde }),
   });
   return json<AnnotatieDocument>(res);
 }

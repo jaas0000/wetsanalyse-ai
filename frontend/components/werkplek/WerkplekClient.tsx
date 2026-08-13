@@ -25,6 +25,7 @@ import type {
   OntbrekendItem,
   VoorstelElement,
 } from "@/lib/types";
+import { mergeVoorstellen } from "@/lib/annotatie";
 import { wettenOverheidHref } from "@/lib/url";
 
 type Item =
@@ -203,7 +204,9 @@ export function WerkplekClient({ initialGesprekId, onGesprekAangemaakt, onGewijz
     void persisteer(gid, "user", { tekst: prompt });
 
     const doelRef: { d: AgentDoel | null } = { d: null };
-    const els: VoorstelElement[] = [];
+    // Ontdubbeld verzamelen: de agent kan hetzelfde element in meerdere rondes opnieuw sturen
+    // (annoteerder ⇄ Critic), en dan wint de laatste versie.
+    let els: VoorstelElement[] = [];
     const ontbrekend: OntbrekendItem[] = [];
     let tekst = "";
     let denk = "";
@@ -229,7 +232,7 @@ export function WerkplekClient({ initialGesprekId, onGesprekAangemaakt, onGewijz
             updateItem(antId, { bronnen: b });
           },
           onDoel: (d) => (doelRef.d = d),
-          onElement: (e) => els.push(e),
+          onElement: (e) => (els = mergeVoorstellen(els, e)),
           onOntbrekend: (xs) => ontbrekend.push(...xs),
         },
         gid,
