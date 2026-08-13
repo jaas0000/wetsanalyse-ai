@@ -55,7 +55,7 @@ function BerichtItem({ bericht }: { bericht: BerichtOut }) {
   );
 }
 
-export function BerichtenPanel({ positie }: { positie?: string } = {}) {
+export function BerichtenPanel({ positie, containerClassName }: { positie?: string; containerClassName?: string } = {}) {
   const [ongelezen, setOngelezen] = useState(0);
   const [berichten, setBerichten] = useState<BerichtOut[] | null>(null);
   const [laden, setLaden] = useState(false);
@@ -102,8 +102,11 @@ export function BerichtenPanel({ positie }: { positie?: string } = {}) {
   return (
     <Popover
       positie={positie}
-      // Nooit breder dan het scherm: op mobiel leeft dit paneel in de sidebar-drawer.
-      className="max-h-[min(480px,70vh)] w-[min(20rem,calc(100vw-2rem))] overflow-y-auto rounded-button border border-line bg-paper shadow-md"
+      containerClassName={containerClassName}
+      // Zelfde vormgeving als het gebruikersmenu onderin de sidebar (rounded-kaart, shadow-kaart).
+      // De breedte komt uit `positie` (inset-x-3), niet uit een vaste maat: zo volgt het paneel de
+      // kolom waarin het hangt en kan het per definitie niet buiten beeld vallen.
+      className="max-h-[min(480px,70vh)] overflow-y-auto rounded-kaart border border-line bg-paper shadow-kaart"
       ariaLabel="Berichten"
       onClose={() => triggerRef.current?.focus()}
       trigger={(open, toggle) => (

@@ -11,14 +11,18 @@ interface PopoverProps {
   /** Aangeroepen vlak vóór het paneel sluit (Escape, outside-click, of toggle) — zodat de
    * aanroeper zelf de focus kan terugzetten op de trigger. Popover kent de trigger zelf niet. */
   onClose?: () => void;
-  /** Positioneringsklassen van het paneel, relatief aan de trigger. Default `right-0` (paneel klapt
-   * naar links uit) past onder een knop rechts in beeld. Zit de trigger in een smalle kolom, dan
-   * moet de aanroeper zelf kiezen — een 20rem paneel valt anders buiten het scherm. Voorbeeld uit de
-   * sidebar: `"right-0 lg:right-auto lg:left-0"` (mobiel binnen de drawer, desktop naar rechts uit). */
+  /** Volledige positionering van het paneel (plaatsing én richting), relatief aan de wrapper.
+   * Default `right-0 top-full mt-1`: onder de trigger, naar links uitklappend. De aanroeper bepaalt
+   * dit zelf omdat alleen die weet hoeveel ruimte er is — in een smalle kolom is `inset-x-3 top-full`
+   * (volle kolombreedte) juist, en boven aan een scherm `bottom-full mb-1` (omhoog uitklappend). */
   positie?: string;
+  /** Klassen van de wrapper om trigger + paneel. Default `relative`, zodat het paneel aan de
+   * trigger hangt. Zet dit op `static` als een parent het ankerpunt moet zijn — bijvoorbeeld om
+   * het paneel de volle breedte van een kolom te laten volgen in plaats van die van de knop. */
+  containerClassName?: string;
 }
 
-export function Popover({ trigger, children, className = "", ariaLabel, onClose, positie = "right-0" }: PopoverProps) {
+export function Popover({ trigger, children, className = "", ariaLabel, onClose, positie = "right-0 top-full mt-1", containerClassName = "relative" }: PopoverProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -54,13 +58,13 @@ export function Popover({ trigger, children, className = "", ariaLabel, onClose,
   }, [open]);
 
   return (
-    <div ref={ref} className="relative">
+    <div ref={ref} className={containerClassName}>
       {trigger(open, toggle)}
       {open && (
         <div
           role="dialog"
           aria-label={ariaLabel}
-          className={`absolute ${positie} top-full z-40 mt-1 ${className}`}
+          className={`absolute z-40 ${positie} ${className}`}
         >
           {children}
         </div>

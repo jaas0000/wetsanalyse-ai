@@ -68,8 +68,10 @@ export function GesprekSidebar({
 
   return (
     <div className="flex h-full flex-col bg-surface">
-      {/* Logo + sluitknop (mobiel) */}
-      <div className="flex items-center justify-between px-4 pt-[max(0.75rem,env(safe-area-inset-top))]">
+      {/* Logo + berichten + sluitknop (mobiel). `relative`: het berichtenpaneel hangt aan deze rij,
+          niet aan de bel, zodat het net als het gebruikersmenu onderin de volle sidebarbreedte
+          volgt (inset-x-3) en nooit buiten de kolom valt. */}
+      <div className="relative flex items-center justify-between px-4 pt-[max(0.75rem,env(safe-area-inset-top))]">
         <Link href="/" aria-label="Belastingdienst, naar startpagina" className="block py-1">
           <Image
             src="/belastingdienst-logo.svg"
@@ -82,10 +84,7 @@ export function GesprekSidebar({
           />
         </Link>
         <div className="flex items-center">
-          {/* Berichten (release notes). Mobiel klapt het paneel binnen de drawer uit (rechts
-              uitgelijnd); vanaf lg staat de sidebar vast en klapt het naar rechts over de chat heen,
-              want links ervan is geen ruimte. */}
-          <BerichtenPanel positie="right-0 lg:right-auto lg:left-0" />
+          <BerichtenPanel positie="inset-x-3 top-full mt-1" containerClassName="static" />
           {onSluit && (
             <button
               type="button"
