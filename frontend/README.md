@@ -42,7 +42,7 @@ alternatief voor Rijksoverheid Sans, met responsive typografie (100/90/80% op de
 Alle design tokens staan centraal — CSS-variabelen in `app/globals.css` → Tailwind in
 `tailwind.config.ts` — en de primitives in `components/ui/` (48px-knoppen/velden, platte cards,
 `Vormelement`-signatuur). De **JAS-klassekleuren** (`lib/jas.ts`) zijn de exacte labelkleuren uit
-de officiële JAS-tabel `docs/wa-table.png`; de job-state-kleuren staan in `lib/states.ts`.
+de officiële JAS-tabel `docs/wetsanalyse/wa-table.png`; de job-state-kleuren staan in `lib/states.ts`.
 
 > Kleur en typografie lopen via de tokens — geen losse hex-waarden in componenten. Het officiële
 > logo-asset (`public/belastingdienst-logo.svg`) blijft ongewijzigd.

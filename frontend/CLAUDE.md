@@ -54,7 +54,7 @@ De **harde scheidingslijn**: alles met een token is server-only.
   + `gesprek_contracts.py`) en de bron-van-waarheid voor de TS-kant. Wijzigt het API-contract, werk dit bestand bij (verifieer
   desgewenst tegen `openapi-typescript http://localhost:3000/openapi.json` — zie de README).
   `lib/jas.ts` is de afgeleide presentatie-helper voor de JAS-klasse-weergave (kleur + label uit
-  `docs/wa-table.png`); brongetrouw geldt ook in de UI — verzin er geen klassen bij.
+  `docs/wetsanalyse/wa-table.png`); brongetrouw geldt ook in de UI — verzin er geen klassen bij.
 - `app/**/page.tsx` (Server Components) — data ophalen via `lib/server.ts`; interactie delegeren naar
   een `*Client.tsx` Client Component. `app/page.tsx` (home) doet server-side een `redirect("/workbench")`.
   De werkplek zit in `app/workbench/page.tsx`, het beheer in `app/beheer/page.tsx`, het account in
@@ -75,7 +75,7 @@ De **harde scheidingslijn**: alles met een token is server-only.
   (bv. naast een invoerveld), geef hem dan `className="w-full sm:w-auto"` en laat de container op
   mobiel stapelen (`flex flex-col … sm:flex-row`) — geen vaste/`flex-wrap`-knoprijen die op smal
   scherm overlopen. De JAS-klassekleuren in `lib/jas.ts` zijn de **exacte labelkleuren uit
-  `docs/wa-table.png`**.
+  `docs/wetsanalyse/wa-table.png`**.
 
 ## Werkplek — de Assistent-pagina (`/workbench`)
 
@@ -176,7 +176,7 @@ tokens/secrets/inhoud loggen. In de vitest-node-omgeving wordt `server-only` ges
 - **Huisstijl via tokens, niet hardcoded.** Kleur en typografie lopen via de tokens in
   `app/globals.css` + `tailwind.config.ts` (en `lib/jas.ts` voor de JAS-badges) — strooi
   geen losse hex-waarden door componenten. Het officiële logo-asset (`public/belastingdienst-logo.svg`)
-  blijft ongewijzigd; de JAS-klassekleuren komen exact uit `docs/wa-table.png`.
+  blijft ongewijzigd; de JAS-klassekleuren komen exact uit `docs/wetsanalyse/wa-table.png`.
 
 ## Commando's
 

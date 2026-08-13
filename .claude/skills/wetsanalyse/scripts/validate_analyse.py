@@ -24,7 +24,7 @@ import sys
 import unicodedata
 from pathlib import Path
 
-# De canonieke weergave-volgorde van de dertien JAS-klassen (docs/wa-table.png).
+# De canonieke weergave-volgorde van de dertien JAS-klassen (docs/wetsanalyse/wa-table.png).
 # Alle resultaatweergaves (viewers, Markdown-exports, frontend) sorteren hierop.
 JAS_KLASSEN_VOLGORDE: tuple[str, ...] = (
     "Rechtssubject",

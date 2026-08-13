@@ -133,7 +133,7 @@ DI + tests per laag. **Brongetrouwheid + mens-beslist in elke fase.**
 - **graph-qa**: `agent/specialists.py` (annotatie-specialist + Critic), `agent/tools/` (annotatie-/
   lessons-tools), nieuwe prompt vers uit de JAS-bron.
 - **frontend**: nieuw workbench-scherm + componenten (documentpaneel, review-queue, decision-card,
-  tijdlijn) + BFF-routes; JAS-kleuren uit `docs/wa-table.png`.
+  tijdlijn) + BFF-routes; JAS-kleuren uit `docs/wetsanalyse/wa-table.png`.
 
 ## Verificatie (per fase)
 Unit-tests met DI/fakes; een gescript end-to-end pad; live rooktest via de workbench. **Geen
