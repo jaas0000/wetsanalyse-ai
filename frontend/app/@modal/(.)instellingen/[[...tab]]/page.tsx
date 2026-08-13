@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { InstellingenDialog } from "@/components/instellingen/InstellingenDialog";
-import { isAdminTab, tabUitPad } from "@/components/instellingen/InstellingenInhoud";
+import { isAdminTab, tabUitPad } from "@/lib/instellingen";
 
 /** Intercepting route: navigeer je binnen de app naar /instellingen/…, dan vult dit het `@modal`-slot
  *  en verschijnt het venster als dialog over de huidige pagina. Bij een directe link of een refresh

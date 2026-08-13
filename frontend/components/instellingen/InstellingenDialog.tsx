@@ -2,7 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import { Dialog } from "@/components/ui/Dialog";
-import { InstellingenInhoud, type TabKey } from "./InstellingenInhoud";
+import type { TabKey } from "@/lib/instellingen";
+import { InstellingenInhoud } from "./InstellingenInhoud";
 
 /** Het instellingenvenster zoals je het vanuit de werkplek opent: een gecentreerde dialog over de
  *  chat heen. Sluiten gaat met `router.back()` — de intercepting route heeft een history-entry

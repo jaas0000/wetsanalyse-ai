@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
-import { InstellingenInhoud, isAdminTab, tabUitPad } from "@/components/instellingen/InstellingenInhoud";
+import { InstellingenInhoud } from "@/components/instellingen/InstellingenInhoud";
+import { isAdminTab, tabUitPad } from "@/lib/instellingen";
 
 export const metadata = { title: "Instellingen · Wetsanalyse" };
 
