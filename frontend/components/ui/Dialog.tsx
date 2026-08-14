@@ -12,7 +12,9 @@ export type DialogVariant =
   /** Van rechts inschuivend paneel (artefact). Op mobiel een bottom-sheet. */
   | "side"
   /** Eigen kolom naast de inhoud (artefact op een breed scherm). NIET modaal. */
-  | "kolom";
+  | "kolom"
+  /** Van links inschuivend paneel over de volle hoogte (de gesprekkenlijst op een smal scherm). */
+  | "drawer";
 
 const PANEEL_CLASS: Record<DialogVariant, string> = {
   center:
@@ -22,12 +24,18 @@ const PANEEL_CLASS: Record<DialogVariant, string> = {
     "absolute inset-x-0 bottom-0 top-[8%] flex flex-col rounded-t-vorm bg-paper shadow-kaart outline-none animate-rise " +
     "sm:inset-y-0 sm:right-0 sm:left-auto sm:top-0 sm:w-[min(46rem,92vw)] sm:rounded-none sm:rounded-l-vorm",
   kolom: "flex h-full w-full flex-col border-l border-line bg-paper outline-none",
+  // Geen `animate-rise` hier: die schuift 8px omhoog, en dat is de verkeerde richting voor een
+  // paneel dat van links komt. Liever geen animatie dan een die de verkeerde kant op wijst.
+  drawer: "absolute inset-y-0 left-0 flex w-[82%] max-w-xs flex-col bg-paper shadow-xl outline-none",
 };
 
 interface Props {
   /** Voorleesnaam van het venster (aria-label). */
   label: string;
   variant?: DialogVariant;
+  /** Extra klassen op de buitenste laag (de backdrop-houder), bv. `lg:hidden` voor een drawer die
+   *  alleen op smalle schermen bestaat. */
+  wrapperClassName?: string;
   onSluit: () => void;
   /** Wat Escape doet, als dat niet simpelweg sluiten is.
    *
@@ -49,7 +57,7 @@ interface Props {
  *  **`kolom` is bewust niet modaal**: geen backdrop, geen `aria-modal`, en géén focus-trap. Het
  *  paneel staat dan náást de chat, en die moet juist bereikbaar blijven — een trap zou je erin
  *  opsluiten. Escape sluit wél, dat is in alle drie de vormen dezelfde uitweg. */
-export function Dialog({ label, variant = "center", onSluit, onEscape, children }: Props) {
+export function Dialog({ label, variant = "center", wrapperClassName = "", onSluit, onEscape, children }: Props) {
   const paneelRef = useRef<HTMLDivElement>(null);
   const modaal = variant !== "kolom";
 
@@ -99,7 +107,7 @@ export function Dialog({ label, variant = "center", onSluit, onEscape, children 
   }
 
   return (
-    <div className="fixed inset-0 z-40" role="dialog" aria-modal="true" aria-label={label}>
+    <div className={`fixed inset-0 z-40 ${wrapperClassName}`} role="dialog" aria-modal="true" aria-label={label}>
       <div className="absolute inset-0 bg-ink/30" onClick={onSluit} />
       <div ref={paneelRef} tabIndex={-1} className={PANEEL_CLASS[variant]}>
         {children}

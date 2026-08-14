@@ -205,3 +205,35 @@ describe("PoC-disclaimer-gate", () => {
     expect(res).toBe(true);
   });
 });
+
+describe("rol-gate op /api/admin", () => {
+  it("geeft een analist een 403 in JSON, geen omleiding naar HTML", async () => {
+    // `fetch` volgt een redirect en krijgt dan de homepage met status 200 terug, waarna `res.json()`
+    // struikelt op een parsefout — de UI toonde dus een onbegrijpelijke melding in plaats van
+    // "Alleen voor beheerders".
+    const res = await authorized({
+      auth: sessie,
+      request: fakeRequest("GET", "https://app.example/api/admin/users"),
+    });
+    expect(res).toBeInstanceOf(Response);
+    expect((res as Response).status).toBe(403);
+    expect(await (res as Response).json()).toEqual({ detail: "Alleen voor beheerders." });
+  });
+
+  it("stuurt een analist op een beheerpágina wél door naar de start", async () => {
+    const res = await authorized({
+      auth: sessie,
+      request: fakeRequest("GET", "https://app.example/instellingen/beheer"),
+    });
+    expect((res as Response).status).toBe(302);
+    expect((res as Response).headers.get("location")).toBe("https://app.example/");
+  });
+
+  it("laat een beheerder gewoon door op de admin-BFF", async () => {
+    const res = await authorized({
+      auth: { user: { userid: "bh1", role: "beheerder" } },
+      request: fakeRequest("GET", "https://app.example/api/admin/users"),
+    });
+    expect(res).toBe(true);
+  });
+});

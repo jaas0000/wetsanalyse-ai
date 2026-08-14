@@ -25,7 +25,7 @@ export function AuthFrame({
   children: ReactNode;
 }) {
   return (
-    <div className="flex min-h-[100dvh] flex-col items-center justify-center bg-surface px-4 py-10">
+    <div className="flex min-h-screen min-h-[100dvh] flex-col items-center justify-center bg-surface px-4 py-10">
       <div className={`animate-rise w-full ${breed ? "max-w-2xl" : "max-w-sm"}`}>
         {/* Het lint (het blauwe blok) hoort op de horizontale middenas te staan, niet het logo als
             geheel. In de SVG (viewBox 275×125) is het lint 50 breed vanaf x=0, dus het hart ervan zit

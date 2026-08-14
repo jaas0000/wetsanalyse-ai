@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
+import { Dialog } from "@/components/ui/Dialog";
 import { GesprekSidebar } from "@/components/werkplek/GesprekSidebar";
 import { WerkplekClient } from "@/components/werkplek/WerkplekClient";
 import { hernoemGesprek, lijstGesprekken, verwijderGesprek } from "@/lib/api";
@@ -18,6 +19,10 @@ export function WorkbenchShell() {
   const [mountKey, setMountKey] = useState(0);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [laden, setLaden] = useState(true); // eerste gesprekken-fetch loopt nog → sidebar-skeletons
+  // Een mislukte hernoem- of verwijderactie mag de werkplek niet blokkeren, maar hoort ook niet stil
+  // te blijven: zonder melding is "de nieuwe naam staat er niet" niet te onderscheiden van "de naam
+  // is niet aangeslagen", en blijft een gesprek na een bevestigde verwijdering gewoon staan.
+  const [fout, setFout] = useState<string | null>(null);
 
   const verversLijst = useCallback(() => {
     lijstGesprekken()
@@ -29,16 +34,6 @@ export function WorkbenchShell() {
   useEffect(() => {
     verversLijst();
   }, [verversLijst]);
-
-  // Escape sluit de mobiele drawer.
-  useEffect(() => {
-    if (!drawerOpen) return;
-    const opEsc = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setDrawerOpen(false);
-    };
-    window.addEventListener("keydown", opEsc);
-    return () => window.removeEventListener("keydown", opEsc);
-  }, [drawerOpen]);
 
   function nieuwGesprek() {
     setActiveId(null);
@@ -60,22 +55,24 @@ export function WorkbenchShell() {
   }
 
   async function hernoem(id: string, titel: string) {
+    setFout(null);
     try {
       await hernoemGesprek(id, titel);
       verversLijst();
     } catch {
-      /* stil */
+      setFout("De nieuwe naam is niet opgeslagen.");
     }
   }
 
   async function verwijder(id: string) {
     if (!window.confirm("Dit gesprek verwijderen? Dit kan niet ongedaan worden gemaakt.")) return;
+    setFout(null);
     try {
       await verwijderGesprek(id);
       if (id === activeId) nieuwGesprek();
       else verversLijst();
     } catch {
-      /* stil */
+      setFout("Het gesprek is niet verwijderd.");
     }
   }
 
@@ -95,6 +92,19 @@ export function WorkbenchShell() {
         Analyses kunnen verloren gaan. <span className="underline">Lees de voorwaarden</span>
       </Link>
 
+      {fout && (
+        <div role="status" className="shrink-0 border-b border-fout/30 bg-fout/10 px-4 py-2 text-center text-[0.8125rem] text-fout">
+          {fout}{" "}
+          <button
+            type="button"
+            onClick={() => setFout(null)}
+            className="focus-ring rounded font-medium underline underline-offset-2"
+          >
+            Sluiten
+          </button>
+        </div>
+      )}
+
       <div className="flex min-h-0 flex-1">
       {/* Desktop-sidebar */}
       <aside className="hidden w-[17rem] shrink-0 border-r border-line lg:block">
@@ -109,23 +119,27 @@ export function WorkbenchShell() {
         />
       </aside>
 
-      {/* Mobiele off-canvas drawer */}
+      {/* Mobiele off-canvas drawer. Via `Dialog` en niet als eigen constructie: die draagt de
+          focus-trap, Escape en de backdrop. Deze drawer had wél `role="dialog"` en `aria-modal` maar
+          geen van de mechanismen erachter, dus liep Tab achter de scrim door naar de chat eronder. */}
       {drawerOpen && (
-        <div className="fixed inset-0 z-40 lg:hidden" role="dialog" aria-modal="true" aria-label="Gesprekken">
-          <div className="absolute inset-0 bg-ink/40" onClick={() => setDrawerOpen(false)} />
-          <div className="absolute inset-y-0 left-0 w-[82%] max-w-xs shadow-xl">
-            <GesprekSidebar
-              gesprekken={gesprekken}
-              activeId={activeId}
-              onNieuw={nieuwGesprek}
-              onOpen={openGesprek}
-              onHernoem={hernoem}
-              onVerwijder={verwijder}
-              laden={laden}
-              onSluit={() => setDrawerOpen(false)}
-            />
-          </div>
-        </div>
+        <Dialog
+          label="Gesprekken"
+          variant="drawer"
+          wrapperClassName="lg:hidden"
+          onSluit={() => setDrawerOpen(false)}
+        >
+          <GesprekSidebar
+            gesprekken={gesprekken}
+            activeId={activeId}
+            onNieuw={nieuwGesprek}
+            onOpen={openGesprek}
+            onHernoem={hernoem}
+            onVerwijder={verwijder}
+            laden={laden}
+            onSluit={() => setDrawerOpen(false)}
+          />
+        </Dialog>
       )}
 
       {/* Rechterkolom: mobiele topbar + chatvenster */}

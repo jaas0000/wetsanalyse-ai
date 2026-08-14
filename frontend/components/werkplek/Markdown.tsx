@@ -1,11 +1,18 @@
 "use client";
 
+import { memo } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 /** Rendert een agent-antwoord als (GitHub-flavored) Markdown. Geen rauwe HTML (geen rehype-raw), dus
- *  veilig; links laten we alleen door voor http(s) en openen extern. */
-export function Markdown({ tekst }: { tekst: string }) {
+ *  veilig; links laten we alleen door voor http(s) en openen extern.
+ *
+ *  **Gememoïseerd op de tekst.** Tijdens het streamen wordt de hele thread bij elke token opnieuw
+ *  gerenderd; zonder dit parseerde react-markdown élk afgerond antwoord in het gesprek dan opnieuw,
+ *  en groeiden de kosten mee met de lengte van het gesprek. Het lópende antwoord verandert wél per
+ *  token en wordt dus nog steeds opnieuw geparseerd — dat schaalt met de lengte van dat ene antwoord
+ *  en is de prijs voor opmaak die meteen goed staat. */
+export const Markdown = memo(function Markdown({ tekst }: { tekst: string }) {
   return (
     <div className="space-y-3 break-words text-[0.9375rem] leading-relaxed text-ink [overflow-wrap:anywhere]">
       <ReactMarkdown
@@ -45,4 +52,4 @@ export function Markdown({ tekst }: { tekst: string }) {
       </ReactMarkdown>
     </div>
   );
-}
+});

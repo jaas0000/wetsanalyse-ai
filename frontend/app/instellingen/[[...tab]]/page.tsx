@@ -26,7 +26,7 @@ export default async function InstellingenPagina({
   if (isAdminTab(actief) && !isBeheerder) redirect("/");
 
   return (
-    <div className="flex h-[100dvh] flex-col overflow-hidden bg-surface">
+    <div className="flex h-screen h-[100dvh] flex-col overflow-hidden bg-surface">
       <div className="flex shrink-0 items-center justify-between gap-3 border-b border-line bg-paper px-5 py-3.5 pt-[max(0.875rem,env(safe-area-inset-top))]">
         <h1 className="font-display text-base font-semibold text-lint">Instellingen</h1>
         <Link

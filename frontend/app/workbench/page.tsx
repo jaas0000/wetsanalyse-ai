@@ -7,7 +7,7 @@ export const metadata = { title: "Assistent · Wetsanalyse" };
  *  deze klasse scrolt de chat als document en staat de invoerbalk niet meer gepind onderaan. */
 export default function WerkplekPagina() {
   return (
-    <div className="h-[100dvh] overflow-hidden">
+    <div className="h-screen h-[100dvh] overflow-hidden">
       <WorkbenchShell />
     </div>
   );

@@ -99,7 +99,10 @@ Bovenaan de shell staat de klikbare **testomgeving-strook**. De shell is twee ko
 - **Links de sidebar** (`GesprekSidebar` + `GesprekLijst`): bovenin het Belastingdienst-logo, een
   "Nieuw gesprek"-knop, de **chatgeschiedenis** (per-gebruiker gepersisteerd), en onderin een
   **instellingen/gebruiker**-blok (Account/Beheer + uitloggen). Op `<lg` is dit een off-canvas drawer
-  (mobiele topbar met hamburger; scrim/Escape/safe-area).
+  (mobiele topbar met hamburger; scrim/Escape/safe-area) — via **`Dialog` met de `drawer`-variant**,
+  niet als eigen constructie: die droeg wél `role="dialog"`/`aria-modal` maar geen focus-trap, dus
+  liep Tab achter de scrim door naar de chat eronder. Eén focus-trap in de codebase, zoals `Dialog`
+  zelf als uitgangspunt heeft staan.
 - **Rechts het chatvenster** (`WerkplekClient.tsx`): één gespreksvenster voor **vragen** (Q&A) én
   **JAS-annotatie**, beide als SSE tegen graph-qa's unified agent. De thread hydrateert uit het actieve
   gesprek en **persisteert elke beurt** naar de api (`/v1/gesprekken/*`); de shell remount het venster

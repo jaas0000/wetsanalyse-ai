@@ -4,7 +4,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 // gecentreerde kaart), zodat er niets verspringt zodra de pagina er is.
 export default function Laden() {
   return (
-    <div className="flex min-h-[100dvh] items-center justify-center bg-surface px-4 py-10" aria-busy="true">
+    <div className="flex min-h-screen min-h-[100dvh] items-center justify-center bg-surface px-4 py-10" aria-busy="true">
       <span className="sr-only">Laden…</span>
       <div className="w-full max-w-sm">
         <Skeleton className="mx-auto mb-6 h-[3.75rem] w-[13rem]" />

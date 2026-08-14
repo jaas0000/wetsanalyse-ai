@@ -114,6 +114,12 @@ export const authConfig = {
         path.startsWith("/beheer") ||
         path.startsWith("/api/admin");
       if (adminPad && role !== "beheerder") {
+        // Een BFF-route wil een statuscode, geen omleiding: `fetch` volgt de redirect, krijgt de HTML
+        // van de homepage met status 200, en dan struikelt `res.json()` op een parsefout in plaats van
+        // dat de UI "Alleen voor beheerders" toont. Pagina's willen die omleiding juist wél.
+        if (path.startsWith("/api/")) {
+          return Response.json({ detail: "Alleen voor beheerders." }, { status: 403 });
+        }
         return Response.redirect(new URL("/", nextUrl));
       }
       return true;

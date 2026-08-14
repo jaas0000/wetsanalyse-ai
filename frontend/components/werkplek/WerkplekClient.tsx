@@ -127,6 +127,11 @@ export function WerkplekClient({ initialGesprekId, onGesprekAangemaakt, onGewijz
   // blijft de assistent bereikbaar tijdens het reviewen.
   const breed = useBreedScherm();
 
+  // Een lopende beurt hoort te stoppen als dit venster verdwijnt (van gesprek wisselen remount het
+  // component). Zonder dit liep de SSE-verbinding — en de agent erachter — door voor een scherm dat
+  // niemand meer ziet.
+  useEffect(() => () => afbrekenRef.current?.abort(), []);
+
   // Hydrateer één keer bij mount: bestaande gespreksberichten → thread. Lees de id uit een MOUNT-vaste
   // ref, niet uit de reactieve prop: bij de eerste beurt zet de shell `activeId` (→ prop null→id) zónder
   // remount; zou de effect daarop herstarten, dan overschrijft `haalGesprek` de lopende stream. Een échte
@@ -248,6 +253,11 @@ export function WerkplekClient({ initialGesprekId, onGesprekAangemaakt, onGewijz
 
     // Toon de user-bubbel + antwoord-placeholder OPTIMISTISCH, vóór het (bij een nieuw gesprek) awaiten
     // van maakGesprek — anders "verdwijnt" het bericht tijdens die round-trip.
+    // De controller bestaat vóórdat de knop een stopknop wordt. Stond hij verderop (na het
+    // aanmaken van het gesprek), dan deed "stoppen" in dat eerste venster niets.
+    const beheerser = new AbortController();
+    afbrekenRef.current = beheerser;
+
     const antId = uid();
     setItems((xs) => [
       ...xs,
@@ -276,9 +286,6 @@ export function WerkplekClient({ initialGesprekId, onGesprekAangemaakt, onGewijz
     // De chip is UI-state en reist niet mee naar de api; zonder deze regel leest een herladen gesprek
     // als een losse vraag zonder onderwerp.
     void persisteer(gid, "user", { tekst: contextLabel ? `Bij ${contextLabel}: ${prompt}` : prompt });
-
-    const beheerser = new AbortController();
-    afbrekenRef.current = beheerser;
 
     const doelRef: { d: AgentDoel | null } = { d: null };
     // Ontdubbeld verzamelen: de agent kan hetzelfde element in meerdere rondes opnieuw sturen
@@ -444,7 +451,9 @@ export function WerkplekClient({ initialGesprekId, onGesprekAangemaakt, onGewijz
   }
 
   function opToets(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    if (e.key === "Enter" && !e.shiftKey) {
+    // `isComposing`: met een IME (of een Android-toetsenbord dat een woordsuggestie met Enter
+    // bevestigt) hoort Enter de compositie af te ronden, niet de beurt te versturen.
+    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
       void verstuur();
     }
@@ -804,11 +813,18 @@ function AssistentAvatar() {
 /** Kopieert de letterlijke antwoordtekst; toont kort "Gekopieerd". Subtiel, hover-onthullend op desktop. */
 function KopieerKnop({ tekst }: { tekst: string }) {
   const [gekopieerd, setGekopieerd] = useState(false);
+  // De "Gekopieerd"-melding weer weghalen, en de timer opruimen als het bericht ondertussen
+  // verdwijnt (bv. bij het wisselen van gesprek).
+  useEffect(() => {
+    if (!gekopieerd) return;
+    const id = window.setTimeout(() => setGekopieerd(false), 1500);
+    return () => window.clearTimeout(id);
+  }, [gekopieerd]);
+
   async function kopieer() {
     try {
       await navigator.clipboard.writeText(tekst);
       setGekopieerd(true);
-      setTimeout(() => setGekopieerd(false), 1500);
     } catch {
       /* clipboard geweigerd — stil */
     }

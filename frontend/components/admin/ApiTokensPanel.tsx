@@ -15,6 +15,20 @@ export function ApiTokensPanel() {
   const [tokens, setTokens] = useState<ApiTokenOut[] | null>(null);
   const [fout, setFout] = useState<string | null>(null);
   const [label, setLabel] = useState("");
+  const [gekopieerd, setGekopieerd] = useState(false);
+
+  /** Kopiëren mét terugkoppeling. `navigator.clipboard` bestaat niet op een niet-beveiligde origin
+   *  en kan geweigerd worden; dat stil laten gebeuren is bij een eenmalig token het slechtste
+   *  antwoord — dan denk je dat je het hebt. */
+  async function kopieer(token: string) {
+    try {
+      await navigator.clipboard.writeText(token);
+      setGekopieerd(true);
+      setFout(null);
+    } catch {
+      setFout("Kopiëren lukt niet in deze browser — selecteer het token hierboven en kopieer het zelf.");
+    }
+  }
   // Eenmalig getoond volledig token (na genereren) — daarna niet meer op te vragen.
   const [nieuw, setNieuw] = useState<{ label: string; token: string } | null>(null);
 
@@ -44,6 +58,7 @@ export function ApiTokensPanel() {
     try {
       const res = await createApiToken(label.trim());
       setNieuw({ label: res.label, token: res.token });
+      setGekopieerd(false); // een vers token is nog niet gekopieerd
       setLabel("");
       await laad();
     } catch (e) {
@@ -83,16 +98,23 @@ export function ApiTokensPanel() {
           <p className="text-sm">
             Voor <span className="font-medium">{nieuw.label || "(geen label)"}</span>:
           </p>
-          <code className="mt-1 block break-all rounded bg-paper px-1.5 py-1 font-mono text-xs">
-            {nieuw.token}
-          </code>
+          {/* Selecteerbaar veld i.p.v. alleen een <code>: lukt kopiëren niet (geen beveiligde origin,
+              toestemming geweigerd), dan moet handmatig selecteren altijd nog kunnen — dit token is
+              eenmalig. */}
+          <input
+            readOnly
+            value={nieuw.token}
+            aria-label="API-token"
+            onFocus={(e) => e.currentTarget.select()}
+            className="mt-1 w-full rounded border border-line bg-paper px-1.5 py-1 font-mono text-xs text-ink"
+          />
           <p className="mt-1 text-xs text-muted">
             Dit volledige token wordt <span className="font-medium">niet opnieuw getoond</span>. Bewaar het veilig
             (bijv. als lokale env-var voor de MCP); intrekken kan hieronder.
           </p>
           <ButtonRow align="start" className="mt-2">
-            <Button size="sm" variant="secondary" onClick={() => navigator.clipboard?.writeText(nieuw.token)}>
-              Kopiëren
+            <Button size="sm" variant="secondary" onClick={() => void kopieer(nieuw.token)}>
+              {gekopieerd ? "Gekopieerd" : "Kopiëren"}
             </Button>
             <Button size="sm" variant="ghost" onClick={() => setNieuw(null)}>
               Sluiten

@@ -64,7 +64,10 @@ export function DocumentPaneel({
   actiefId?: string;
   onKies?: (id?: string) => void;
   /** De jurist heeft tekst geselecteerd om zelf te markeren. Weglaten = alleen-lezen. */
-  onSelectie?: (sel: { fragment: string; start: number; eind: number; lid: string; bron: string; x: number; y: number }) => void;
+  onSelectie?: (sel: {
+    fragment: string; start: number; eind: number; lid: string; bron: string;
+    x: number; y: number; yBoven: number;
+  }) => void;
 }) {
   const bron = useMemo(() => bronVan(regels), [regels]);
   const segmenten = useMemo(() => segmenteer(bron, elementen, actiefId), [bron, elementen, actiefId]);
@@ -138,6 +141,7 @@ export function DocumentPaneel({
       bron,
       x: rect.left + rect.width / 2,
       y: rect.bottom,
+      yBoven: rect.top,
     });
   }
 

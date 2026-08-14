@@ -1,15 +1,20 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { JAS_KLASSEN, jasStyle } from "@/lib/jas";
+import { plaatsPopover } from "@/lib/popover";
 
-/** Waar de popover moet verschijnen: het scherm-rechthoekje van de selectie. */
+/** Waar de popover moet verschijnen: het scherm-rechthoekje van de selectie.
+ *
+ *  `y` is de ONDERkant en `yBoven` de bovenkant; die tweede is nodig om naar boven te kunnen
+ *  uitklappen zonder de selectie zelf af te dekken. */
 export interface SelectieDoel {
   fragment: string;
   x: number;
   y: number;
+  yBoven: number;
 }
 
 /** Keuzemenu bij een tekstselectie: kies een JAS-klasse en de markering is er.
@@ -72,11 +77,21 @@ export function SelectiePopover({
     }
   }
 
-  // Binnen beeld houden: de popover is 20rem breed en verschijnt onder de selectie.
-  const breedte = 320;
-  const links = Math.max(
-    8,
-    Math.min(doel.x - breedte / 2, (globalThis.innerWidth || 1024) - breedte - 8),
+  // Binnen beeld houden — horizontaal én verticaal. De hoogte meten we ná de eerste render: hij
+  // hangt af van het aantal klassen, van de aanpasbaar-strook en van de tekstgrootte van de
+  // gebruiker, dus een vaste aanname klopt precies wanneer het misgaat. `useLayoutEffect` doet dat
+  // vóór de paint, zodat je hem niet ziet verspringen.
+  const BREEDTE = 320;
+  const [hoogte, setHoogte] = useState(280);
+  useLayoutEffect(() => {
+    const gemeten = ref.current?.offsetHeight;
+    if (gemeten && gemeten !== hoogte) setHoogte(gemeten);
+  }, [hoogte, doel, aanpasbaar]);
+
+  const plek = plaatsPopover(
+    { midden: doel.x, boven: doel.yBoven, onder: doel.y },
+    { breedte: BREEDTE, hoogte },
+    { breedte: globalThis.innerWidth || 1024, hoogte: globalThis.innerHeight || 768 },
   );
 
   return (
@@ -84,8 +99,8 @@ export function SelectiePopover({
       ref={ref}
       role="dialog"
       aria-label="Markering toevoegen"
-      style={{ position: "fixed", top: doel.y + 8, left: links, width: breedte }}
-      className="z-50 rounded-kaart border border-line bg-paper p-3 shadow-kaart"
+      style={{ position: "fixed", top: plek.top, left: plek.left, width: BREEDTE }}
+      className="z-50 max-h-[calc(100dvh-1rem)] overflow-y-auto rounded-kaart border border-line bg-paper p-3 shadow-kaart"
     >
       <p className="mb-2 line-clamp-2 text-xs text-muted">
         <span className="font-medium text-ink">Markeren:</span> “{doel.fragment}”
