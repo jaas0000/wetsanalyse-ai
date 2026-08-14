@@ -222,7 +222,7 @@ function DecisionCard({
     <div
       ref={kaartRef}
       onClick={onKies}
-      className={`rounded-kaart border border-line border-l-4 bg-white p-3 shadow-zacht transition ${
+      className={`rounded-kaart border border-line border-l-4 bg-paper p-3 shadow-zacht transition ${
         beslist ? "opacity-75" : aandacht ? `${aandacht.rand} ${aandacht.tint}` : "border-l-line"
       } ${actief ? "border-lint ring-1 ring-lint" : ""}`}
     >

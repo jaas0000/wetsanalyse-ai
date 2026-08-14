@@ -66,19 +66,25 @@ export function OntbrekendLijst({
           const toevoegbaar = !!onToevoegen && start >= 0 && !klaar;
 
           return (
-            <li key={i} className="rounded-kaart border border-line bg-paper p-2">
-              <div className="flex flex-wrap items-center gap-1.5">
-                <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${jasStyle(item.klasse)}`}>
-                  {item.klasse}
-                </span>
-                {fragment ? (
-                  <span className="min-w-0 flex-1 truncate text-xs italic text-ink">“{fragment}”</span>
-                ) : (
-                  <span className="min-w-0 flex-1 text-xs text-faint">geen fragment aangewezen</span>
-                )}
-              </div>
+            // Zelfde vorm als een reviewkaart: het gaat om hetzelfde ding — een JAS-klasse met een
+            // letterlijk fragment. Alleen de gestippelde rand om het blok markeert dat deze nog niet
+            // in het document staan.
+            <li key={i} className="rounded-kaart border border-line border-l-4 border-l-line bg-paper p-3">
+              <span className={`inline-block rounded px-2 py-0.5 text-xs font-semibold ${jasStyle(item.klasse)}`}>
+                {item.klasse}
+              </span>
 
-              {item.reden && <p className="mt-1 text-xs text-muted">{item.reden}</p>}
+              {/* Het fragment krijgt dezelfde citaatvorm als op de reviewkaart, en wordt NIET afgekapt:
+                  je moet het kunnen lezen om te kunnen besluiten of je het toevoegt. */}
+              {fragment ? (
+                <p className="mt-2 border-l-2 border-line pl-2.5 text-sm italic text-ink">“{fragment}”</p>
+              ) : (
+                <p className="mt-2 border-l-2 border-line pl-2.5 text-sm text-faint">
+                  geen fragment aangewezen
+                </p>
+              )}
+
+              {item.reden && <p className="mt-1.5 text-xs text-muted">{item.reden}</p>}
 
               {/* Drie situaties, drie boodschappen. Niets verzwijgen: kan het niet, zeg dan waarom. */}
               {fragment && start < 0 && (
