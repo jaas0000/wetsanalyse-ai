@@ -11,7 +11,9 @@ import { GesprekLijst } from "@/components/werkplek/GesprekLijst";
 import { wisDisclaimer } from "@/lib/api";
 import type { GesprekSamenvatting } from "@/lib/types";
 
-/** Wis het disclaimer-akkoord en log dan pas uit (gedeelde-machine-hygiëne; zelfde volgorde als SiteNav). */
+/** Wis het disclaimer-akkoord en log dan pas uit: zonder dat overleeft de sessiecookie een logout
+ *  binnen dezelfde browsersessie en ziet de volgende gebruiker op een gedeelde machine de
+ *  waarschuwing niet. */
 async function uitloggen(): Promise<void> {
   await wisDisclaimer();
   await signOut({ callbackUrl: "/login" });

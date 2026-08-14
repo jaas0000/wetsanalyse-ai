@@ -10,8 +10,8 @@ export const metadata = { title: "Instellingen · Wetsanalyse" };
  *  van buiten de werkplek. Vanuit de app onderschept `app/@modal/(.)instellingen/…` dit pad en toont
  *  dezelfde inhoud als dialog over de werkplek heen.
  *
- *  Deze pagina draait in de app-shell (zie `lib/appShell.ts`): geen globale logobalk, volle hoogte.
- *  Daarom draagt ze zelf de kop met de weg terug. */
+ *  Er is geen globale chrome meer; deze pagina draagt daarom zelf haar volle hoogte én de kop met
+ *  de weg terug naar de werkplek. */
 export default async function InstellingenPagina({
   params,
 }: {
@@ -26,7 +26,7 @@ export default async function InstellingenPagina({
   if (isAdminTab(actief) && !isBeheerder) redirect("/");
 
   return (
-    <div className="flex h-full flex-col bg-surface">
+    <div className="flex h-[100dvh] flex-col overflow-hidden bg-surface">
       <div className="flex shrink-0 items-center justify-between gap-3 border-b border-line bg-paper px-5 py-3.5 pt-[max(0.875rem,env(safe-area-inset-top))]">
         <h1 className="font-display text-base font-semibold text-lint">Instellingen</h1>
         <Link

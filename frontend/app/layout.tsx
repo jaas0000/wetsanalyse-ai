@@ -1,9 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { auth } from "@/auth";
-import { AppMain } from "@/components/AppMain";
 import { Providers } from "@/components/Providers";
-import { SiteFooter } from "@/components/SiteFooter";
-import { SiteHeader } from "@/components/SiteHeader";
 import { sans, mono } from "./fonts";
 import "./globals.css";
 
@@ -31,9 +28,13 @@ export const viewport: Viewport = {
   themeColor: "#154273",
 };
 
-/** `modal` is het parallelle slot dat de intercepting routes vullen (app/@modal/**). Het staat
- *  buiten `AppMain`, want een dialog hoort over de hele app heen te liggen — niet in de
- *  documentflow of de vol-bleed werkplek-container. */
+/** De layout is bewust kaal: er is geen globale chrome meer. Elk scherm draagt zijn eigen kader —
+ *  ingelogd is dat de app-schil (`/workbench`, `/instellingen`), uitgelogd de gecentreerde kaart van
+ *  `AuthFrame`. De oude logobalk + navigatiebalk + footer zijn weg: die navigatie wees naar plekken
+ *  die inmiddels ín de schil zitten, en de kop verborg zichzelf toch al op de app-paden.
+ *
+ *  `modal` is het parallelle slot dat de intercepting routes vullen (app/@modal/**); dat staat
+ *  buiten `{children}`, want een dialog hoort over de hele app heen te liggen. */
 export default async function RootLayout({
   children,
   modal,
@@ -46,9 +47,7 @@ export default async function RootLayout({
     <html lang="nl" className={`${sans.variable} ${mono.variable}`}>
       <body className="min-h-screen">
         <Providers session={session}>
-          <SiteHeader ingelogd={!!session} />
-          <AppMain>{children}</AppMain>
-          <SiteFooter />
+          {children}
           {modal}
         </Providers>
       </body>

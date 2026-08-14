@@ -88,11 +88,11 @@ De **harde scheidingslijn**: alles met een token is server-only.
 ## Werkplek — de Assistent-pagina (`/workbench`)
 
 De **Assistent-pagina** (`app/workbench/page.tsx`, titel "Assistent") → `components/werkplek/WorkbenchShell.tsx`:
-een **volledige chat-app-shell** (Claude/ChatGPT-achtig, in Belastingdienst-huisstijl). Op de
-**app-shell-paden** wijkt de globale chrome: `SiteHeader`, `AppMain` (vol-bleed `h-[100dvh]`) en
-`SiteFooter` vragen alle drie `isAppShellPad(pathname)` uit `lib/appShell.ts` — dat dekt `/workbench`
-**én** `/instellingen*`, want de intercepting route wijzigt de URL terwijl de werkplek eronder blijft
-staan. Voeg je een app-shell-pad toe, doe dat daar; niet met een losse `pathname === …`-check. De shell is twee kolommen:
+een **volledige chat-app-shell** (Claude/ChatGPT-achtig, in Belastingdienst-huisstijl). Er is **geen
+globale chrome**: `app/layout.tsx` bevat alleen `Providers`, `{children}` en het `modal`-slot. Elk
+scherm draagt zijn eigen kader — de shell-pagina's (`/workbench`, `/instellingen`) zetten zelf
+`h-[100dvh] overflow-hidden`, en alles daarbuiten gebruikt `AuthFrame` (zie §*Buiten de schil*).
+Bovenaan de shell staat de klikbare **testomgeving-strook**. De shell is twee kolommen:
 - **Links de sidebar** (`GesprekSidebar` + `GesprekLijst`): bovenin het Belastingdienst-logo, een
   "Nieuw gesprek"-knop, de **chatgeschiedenis** (per-gebruiker gepersisteerd), en onderin een
   **instellingen/gebruiker**-blok (Account/Beheer + uitloggen). Op `<lg` is dit een off-canvas drawer
@@ -122,6 +122,24 @@ staan. Voeg je een app-shell-pad toe, doe dat daar; niet met een losse `pathname
 - **Config:** `GRAPH_QA_URL` (intern, default `http://graph-qa:8080`, via `graphQaBaseUrl()`) +
   `GRAPH_QA_TOKEN(_FILE)` — de frontend moet graph-qa op het gedeelde docker-netwerk kunnen
   bereiken (`lib/config.ts`).
+
+### Buiten de schil: één kaart
+
+Alles wat geen app-schil is — inloggen, 2FA, de eerste beheerder, de blokkerende disclaimer en de
+fout-/laadpagina's — gebruikt **`components/auth/AuthFrame.tsx`**: een gecentreerde kaart op
+`bg-surface` met het logo erboven, in dezelfde vormtaal als de dialogen. De oude documentopmaak
+(`SiteHeader`, `SiteNav`, `SiteFooter`, `AppMain`, `lib/appShell.ts`) is **weg**; die navigatiebalk
+wees naar plekken die inmiddels in de sidebar zitten. Bewust geen namaak-werkplek achter het
+inlogscherm: een lege, vervaagde app leest als "hij laadt", niet als "log eerst in".
+
+`app/global-error.tsx` blijft een uitzondering met inline stijl en hardcoded huisstijlkleuren — die
+boundary vervangt de hele document-boom en kan de app-CSS niet veronderstellen.
+
+**De disclaimer heeft twee schillen, één tekst.** De edge-gate (`auth.config.ts` → `vereistAkkoord`)
+stuurt je zonder akkoord naar `/disclaimer`: dat is de **blokkerende** volle pagina in `AuthFrame`.
+Klik je de teststrook aan vanuit de werkplek, dan onderschept `app/@modal/(.)disclaimer/page.tsx` dat
+pad en opent `DisclaimerDialog` over de werkplek heen — zelfde `DisclaimerClient`, andere schil, en je
+verlaat je gesprek niet. Verander je de tekst, dan verander je hem dus op één plek.
 
 ### Berichten en feedback
 

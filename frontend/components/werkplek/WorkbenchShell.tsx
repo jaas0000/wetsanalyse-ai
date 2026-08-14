@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { GesprekSidebar } from "@/components/werkplek/GesprekSidebar";
@@ -81,7 +82,20 @@ export function WorkbenchShell() {
   const actieveTitel = gesprekken.find((g) => g.id === activeId)?.titel || "Nieuw gesprek";
 
   return (
-    <div className="flex h-full">
+    <div className="flex h-full flex-col">
+      {/* Waar zit ik? Deze strook hing eerder aan de globale sitekop, en die verborg zichzelf op de
+          werkplek — dus juist waar je de hele dag werkt, zag je hem nooit. Nu staat hij bovenaan de
+          schil. De klik opent de voorwaarden als dialog (intercepting route), zodat je je gesprek
+          niet verlaat. */}
+      <Link
+        href="/disclaimer"
+        className="focus-ring block shrink-0 bg-waarschuwing/10 py-1 text-center text-[0.7rem] text-ink transition-colors hover:bg-waarschuwing/20"
+      >
+        <span className="font-semibold">Testomgeving — proof of concept.</span>{" "}
+        Analyses kunnen verloren gaan. <span className="underline">Lees de voorwaarden</span>
+      </Link>
+
+      <div className="flex min-h-0 flex-1">
       {/* Desktop-sidebar */}
       <aside className="hidden w-[17rem] shrink-0 border-r border-line lg:block">
         <GesprekSidebar
@@ -148,6 +162,7 @@ export function WorkbenchShell() {
           onGesprekAangemaakt={gesprekAangemaakt}
           onGewijzigd={verversLijst}
         />
+      </div>
       </div>
     </div>
   );
