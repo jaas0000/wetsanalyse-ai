@@ -143,7 +143,7 @@ def test_decompositie_deelvragen_retrieval_en_synthese():
     types = [e["type"] for e in events]
 
     # opsplitsing + per-deelvraag status
-    assert any(e["type"] == "status" and "Opgesplitst in 2 deelvragen" in e["message"] for e in events)
+    assert any(e["type"] == "status" and "Decompositie · 2 deelvragen" in e["message"] for e in events)
     assert any(e["type"] == "status" and "Deelvraag 1/2" in e["message"] for e in events)
     assert any(e["type"] == "status" and "Deelvraag 2/2" in e["message"] for e in events)
     # alleen de synthese streamt tokens (deelvraag-narratie niet)
@@ -239,4 +239,4 @@ def test_deelvraag_beurtlimiet_dwingt_antwoord_af():
     tokens = "".join(e["content"] for e in events if e["type"] == "token")
     assert "Volgens" in tokens, "de laatste beurt moet een echt antwoord opleveren"
     assert "geen antwoord formuleren" not in tokens, "het finalize-vangnet mag niet nodig zijn"
-    assert any(e["type"] == "status" and "Beurtlimiet" in e.get("message", "") for e in events)
+    assert any(e["type"] == "status" and "beurtlimiet bereikt" in e.get("message", "") for e in events)

@@ -221,6 +221,13 @@ Drie dingen die je verder moet kennen voordat je hieraan werkt:
   overgeslagen, herziening leverde niets op) — stil doorgaan wekt de indruk dat alles beoordeeld is.
   De bewoording zit in pure functies (`_annoteer_melding`, `_critic_melding`, `_herzien_melding`,
   `_toolregel`) zodat hij te testen is; de werkplek bewaart de reeks bij de annotatie.
+- **Eén idioom: `Actor · wat er gebeurde`.** Alle statusregels lopen via `_stap(writer, actor,
+  bericht)`; een test bewaakt de vorm. Zonder die helper verzon elke node zijn eigen stijl —
+  "Opgesplitst in 3 deelvragen." naast "Annoteerder · 4 gegrond", en twee verschillende teksten voor
+  dezelfde graafbevraging. Dat geldt voor de héle keten, niet alleen de annotatie: ook de
+  antwoordroute meldt nu zijn stappen zónder eigen narratie (`Controle · brongetrouwheid…`,
+  `Correctie · …`, `Synthese · …`, `Klaar · N bronnen`). De LLM-narratie zelf blijft `reason`; die
+  stappen dubbelop melden zou alleen ruis opleveren.
 - **Onderwerp-afbakening & injectie.** De agent antwoordt alleen over de wetgeving in de graaf en
   behandelt graaftekst als data. Verzwak `SYSTEM_PROMPT`/`_ROUTER_SYSTEM` hierin niet zonder reden.
 

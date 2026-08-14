@@ -376,7 +376,7 @@ def test_elke_fase_meldt_zich_met_naam_en_uitkomst():
     regels = _statusregels(events)
     tekst = "\n".join(regels)
 
-    for merk in ("Supervisor →", "Graaf bevragen ·", "Annoteerder ·", "Critic ·", "Herziening 1 ·", "Klaar ·"):
+    for merk in ("Supervisor ·", "Graaf bevragen ·", "Annoteerder ·", "Critic ·", "Herziening 1 ·", "Klaar ·"):
         assert merk in tekst, f"{merk!r} ontbreekt in de tijdlijn:\n{tekst}"
 
     # De volgorde vertelt het verhaal: eerst annoteren, dan de kritiek, dan de correctie.
@@ -440,3 +440,27 @@ def test_een_uitgevallen_critic_meldt_zich():
         settings=make_settings(enable_decomposition=True), llm=llm, graph=FakeGraph(result=LID_TSV),
     ))
     assert any("overgeslagen (fout)" in r for r in _statusregels(events))
+
+
+def test_elke_statusregel_volgt_hetzelfde_idioom():
+    """`Actor · wat er gebeurde` — anders staan er twee dialecten in één tijdlijn.
+
+    Voor de helper `_stap` bestond, verzon elke node zijn eigen vorm: "Opgesplitst in 3 deelvragen."
+    naast "Annoteerder · 4 gegrond", en twee verschillende teksten voor dezelfde graafbevraging.
+    """
+    llm = FakeLLM([
+        *_aanloop(),
+        _annoteer([{"id": "el-a", "klasse": "Rechtssubject", "tekst": "De ontvanger", "lid": "1"}]),
+        _critic([{"id": "el-a", "aandacht": "rood", "motivatie": "mis", "actie": "vervang",
+                  "voorstel_klasse": "Voorwaarde"}]),
+        _annoteer([{"id": "el-a", "klasse": "Voorwaarde", "tekst": "De ontvanger", "lid": "1"}]),
+        _critic([{"id": "el-a", "aandacht": "groen", "motivatie": "ok"}]),
+    ])
+    _, events = _annoteer_uitkomst(llm)
+
+    for regel in _statusregels(events):
+        actor, scheiding, rest = regel.partition(" · ")
+        assert scheiding, f"geen actor in {regel!r}"
+        assert actor and actor[0].isupper(), f"actor niet als naam geschreven: {regel!r}"
+        assert rest.strip(), f"actor zonder uitkomst: {regel!r}"
+        assert not rest.strip().endswith("."), f"geen punt aan het eind: {regel!r}"

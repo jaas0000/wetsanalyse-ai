@@ -41,6 +41,7 @@ from .grounding import check_grounding, curate_sources
 from .ports import GraphPort, LLMPort
 from .prompts import SYSTEM_PROMPT
 from .provenance import collect_sources
+from .specialists import DEFAULT as DEFAULT_SPECIALIST
 from .specialists import get as get_specialist
 from .supervisor import SUPERVISOR_SYSTEM, parse_supervisor
 from .tools import anthropic_schemas, dispatch
@@ -111,6 +112,16 @@ def _kandidaten_uit_json(text: str) -> list[dict[str, str]]:
 # naar een leeg scherm en zag het heen-en-weer tussen annoteerder en Critic niet. Deze regels vullen
 # dat gat. Ze zijn pure functies zodat de bewoording te testen is zonder een hele graaf te draaien.
 
+def _stap(writer: Any, actor: str, bericht: str) -> None:
+    """Meld één stap in de keten: `Actor · wat er gebeurde`.
+
+    Bestaat om het idioom af te dwingen. Zonder deze helper verzint elke node zijn eigen vorm — zo
+    stonden er "Opgesplitst in 3 deelvragen." en "Annoteerder · 4 gegrond" naast elkaar, en waren er
+    twee verschillende teksten voor dezelfde graafbevraging.
+    """
+    writer({"type": "status", "message": f"{actor} · {bericht}"})
+
+
 def _toolregel(call: dict[str, Any]) -> str:
     """`get_lid(BWBR0004770, art. 9, lid 1)` — de tool mét waar hij naar kijkt.
 
@@ -125,7 +136,7 @@ def _toolregel(call: dict[str, Any]) -> str:
 
 def _annoteer_melding(voorstellen: list[Any], verworpen: list[Any]) -> str:
     """Wat de annoteerder opleverde, inclusief wat er sneuvelde en waarom."""
-    regel = f"Annoteerder · {len(voorstellen) + len(verworpen)} fragmenten, {len(voorstellen)} gegrond"
+    regel = f"{len(voorstellen) + len(verworpen)} fragmenten, {len(voorstellen)} gegrond"
     if not verworpen:
         return regel
     per_reden: dict[str, int] = {}
@@ -145,13 +156,13 @@ def _critic_melding(oordelen: dict[str, Any], ontbrekend: list[Any]) -> str:
         telling[niveau] = telling.get(niveau, 0) + 1
     volgorde = ["rood", "geel", "groen", "geen oordeel"]
     delen = [f"{telling[n]} {n}" for n in volgorde if telling.get(n)]
-    regel = "Critic · " + (", ".join(delen) if delen else "geen oordelen")
+    regel = ", ".join(delen) if delen else "geen oordelen"
     if ontbrekend:
         regel += f" · {len(ontbrekend)} mogelijk gemist"
     return regel
 
 
-def _herzien_melding(ronde: int, voor: list[dict[str, Any]], na: list[dict[str, Any]]) -> str:
+def _herzien_melding(voor: list[dict[str, Any]], na: list[dict[str, Any]]) -> str:
     """Wat de annoteerder met de kritiek deed. Dít is het samenspel: aangepast versus behouden."""
     oud = {v.get("id"): v for v in voor}
     aangepast = sum(
@@ -167,7 +178,7 @@ def _herzien_melding(ronde: int, voor: list[dict[str, Any]], na: list[dict[str, 
         delen.append(f"{toegevoegd} toegevoegd")
     if verdwenen:
         delen.append(f"{verdwenen} verwijderd")
-    return f"Herziening {ronde} · " + ", ".join(delen)
+    return ", ".join(delen)
 
 
 def _doel_uit_toolcalls(messages: list[dict[str, Any]]) -> dict[str, str]:
@@ -383,7 +394,7 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
             # duiding-specialist. Dat is een topologische garantie in plaats van een belofte in een
             # prompt — de antwoord-route emit geen `doel`/`element`-events, dus advies vragen kán de
             # annotatie niet wijzigen. Scheelt bovendien een LLM-call.
-            writer({"type": "status", "message": "Advies bij de annotatie"})
+            _stap(writer, "Assistent", "advies bij een bestaande markering")
             return {
                 "specialist": "duiding", "worker_plan": ["duiding"], "worker_idx": 0,
                 "plan": "adviesvraag bij een bestaande annotatie",
@@ -399,7 +410,7 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
         text = "".join(b.text for b in resp.content if b.type == "text")
         worker_plan, plan = parse_supervisor(text)
         eerste = worker_plan[0]
-        writer({"type": "status", "message": f"Supervisor → {eerste}-worker · {plan[:80]}"})
+        _stap(writer, "Supervisor", f"kiest de {eerste}-worker · {plan[:80]}")
         return {"specialist": eerste, "plan": plan, "worker_plan": worker_plan, "worker_idx": 0}
 
     def _entry_node(state: State) -> str:
@@ -492,6 +503,11 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
 
     def agent_node(state: State) -> dict[str, Any]:
         writer = get_stream_writer()
+        # Alleen bij de eerste beurt: daarna is elke ronde al herkenbaar aan de graafbevragingen, en
+        # zou dit bij elke tool-lus opnieuw voorbijkomen.
+        if not state.get("turns"):
+            spec_naam = state.get("specialist") or DEFAULT_SPECIALIST
+            _stap(writer, f"Specialist {spec_naam}", "raadpleegt de kennisgraaf")
         # De annotatie-route draait de agent⇄tools-lus als OPHAAL-agent (retrieval-specialist): hij
         # vindt de exacte bepaling. De JAS-annotatie gebeurt daarna in annoteer_node (pure LLM-call).
         spec_naam = "retrieval" if state.get("specialist") == "annotatie" else state.get("specialist")
@@ -603,7 +619,7 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
             return {"answer": melding, "voorstellen": [], "messages": [{"role": "assistant", "content": melding}]}
 
         plek = f"art. {aanduiding}" + (f" lid {doel['lid']}" if doel.get("lid") else "")
-        writer({"type": "status", "message": f"Annoteerder · leest {plek} ({len(corpus)} tekens)"})
+        _stap(writer, "Annoteerder", f"leest {plek} ({len(corpus)} tekens)")
 
         resp = llm.create(
             model=model,
@@ -614,7 +630,7 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
         )
         llm_text = "".join(b.text for b in resp.content if b.type == "text")
         voorstellen, verworpen = _verwerk(llm_text, corpus, doel.get("bwbId", ""), aanduiding, doel.get("lid", ""))
-        writer({"type": "status", "message": _annoteer_melding(voorstellen, verworpen)})
+        _stap(writer, "Annoteerder", _annoteer_melding(voorstellen, verworpen))
 
         # Stuur de opgehaalde tekst mee zodat de frontend precies dít toont (één bron, ook voor divisies).
         doel_uit = {**doel, "leden_teksten": [{"lid": doel.get("lid", ""), "tekst": corpus}]}
@@ -663,7 +679,7 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
         if not voorstellen:
             return {}  # annoteer_node heeft de lege/foutmelding al geëmit
 
-        writer({"type": "status", "message": f"Critic · beoordeelt {len(voorstellen)} markeringen"})
+        _stap(writer, "Critic", f"beoordeelt {len(voorstellen)} markeringen")
         corpus = _corpus_uit_trace(state.get("source_trace", []))
 
         oordelen: dict[str, Any] = {}
@@ -684,8 +700,7 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
             logger.warning("critic: beoordeling mislukt; elementen zonder aandacht doorgelaten", exc_info=True)
 
         if gefaald:
-            writer({"type": "status",
-                    "message": "Critic · overgeslagen (fout) — de voorstellen blijven staan"})
+            _stap(writer, "Critic", "overgeslagen (fout) — de voorstellen blijven staan")
             # Laat de voorstellen ONGEMOEID. In een tweede ronde staat er al een oordeel van de
             # eerste pas op; dat overschrijven met lege waarden zou een geslaagde beoordeling
             # ongedaan maken omdat een latere poging mislukte.
@@ -709,7 +724,7 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
             if oordeel is not None:
                 feedback.append({"id": v.get("id", ""), **oordeel.model_dump()})
 
-        writer({"type": "status", "message": _critic_melding(oordelen, ontbrekend)})
+        _stap(writer, "Critic", _critic_melding(oordelen, ontbrekend))
 
         # `voorstellen` expliciet teruggeven: eerder werkten de aandacht-velden alleen door omdat het
         # dezelfde dict-objecten waren. Dat is fragiel zodra er meerdere rondes over de state lopen.
@@ -788,14 +803,13 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
             )
         except Exception:  # noqa: BLE001 — een mislukte herziening mag de annotatie niet breken
             logger.warning("herziening: mislukt; vorige voorstellen behouden", exc_info=True)
-            writer({"type": "status",
-                    "message": f"Herziening {ronde} · mislukt — vorige voorstellen behouden"})
+            _stap(writer, f"Herziening {ronde}", "mislukt — vorige voorstellen behouden")
             return {"critic_feedback": [], "critic_ronde": ronde}
 
         if not herzien:
             logger.warning("herziening: leverde niets gegronds op; vorige voorstellen behouden")
-            writer({"type": "status",
-                    "message": f"Herziening {ronde} · leverde niets gegronds op — vorige voorstellen behouden"})
+            _stap(writer, f"Herziening {ronde}",
+                  "leverde niets gegronds op — vorige voorstellen behouden")
             return {"critic_feedback": [], "critic_ronde": ronde}
 
         te_verwijderen = {f.get("id") for f in feedback if f.get("actie") == "verwijder"}
@@ -825,7 +839,7 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
             samengevoegd[nieuw_v.id] = nieuw_dict
 
         uit = list(samengevoegd.values())
-        writer({"type": "status", "message": _herzien_melding(ronde, voorstellen, uit)})
+        _stap(writer, f"Herziening {ronde}", _herzien_melding(voorstellen, uit))
         return {
             "voorstellen": uit + van_jurist,
             "verworpen_fragmenten": [x.model_dump() for x in verworpen],
@@ -876,7 +890,7 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
         if herzieningen:
             delen.append(f"na {herzieningen} herziening" + ("en" if herzieningen > 1 else ""))
         samenvatting = "; ".join(delen) + "."
-        writer({"type": "status", "message": f"Klaar · {len(voorstellen)} elementen ter beoordeling"})
+        _stap(writer, "Klaar", f"{len(voorstellen)} elementen ter beoordeling")
         writer({"type": "token", "content": samenvatting})
 
         # Geheugen: leg een leesbaar spoor van de annotatie vast (met de elementen) zodat een
@@ -890,7 +904,7 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
     def tools_node(state: State) -> dict[str, Any]:
         writer = get_stream_writer()
         pending = state.get("pending_tools", [])
-        writer({"type": "status", "message": "Graaf bevragen · " + ", ".join(_toolregel(t) for t in pending)})
+        _stap(writer, "Graaf bevragen", ", ".join(_toolregel(t) for t in pending))
         trace = list(state.get("source_trace", []))
         results = []
         for tu in pending:
@@ -904,7 +918,15 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
         }
 
     def verify_node(state: State) -> dict[str, Any]:
+        writer = get_stream_writer()
         report = check_grounding(state.get("answer", ""), state.get("source_trace", []))
+        # Deze controle heeft geen eigen narratie (geen LLM), dus zonder deze regel gebeurt er iets
+        # wezenlijks — de brongetrouwheidstoets — zonder dat de jurist het ziet.
+        _stap(writer, "Controle", (
+            f"brongetrouwheid: {len(report.cited)} verwijzingen onderbouwd"
+            if report.grounded
+            else f"brongetrouwheid: {len(report.unsupported)} verwijzing(en) niet uit de graaf"
+        ))
         return {"grounded": report.grounded, "cited": len(report.cited), "unsupported": report.unsupported}
 
     def route_after_verify(state: State) -> str:
@@ -913,7 +935,9 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
         return "finalize"
 
     def correct_node(state: State) -> dict[str, Any]:
+        writer = get_stream_writer()
         bad = ", ".join(state.get("unsupported", []))
+        _stap(writer, "Correctie", "antwoord bijstellen op de niet-onderbouwde verwijzingen")
         return {
             "messages": [{
                 "role": "user",
@@ -960,6 +984,7 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
         if settings.curate_sources:
             sources = curate_sources(sources, state.get("answer", ""))
         src_dicts = [s.model_dump() for s in sources]
+        _stap(writer, "Klaar", f"{len(src_dicts)} bron" + ("nen" if len(src_dicts) != 1 else ""))
         writer({"type": "sources", "sources": src_dicts})
         writer({
             "type": "grounding",
@@ -1002,7 +1027,7 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
             subs = [state["question"]]
         subs = subs[: settings.max_subquestions]
         if len(subs) > 1:
-            writer({"type": "status", "message": f"Opgesplitst in {len(subs)} deelvragen."})
+            _stap(writer, "Decompositie", f"{len(subs)} deelvragen")
         return {"sub_questions": subs}
 
     def solve_node(state: State) -> dict[str, Any]:
@@ -1025,7 +1050,7 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
         findings: list[dict[str, str]] = []
         for i, sub in enumerate(subs, 1):
             if len(subs) > 1:
-                writer({"type": "status", "message": f"Deelvraag {i}/{len(subs)}: {sub[:80]}"})
+                _stap(writer, f"Deelvraag {i}/{len(subs)}", sub[:80])
             system = base_system
             if findings:
                 ctx = "\n".join(f"- {f['vraag']} → {f['antwoord'][:300]}" for f in findings)
@@ -1042,7 +1067,7 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
                 # de laatste beurt gedwongen een antwoord op wat er is opgehaald.
                 laatste_beurt = _turn == settings.sub_max_turns - 1
                 if laatste_beurt:
-                    writer({"type": "status", "message": "Beurtlimiet bereikt — antwoord opstellen uit wat is gevonden"})
+                    _stap(writer, "Deelvraag", "beurtlimiet bereikt — verder met wat is gevonden")
                 with llm.stream(
                     model=model, max_tokens=4096, system=system,
                     tools=[] if laatste_beurt else schemas,
@@ -1065,7 +1090,7 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
                 if not tool_uses:
                     antwoord = "\n\n".join(p for p in text_parts if p)
                     break
-                writer({"type": "status", "message": f"Graaf bevragen: {', '.join(t['name'] for t in tool_uses)}..."})
+                _stap(writer, "Graaf bevragen", ", ".join(_toolregel(t) for t in tool_uses))
                 results = []
                 for tu in tool_uses:
                     result_text = truncate(dispatch(tu["name"], graph, tu["input"], settings))
@@ -1098,6 +1123,7 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
         """Stel het eind-antwoord samen uit de deelbevindingen (streamt de tokens)."""
         writer = get_stream_writer()
         findings = state.get("sub_findings") or []
+        _stap(writer, "Synthese", f"antwoord uit {len(findings)} deelbevindingen")
         bevindingen = "\n\n".join(
             f"DEELVRAAG: {f['vraag']}\nBEVINDING: {f['antwoord']}" for f in findings
         )
