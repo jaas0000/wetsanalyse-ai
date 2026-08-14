@@ -249,12 +249,19 @@ class MensElementInvoer(BaseModel):
 
 
 class Wijziging(BaseModel):
-    """Voorgestelde veldwijzigingen bij een edit-beslissing (alle optioneel)."""
+    """Voorgestelde veldwijzigingen bij een edit-beslissing (alle optioneel).
+
+    Het `anker` hoort bij `tekst`: kort de jurist een markering in of breidt hij hem uit, dan schuift
+    de plek mee. Blijft het oude anker staan, dan wijzen de offsets naar het oude fragment en springt
+    de markering na herladen naar een ander voorkomen. Verandert de tekst zonder dat er een anker
+    meekomt, dan wordt het oude gewist — geen anker is eerlijker dan een anker dat liegt.
+    """
 
     klasse: str | None = None
     tekst: str | None = None
     toelichting: str | None = None
     lid: str | None = None
+    anker: Anker | None = None
 
 
 class BeslissingInvoer(BaseModel):

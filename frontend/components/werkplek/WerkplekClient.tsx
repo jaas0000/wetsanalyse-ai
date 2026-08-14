@@ -14,6 +14,7 @@ import {
   maakDocument,
   maakGesprek,
   voegBerichtToe,
+  verwijderElement,
   zetElementen,
   voegElementToe,
 } from "@/lib/api";
@@ -323,6 +324,19 @@ export function WerkplekClient({ initialGesprekId, onGesprekAangemaakt, onGewijz
     if (nieuw) setActiefId(nieuw.id);
   }
 
+  /** Een eigen markering wissen. Alleen je eigen: een agent-voorstel verwérp je, zodat het
+   *  auditspoor laat zien dát er een voorstel was. Was hij actief, dan valt de focus terug op de
+   *  hele tekst — anders wijst `actiefId` naar een element dat niet meer bestaat. */
+  async function wisEigenMarkering(slug: string, elementId: string) {
+    await verwijderElement(slug, elementId);
+    setDocs((m) => {
+      const doc = m[slug];
+      if (!doc) return m;
+      return { ...m, [slug]: { ...doc, elementen: doc.elementen.filter((e) => e.id !== elementId) } };
+    });
+    setActiefId((huidig) => (huidig === elementId ? undefined : huidig));
+  }
+
   /** Adviesvraag bij één element: `modus: "advies"` stuurt de agent naar de antwoord-route, die
    *  geen element-events uitstuurt — de annotatie kan er dus niet door wijzigen. Het paar
    *  vraag/antwoord bewaren we óók als gespreksbericht, zodat de thread één verhaal blijft. */
@@ -527,6 +541,7 @@ export function WerkplekClient({ initialGesprekId, onGesprekAangemaakt, onGewijz
           onKies={(id) => setActiefId((huidig) => (id && id === huidig ? undefined : id))}
           onBeslissing={(elementId, req) => beslissing(artefactSlug, elementId, req)}
           onEigenMarkering={(invoer) => eigenMarkering(artefactSlug, invoer)}
+          onWisEigenMarkering={(elementId) => wisEigenMarkering(artefactSlug, elementId)}
           onAdvies={(el, vraag, opToken) => advies(artefactSlug, el, vraag, opToken)}
           onSluit={() => setArtefactSlug(undefined)}
         />

@@ -382,6 +382,7 @@ async def beslis(
             raise HTTPException(status_code=422, detail="review_reason is verplicht bij een reject.")
 
     diff_holder: dict = {}
+    anker_verplaatst: dict = {}
 
     def toepassen(el: AnnotatieElement) -> None:
         """Muteert het element in-place binnen de atomaire store-transactie (row-lock)."""
@@ -392,6 +393,15 @@ async def beslis(
                 if nieuw is not None and nieuw != getattr(el, veld):
                     diff[veld] = {"voor": getattr(el, veld), "na": nieuw}
                     setattr(el, veld, nieuw)
+            # Het anker hoort bij de tekst en volgt hem dus: meegestuurd anker wint, geen anker bij
+            # een gewijzigd fragment wist het oude. Bewust NIET in de `diff` — dat is machinerie, geen
+            # inhoudelijke wijziging die de jurist in zijn reviewspoor wil terugzien.
+            if "tekst" in diff:
+                el.anker = req.wijziging.anker
+                anker_verplaatst["ja"] = req.wijziging.anker is not None
+            elif req.wijziging.anker is not None:
+                el.anker = req.wijziging.anker
+                anker_verplaatst["ja"] = True
             el.lifecycle = Lifecycle.edited
             # NIET `herkomst` — dat blijft wie het element aanmaakte. Een edit door de jurist maakt
             # er geen mens-element van; anders is later niet meer te zien dat de agent het voorstelde.
@@ -419,6 +429,7 @@ async def beslis(
         detail={
             "review_reason": req.review_reason.value if req.review_reason else None,
             "comment": req.comment, "diff": diff_holder,
+            **({"anker_verplaatst": True} if anker_verplaatst.get("ja") else {}),
         },
     )
     return resultaat

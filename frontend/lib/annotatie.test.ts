@@ -1,12 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
   documentStatusLabel,
+  gewijzigdeVelden,
+  overlaptSelectie,
+  redenVoorWijziging,
   kandidaatLabel,
   kandidaatPrompt,
   kandidatenAlsTekst,
   mergeVoorstellen,
 } from "./annotatie";
-import type { VoorstelElement } from "./types";
+import type { AnnotatieElement, VoorstelElement } from "./types";
 
 describe("documentStatusLabel", () => {
   it("mapt de drie documentstatussen naar NL-labels", () => {
@@ -92,5 +95,70 @@ describe("kandidaten bij een onderwerp-vraag", () => {
     const tekst = kandidatenAlsTekst("Ik vond 2 bepalingen.", [k, { bwbId: "BWBR1", artikel: "36" }]);
     expect(tekst.split("\n")).toHaveLength(3);
     expect(tekst).toContain("- Artikel 36a, lid 1 — Invorderingswet 1990");
+  });
+});
+
+// --- de reden hoeft niet meer gevraagd te worden ------------------------------------------------
+
+const ELEMENT = {
+  id: "el-1",
+  klasse: "Rechtsobject",
+  tekst: "belastingaanslag",
+  lid: "1",
+  toelichting: "het object",
+  vindplaats: "",
+  herkomst: "agent",
+  gewijzigd_door: "",
+  lifecycle: "voorgesteld",
+  alternatieven: [],
+  aandacht: null,
+  critic: "",
+  critic_rondes: [],
+  critic_suggestie: null,
+  anker: null,
+  diff: {},
+  beslissingen: [],
+} as unknown as AnnotatieElement;
+
+describe("redenVoorWijziging", () => {
+  it("leidt de reden af uit het veld dat veranderde", () => {
+    expect(redenVoorWijziging(ELEMENT, { tekst: "een belastingaanslag" })).toBe("tekst");
+    expect(redenVoorWijziging(ELEMENT, { klasse: "Rechtssubject" })).toBe("verkeerde_klasse");
+    expect(redenVoorWijziging(ELEMENT, { toelichting: "toch iets anders" })).toBe("interpretatie");
+  });
+
+  it("valt op 'anders' terug als er meer dan één veld wijzigt", () => {
+    expect(redenVoorWijziging(ELEMENT, { tekst: "aanslag", klasse: "Rechtssubject" })).toBe("anders");
+  });
+
+  it("telt een veld dat gelijk blijft niet mee", () => {
+    // Anders zou een klasse-wijziging waarbij de tekst wordt meegestuurd 'anders' opleveren.
+    const w = { tekst: ELEMENT.tekst, klasse: "Rechtssubject" };
+    expect(gewijzigdeVelden(ELEMENT, w)).toEqual(["klasse"]);
+    expect(redenVoorWijziging(ELEMENT, w)).toBe("verkeerde_klasse");
+  });
+
+  it("ziet niets te doen als er niets verandert", () => {
+    expect(gewijzigdeVelden(ELEMENT, { klasse: ELEMENT.klasse, tekst: ELEMENT.tekst })).toEqual([]);
+  });
+
+  it("beschouwt een lege toelichting als een wijziging", () => {
+    // Wissen is ook een keuze; het mag alleen niet ongemerkt gebeuren (daar zit de tweede klik).
+    expect(gewijzigdeVelden(ELEMENT, { toelichting: "" })).toEqual(["toelichting"]);
+  });
+});
+
+describe("overlaptSelectie", () => {
+  const bereik = { start: 10, eind: 26 };
+
+  it("herkent een selectie die het fragment raakt", () => {
+    expect(overlaptSelectie({ start: 6, eind: 26 }, bereik)).toBe(true);   // uitbreiden naar links
+    expect(overlaptSelectie({ start: 10, eind: 20 }, bereik)).toBe(true);  // inkorten
+    expect(overlaptSelectie({ start: 26, eind: 40 }, bereik)).toBe(true);  // sluit erop aan
+  });
+
+  it("herkent een selectie die er los van staat", () => {
+    expect(overlaptSelectie({ start: 0, eind: 9 }, bereik)).toBe(false);
+    expect(overlaptSelectie({ start: 27, eind: 40 }, bereik)).toBe(false);
   });
 });

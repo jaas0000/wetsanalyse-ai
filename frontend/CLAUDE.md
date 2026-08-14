@@ -147,6 +147,28 @@ bepaling uitkomen dan de jurist aanwees. Er is bewust géén "annoteer ze allema
 een eigen document met een eigen review. De kandidaten zitten niet in het berichtcontract van de api;
 wat na een herlaadbeurt overblijft is de opsomming uit `kandidatenAlsTekst`.
 
+### Reviewen zonder formulier
+
+De reviewkaart kent geen modi meer (`Aanpassen` → veld → reden → `Opslaan`). Elk veld schrijft
+zichzelf weg en de `review_reason` wordt **afgeleid** uit wát er veranderde
+(`redenVoorWijziging` in `lib/annotatie.ts`: tekst → `tekst`, klasse → `verkeerde_klasse`,
+toelichting → `interpretatie`, meerdere velden → `anders`). Vragen wat je zojuist deed is dubbelop.
+
+- **Klasse** = de badge zelf; klikken opent het palet, klikken op een klasse ís de wijziging.
+- **Toelichting** is een inline veld (Enter/blur bewaart, Escape annuleert). Een gevulde toelichting
+  leegmaken vraagt een tweede klik — dat doe je met één misklik en er is geen undo.
+- **× betekent weghalen**, met twee uitkomsten achter hetzelfde gebaar: een agent-voorstel klapt de
+  redenen-chips uit (één klik = verworpen, terug te draaien met `Akkoord`), een eigen markering
+  verandert in "Wissen?" en is na de tweede klik echt weg (`DELETE`).
+- **De reden blijft alleen bij verwerpen een vraag**: die informatie heeft alleen de mens.
+- **Fragment inkorten/uitbreiden**: klik de markering aan en selecteer opnieuw. Raakt de selectie het
+  bereik van de actieve markering (`overlaptSelectie` + `vindPositie`, dezelfde functie als de
+  weergave), dan biedt `SelectiePopover` bovenaan *Fragment aanpassen* aan — één klik, mét een nieuw
+  anker. Geen overlap = gewoon een nieuwe markering. Bewust wél die klik: een selectie die je maakte
+  om te lezen mag nooit stilzwijgend een annotatie wijzigen.
+- **Geen lifecycle-jargon in beeld**: de kaart toont "voorstel van de assistent" / "door jou
+  aangepast" / "door jou gemarkeerd" + tijd. Het volledige spoor staat in het auditlog.
+
 ### Zelf annoteren (tekstselectie)
 
 De jurist kan in `DocumentPaneel` tekst selecteren en die zelf markeren. Drie dingen om te kennen:

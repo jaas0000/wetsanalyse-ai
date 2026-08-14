@@ -425,3 +425,75 @@ async def test_suggestie_op_een_agentelement_wordt_genegeerd(client):
         "ronde": 1,
     })).json()
     assert doc["elementen"][0]["critic_suggestie"] is None
+
+
+# --- het fragment inkorten/uitbreiden: het anker moet meeschuiven -------------------------------
+#
+# Zonder dat wijzen de offsets naar het oude fragment en springt de markering na herladen naar een
+# ander voorkomen — precies wat het anker moest voorkomen.
+
+def _anker(start, eind, hash_="v1"):
+    return {"lid": "1", "start": start, "eind": eind, "voor": "", "na": "", "bron_hash": hash_}
+
+
+async def test_edit_van_de_tekst_verplaatst_het_anker(client):
+    slug = await _maak_doc(client)
+    doc = (await _put(client, slug, [
+        {"klasse": "Rechtsobject", "tekst": "belastingaanslag", "anker": _anker(10, 26)},
+    ])).json()
+    el_id = doc["elementen"][0]["id"]
+
+    doc = (await client.post(f"{BASIS}/{slug}/elementen/{el_id}/beslissing", json={
+        "type": "edit", "review_reason": "tekst",
+        "wijziging": {"tekst": "een belastingaanslag", "anker": _anker(6, 26)},
+    })).json()
+
+    el = doc["elementen"][0]
+    assert el["tekst"] == "een belastingaanslag"
+    assert (el["anker"]["start"], el["anker"]["eind"]) == (6, 26)
+    assert "anker" not in el["diff"], "het anker is machinerie, geen inhoudelijke wijziging"
+    assert el["diff"]["tekst"] == {"voor": "belastingaanslag", "na": "een belastingaanslag"}
+
+
+async def test_edit_zonder_anker_wist_een_verouderd_anker(client):
+    """Geen anker is eerlijker dan een anker dat over de oude tekst gaat: dan valt de weergave terug
+    op de context/het eerste voorkomen in plaats van naar een verkeerde plek te wijzen."""
+    slug = await _maak_doc(client)
+    doc = (await _put(client, slug, [
+        {"klasse": "Rechtsobject", "tekst": "belastingaanslag", "anker": _anker(10, 26)},
+    ])).json()
+    el_id = doc["elementen"][0]["id"]
+
+    doc = (await client.post(f"{BASIS}/{slug}/elementen/{el_id}/beslissing", json={
+        "type": "edit", "review_reason": "tekst", "wijziging": {"tekst": "aanslag"},
+    })).json()
+    assert doc["elementen"][0]["anker"] is None
+
+
+async def test_edit_die_de_tekst_niet_raakt_laat_het_anker_staan(client):
+    slug = await _maak_doc(client)
+    doc = (await _put(client, slug, [
+        {"klasse": "Rechtsobject", "tekst": "belastingaanslag", "anker": _anker(10, 26)},
+    ])).json()
+    el_id = doc["elementen"][0]["id"]
+
+    doc = (await client.post(f"{BASIS}/{slug}/elementen/{el_id}/beslissing", json={
+        "type": "edit", "review_reason": "verkeerde_klasse", "wijziging": {"klasse": "Rechtssubject"},
+    })).json()
+    el = doc["elementen"][0]
+    assert el["klasse"] == "Rechtssubject"
+    assert (el["anker"]["start"], el["anker"]["eind"]) == (10, 26)
+
+
+async def test_de_audit_meldt_dat_het_anker_verplaatste(client):
+    slug = await _maak_doc(client)
+    doc = (await _put(client, slug, [{"klasse": "Rechtsobject", "tekst": "belastingaanslag"}])).json()
+    el_id = doc["elementen"][0]["id"]
+    await client.post(f"{BASIS}/{slug}/elementen/{el_id}/beslissing", json={
+        "type": "edit", "review_reason": "tekst",
+        "wijziging": {"tekst": "een belastingaanslag", "anker": _anker(6, 26)},
+    })
+
+    regels = (await client.get(f"{BASIS}/{slug}/audit")).json()
+    laatste = next(r for r in reversed(regels) if r["actie"] == "beslissing-edit")
+    assert laatste["detail"]["anker_verplaatst"] is True

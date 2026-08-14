@@ -7,9 +7,9 @@ import { Melding } from "@/components/ui/Melding";
 import { DocumentPaneel } from "@/components/workbench/DocumentPaneel";
 import { ReviewQueue } from "@/components/workbench/ReviewQueue";
 import { SelectiePopover, type SelectieDoel } from "@/components/workbench/SelectiePopover";
-import { DOCUMENT_STATUS_LABEL, DOCUMENT_STATUS_STYLE } from "@/lib/annotatie";
+import { DOCUMENT_STATUS_LABEL, DOCUMENT_STATUS_STYLE, overlaptSelectie } from "@/lib/annotatie";
 import { jasStyle } from "@/lib/jas";
-import { maakAnker } from "@/lib/selectie";
+import { maakAnker, vindPositie } from "@/lib/selectie";
 import type {
   AnnotatieDocument, AnnotatieElement, BeslissingInvoer, GraafArtikel, OntbrekendItem,
 } from "@/lib/types";
@@ -30,6 +30,8 @@ interface Props {
     klasse: string; tekst: string; lid: string; toelichting: string;
     anker: ReturnType<typeof maakAnker>;
   }) => Promise<void>;
+  /** Eigen markering wissen. Een agent-voorstel verwérp je — dat gaat via `onBeslissing`. */
+  onWisEigenMarkering?: (elementId: string) => Promise<void>;
   /** Adviesvraag bij één element. Wijzigt nooit iets: de agent draait op de antwoord-route. */
   onAdvies?: (el: AnnotatieElement, vraag: string, opToken: (t: string) => void) => Promise<void>;
   onSluit: () => void;
@@ -39,11 +41,50 @@ interface Props {
  *  brongetrouwe artikeltekst (links, letterlijke highlights) en de review-queue (rechts). Los van de
  *  chatstroom, zoals een Claude-artefact. */
 export function ArtefactPaneel({
-  doc, info, ontbrekend, actiefId, onKies, onBeslissing, onEigenMarkering, onAdvies, onSluit,
+  doc, info, ontbrekend, actiefId, onKies, onBeslissing, onEigenMarkering, onWisEigenMarkering,
+  onAdvies, onSluit,
 }: Props) {
   const opschrift = `${info.citeertitel || doc.bwbId} — artikel ${info.artikel}${doc.lid ? ` lid ${doc.lid}` : ""}`;
   const [selectie, setSelectie] = useState<(SelectieDoel & { start: number; eind: number; lid: string; bron: string }) | null>(null);
   const [fout, setFout] = useState<string | null>(null);
+
+  // Raakt de selectie de markering die in beeld staat? Dan is dit vermoedelijk een correctie op dát
+  // element (inkorten/uitbreiden) en niet een nieuwe markering. De positie komt uit dezelfde
+  // `vindPositie` als de weergave, dus het antwoord klopt altijd met wat je ziet.
+  const actief = doc.elementen.find((e) => e.id === actiefId && e.lifecycle !== "rejected");
+  const actiefBereik = (() => {
+    if (!actief || !selectie) return null;
+    const start = vindPositie(selectie.bron, actief.tekst.trim(), actief.anker, []);
+    return start < 0 ? null : { start, eind: start + actief.tekst.trim().length };
+  })();
+  // Een selectie die exact het huidige fragment is, is geen correctie: dan zou "aanpassen" een lege
+  // wijziging wegschrijven en het auditspoor vervuilen met een beslissing zonder inhoud.
+  const teCorrigeren =
+    actief && actiefBereik && selectie && selectie.fragment !== actief.tekst
+    && overlaptSelectie(selectie, actiefBereik)
+      ? actief
+      : undefined;
+
+  /** Het fragment van de actieve markering vervangen door de selectie. Het anker gaat mee: zonder
+   *  dat wijzen de offsets naar het oude fragment en springt de markering na herladen. */
+  async function pasFragmentAan() {
+    if (!selectie || !teCorrigeren) return;
+    setFout(null);
+    try {
+      await onBeslissing(teCorrigeren.id, {
+        type: "edit",
+        review_reason: "tekst",
+        wijziging: {
+          tekst: selectie.fragment,
+          anker: maakAnker(selectie.bron, selectie.start, selectie.eind, selectie.lid),
+        },
+      });
+      setSelectie(null);
+      window.getSelection()?.removeAllRanges();
+    } catch (e) {
+      setFout(e instanceof Error ? e.message : "Aanpassen is niet gelukt.");
+    }
+  }
 
   async function markeer(klasse: string, toelichting: string) {
     if (!selectie || !onEigenMarkering) return;
@@ -107,7 +148,8 @@ export function ArtefactPaneel({
           />
           {onEigenMarkering && (
             <p className="-mt-2 text-xs text-faint">
-              Tip: selecteer een stuk tekst om het zelf te markeren.
+              Tip: selecteer een stuk tekst om het zelf te markeren — of klik eerst een markering aan
+              en selecteer opnieuw om die in te korten of uit te breiden.
             </p>
           )}
           {fout && <Melding type="fout" compact>{fout}</Melding>}
@@ -117,6 +159,7 @@ export function ArtefactPaneel({
               actiefId={actiefId}
               onKies={onKies}
               onBeslissing={onBeslissing}
+              onVerwijder={onWisEigenMarkering}
               onAdvies={onAdvies}
             />
           ) : (
@@ -138,7 +181,13 @@ export function ArtefactPaneel({
         </div>
 
         {selectie && (
-          <SelectiePopover doel={selectie} onKies={markeer} onSluit={() => setSelectie(null)} />
+          <SelectiePopover
+            doel={selectie}
+            aanpasbaar={teCorrigeren ? { klasse: teCorrigeren.klasse, tekst: teCorrigeren.tekst } : undefined}
+            onPasAan={teCorrigeren ? pasFragmentAan : undefined}
+            onKies={markeer}
+            onSluit={() => setSelectie(null)}
+          />
         )}
       </>
     </Dialog>

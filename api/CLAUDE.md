@@ -89,6 +89,13 @@ De API bedient zeven dingen:
   Critic-oordeel bij zetten. Agent-elementen die in de nieuwe ronde ontbreken worden ingetrokken.
   Optioneel `If-Match` tegen de `ETag` uit de respons → 412 bij een tussentijdse wijziging.
 
+  **Een edit mag het fragment verplaatsen.** `Wijziging` draagt naast `klasse`/`tekst`/`toelichting`/
+  `lid` een optioneel `anker`: kort de jurist een markering in of breidt hij hem uit, dan schuift de
+  plek mee. Verandert de tekst zonder dat er een anker meekomt, dan wordt het oude **gewist** — een
+  anker dat over het oude fragment gaat laat de markering na herladen naar een ander voorkomen
+  springen. Het anker staat niet in de `diff` (machinerie, geen inhoudelijke wijziging) maar wel als
+  `anker_verplaatst` in het auditdetail.
+
   **Herkomst is gesplitst.** `herkomst` = wie het element aanmaakte (onveranderlijk), `gewijzigd_door`
   = wie het daarna aanpaste. Een edit door de jurist maakt van een agent-element dus geen
   mens-element. Rijen van vóór die splitsing worden lazy gerepareerd door een `model_validator`.

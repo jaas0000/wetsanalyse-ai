@@ -239,6 +239,10 @@ export interface Wijziging {
   tekst?: string | null;
   toelichting?: string | null;
   lid?: string | null;
+  // Hoort bij `tekst`: kort de jurist een markering in of breidt hij hem uit, dan schuift de plek
+  // mee. Verandert de tekst zonder anker, dan wist de server het oude — een anker dat over het oude
+  // fragment gaat zou de markering na herladen naar een ander voorkomen laten springen.
+  anker?: Anker | null;
 }
 
 export interface BeslissingInvoer {

@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { AdviesDraadje } from "@/components/workbench/AdviesDraadje";
+import { redenVoorWijziging } from "@/lib/annotatie";
 import { JAS_KLASSEN, jasStyle } from "@/lib/jas";
-import type { AnnotatieElement, BeslissingInvoer, ReviewReason } from "@/lib/types";
+import type { AnnotatieElement, BeslissingInvoer, ReviewReason, Wijziging } from "@/lib/types";
 
 const REDENEN: { waarde: ReviewReason; label: string }[] = [
   { waarde: "verkeerde_klasse", label: "verkeerde klasse" },
@@ -14,14 +15,6 @@ const REDENEN: { waarde: ReviewReason; label: string }[] = [
   { waarde: "onvoldoende_context", label: "onvoldoende context" },
   { waarde: "anders", label: "anders" },
 ];
-
-const LIFECYCLE_LABEL: Record<string, string> = {
-  voorgesteld: "voorgesteld",
-  critic_checked: "te reviewen",
-  human_approved: "akkoord",
-  edited: "aangepast",
-  rejected: "verworpen",
-};
 
 // Aandacht-niveau (🟢🟡🔴) is de dragende visuele as: het kleurt de linker-accentrand + een zachte
 // tint. Alle kleuren via de aandacht-design-tokens (geen rauwe Tailwind-kleuren buiten de huisstijl).
@@ -33,48 +26,158 @@ const AANDACHT: Record<string, { emoji: string; label: string; rand: string; tin
 
 const BESLIST = ["human_approved", "edited", "rejected"];
 
-// Actieknoppen via de functionele tokens (geen emerald/sky/rose): akkoord = succes, aanpassen = info,
-// verwerpen = fout.
 const KNOP_SUCCES = "bg-succes text-paper hover:brightness-110";
 const KNOP_INFO = "bg-info text-paper hover:brightness-110";
-const KNOP_FOUT = "bg-fout text-paper hover:brightness-110";
 const KNOP_BASIS = "rounded-lg px-2.5 py-1.5 text-xs font-medium transition disabled:opacity-50";
+const CHIP =
+  "rounded-full border border-line px-2 py-0.5 text-[0.7rem] text-ink transition hover:border-lint hover:bg-surface disabled:opacity-50";
 
-type Actie = "reject" | "edit" | "comment" | null;
+/** Wie dit element maakte en wat ermee gebeurde, in mensentaal.
+ *
+ *  De lifecycle-namen (`voorgesteld`/`critic_checked`/`edited`) zijn machinetaal; de jurist wil weten
+ *  van wie het element komt en of hij er al iets mee deed. Het volledige spoor staat in het auditlog. */
+function statusRegel(el: AnnotatieElement): string {
+  if (el.lifecycle === "rejected") return "verworpen";
+  if (el.herkomst === "mens") return "door jou gemarkeerd";
+  if (el.gewijzigd_door === "mens") return "door jou aangepast";
+  if (el.lifecycle === "human_approved") return "akkoord bevonden";
+  return "voorstel van de assistent";
+}
+
+function tijdstip(el: AnnotatieElement): string {
+  const laatste = el.beslissingen[el.beslissingen.length - 1];
+  if (!laatste?.tijd) return "";
+  const d = new Date(laatste.tijd);
+  return Number.isNaN(d.getTime()) ? "" : d.toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit" });
+}
+
+/** Tekstveld dat zichzelf opslaat: Enter/blur bewaart, Escape annuleert.
+ *
+ *  Leegmaken van een gevulde waarde is óók een wijziging, maar wél een die je met één misklik maakt.
+ *  Die vraagt daarom een bevestiging — de enige rem die er is, want er is geen undo. */
+function InlineVeld({
+  waarde,
+  placeholder,
+  onBewaar,
+}: {
+  waarde: string;
+  placeholder: string;
+  onBewaar: (nieuw: string) => Promise<void> | void;
+}) {
+  const [bewerkt, setBewerkt] = useState(false);
+  const [concept, setConcept] = useState(waarde);
+  const [wisBevestiging, setWisBevestiging] = useState(false);
+  const ref = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (bewerkt) ref.current?.focus();
+  }, [bewerkt]);
+
+  async function bewaar() {
+    const nieuw = concept.trim();
+    setBewerkt(false);
+    if (nieuw === waarde) return;
+    if (!nieuw && waarde) {
+      setWisBevestiging(true);
+      return;
+    }
+    await onBewaar(nieuw);
+  }
+
+  if (wisBevestiging) {
+    return (
+      <button
+        type="button"
+        autoFocus
+        onClick={async () => {
+          setWisBevestiging(false);
+          await onBewaar("");
+        }}
+        onBlur={() => {
+          setWisBevestiging(false);
+          setConcept(waarde);
+        }}
+        className={`${CHIP} border-fout text-fout`}
+      >
+        Toelichting wissen?
+      </button>
+    );
+  }
+
+  if (!bewerkt) {
+    return (
+      <button
+        type="button"
+        onClick={() => {
+          setConcept(waarde);
+          setBewerkt(true);
+        }}
+        className={`w-full rounded px-1 py-0.5 text-left transition hover:bg-surface ${waarde ? "" : "text-faint"}`}
+      >
+        {waarde || placeholder}
+      </button>
+    );
+  }
+
+  return (
+    <input
+      ref={ref}
+      value={concept}
+      onChange={(e) => setConcept(e.target.value)}
+      onBlur={() => void bewaar()}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") void bewaar();
+        if (e.key === "Escape") {
+          setConcept(waarde);
+          setBewerkt(false);
+        }
+      }}
+      placeholder={placeholder}
+      className="w-full rounded-field border border-lint bg-paper px-2 py-1 text-xs text-ink focus:outline-none"
+    />
+  );
+}
 
 function DecisionCard({
   el,
   actief,
   onKies,
   onBeslissing,
+  onVerwijder,
   onAdvies,
 }: {
   el: AnnotatieElement;
   actief: boolean;
   onKies: () => void;
   onBeslissing: (req: BeslissingInvoer) => Promise<void>;
+  /** Alleen bij een eigen markering: die kun je écht wissen. Weglaten verbergt de wisknop. */
+  onVerwijder?: () => Promise<void>;
   /** Vraag de assistent om uitleg bij dít element. Weglaten verbergt het draadje. */
   onAdvies?: (el: AnnotatieElement, vraag: string, opToken: (t: string) => void) => Promise<void>;
 }) {
-  const [actie, setActie] = useState<Actie>(null);
-  const [reden, setReden] = useState<ReviewReason>("interpretatie");
-  const [comment, setComment] = useState("");
-  const [klasse, setKlasse] = useState(el.klasse);
-  const [toelichting, setToelichting] = useState(el.toelichting);
+  const [palet, setPalet] = useState(false);
+  const [wegHalen, setWegHalen] = useState(false);   // × aangeklikt: redenen (agent) of "Wissen?" (mens)
+  const [notitie, setNotitie] = useState(false);
   const [bezig, setBezig] = useState(false);
 
-  // "beslist" = de mens heeft al een besluit genomen; `voorgesteld`/`critic_checked` zijn nog te reviewen.
   const beslist = BESLIST.includes(el.lifecycle);
   const aandacht = el.aandacht ? AANDACHT[el.aandacht] : null;
+  const eigen = el.herkomst === "mens";
 
   async function verstuur(req: BeslissingInvoer) {
     setBezig(true);
     try {
       await onBeslissing(req);
-      setActie(null);
+      setPalet(false);
+      setWegHalen(false);
     } finally {
       setBezig(false);
     }
+  }
+
+  /** Eén wijziging wegschrijven met een afgeleide reden — geen dropdown, geen opslaan-knop. */
+  async function wijzig(w: Wijziging) {
+    await verstuur({ type: "edit", review_reason: redenVoorWijziging(el, w), wijziging: w });
   }
 
   return (
@@ -84,33 +187,128 @@ function DecisionCard({
         beslist ? "opacity-75" : aandacht ? `${aandacht.rand} ${aandacht.tint}` : "border-l-line"
       } ${actief ? "border-lint ring-1 ring-lint" : ""}`}
     >
-      <div className="flex items-center justify-between gap-2">
-        <span className="flex items-center gap-1.5">
+      <div className="flex items-start justify-between gap-2">
+        <span className="flex flex-wrap items-center gap-1.5">
           {el.aandacht && (
             <span title={el.critic || aandacht?.label} aria-label={aandacht?.label}>
               {aandacht?.emoji}
             </span>
           )}
-          <span className={`rounded px-2 py-0.5 text-xs font-semibold ${jasStyle(el.klasse)}`}>{el.klasse}</span>
+          {/* De klasse ís de knop: klikken opent het palet, klikken op een klasse is de wijziging. */}
+          <button
+            type="button"
+            disabled={bezig}
+            onClick={(e) => {
+              e.stopPropagation();
+              setPalet((v) => !v);
+            }}
+            title="Andere klasse kiezen"
+            className={`rounded px-2 py-0.5 text-xs font-semibold transition hover:ring-1 hover:ring-lint disabled:opacity-50 ${jasStyle(el.klasse)}`}
+          >
+            {el.klasse} ▾
+          </button>
+          {el.lid && <span className="text-[0.65rem] text-muted">lid {el.lid}</span>}
         </span>
-        <span className="flex items-center gap-1.5 text-[0.65rem] uppercase tracking-wide text-muted">
-          {beslist && (
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="text-succes" aria-hidden>
-              <path d="M20 6 9 17l-5-5" />
-            </svg>
+
+        <span className="flex shrink-0 items-center gap-1" onClick={(e) => e.stopPropagation()}>
+          {!beslist && (
+            <button
+              type="button"
+              disabled={bezig}
+              onClick={() => void verstuur({ type: "approve" })}
+              className={`${KNOP_BASIS} ${KNOP_SUCCES}`}
+            >
+              Akkoord
+            </button>
           )}
-          {LIFECYCLE_LABEL[el.lifecycle] ?? el.lifecycle}
-          {el.lid ? ` · lid ${el.lid}` : ""}
+          {(!beslist || eigen) && (
+            <button
+              type="button"
+              disabled={bezig}
+              onClick={() => setWegHalen((v) => !v)}
+              aria-label={eigen ? "Markering wissen" : "Voorstel verwerpen"}
+              title={eigen ? "Wissen" : "Verwerpen"}
+              className="rounded-lg p-1.5 text-muted transition hover:bg-surface hover:text-fout"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
+                <path d="M18 6 6 18M6 6l12 12" />
+              </svg>
+            </button>
+          )}
         </span>
       </div>
+
+      {palet && (
+        <div className="mt-2 flex flex-wrap gap-1" onClick={(e) => e.stopPropagation()}>
+          {JAS_KLASSEN.filter((k) => k !== el.klasse).map((k) => (
+            <button
+              key={k}
+              type="button"
+              disabled={bezig}
+              onClick={() => void wijzig({ klasse: k })}
+              className={`min-h-[28px] rounded-full border px-2 py-0.5 text-xs transition coarse:min-h-[36px] disabled:opacity-50 ${jasStyle(k)}`}
+            >
+              {k}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Wissen (eigen markering) of verwerpen (agent-voorstel): hetzelfde gebaar, twee uitkomsten.
+          Wissen is onomkeerbaar — vandaar de tweede klik in plaats van een dialoog. Bij verwerpen is
+          de reden echte informatie die alleen de mens heeft; die is niet af te leiden. */}
+      {wegHalen && (
+        <div className="mt-2 flex flex-wrap items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+          {eigen ? (
+            <button
+              type="button"
+              disabled={bezig || !onVerwijder}
+              onClick={async () => {
+                setBezig(true);
+                try {
+                  await onVerwijder?.();
+                } finally {
+                  setBezig(false);
+                  setWegHalen(false);
+                }
+              }}
+              className={`${CHIP} border-fout font-medium text-fout`}
+            >
+              Wissen?
+            </button>
+          ) : (
+            <>
+              <span className="text-[0.7rem] text-muted">Verwerpen — waarom?</span>
+              {REDENEN.map((r) => (
+                <button
+                  key={r.waarde}
+                  type="button"
+                  disabled={bezig}
+                  onClick={() => void verstuur({ type: "reject", review_reason: r.waarde })}
+                  className={CHIP}
+                >
+                  {r.label}
+                </button>
+              ))}
+            </>
+          )}
+        </div>
+      )}
+
       <p className="mt-2 border-l-2 border-line pl-2.5 text-sm italic text-ink">“{el.tekst}”</p>
-      {el.toelichting && <p className="mt-1.5 text-xs text-muted">{el.toelichting}</p>}
+
+      <div className="mt-1.5 text-xs text-muted" onClick={(e) => e.stopPropagation()}>
+        <InlineVeld
+          waarde={el.toelichting}
+          placeholder="Toelichting toevoegen…"
+          onBewaar={(nieuw) => wijzig({ toelichting: nieuw })}
+        />
+      </div>
+
       {el.critic && <p className="mt-1 text-xs italic text-muted">Critic: {el.critic}</p>}
 
-      {/* Kanttekening bij een markering die de JURIST zelf maakte. Bewust een ander vorm dan een
-          decision-card: dit is advies dat je naast je neer mag leggen, geen voorstel om te beoordelen.
-          Accepteren wordt een `edit` (de klasse wijzigt), afwijzen een `comment` — zo blijft in het
-          auditspoor staan dát de Critic iets vond en wat jij daarmee deed. */}
+      {/* Kanttekening bij een markering die de JURIST zelf maakte. Bewust een andere vorm dan de kaart
+          zelf: dit is advies dat je naast je neer mag leggen, geen voorstel om te beoordelen. */}
       {el.critic_suggestie?.motivatie && el.critic_suggestie.status === "open" && (
         <div
           className="mt-2 rounded-kaart border border-dashed border-line bg-surface p-2"
@@ -129,14 +327,7 @@ function DecisionCard({
             {el.critic_suggestie.voorstel_klasse && (
               <button
                 disabled={bezig}
-                onClick={() =>
-                  verstuur({
-                    type: "edit",
-                    review_reason: "verkeerde_klasse",
-                    comment: "Kanttekening van de assistent overgenomen.",
-                    wijziging: { klasse: el.critic_suggestie!.voorstel_klasse },
-                  })
-                }
+                onClick={() => void wijzig({ klasse: el.critic_suggestie!.voorstel_klasse })}
                 className={`${KNOP_BASIS} ${KNOP_SUCCES}`}
               >
                 Overnemen
@@ -145,7 +336,7 @@ function DecisionCard({
             <button
               disabled={bezig}
               onClick={() =>
-                verstuur({ type: "comment", comment: "Kanttekening van de assistent afgewezen." })
+                void verstuur({ type: "comment", comment: "Kanttekening van de assistent afgewezen." })
               }
               className={`${KNOP_BASIS} ${KNOP_INFO}`}
             >
@@ -154,152 +345,49 @@ function DecisionCard({
           </div>
         </div>
       )}
-      {el.alternatieven.length > 0 &&
-        (beslist ? (
-          <p className="mt-1 text-xs text-muted">Twijfel: {el.alternatieven.map((a) => a.klasse).join(", ")}</p>
-        ) : (
-          <div className="mt-1.5 flex flex-wrap items-center gap-1 text-xs text-muted" onClick={(e) => e.stopPropagation()}>
-            <span>Twijfel — kies om te wijzigen:</span>
-            {el.alternatieven.map((a) => (
-              <button
-                key={a.klasse}
-                title={a.motivatie}
-                onClick={() => {
-                  setKlasse(a.klasse);
-                  setReden("verkeerde_klasse");
-                  setActie("edit");
-                }}
-                className={`rounded px-1.5 py-0.5 text-xs font-medium ${jasStyle(a.klasse)} hover:ring-1 hover:ring-lint`}
-              >
-                {a.klasse}
-              </button>
-            ))}
-          </div>
-        ))}
+
+      {el.alternatieven.length > 0 && (
+        <div className="mt-1.5 flex flex-wrap items-center gap-1 text-xs text-muted" onClick={(e) => e.stopPropagation()}>
+          <span>Twijfel — klik om te wisselen:</span>
+          {el.alternatieven.map((a) => (
+            <button
+              key={a.klasse}
+              disabled={bezig}
+              title={a.motivatie}
+              onClick={() => void wijzig({ klasse: a.klasse })}
+              className={`rounded px-1.5 py-0.5 text-xs font-medium ${jasStyle(a.klasse)} hover:ring-1 hover:ring-lint`}
+            >
+              {a.klasse}
+            </button>
+          ))}
+        </div>
+      )}
 
       {onAdvies && <AdviesDraadje onVraag={(v, opToken) => onAdvies(el, v, opToken)} />}
 
-      {!beslist && actie === null && (
-        <div className="mt-2.5 flex flex-wrap gap-1.5" onClick={(e) => e.stopPropagation()}>
-          <button disabled={bezig} onClick={() => verstuur({ type: "approve" })} className={`${KNOP_BASIS} ${KNOP_SUCCES}`}>
-            Akkoord
-          </button>
-          <button
-            onClick={() => {
-              // Reset naar de actuele waarden zodat een eerder geannuleerde bewerking niet blijft hangen.
-              setKlasse(el.klasse);
-              setToelichting(el.toelichting);
-              setActie("edit");
-            }}
-            className={`${KNOP_BASIS} ${KNOP_INFO}`}
-          >
-            Aanpassen
-          </button>
-          <button onClick={() => setActie("reject")} className={`${KNOP_BASIS} ${KNOP_FOUT}`}>
-            Verwerpen
-          </button>
-          <button
-            onClick={() => {
-              setComment("");
-              setActie("comment");
-            }}
-            className={`${KNOP_BASIS} border border-line text-ink hover:bg-surface`}
-          >
-            Opmerking
-          </button>
-        </div>
-      )}
-
-      {actie === "reject" && (
-        <div className="mt-2 space-y-1.5" onClick={(e) => e.stopPropagation()}>
-          <RedenSelect reden={reden} setReden={setReden} />
-          <div className="flex gap-1.5">
-            <button disabled={bezig} onClick={() => verstuur({ type: "reject", review_reason: reden })} className={`${KNOP_BASIS} ${KNOP_FOUT}`}>
-              Verwerpen
+      <div className="mt-2 flex items-center justify-between gap-2 border-t border-line/60 pt-1.5 text-[0.65rem] text-muted">
+        <span className="min-w-0 flex-1" onClick={(e) => e.stopPropagation()}>
+          {notitie ? (
+            <InlineVeld
+              waarde=""
+              placeholder="Opmerking bij de review…"
+              onBewaar={async (tekst) => {
+                if (tekst) await verstuur({ type: "comment", comment: tekst });
+                setNotitie(false);
+              }}
+            />
+          ) : (
+            <button type="button" onClick={() => setNotitie(true)} className="underline-offset-2 hover:underline">
+              Opmerking…
             </button>
-            <AnnuleerKnop onClick={() => setActie(null)} />
-          </div>
-        </div>
-      )}
-
-      {actie === "edit" && (
-        <div className="mt-2 space-y-1.5" onClick={(e) => e.stopPropagation()}>
-          <select
-            value={klasse}
-            onChange={(e) => setKlasse(e.target.value)}
-            className="w-full rounded-field border border-line px-2 py-1.5 text-xs"
-          >
-            {JAS_KLASSEN.map((k) => (
-              <option key={k} value={k}>
-                {k}
-              </option>
-            ))}
-          </select>
-          <input
-            value={toelichting}
-            onChange={(e) => setToelichting(e.target.value)}
-            placeholder="Toelichting"
-            className="w-full rounded-field border border-line px-2 py-1.5 text-xs"
-          />
-          <RedenSelect reden={reden} setReden={setReden} />
-          <div className="flex gap-1.5">
-            <button
-              disabled={bezig}
-              onClick={() => verstuur({ type: "edit", review_reason: reden, wijziging: { klasse, toelichting } })}
-              className={`${KNOP_BASIS} ${KNOP_INFO}`}
-            >
-              Opslaan
-            </button>
-            <AnnuleerKnop onClick={() => setActie(null)} />
-          </div>
-        </div>
-      )}
-
-      {actie === "comment" && (
-        <div className="mt-2 space-y-1.5" onClick={(e) => e.stopPropagation()}>
-          <input
-            value={comment}
-            onChange={(e) => setComment(e.target.value)}
-            placeholder="Opmerking"
-            className="w-full rounded-field border border-line px-2 py-1.5 text-xs"
-          />
-          <div className="flex gap-1.5">
-            <button
-              disabled={bezig || !comment.trim()}
-              onClick={() => verstuur({ type: "comment", comment })}
-              className={`${KNOP_BASIS} bg-lint text-paper hover:bg-accent-soft`}
-            >
-              Plaatsen
-            </button>
-            <AnnuleerKnop onClick={() => setActie(null)} />
-          </div>
-        </div>
-      )}
+          )}
+        </span>
+        <span className="shrink-0">
+          {statusRegel(el)}
+          {tijdstip(el) && ` · ${tijdstip(el)}`}
+        </span>
+      </div>
     </div>
-  );
-}
-
-function RedenSelect({ reden, setReden }: { reden: ReviewReason; setReden: (r: ReviewReason) => void }) {
-  return (
-    <select
-      value={reden}
-      onChange={(e) => setReden(e.target.value as ReviewReason)}
-      className="w-full rounded-field border border-line px-2 py-1.5 text-xs"
-    >
-      {REDENEN.map((r) => (
-        <option key={r.waarde} value={r.waarde}>
-          {r.label}
-        </option>
-      ))}
-    </select>
-  );
-}
-
-function AnnuleerKnop({ onClick }: { onClick: () => void }) {
-  return (
-    <button onClick={onClick} className={`${KNOP_BASIS} border border-line text-muted hover:bg-surface`}>
-      Annuleren
-    </button>
   );
 }
 
@@ -308,12 +396,15 @@ export function ReviewQueue({
   actiefId,
   onKies,
   onBeslissing,
+  onVerwijder,
   onAdvies,
 }: {
   elementen: AnnotatieElement[];
   actiefId?: string;
   onKies: (id?: string) => void;
   onBeslissing: (elementId: string, req: BeslissingInvoer) => Promise<void>;
+  /** Eigen markering wissen. Weglaten maakt de lijst alleen-beoordeelbaar. */
+  onVerwijder?: (elementId: string) => Promise<void>;
   onAdvies?: (el: AnnotatieElement, vraag: string, opToken: (t: string) => void) => Promise<void>;
 }) {
   const telling = elementen.reduce<Record<string, number>>((acc, el) => {
@@ -358,6 +449,7 @@ export function ReviewQueue({
           actief={el.id === actiefId}
           onKies={() => onKies(el.id)}
           onBeslissing={(req) => onBeslissing(el.id, req)}
+          onVerwijder={onVerwijder && el.herkomst === "mens" ? () => onVerwijder(el.id) : undefined}
           onAdvies={onAdvies}
         />
       ))}
