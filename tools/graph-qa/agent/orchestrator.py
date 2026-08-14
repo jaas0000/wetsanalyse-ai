@@ -781,6 +781,28 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
             "gemeld_ontbrekend": sorted(al_gemeld | huidig),
         }
 
+    def _open_werk(state: State) -> bool:
+        """Ligt er na de laatste Critic-pas nog werk?
+
+        Eén definitie, gebruikt door de routering én door de stopreden in `emit_node`. Stonden die
+        los van elkaar, dan kan de tijdlijn "rondelimiet bereikt" melden terwijl er niets meer te doen
+        was — en dan liegt precies het signaal waarmee je convergentie beoordeelt.
+
+        Alleen wat de Critic nog niet eerder meldde telt, en instructies die de annoteerder
+        gemotiveerd naast zich neerlegde tellen niet meer mee.
+        """
+        eigen_ids = {v.get("id") for v in (state.get("voorstellen") or []) if v.get("van_jurist")}
+        geweigerd = set(state.get("geweigerde_feedback") or [])
+        feedback = [
+            f for f in (state.get("critic_feedback") or [])
+            if f.get("id") not in eigen_ids and _feedback_sleutel(f) not in geweigerd
+        ]
+        return (
+            any(f.get("actie") in ("vervang", "verwijder") or f.get("aandacht") == "rood" for f in feedback)
+            or bool(state.get("nieuw_ontbrekend"))
+            or bool(state.get("verworpen_fragmenten"))
+        )
+
     def route_na_critic(state: State) -> str:
         """Nog een herzieningsronde, of naar de jurist?
 
@@ -796,20 +818,7 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
         if int(state.get("critic_ronde") or 0) >= settings.critic_max_rondes:
             return "emit"
 
-        eigen_ids = {v.get("id") for v in (state.get("voorstellen") or []) if v.get("van_jurist")}
-        geweigerd = set(state.get("geweigerde_feedback") or [])
-        feedback = [
-            f for f in (state.get("critic_feedback") or [])
-            if f.get("id") not in eigen_ids and _feedback_sleutel(f) not in geweigerd
-        ]
-        # Alleen wat de Critic nog niet eerder meldde is werk. Zonder dit draait de lus altijd door:
-        # hij bedenkt elke ronde opnieuw wat er "mist", dus er is altijd een reden voor nog een ronde.
-        te_doen = (
-            any(f.get("actie") in ("vervang", "verwijder") or f.get("aandacht") == "rood" for f in feedback)
-            or bool(state.get("nieuw_ontbrekend"))
-            or bool(state.get("verworpen_fragmenten"))
-        )
-        return "herzie" if te_doen else "emit"
+        return "herzie" if _open_werk(state) else "emit"
 
     def herzie_node(state: State) -> dict[str, Any]:
         """Laat de annoteerder de Critic-instructies verwerken. Eén LLM-call, geen tools.
@@ -989,10 +998,14 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
         # De stopreden hoort hier te worden afgeleid: `route_na_critic` weet hem wel, maar een
         # conditionele edge geeft alleen een naam terug en kan geen state schrijven. Alle feiten
         # staan hier, dus is dit de plek waar één waarheid overblijft.
+        # Het plafond is alleen de reden als er ook écht nog werk lag. Raakt de lus het plafond
+        # precies op het moment dat de Critic niets meer te melden heeft, dan is dat convergentie —
+        # en dat hoort er niet uit te zien als uitputting.
         reden = state.get("stop_reden") or (
             "Critic uitgevallen" if state.get("critic_gefaald")
             else "herzieningslus uit" if settings.critic_max_rondes <= 0
-            else "rondelimiet bereikt" if int(state.get("critic_ronde") or 0) >= settings.critic_max_rondes
+            else "rondelimiet bereikt"
+            if int(state.get("critic_ronde") or 0) >= settings.critic_max_rondes and _open_werk(state)
             else "geen open punten"
         )
         _stap(writer, "Klaar", f"{reden} · {len(voorstellen)} elementen ter beoordeling")

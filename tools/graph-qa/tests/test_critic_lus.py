@@ -571,3 +571,28 @@ def test_elk_element_draagt_zijn_rondegeschiedenis():
     assert [r["ronde"] for r in rondes] == [1, 2]
     assert [r["aandacht"] for r in rondes] == ["rood", "groen"]
     assert rondes[0]["voorstel_klasse"] == "Rechtssubject"
+
+
+def test_plafond_en_klaar_tegelijk_heet_geen_uitputting():
+    """Raakt de lus het plafond precies als de Critic niets meer te melden heeft, dan is dat
+    convergentie — geen uitputting.
+
+    Dit gebeurde in de eerste dev-meting: de laatste pas gaf "5 geel, 5 groen · niets gemist" en de
+    tijdlijn zei toch "rondelimiet bereikt". Uitgerekend het signaal waarmee je beoordeelt of de lus
+    convergeert, klopte dan niet.
+    """
+    llm = FakeLLM([
+        *_aanloop(),
+        _annoteer([{"id": "el-a", "klasse": "Rechtsfeit", "tekst": "De ontvanger", "lid": "1"}]),
+        _critic([{"id": "el-a", "aandacht": "rood", "motivatie": "mis", "actie": "vervang",
+                  "voorstel_klasse": "Voorwaarde"}]),
+        _annoteer([{"id": "el-a", "klasse": "Voorwaarde", "tekst": "De ontvanger", "lid": "1"}]),
+        _critic([{"id": "el-a", "aandacht": "rood", "motivatie": "toch niet", "actie": "vervang",
+                  "voorstel_klasse": "Rechtssubject"}]),
+        _annoteer([{"id": "el-a", "klasse": "Rechtssubject", "tekst": "De ontvanger", "lid": "1"}]),
+        # Tweede herziening is gedaan → plafond bereikt. Deze laatste pas is tevreden.
+        _critic([{"id": "el-a", "aandacht": "groen", "motivatie": "nu juist"}]),
+    ])
+    _, events = _annoteer_uitkomst(llm)
+    klaar = next(r for r in _statusregels(events) if r.startswith("Klaar"))
+    assert "geen open punten" in klaar, klaar
