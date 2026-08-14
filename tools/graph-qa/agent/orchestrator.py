@@ -648,8 +648,13 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
         # als de Critic er iets van vindt. Die bevinding komt terug als suggestie, niet als wijziging.
         van_jurist = [v for v in alle if v.get("van_jurist")]
         voorstellen = [v for v in alle if not v.get("van_jurist")]
+        # De teller telt POGINGEN, niet successen. Hoogde alleen een geslaagde herziening hem op, dan
+        # bleef een onproductieve ronde gratis doorlopen: `critic_ontbrekend`/`verworpen_fragmenten`
+        # blijven staan, dus de route springt er meteen weer in. Op dev leverde dat vier herzieningen
+        # bij `CRITIC_MAX_RONDES=2` — precies de kosten die die knop hoort af te grendelen.
+        ronde = int(state.get("critic_ronde") or 0) + 1
         if not voorstellen:
-            return {}
+            return {"critic_ronde": ronde}
         doel = _bepaal_doel(state)
         corpus = _corpus_uit_trace(state.get("source_trace", []))
         aanduiding = doel.get("artikel") or doel.get("nummer") or ""
@@ -675,11 +680,11 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
             )
         except Exception:  # noqa: BLE001 — een mislukte herziening mag de annotatie niet breken
             logger.warning("herziening: mislukt; vorige voorstellen behouden", exc_info=True)
-            return {"critic_feedback": []}
+            return {"critic_feedback": [], "critic_ronde": ronde}
 
         if not herzien:
             logger.warning("herziening: leverde niets gegronds op; vorige voorstellen behouden")
-            return {"critic_feedback": []}
+            return {"critic_feedback": [], "critic_ronde": ronde}
 
         te_verwijderen = {f.get("id") for f in feedback if f.get("actie") == "verwijder"}
         samengevoegd = {v["id"]: v for v in voorstellen if v.get("id") not in te_verwijderen}
@@ -699,7 +704,7 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
             "voorstellen": list(samengevoegd.values()) + van_jurist,
             "verworpen_fragmenten": [x.model_dump() for x in verworpen],
             "critic_feedback": [],
-            "critic_ronde": int(state.get("critic_ronde") or 0) + 1,
+            "critic_ronde": ronde,
         }
 
     def emit_node(state: State) -> dict[str, Any]:

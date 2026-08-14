@@ -59,7 +59,7 @@ def test_parser_laat_een_gewoon_doel_met_rust():
 
 # --- de keten -------------------------------------------------------------------------------------
 
-def _onderwerp_scenario():
+def _onderwerp_scenario(*, decompositie: bool = True):
     llm = FakeLLM([
         response([text_block("WORKERS: annotatie\nPLAN: zoek de bepalingen over dit onderwerp")], "end_turn"),
         response([tool_block("t1", "semantic_search", {"query": "aansprakelijkheid bestuurder"})], "tool_use"),
@@ -67,7 +67,7 @@ def _onderwerp_scenario():
     ])
     events = _run(answer_stream(
         "annoteer alles over aansprakelijkheid van de bestuurder",
-        settings=make_settings(enable_decomposition=True), llm=llm, graph=FakeGraph(result=ZOEK_TSV),
+        settings=make_settings(enable_decomposition=decompositie), llm=llm, graph=FakeGraph(result=ZOEK_TSV),
     ))
     return events, llm
 
@@ -88,3 +88,9 @@ def test_de_gebruiker_hoort_wat_er_te_kiezen_valt():
     events, _ = _onderwerp_scenario()
     tekst = "".join(e["content"] for e in events if e["type"] == "token")
     assert "2 bepalingen" in tekst
+
+
+def test_werkt_ook_zonder_decompositie():
+    """build_graph bedraadt de annotatieroute twee keer; dev draait met ENABLE_DECOMPOSITION=0."""
+    events, _ = _onderwerp_scenario(decompositie=False)
+    assert next(e for e in events if e["type"] == "kandidaten")["kandidaten"]

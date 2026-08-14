@@ -295,3 +295,32 @@ def test_klep_uit_reproduceert_het_oude_gedrag():
     # En de samenvatting rept niet over herzieningen.
     tokens = "".join(e["content"] for e in events if e["type"] == "token")
     assert "herziening" not in tokens
+
+
+def test_een_onproductieve_herziening_telt_ook_mee():
+    """Anders is `critic_max_rondes` geen plafond.
+
+    Een herziening die niets gegronds oplevert liet de teller ongemoeid, terwijl `ontbrekend` in de
+    state bleef staan — dus de route sprong er meteen weer in. Op dev gaf dat vier herzieningen bij
+    een maximum van twee: acht LLM-calls die de knop juist hoort af te grendelen. Een ronde die een
+    LLM-call kost, is een ronde.
+    """
+    leeg = lambda: response([text_block("geen JSON hier")], "end_turn")  # noqa: E731
+    blijft_rood = lambda: _critic(  # noqa: E731
+        [{"id": "el-a", "aandacht": "rood", "motivatie": "mis", "actie": "vervang",
+          "voorstel_klasse": "Rechtssubject"}],
+        [{"klasse": "Voorwaarde", "reden": "niet gemarkeerd"}],
+    )
+    llm = FakeLLM([
+        *_aanloop(),
+        _annoteer([{"id": "el-a", "klasse": "Rechtsfeit", "tekst": "De ontvanger", "lid": "1"}]),
+        blijft_rood(),
+        leeg(), blijft_rood(),      # herziening 1: niets gegronds
+        leeg(), blijft_rood(),      # herziening 2: idem — hierna is het maximum op
+        leeg(), blijft_rood(),      # zou een derde ronde zijn: mag niet gebeuren
+    ])
+    elementen, _ = _annoteer_uitkomst(llm)
+
+    assert llm.index == 9, f"aanloop(3) + annoteer + critic + 2x(herzie+critic) = 9, niet {llm.index}"
+    assert len(elementen) == 1, "de mislukte herzieningen laten het voorstel staan"
+    assert elementen[0]["klasse"] == "Rechtsfeit"

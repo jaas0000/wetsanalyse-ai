@@ -133,7 +133,10 @@ kost de lus dus niets.
 - **Een herziening die een element ongewijzigd laat, behoudt het oordeel.** Is het element wél
   aangepast, dan is de aandacht leeg tot de volgende Critic-pas — die versie is nog niet beoordeeld,
   en er een oud oordeel op plakken zou schijnzekerheid zijn.
-- De rondeteller telt **herzieningen**, niet Critic-passes, en wordt gereset in `advance_node` én in
+- De rondeteller telt **herzieningspogingen** — ook een mislukte. Telde alleen een geslaagde
+  herziening mee, dan liep een onproductieve ronde gratis door (`critic_ontbrekend`/
+  `verworpen_fragmenten` blijven staan, dus de route springt er meteen weer in) en was
+  `critic_max_rondes` geen plafond. Hij telt geen Critic-passes, en wordt gereset in `advance_node` én in
   de init van `answer_stream`. Zonder die reset begint een tweede beurt in dezelfde thread met een
   volle teller (de checkpointer bewaart de state) en wordt de lus overgeslagen.
 
