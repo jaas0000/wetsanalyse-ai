@@ -4,7 +4,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { ArtefactPaneel } from "@/components/werkplek/ArtefactPaneel";
 import { Melding } from "@/components/ui/Melding";
-import { Markdown } from "@/components/werkplek/Markdown";
+import { Markdown, StreamendeTekst } from "@/components/werkplek/Markdown";
 import {
   annoteerAgentStream,
   beslis,
@@ -562,8 +562,11 @@ export function WerkplekClient({ initialGesprekId, onGesprekAangemaakt, onGewijz
             </div>
           )}
 
-          {items.map((item) =>
-            item.type === "user" ? (
+          {items.map((item, i) => {
+            // Alleen de laatste beurt kan aan het streamen zijn; die krijgt platte tekst tot hij
+            // klaar is (zie `StreamendeTekst`).
+            const streamt = bezig && i === items.length - 1;
+            return item.type === "user" ? (
               <div key={item.id} className="flex animate-rise flex-col items-end gap-1">
                 {item.over && (
                   <span className="max-w-[85%] truncate rounded-full bg-surface px-2.5 py-0.5 text-[0.7rem] text-muted">
@@ -580,7 +583,11 @@ export function WerkplekClient({ initialGesprekId, onGesprekAangemaakt, onGewijz
                 <div className="min-w-0 flex-1 text-sm text-ink">
                   <p className="mb-1 text-xs font-medium text-muted">Assistent</p>
                   {item.denk && <DenkProces tekst={item.denk} actief={bezig && !item.tekst} />}
-                  {item.tekst ? <Markdown tekst={item.tekst} /> : item.denk ? null : <Punten />}
+                  {item.tekst ? (
+                    streamt ? <StreamendeTekst tekst={item.tekst} /> : <Markdown tekst={item.tekst} />
+                  ) : item.denk ? null : (
+                    <Punten />
+                  )}
                   {item.bronnen && item.bronnen.length > 0 && <Bronnen bronnen={item.bronnen} />}
                   {item.tekst && <KopieerKnop tekst={item.tekst} />}
                 </div>
@@ -607,8 +614,8 @@ export function WerkplekClient({ initialGesprekId, onGesprekAangemaakt, onGewijz
                   onOpen={() => void openArtefact(item.slug)}
                 />
               </div>
-            ),
-          )}
+            );
+          })}
         </div>
       </div>
 
