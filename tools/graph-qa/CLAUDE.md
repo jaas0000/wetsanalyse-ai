@@ -142,6 +142,14 @@ routeert hard naar de `duiding`-specialist. Een adviesvraag kan daardoor *topolo
 wijzigen — die route emit geen `doel`/`element`-events. Dat is een garantie, geen prompt-belofte. Het
 contextblok (bepaling, klasse, fragment, corpus) gaat mee in de systeemprompt.
 
+**Een ONDERWERP in plaats van een bepaling** ("annoteer alles over aansprakelijkheid van de
+bestuurder") levert geen annotatie maar een keuze. De ophaal-agent zoekt dan met
+`semantic_search`/`search_wetgeving` en geeft `{"kandidaten": [...]}` terug; `annoteer_node` ziet dat,
+emit één `kandidaten`-event en stopt de beurt — geen LLM-call voor annoteren of Critic. Welke bepaling
+de werkvoorraad in gaat is een inhoudelijke keuze; de agent er zelf één laten pakken levert een
+annotatie op een bepaling die niemand vroeg. De werkplek toont de lijst en stuurt de gekozen bepaling
+als nieuwe opdracht in.
+
 **De Critic kijkt ook mee op markeringen van de jurist.** Die komen via `context.bestaande_elementen`
 binnen en gaan als BEVROREN voorstellen (`van_jurist`) mee de Critic in: ze doen niet mee in de
 herzieningslus, komen niet terug als `element`-event, en hun oordeel gaat als apart
@@ -173,7 +181,7 @@ Drie dingen die je verder moet kennen voordat je hieraan werkt:
   bouwer in `graph/queries.py`. `raw_sparql` blijft de afgeschermde ontsnapping.
 - **DI, geen globale clients.** Afhankelijkheden achter een poort + adapter, zodat ze faken te zijn.
 - **SSE-event-contract.** De event-types (`status`/`reason`/`token`/`sources`/`grounding`/`done`/`error`,
-  plus `doel`/`element`/`ontbrekend`/`suggestie` van de annotatie-worker — alles over `POST /v1/chat`) zijn het
+  plus `doel`/`element`/`ontbrekend`/`suggestie`/`kandidaten` van de annotatie-worker — alles over `POST /v1/chat`) zijn het
   contract met de consumenten (de werkplek); wijzig ze
   bewust en gelijktijdig. **`reason` = het denkproces** (tool-narratie, live gestreamd); **`token` = alléén
   het eindantwoord** — hou die twee gescheiden zodat de werkplek ze los kan tonen. De annotatie-keten is

@@ -138,6 +138,15 @@ Twee kleine domeinen die aan de app-shell hangen, niet aan de oude paginanavigat
 Beide panelen halen hun teller periodiek/bij openen op en falen **stil**: een hapering mag de
 werkplek niet blokkeren, de badge is een hint.
 
+### Annoteren op onderwerp
+
+Noemt de vraag een onderwerp in plaats van een bepaling, dan komt er een `kandidaten`-event in plaats
+van `doel`/`element`: de thread toont een keuzelijst (`KandidatenKeuze`), en één klik stuurt
+`kandidaatPrompt(k)` als nieuwe beurt in — mét het bwbId, anders kan de ophaal-agent bij een andere
+bepaling uitkomen dan de jurist aanwees. Er is bewust géén "annoteer ze allemaal": elke annotatie is
+een eigen document met een eigen review. De kandidaten zitten niet in het berichtcontract van de api;
+wat na een herlaadbeurt overblijft is de opsomming uit `kandidatenAlsTekst`.
+
 ### Zelf annoteren (tekstselectie)
 
 De jurist kan in `DocumentPaneel` tekst selecteren en die zelf markeren. Drie dingen om te kennen:

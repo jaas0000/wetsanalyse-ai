@@ -65,6 +65,46 @@ def _doel_uit_json(text: str) -> dict[str, str]:
     return {"bwbId": "", "artikel": "", "lid": "", "nummer": "", "citeertitel": ""}
 
 
+def _kandidaten_uit_json(text: str) -> list[dict[str, str]]:
+    """Haal de kandidaat-bepalingen uit de JSON van de ophaal-agent.
+
+    Vraagt een jurist om een ONDERWERP ("annoteer alles over aansprakelijkheid van de bestuurder"),
+    dan is er geen enkele bepaling aan te wijzen. De ophaal-agent zoekt er dan in de graaf naar en
+    levert `{"kandidaten": [...]}` in plaats van een `doel`. Welke daarvan de werkvoorraad in gaan is
+    een inhoudelijke keuze van de jurist — dus hier niets raden.
+    """
+    import json
+
+    s, e = text.find("{"), text.rfind("}")
+    if s == -1 or e <= s:
+        return []
+    try:
+        data = json.loads(text[s : e + 1])
+    except json.JSONDecodeError:
+        return []
+    rij = data.get("kandidaten") if isinstance(data, dict) else None
+    if not isinstance(rij, list):
+        return []
+
+    uit: list[dict[str, str]] = []
+    gezien: set[tuple[str, str, str]] = set()
+    for k in rij:
+        if not isinstance(k, dict):
+            continue
+        kandidaat = {
+            veld: str(k.get(veld, "")).strip()
+            for veld in ("bwbId", "artikel", "lid", "citeertitel", "fragment")
+        }
+        if not (kandidaat["bwbId"] and kandidaat["artikel"]):
+            continue
+        sleutel = (kandidaat["bwbId"], kandidaat["artikel"], kandidaat["lid"])
+        if sleutel in gezien:
+            continue
+        gezien.add(sleutel)
+        uit.append(kandidaat)
+    return uit[:8]
+
+
 def _doel_uit_toolcalls(messages: list[dict[str, Any]]) -> dict[str, str]:
     """Gezaghebbend doel = de LAATSTE fetch-tool-call (get_lid/get_artikel/get_bepaling) die de agent
     deed — wat hij écht ophaalde. get_bepaling levert een `nummer` (bv. '9.1' voor een divisie); dat
@@ -439,6 +479,21 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
         element ertegen. De gegronde voorstellen gaan naar de state; de aparte critic_node scoort ze en
         emit ze dán als `element`-events. annoteer emit alléén `doel` (en een melding bij lege uitkomst)."""
         writer = get_stream_writer()
+
+        # Een ONDERWERP in plaats van een bepaling: de ophaal-agent legt kandidaten voor en wij
+        # annoteren nog niets. Welke bepaling de werkvoorraad in gaat is een inhoudelijke keuze van
+        # de jurist, niet iets om te laten raden door een semantische zoekopdracht.
+        kandidaten = _kandidaten_uit_json(state.get("answer", ""))
+        if kandidaten:
+            writer({"type": "kandidaten", "kandidaten": kandidaten})
+            melding = (
+                f"Ik vond {len(kandidaten)} bepalingen over dit onderwerp. Kies welke je wilt laten "
+                "annoteren."
+            )
+            writer({"type": "token", "content": melding})
+            return {"answer": melding, "voorstellen": [],
+                    "messages": [{"role": "assistant", "content": melding}]}
+
         doel = _bepaal_doel(state)
         corpus = _corpus_uit_trace(state.get("source_trace", []))
         aanduiding = doel.get("artikel") or doel.get("nummer") or ""

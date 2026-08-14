@@ -20,6 +20,7 @@ import type {
   AdminBerichtenPaginaOut,
   AdminBerichtOut,
   AgentDoel,
+  AgentKandidaat,
   Anker,
   AnnotatieDocument,
   AuditRecord,
@@ -402,6 +403,8 @@ export async function annoteerAgentStream(
     onOntbrekend?: (items: OntbrekendItem[]) => void;
     /** Kanttekening van de Critic bij een markering die de JURIST maakte. Nooit een wijziging. */
     onSuggestie?: (s: { element_id: string; aandacht: string; motivatie: string }) => void;
+    /** De vraag noemde een onderwerp, geen bepaling: dit zijn de gevonden bepalingen om uit te kiezen. */
+    onKandidaten?: (k: AgentKandidaat[]) => void;
   },
   conversationId?: string,
   signal?: AbortSignal,
@@ -450,6 +453,7 @@ export async function annoteerAgentStream(
               items?: OntbrekendItem[];
               sources?: Bron[];
               suggestie?: { element_id: string; aandacht: string; motivatie: string };
+              kandidaten?: AgentKandidaat[];
             }
           | null;
         if (!ev) continue;
@@ -461,6 +465,7 @@ export async function annoteerAgentStream(
         else if (ev.type === "element" && ev.element) handlers.onElement?.(ev.element);
         else if (ev.type === "ontbrekend") handlers.onOntbrekend?.(ev.items ?? []);
         else if (ev.type === "suggestie" && ev.suggestie) handlers.onSuggestie?.(ev.suggestie);
+        else if (ev.type === "kandidaten") handlers.onKandidaten?.(ev.kandidaten ?? []);
         else if (ev.type === "error") throw { status: 502, detail: ev.message ?? "Agent mislukt." } as ApiError;
       }
     }

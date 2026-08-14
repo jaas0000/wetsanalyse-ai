@@ -261,6 +261,18 @@ export interface AgentDoel {
   leden_teksten?: { lid: string; tekst: string }[];
 }
 
+/** Een bepaling die de agent vond bij een ONDERWERP-vraag (uit het `kandidaten`-SSE-event).
+ *
+ *  De agent kiest er zelf geen: welke bepaling de werkvoorraad in gaat, bepaalt de jurist.
+ */
+export interface AgentKandidaat {
+  bwbId: string;
+  artikel: string;
+  lid?: string;
+  citeertitel?: string;
+  fragment?: string;
+}
+
 /** Een bron onder een agent-antwoord (uit het `sources`-SSE-event). */
 export interface Bron {
   label: string;

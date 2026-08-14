@@ -1,4 +1,4 @@
-import type { DocumentStatus, VoorstelElement } from "./types";
+import type { AgentKandidaat, DocumentStatus, VoorstelElement } from "./types";
 
 // Presentatie-helpers voor de annotatie-workbench (statuslabels/kleuren).
 
@@ -39,4 +39,31 @@ export function mergeVoorstellen(
   const kopie = [...bestaand];
   kopie[index] = binnen;
   return kopie;
+}
+
+/** Mensleesbare aanduiding van een kandidaat-bepaling ("Artikel 36a, lid 1 — Invorderingswet 1990"). */
+export function kandidaatLabel(k: AgentKandidaat): string {
+  const bepaling = `Artikel ${k.artikel}${k.lid ? `, lid ${k.lid}` : ""}`;
+  return k.citeertitel ? `${bepaling} — ${k.citeertitel}` : bepaling;
+}
+
+/** De opdracht die volgt als de jurist een kandidaat kiest.
+ *
+ *  Het bwbId gaat mee omdat de ophaal-agent anders opnieuw moet zoeken op de citeertitel — en dan
+ *  bij een andere bepaling kan uitkomen dan die de jurist aanwees.
+ */
+export function kandidaatPrompt(k: AgentKandidaat): string {
+  const bepaling = `artikel ${k.artikel}${k.lid ? ` lid ${k.lid}` : ""}`;
+  const regeling = k.citeertitel ? `${k.citeertitel} (${k.bwbId})` : k.bwbId;
+  return `Annoteer ${bepaling} van de ${regeling}.`;
+}
+
+/** De keuze als tekst, zodat de thread na herladen nog laat zien wát er te kiezen viel.
+ *
+ *  De kandidaten zelf zijn geen onderdeel van het berichtcontract van de api; alleen deze tekst
+ *  wordt bewaard. Zonder dit leest een herladen gesprek als "Ik vond 5 bepalingen" zonder welke.
+ */
+export function kandidatenAlsTekst(melding: string, kandidaten: AgentKandidaat[]): string {
+  const regels = kandidaten.map((k) => `- ${kandidaatLabel(k)}`);
+  return [melding.trim(), ...regels].filter(Boolean).join("\n");
 }

@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { documentStatusLabel, mergeVoorstellen } from "./annotatie";
+import {
+  documentStatusLabel,
+  kandidaatLabel,
+  kandidaatPrompt,
+  kandidatenAlsTekst,
+  mergeVoorstellen,
+} from "./annotatie";
 import type { VoorstelElement } from "./types";
 
 describe("documentStatusLabel", () => {
@@ -64,5 +70,27 @@ describe("mergeVoorstellen", () => {
     const eerst = mergeVoorstellen([], voorstel({ id: "a1" }));
     const na = mergeVoorstellen(eerst, voorstel({}));
     expect(na).toHaveLength(2);
+  });
+});
+
+describe("kandidaten bij een onderwerp-vraag", () => {
+  const k = { bwbId: "BWBR0004770", artikel: "36a", lid: "1", citeertitel: "Invorderingswet 1990" };
+
+  it("noemt lid alleen als er een lid is", () => {
+    expect(kandidaatLabel(k)).toBe("Artikel 36a, lid 1 — Invorderingswet 1990");
+    expect(kandidaatLabel({ bwbId: "BWBR1", artikel: "36" })).toBe("Artikel 36");
+  });
+
+  it("zet het bwbId in de vervolgopdracht", () => {
+    // Zonder bwbId moet de ophaal-agent opnieuw zoeken op de citeertitel — en kan hij bij een
+    // andere bepaling uitkomen dan die de jurist aanwees.
+    expect(kandidaatPrompt(k)).toContain("BWBR0004770");
+    expect(kandidaatPrompt(k)).toContain("artikel 36a lid 1");
+  });
+
+  it("bewaart de keuze leesbaar voor na een herlaadbeurt", () => {
+    const tekst = kandidatenAlsTekst("Ik vond 2 bepalingen.", [k, { bwbId: "BWBR1", artikel: "36" }]);
+    expect(tekst.split("\n")).toHaveLength(3);
+    expect(tekst).toContain("- Artikel 36a, lid 1 — Invorderingswet 1990");
   });
 });

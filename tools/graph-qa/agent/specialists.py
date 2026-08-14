@@ -37,7 +37,16 @@ _RETRIEVAL_SYSTEM = (
     "- Je MOET eindigen met een geslaagde get_lid/get_artikel/get_bepaling-call die de tekst teruggaf.\n"
     "Geef daarna UITSLUITEND deze JSON terug (geen proza):\n"
     '{"bwbId": "<BWBR…>", "nummer": "<het opgehaalde nummer, bv. 9.1>", "artikel": "<artikelnr of leeg>", '
-    '"lid": "<lidnummer of leeg>", "citeertitel": "<naam van de regeling>"}'
+    '"lid": "<lidnummer of leeg>", "citeertitel": "<naam van de regeling>"}\n'
+    "\n"
+    "UITZONDERING — de gebruiker noemt GEEN bepaling maar een ONDERWERP ('alles over aansprakelijkheid "
+    "van de bestuurder', 'de bepalingen over uitstel van betaling'). Kies er dan NIET zelf één uit: "
+    "zoek met semantic_search/search_wetgeving en leg de gevonden bepalingen als keuze voor. Haal in "
+    "dat geval GEEN tekst op en geef deze JSON terug:\n"
+    '{"kandidaten": [{"bwbId": "<BWBR…>", "artikel": "<nr>", "lid": "<nr of leeg>", '
+    '"citeertitel": "<regeling>", "fragment": "<eerste zin van de bepaling>"}]}\n'
+    "Maximaal 8 kandidaten, de meest relevante eerst. Twijfel je of het een onderwerp of een concrete "
+    "bepaling is, en wijst de vraag één bepaling aan? Dan is het een concrete bepaling — haal die op."
 )
 
 
