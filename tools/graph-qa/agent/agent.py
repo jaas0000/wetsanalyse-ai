@@ -146,6 +146,11 @@ async def answer_stream(
         "critic_ontbrekend": [],
         "critic_gefaald": False,
         "critic_ronde": 0,
+        "nieuw_ontbrekend": [],
+        "gemeld_ontbrekend": [],
+        "geweigerde_feedback": [],
+        "herziening_wijzigde": False,
+        "stop_reden": "",
     }
 
     tracer = get_tracer(__name__)

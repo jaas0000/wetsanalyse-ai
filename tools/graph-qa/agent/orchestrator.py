@@ -112,6 +112,16 @@ def _kandidaten_uit_json(text: str) -> list[dict[str, str]]:
 # naar een leeg scherm en zag het heen-en-weer tussen annoteerder en Critic niet. Deze regels vullen
 # dat gat. Ze zijn pure functies zodat de bewoording te testen is zonder een hele graaf te draaien.
 
+def _ontbrekend_sleutel(item: dict[str, Any]) -> str:
+    """Identiteit van een gemeld gemist element: klasse + het genoemde fragment."""
+    return f"{str(item.get('klasse', '')).strip()}|{' '.join(str(item.get('tekst', '')).split()).lower()}"
+
+
+def _feedback_sleutel(f: dict[str, Any]) -> str:
+    """Identiteit van één correctie-instructie, om te herkennen dat hij al eens is afgewezen."""
+    return f"{f.get('id', '')}|{f.get('actie', '')}|{f.get('voorstel_klasse', '')}|{f.get('voorstel_tekst', '')}"
+
+
 def _stap(writer: Any, actor: str, bericht: str) -> None:
     """Meld één stap in de keten: `Actor · wat er gebeurde`.
 
@@ -148,7 +158,7 @@ def _annoteer_melding(voorstellen: list[Any], verworpen: list[Any]) -> str:
     return f"{regel} — {len(verworpen)} verworpen ({details})"
 
 
-def _critic_melding(oordelen: dict[str, Any], ontbrekend: list[Any]) -> str:
+def _critic_melding(oordelen: dict[str, Any], ontbrekend: list[Any], nieuw: int | None = None) -> str:
     """Tellingen per aandacht-niveau; de oordelen zelf staan al op de reviewkaarten."""
     telling: dict[str, int] = {}
     for o in oordelen.values():
@@ -159,6 +169,10 @@ def _critic_melding(oordelen: dict[str, Any], ontbrekend: list[Any]) -> str:
     regel = ", ".join(delen) if delen else "geen oordelen"
     if ontbrekend:
         regel += f" · {len(ontbrekend)} mogelijk gemist"
+        # Onderscheid maken tussen "hij ziet iets nieuws" en "hij herhaalt zichzelf" is precies wat
+        # je wilt kunnen zien in de tijdlijn.
+        if nieuw is not None and nieuw < len(ontbrekend):
+            regel += f" ({nieuw} nieuw)" if nieuw else " (niets nieuws)"
     return regel
 
 
@@ -362,6 +376,13 @@ class State(TypedDict, total=False):
     critic_ontbrekend: list[dict[str, Any]]
     critic_gefaald: bool
     critic_ronde: int                            # hoeveel HERZIENINGEN deze beurt al zijn gedaan
+    # Convergentie. Zonder deze drie draait de lus altijd tot de rondelimiet: de Critic bedenkt elke
+    # ronde opnieuw wat er "mist", dus er is altijd een reden om door te gaan.
+    nieuw_ontbrekend: list[dict[str, Any]]       # gemist én nog niet eerder gemeld — alleen dit is werk
+    gemeld_ontbrekend: list[str]                 # sleutels van alles wat al ooit gemeld is
+    geweigerde_feedback: list[str]               # instructies die de annoteerder gemotiveerd liet liggen
+    herziening_wijzigde: bool                    # niets veranderd? dan heeft nog een Critic-pas geen zin
+    stop_reden: str                              # waaróm de lus eindigde; komt in de tijdlijn
     # Wat de werkplek meestuurt over de bepaling/markering die in beeld staat. `modus == "advies"`
     # betekent: een vraag bij een bestaande annotatie, die niets mag wijzigen.
     modus: str
@@ -432,6 +453,8 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
                 # tweede annotatie in dezelfde beurt op de rondeteller van de eerste doorbouwen.
                 "voorstellen": [], "verworpen_fragmenten": [], "critic_feedback": [],
                 "critic_ontbrekend": [], "critic_gefaald": False, "critic_ronde": 0,
+                "nieuw_ontbrekend": [], "gemeld_ontbrekend": [], "geweigerde_feedback": [],
+                "herziening_wijzigde": False, "stop_reden": "",
             })
         return upd
 
@@ -691,7 +714,9 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
                 max_tokens=2048,
                 system=critic_systeemprompt(),
                 tools=[],
-                messages=[{"role": "user", "content": critic_userprompt(voorstellen, corpus)}],
+                messages=[{"role": "user", "content": critic_userprompt(
+                    voorstellen, corpus, list(state.get("gemeld_ontbrekend") or []),
+                )}],
             )
             crit_text = "".join(b.text for b in resp.content if b.type == "text")
             oordelen, ontbrekend = _verwerk_critic(crit_text, [str(v.get("id", "")) for v in voorstellen])
@@ -710,21 +735,38 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
                 "critic_gefaald": True,
             }
 
+        # Rondenummer: `critic_ronde` telt HERZIENINGEN, en de eerste Critic-pas komt daarvóór.
+        ronde = int(state.get("critic_ronde") or 0) + 1
+
         feedback: list[dict[str, Any]] = []
         for v in voorstellen:
             oordeel = oordelen.get(str(v.get("id", "")))
             aandacht = oordeel.aandacht if oordeel else ""
             motivatie = oordeel.motivatie if oordeel else ""
-            # Deterministische regel: aanwezige alternatieven = disambiguatie = minimaal 'geel'.
-            if v.get("alternatieven") and aandacht in ("", "groen"):
-                aandacht = "geel"
-                motivatie = motivatie or "Er zijn plausibele alternatieve klassen."
+            # Alternatieven forceren GEEN geel meer. Dat maakte disambiguatie ononderscheidbaar van
+            # een probleem: een element met alternatieven kon nooit groen worden, dus stond straks
+            # alles "met aandacht" en zei die vlag niets meer. Twijfel telt nu apart (zie emit_node).
             v["aandacht"] = aandacht
             v["critic"] = motivatie
             if oordeel is not None:
                 feedback.append({"id": v.get("id", ""), **oordeel.model_dump()})
+                # Het spoor per element: hierop leunt de volgende Critic-pas (geheugen), de kaart in
+                # de werkplek (het heen-en-weer) en de merge in de api (die matcht op rondenummer).
+                v.setdefault("critic_rondes", []).append({
+                    "ronde": ronde,
+                    "aandacht": aandacht,
+                    "motivatie": motivatie,
+                    "actie": oordeel.actie,
+                    "voorstel_klasse": oordeel.voorstel_klasse,
+                    "voorstel_tekst": oordeel.voorstel_tekst,
+                })
 
-        _stap(writer, "Critic", _critic_melding(oordelen, ontbrekend))
+        al_gemeld = set(state.get("gemeld_ontbrekend") or [])
+        huidig = {_ontbrekend_sleutel(o.model_dump()) for o in ontbrekend}
+        nieuw_ontbrekend = [o.model_dump() for o in ontbrekend
+                            if _ontbrekend_sleutel(o.model_dump()) not in al_gemeld]
+
+        _stap(writer, "Critic", _critic_melding(oordelen, ontbrekend, len(nieuw_ontbrekend)))
 
         # `voorstellen` expliciet teruggeven: eerder werkten de aandacht-velden alleen door omdat het
         # dezelfde dict-objecten waren. Dat is fragiel zodra er meerdere rondes over de state lopen.
@@ -733,6 +775,10 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
             "critic_feedback": feedback,
             "critic_ontbrekend": [o.model_dump() for o in ontbrekend],
             "critic_gefaald": gefaald,
+            # Wat al ooit is gemeld start geen nieuwe ronde meer. Hier berekend en niet in de route:
+            # daar is de accumulatie al bijgewerkt en zou álles als "al gemeld" gelden.
+            "nieuw_ontbrekend": nieuw_ontbrekend,
+            "gemeld_ontbrekend": sorted(al_gemeld | huidig),
         }
 
     def route_na_critic(state: State) -> str:
@@ -749,11 +795,18 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
             return "emit"                                   # nooit de annotatie breken
         if int(state.get("critic_ronde") or 0) >= settings.critic_max_rondes:
             return "emit"
+
         eigen_ids = {v.get("id") for v in (state.get("voorstellen") or []) if v.get("van_jurist")}
-        feedback = [f for f in (state.get("critic_feedback") or []) if f.get("id") not in eigen_ids]
+        geweigerd = set(state.get("geweigerde_feedback") or [])
+        feedback = [
+            f for f in (state.get("critic_feedback") or [])
+            if f.get("id") not in eigen_ids and _feedback_sleutel(f) not in geweigerd
+        ]
+        # Alleen wat de Critic nog niet eerder meldde is werk. Zonder dit draait de lus altijd door:
+        # hij bedenkt elke ronde opnieuw wat er "mist", dus er is altijd een reden voor nog een ronde.
         te_doen = (
             any(f.get("actie") in ("vervang", "verwijder") or f.get("aandacht") == "rood" for f in feedback)
-            or bool(state.get("critic_ontbrekend"))
+            or bool(state.get("nieuw_ontbrekend"))
             or bool(state.get("verworpen_fragmenten"))
         )
         return "herzie" if te_doen else "emit"
@@ -804,13 +857,15 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
         except Exception:  # noqa: BLE001 — een mislukte herziening mag de annotatie niet breken
             logger.warning("herziening: mislukt; vorige voorstellen behouden", exc_info=True)
             _stap(writer, f"Herziening {ronde}", "mislukt — vorige voorstellen behouden")
-            return {"critic_feedback": [], "critic_ronde": ronde}
+            return {"critic_feedback": [], "critic_ronde": ronde, "herziening_wijzigde": False,
+                    "stop_reden": "herziening mislukt"}
 
         if not herzien:
             logger.warning("herziening: leverde niets gegronds op; vorige voorstellen behouden")
             _stap(writer, f"Herziening {ronde}",
                   "leverde niets gegronds op — vorige voorstellen behouden")
-            return {"critic_feedback": [], "critic_ronde": ronde}
+            return {"critic_feedback": [], "critic_ronde": ronde, "herziening_wijzigde": False,
+                    "stop_reden": "geen wijziging meer"}
 
         te_verwijderen = {f.get("id") for f in feedback if f.get("actie") == "verwijder"}
         samengevoegd = {v["id"]: v for v in voorstellen if v.get("id") not in te_verwijderen}
@@ -829,6 +884,11 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
                 nieuw_dict["id"] = bestaand_id
                 nieuw_v = nieuw_v.model_copy(update={"id": bestaand_id})
             vorig = samengevoegd.get(nieuw_v.id)
+            # De rondegeschiedenis gaat ALTIJD mee: die gaat over wat er gebeurd is, niet over de
+            # huidige versie. Zonder dit begint de volgende Critic-pas weer met een schone lei —
+            # precies de reden dat de lus nooit convergeerde.
+            if vorig:
+                nieuw_dict["critic_rondes"] = list(vorig.get("critic_rondes") or [])
             # Een herziening levert verse voorstellen zonder oordeel. Is het element inhoudelijk
             # ongewijzigd, dan geldt het vorige oordeel nog gewoon — dat weggooien zou een groen
             # vinkje laten verdwijnen omdat er elders in de tekst iets veranderde. Bij een écht
@@ -840,12 +900,41 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
 
         uit = list(samengevoegd.values())
         _stap(writer, f"Herziening {ronde}", _herzien_melding(voorstellen, uit))
+
+        # Wat is er écht veranderd? Twee dingen hangen daaraan: of een volgende Critic-pas nog zin
+        # heeft, en welke kritiek de annoteerder gemotiveerd naast zich neerlegde.
+        voor_op_id = {v.get("id"): v for v in voorstellen}
+        gewijzigd = {
+            v.get("id") for v in uit
+            if v.get("id") not in voor_op_id
+            or any(voor_op_id[v["id"]].get(k) != v.get(k) for k in ("klasse", "tekst", "lid"))
+        }
+        for v in uit:
+            # De volgende Critic-pas leest dit: "je zei X, en de annotator heeft het wel/niet gedaan".
+            v["aangepast_na_kritiek"] = v.get("id") in gewijzigd
+        geweigerd = set(state.get("geweigerde_feedback") or [])
+        for f in feedback:
+            if f.get("actie") in ("vervang", "verwijder") and f.get("id") not in gewijzigd:
+                # De annoteerder heeft deze instructie gezien en bewust laten liggen. Hem opnieuw als
+                # werk tellen levert een ronde op die hetzelfde meningsverschil herhaalt.
+                geweigerd.add(_feedback_sleutel(f))
+
         return {
             "voorstellen": uit + van_jurist,
             "verworpen_fragmenten": [x.model_dump() for x in verworpen],
             "critic_feedback": [],
             "critic_ronde": ronde,
+            "herziening_wijzigde": bool(gewijzigd),
+            "geweigerde_feedback": sorted(geweigerd),
         }
+
+    def route_na_herziening(state: State) -> str:
+        """Nog een Critic-pas, of klaar?
+
+        Veranderde er niets, dan zou de Critic exact dezelfde voorstellen opnieuw beoordelen. Dat kost
+        een volle call met het hele corpus en kan per definitie niets nieuws opleveren.
+        """
+        return "critic" if state.get("herziening_wijzigde") else "emit"
 
     def emit_node(state: State) -> dict[str, Any]:
         """De enige plek die annotatie-events uitstuurt: `element` per voorstel, één `ontbrekend`, en
@@ -860,6 +949,7 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
         ontbrekend = state.get("critic_ontbrekend") or []
 
         met_aandacht = 0
+        met_twijfel = 0
         for v in voorstellen:
             if v.get("van_jurist"):
                 # Geen `element`-event: dit element bestaat al in het document en mag niet opnieuw
@@ -872,6 +962,10 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
                 continue
             if v.get("aandacht") in ("geel", "rood"):
                 met_aandacht += 1
+            elif v.get("alternatieven"):
+                # Twijfel, geen bezwaar: de annoteerder zag twee plausibele klassen. Apart tellen,
+                # anders verdrinkt een écht aandachtspunt tussen de disambiguaties.
+                met_twijfel += 1
             writer({"type": "element", "element": v})
         writer({"type": "ontbrekend", "items": ontbrekend})
 
@@ -881,6 +975,8 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
         delen = [f"Ik heb {len(voorstellen)} JAS-elementen voorgesteld voor {plek}"]
         if met_aandacht:
             delen.append(f"{met_aandacht} met aandacht")
+        if met_twijfel:
+            delen.append(f"{met_twijfel} met twijfel")
         if ontbrekend:
             delen.append(f"{len(ontbrekend)} mogelijk ontbrekend")
         met_suggestie = sum(1 for v in eigen if v.get("aandacht") in ("geel", "rood"))
@@ -890,7 +986,16 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
         if herzieningen:
             delen.append(f"na {herzieningen} herziening" + ("en" if herzieningen > 1 else ""))
         samenvatting = "; ".join(delen) + "."
-        _stap(writer, "Klaar", f"{len(voorstellen)} elementen ter beoordeling")
+        # De stopreden hoort hier te worden afgeleid: `route_na_critic` weet hem wel, maar een
+        # conditionele edge geeft alleen een naam terug en kan geen state schrijven. Alle feiten
+        # staan hier, dus is dit de plek waar één waarheid overblijft.
+        reden = state.get("stop_reden") or (
+            "Critic uitgevallen" if state.get("critic_gefaald")
+            else "herzieningslus uit" if settings.critic_max_rondes <= 0
+            else "rondelimiet bereikt" if int(state.get("critic_ronde") or 0) >= settings.critic_max_rondes
+            else "geen open punten"
+        )
+        _stap(writer, "Klaar", f"{reden} · {len(voorstellen)} elementen ter beoordeling")
         writer({"type": "token", "content": samenvatting})
 
         # Geheugen: leg een leesbaar spoor van de annotatie vast (met de elementen) zodat een
@@ -1186,7 +1291,7 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
         # De herzieningslus: de Critic wijst aan, de annoteerder herstelt, de Critic kijkt opnieuw.
         # `emit` is de enige uitgang, zodat de werkplek nooit tussenversies ziet.
         g.add_conditional_edges("critic", route_na_critic, {"herzie": "herzie", "emit": "emit"})
-        g.add_edge("herzie", "critic")
+        g.add_conditional_edges("herzie", route_na_herziening, {"critic": "critic", "emit": "emit"})
         g.add_edge("emit", "advance")
         g.add_conditional_edges("advance", route_after_advance, {**entrymap, "einde": END})
         return g
@@ -1218,7 +1323,7 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
         # De herzieningslus: de Critic wijst aan, de annoteerder herstelt, de Critic kijkt opnieuw.
         # `emit` is de enige uitgang, zodat de werkplek nooit tussenversies ziet.
         g.add_conditional_edges("critic", route_na_critic, {"herzie": "herzie", "emit": "emit"})
-        g.add_edge("herzie", "critic")
+        g.add_conditional_edges("herzie", route_na_herziening, {"critic": "critic", "emit": "emit"})
         g.add_edge("emit", "advance")
         g.add_conditional_edges("advance", route_after_advance, {"agent": "agent", "einde": END})
         return g

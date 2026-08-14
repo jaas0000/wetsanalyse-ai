@@ -89,10 +89,47 @@ UITVOER — geef UITSLUITEND geldige JSON terug, zonder omliggende tekst of code
 ]}}
 Geef voor ELK aangeleverd element precies één oordeel, met het `id` zoals het is aangeleverd. `ontbrekend` mag leeg zijn.
 
+NIET DE EERSTE RONDE? Dan staat er onder de voorstellen wat je vórige ronde vond en wat de annotator daarmee heeft gedaan.
+- Is een punt opgelost? Zeg dat: `aandacht: "groen"`, `actie: "behoud"`. Dat is een uitkomst, geen zwakte.
+- Heeft de annotator jouw voorstel bewust laten liggen? Dan is dat een gemotiveerd meningsverschil. Herhaal het niet — zet het hooguit op "geel" zodat de jurist het ziet, en ga verder.
+- Herhaal geen punten die je al maakte, en meld bij ONTBREKEND alleen elementen die je nog niet eerder hebt genoemd. Is er niets meer over? Zeg dat met groene oordelen en een lege `ontbrekend`.
+
 ELEMENTEN GEMARKEERD MET "DOOR DE JURIST" heeft een mens zelf aangebracht. Beoordeel ze net zo eerlijk, maar weet dat je oordeel daar een SUGGESTIE is die de jurist naast zich neer mag leggen: gebruik `actie: "behoud"` tenzij je echt denkt dat er iets mis is, en formuleer de motivatie als een vraag of overweging, niet als een correctie."""
 
 
-def critic_userprompt(voorstellen: list[dict], artikeltekst: str) -> str:
+def _vorige_ronde_blok(voorstellen: list[dict], gemeld_ontbrekend: list[str]) -> str:
+    """Wat de Critic vorige ronde zei, en wat de annotator ermee deed.
+
+    Zonder dit blok beoordeelt de Critic elke ronde met een schone lei: hij weet niet wat hij zelf al
+    vond, dus bevestigt hij nooit dat iets is opgelost en bedenkt hij elke ronde opnieuw wat er
+    ontbreekt. Dat was de reden dat de herzieningslus altijd tot de rondelimiet doorliep.
+    """
+    regels = []
+    for v in voorstellen:
+        rondes = v.get("critic_rondes") or []
+        if not rondes:
+            continue
+        laatste = rondes[-1]
+        kop = f"[{v.get('id', '')}] {laatste.get('aandacht', '')} · {laatste.get('actie', 'behoud')}"
+        if laatste.get("voorstel_klasse"):
+            kop += f" → {laatste['voorstel_klasse']}"
+        stand = "de annotator heeft dit AANGEPAST" if v.get("aangepast_na_kritiek") else "ongewijzigd gelaten"
+        regels.append(f"{kop}\n       {stand}")
+
+    if not regels and not gemeld_ontbrekend:
+        return ""
+    blok = ["", "--- WAT JE VORIGE RONDE ZEI ---", *regels]
+    if gemeld_ontbrekend:
+        blok.append("Al gemeld als ontbrekend: " + "; ".join(gemeld_ontbrekend))
+    blok.append("--- EINDE ---")
+    return "\n".join(blok)
+
+
+def critic_userprompt(
+    voorstellen: list[dict],
+    artikeltekst: str,
+    gemeld_ontbrekend: list[str] | None = None,
+) -> str:
     regels = []
     for i, v in enumerate(voorstellen):
         alt = ", ".join(a.get("klasse", "") for a in v.get("alternatieven", []) if a.get("klasse"))
@@ -110,8 +147,9 @@ def critic_userprompt(voorstellen: list[dict], artikeltekst: str) -> str:
     return (
         "Beoordeel de onderstaande voorgestelde JAS-elementen tegen de artikeltekst. Geef per element "
         "een aandacht-niveau, een motivatie en een actie, en noem waarschijnlijk ontbrekende elementen.\n\n"
-        f"--- VOORSTELLEN ---\n{lijst}\n--- EINDE VOORSTELLEN ---\n\n"
-        f"--- ARTIKELTEKST ---\n{artikeltekst}\n--- EINDE ARTIKELTEKST ---"
+        f"--- VOORSTELLEN ---\n{lijst}\n--- EINDE VOORSTELLEN ---\n"
+        f"{_vorige_ronde_blok(voorstellen, gemeld_ontbrekend or [])}\n"
+        f"\n--- ARTIKELTEKST ---\n{artikeltekst}\n--- EINDE ARTIKELTEKST ---"
     )
 
 

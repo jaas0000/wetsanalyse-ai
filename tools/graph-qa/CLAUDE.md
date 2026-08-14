@@ -123,6 +123,23 @@ default 2 herzieningen). De route springt er alleen in als er iets te doen is �
 vervang/verwijder-instructie, een gemist element of een verworpen fragment. Bij een schone annotatie
 kost de lus dus niets.
 
+- **De lus convergeert, hij loopt niet leeg.** Drie deterministische uitgangen, want zonder die drie
+  draaide hij altijd tot de rondelimiet: (1) een herziening die niets wijzigt gaat via
+  `route_na_herziening` rechtstreeks naar `emit` — nog een Critic-pas zou dezelfde voorstellen
+  beoordelen; (2) alleen ontbrekende elementen die nog niet eerder zijn gemeld tellen als werk
+  (`gemeld_ontbrekend`); (3) een `vervang`-instructie die de annoteerder ongewijzigd liet is een
+  gemotiveerd meningsverschil en keert niet terug (`geweigerde_feedback`). `emit_node` meldt de
+  stopreden in de tijdlijn — "geen open punten" versus "rondelimiet bereikt" is precies het verschil
+  tussen overeenstemming en uitputting.
+- **De Critic heeft geheugen.** Vanaf ronde 2 krijgt hij per element zijn vorige oordeel terug plus of
+  de annoteerder het aanpaste (`_vorige_ronde_blok`), en de al gemelde ontbrekende elementen. Zonder
+  dat begon hij elke ronde met een schone lei: hij kon nooit zeggen "dit is opgelost" en bedacht elke
+  ronde opnieuw wat er miste. Dat spoor staat in **`critic_rondes`** per element — een veld dat al in
+  het api-contract en de frontend-types zat maar nooit werd gevuld; het bedient nu het geheugen van de
+  Critic, de kaart in de werkplek en de merge in de api tegelijk.
+- **Twijfel is geen aandacht.** Alternatieven forceren geen "geel" meer (die regel maakte elk
+  gedisambigueerd element permanent geel, waardoor de vlag betekenisloos werd). De Critic bepaalt de
+  kleur; `emit_node` telt twijfel apart in de samenvatting.
 - **`critic_max_rondes=0` reproduceert exact het oude gedrag.** Dat is de terugvaloptie in productie:
   één env-var, geen deploy-rollback. Er is een test die dat bewaakt.
 - **`emit_node` is de enige plek die annotatie-events uitstuurt.** Zou de Critic dat doen, dan zag de

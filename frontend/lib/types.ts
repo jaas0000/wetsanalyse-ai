@@ -319,6 +319,8 @@ export interface VoorstelElement {
   grounded: boolean;
   aandacht?: Aandacht;   // Critic-oordeel (groen|geel|rood); afwezig = geen Critic-pas
   critic?: string;       // korte Critic-motivatie
+  /** Het heen-en-weer met de Critic, één regel per ronde. De api merget ze op rondenummer. */
+  critic_rondes?: CriticRonde[];
 }
 
 /** Een door de Critic vermoed ontbrekend JAS-element (suggestief; geen span/bron). */

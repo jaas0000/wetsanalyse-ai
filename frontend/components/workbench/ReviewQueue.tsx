@@ -233,6 +233,13 @@ function DecisionCard({
               {aandacht?.emoji}
             </span>
           )}
+          {/* Twijfel is geen bezwaar: de annoteerder zag twee plausibele klassen. Eerder werd zoiets
+              automatisch geel, waardoor een écht aandachtspunt niet meer opviel tussen de
+              disambiguaties. Neutraal merkje dus, geen kleur uit de aandacht-as. */}
+          {!el.aandacht && el.alternatieven.length > 0 && (
+            <span title="Twijfel tussen klassen — zie de alternatieven" aria-label="twijfel"
+                  className="text-xs text-muted">◇</span>
+          )}
           {/* De klasse ís de knop: klikken opent het palet, klikken op een klasse is de wijziging. */}
           <button
             type="button"
@@ -367,6 +374,22 @@ function DecisionCard({
       )}
 
       {uitgeklapt && el.critic && <p className="mt-1 text-xs italic text-muted">Critic: {el.critic}</p>}
+
+      {/* Het heen-en-weer met de Critic. Pas vanaf twee rondes: bij één ronde staat het oordeel
+          hierboven al en zou dit hetzelfde twee keer zeggen. */}
+      {uitgeklapt && el.critic_rondes.length > 1 && (
+        <ol className="mt-1.5 space-y-0.5 border-l-2 border-line pl-2.5 text-[0.7rem] text-muted">
+          {el.critic_rondes.map((r) => (
+            <li key={r.ronde}>
+              <span className="font-medium">Ronde {r.ronde}</span>
+              {r.aandacht ? ` · ${r.aandacht}` : ""}
+              {r.actie && r.actie !== "behoud" ? ` · ${r.actie}` : ""}
+              {r.voorstel_klasse ? ` → ${r.voorstel_klasse}` : ""}
+              {r.motivatie ? ` — ${r.motivatie}` : ""}
+            </li>
+          ))}
+        </ol>
+      )}
 
       {/* Kanttekening bij een markering die de JURIST zelf maakte. Bewust een andere vorm dan de kaart
           zelf: dit is advies dat je naast je neer mag leggen, geen voorstel om te beoordelen. */}

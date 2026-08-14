@@ -95,9 +95,14 @@ def test_get_bepaling_route_voor_decimaal_nummer():
     assert elementen[0]["vindplaats"] == "BWBR0024096 art. 9.1"
 
 
-def test_critic_geel_bump_bij_alternatieven():
-    # Deterministische regel: een element met alternatieven wordt minimaal 'geel', ook als de Critic
-    # 'groen' zei (disambiguatie = aandacht).
+def test_alternatieven_maken_een_element_niet_geel():
+    """Twijfel is geen aandachtspunt.
+
+    Er stond een deterministische regel die alternatieven naar 'geel' bumpte. Gevolg: zo'n element
+    kon nooit groen worden, en omdat de annoteerder juist wordt aangemoedigd om bij twijfel
+    alternatieven te noemen, stond uiteindelijk álles "met aandacht" — waarmee die vlag betekenisloos
+    werd. De Critic bepaalt nu de kleur; twijfel telt apart in de samenvatting.
+    """
     elementen = json.dumps({"elementen": [
         {"klasse": "Rechtssubject", "tekst": "De ontvanger", "lid": "1", "toelichting": "wie",
          "alternatieven": [{"klasse": "Rechtsobject", "motivatie": "kan ook object zijn"}]},
@@ -115,8 +120,12 @@ def test_critic_geel_bump_bij_alternatieven():
         settings=make_settings(enable_decomposition=True, critic_max_rondes=0), llm=llm, graph=FakeGraph(result=LID_TSV),
     ))
     el = next(e["element"] for e in events if e["type"] == "element")
-    assert el["aandacht"] == "geel"       # groen → geel gebumpt door de alternatieven
-    assert el["alternatieven"][0]["klasse"] == "Rechtsobject"
+    assert el["aandacht"] == "groen", "het oordeel van de Critic blijft staan"
+    assert el["alternatieven"][0]["klasse"] == "Rechtsobject", "de twijfel blijft wel zichtbaar"
+
+    samenvatting = "".join(e["content"] for e in events if e["type"] == "token")
+    assert "1 met twijfel" in samenvatting
+    assert "met aandacht" not in samenvatting
 
 
 def test_critic_faalt_stil_elementen_komen_door():

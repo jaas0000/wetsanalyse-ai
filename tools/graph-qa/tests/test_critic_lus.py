@@ -75,26 +75,33 @@ def test_critic_vraagt_herziening_en_de_annoteerder_past_aan():
 
 def test_lus_stopt_na_het_maximum_aantal_rondes():
     """Een Critic die rood blijft geven mag niet eindeloos doorgaan; wat overblijft gaat naar de
-    jurist met het laatste oordeel erbij."""
-    blijft_rood = lambda: _critic([{  # noqa: E731
+    jurist met het laatste oordeel erbij.
+
+    De annoteerder past hier elke ronde iets aan; zou hij dat niet doen, dan stopt de lus al eerder op
+    stilstand (zie `test_een_herziening_zonder_wijziging_stopt_de_lus`). Dit test dus echt het
+    plafond, niet de convergentie.
+    """
+    blijft_rood = lambda klasse: _critic([{  # noqa: E731
         "id": "el-a", "aandacht": "rood", "motivatie": "nog steeds mis",
-        "actie": "vervang", "voorstel_klasse": "Voorwaarde",
+        "actie": "vervang", "voorstel_klasse": klasse,
     }])
     llm = FakeLLM([
         *_aanloop(),
         _annoteer([{"id": "el-a", "klasse": "Rechtsfeit", "tekst": "De ontvanger", "lid": "1"}]),
-        blijft_rood(),                                                                  # ronde 1
+        blijft_rood("Voorwaarde"),                                                      # ronde 1
         _annoteer([{"id": "el-a", "klasse": "Voorwaarde", "tekst": "De ontvanger", "lid": "1"}]),
-        blijft_rood(),                                                                  # ronde 2
-        _annoteer([{"id": "el-a", "klasse": "Voorwaarde", "tekst": "De ontvanger", "lid": "1"}]),
-        blijft_rood(),                                                                  # zou ronde 3 zijn
+        blijft_rood("Rechtssubject"),                                                   # ronde 2
+        _annoteer([{"id": "el-a", "klasse": "Rechtssubject", "tekst": "De ontvanger", "lid": "1"}]),
+        blijft_rood("Rechtsobject"),                                                    # zou ronde 3 zijn
     ])
-    elementen, _ = _annoteer_uitkomst(llm)
+    elementen, events = _annoteer_uitkomst(llm)
 
     assert len(elementen) == 1
     assert elementen[0]["aandacht"] == "rood", "het laatste oordeel gaat mee naar de jurist"
     # Default 2 rondes: aanloop(3) + annoteer + critic + 2x (herzie + critic) = 9 calls.
     assert llm.index == 9, f"verwacht precies 2 herzieningen, kreeg {llm.index} LLM-calls"
+    assert any("rondelimiet bereikt" in e["message"] for e in events if e["type"] == "status"), \
+        "de tijdlijn hoort te melden dát het plafond de reden was"
 
 
 def test_geen_actiepunten_slaat_de_lus_over():
@@ -297,13 +304,13 @@ def test_klep_uit_reproduceert_het_oude_gedrag():
     assert "herziening" not in tokens
 
 
-def test_een_onproductieve_herziening_telt_ook_mee():
-    """Anders is `critic_max_rondes` geen plafond.
+def test_een_herziening_zonder_wijziging_stopt_de_lus():
+    """Levert een herziening niets op, dan heeft nog een Critic-pas geen zin: die zou exact dezelfde
+    voorstellen opnieuw beoordelen, met het volle corpus erbij.
 
-    Een herziening die niets gegronds oplevert liet de teller ongemoeid, terwijl `ontbrekend` in de
-    state bleef staan — dus de route sprong er meteen weer in. Op dev gaf dat vier herzieningen bij
-    een maximum van twee: acht LLM-calls die de knop juist hoort af te grendelen. Een ronde die een
-    LLM-call kost, is een ronde.
+    (Deze test dekte eerder alleen dat zo'n ronde meetelde voor het plafond. Dat klopt nog steeds —
+    de teller telt pogingen — maar sinds de lus op stilstand stopt, komt het niet meer tot een tweede
+    poging.)
     """
     leeg = lambda: response([text_block("geen JSON hier")], "end_turn")  # noqa: E731
     blijft_rood = lambda: _critic(  # noqa: E731
@@ -315,15 +322,15 @@ def test_een_onproductieve_herziening_telt_ook_mee():
         *_aanloop(),
         _annoteer([{"id": "el-a", "klasse": "Rechtsfeit", "tekst": "De ontvanger", "lid": "1"}]),
         blijft_rood(),
-        leeg(), blijft_rood(),      # herziening 1: niets gegronds
-        leeg(), blijft_rood(),      # herziening 2: idem — hierna is het maximum op
-        leeg(), blijft_rood(),      # zou een derde ronde zijn: mag niet gebeuren
+        leeg(),                     # herziening 1 levert niets op → hier hoort het te stoppen
+        blijft_rood(),              # deze Critic-pas mag niet meer gebeuren
     ])
-    elementen, _ = _annoteer_uitkomst(llm)
+    elementen, events = _annoteer_uitkomst(llm)
 
-    assert llm.index == 9, f"aanloop(3) + annoteer + critic + 2x(herzie+critic) = 9, niet {llm.index}"
-    assert len(elementen) == 1, "de mislukte herzieningen laten het voorstel staan"
+    assert llm.index == 6, f"aanloop(3) + annoteer + critic + herzie = 6, niet {llm.index}"
+    assert len(elementen) == 1, "de mislukte herziening laat het voorstel staan"
     assert elementen[0]["klasse"] == "Rechtsfeit"
+    assert any("geen wijziging meer" in e["message"] for e in events if e["type"] == "status")
 
 
 def test_een_herziening_zonder_id_dupliceert_het_element_niet():
@@ -405,7 +412,8 @@ def test_de_melding_telt_wat_er_daadwerkelijk_uitkomt():
     annoteer = next(r for r in regels if r.startswith("Annoteerder ·") and "gegrond" in r)
     assert "3 fragmenten, 2 gegrond" in annoteer
     assert "1 verworpen (1× niet letterlijk)" in annoteer
-    assert f"Klaar · {len(elementen)} elementen ter beoordeling" in regels
+    assert any(r.startswith("Klaar · ") and f"{len(elementen)} elementen ter beoordeling" in r
+               for r in regels)
 
 
 def test_zonder_lus_geen_herzieningsregel():
@@ -464,3 +472,102 @@ def test_elke_statusregel_volgt_hetzelfde_idioom():
         assert actor and actor[0].isupper(), f"actor niet als naam geschreven: {regel!r}"
         assert rest.strip(), f"actor zonder uitkomst: {regel!r}"
         assert not rest.strip().endswith("."), f"geen punt aan het eind: {regel!r}"
+
+
+# --- convergentie: de lus stopt als er niets meer te doen is --------------------------------------
+
+def test_een_herhaald_gemist_element_start_maar_een_ronde():
+    """De Critic bedacht elke ronde opnieuw wat er "mist", dus was er altijd een reden om door te
+    gaan. Alleen wat hij nog niet eerder noemde is werk."""
+    zelfde_gemist = lambda: _critic(  # noqa: E731
+        [{"id": "el-a", "aandacht": "groen", "motivatie": "ok"}],
+        [{"klasse": "Voorwaarde", "reden": "niet gemarkeerd", "tekst": "indien de schuldenaar daarom verzoekt"}],
+    )
+    llm = FakeLLM([
+        *_aanloop(),
+        _annoteer([{"id": "el-a", "klasse": "Rechtssubject", "tekst": "De ontvanger", "lid": "1"}]),
+        zelfde_gemist(),
+        # De herziening voegt de Voorwaarde toe; de Critic meldt hem dáárna nog een keer.
+        _annoteer([
+            {"id": "el-a", "klasse": "Rechtssubject", "tekst": "De ontvanger", "lid": "1"},
+            {"klasse": "Voorwaarde", "tekst": "indien de schuldenaar daarom verzoekt", "lid": "1"},
+        ]),
+        zelfde_gemist(),
+        _annoteer([{"id": "el-a", "klasse": "Rechtssubject", "tekst": "De ontvanger", "lid": "1"}]),
+    ])
+    _, events = _annoteer_uitkomst(llm)
+
+    regels = _statusregels(events)
+    assert sum(1 for r in regels if r.startswith("Herziening")) == 1, \
+        f"één herziening verwacht, kreeg:\n" + "\n".join(regels)
+    assert any("geen open punten" in r for r in regels)
+    assert any("niets nieuws" in r for r in regels), "de tijdlijn hoort te tonen dat hij zich herhaalt"
+
+
+def test_afgewezen_kritiek_start_geen_nieuwe_ronde():
+    """Laat de annoteerder een vervang-instructie liggen, dan is dat een gemotiveerd
+    meningsverschil — geen reden om de discussie te herhalen."""
+    zelfde_kritiek = lambda: _critic([{  # noqa: E731
+        "id": "el-a", "aandacht": "rood", "motivatie": "moet Voorwaarde zijn",
+        "actie": "vervang", "voorstel_klasse": "Voorwaarde",
+    }])
+    llm = FakeLLM([
+        *_aanloop(),
+        _annoteer([{"id": "el-a", "klasse": "Rechtsfeit", "tekst": "De ontvanger", "lid": "1"}]),
+        zelfde_kritiek(),
+        # De annoteerder is het oneens: hij geeft het element ongewijzigd terug, mét een ander element
+        # erbij zodat de ronde wél iets veranderde (anders stopt de lus al op stilstand).
+        _annoteer([
+            {"id": "el-a", "klasse": "Rechtsfeit", "tekst": "De ontvanger", "lid": "1"},
+            {"klasse": "Voorwaarde", "tekst": "indien de schuldenaar daarom verzoekt", "lid": "1"},
+        ]),
+        zelfde_kritiek(),
+        _annoteer([{"id": "el-a", "klasse": "Voorwaarde", "tekst": "De ontvanger", "lid": "1"}]),
+    ])
+    _, events = _annoteer_uitkomst(llm)
+
+    regels = _statusregels(events)
+    assert sum(1 for r in regels if r.startswith("Herziening")) == 1, \
+        "dezelfde afgewezen instructie mag geen tweede ronde starten"
+    assert any("geen open punten" in r for r in regels)
+
+
+def test_de_critic_krijgt_zijn_vorige_oordeel_terug():
+    """Anders begint hij elke ronde met een schone lei en kan hij nooit zeggen: dit is opgelost."""
+    llm = FakeLLM([
+        *_aanloop(),
+        _annoteer([{"id": "el-a", "klasse": "Rechtsfeit", "tekst": "De ontvanger", "lid": "1"}]),
+        _critic([{"id": "el-a", "aandacht": "rood", "motivatie": "dit is een subject",
+                  "actie": "vervang", "voorstel_klasse": "Rechtssubject"}]),
+        _annoteer([{"id": "el-a", "klasse": "Rechtssubject", "tekst": "De ontvanger", "lid": "1"}]),
+        _critic([{"id": "el-a", "aandacht": "groen", "motivatie": "opgelost"}]),
+    ])
+    _annoteer_uitkomst(llm)
+
+    # De tweede Critic-call (index 6 in de reeks) moet de geschiedenis bevatten.
+    tweede_critic = llm.calls[6]["messages"][0]["content"]
+    assert "WAT JE VORIGE RONDE ZEI" in tweede_critic
+    assert "rood · vervang → Rechtssubject" in tweede_critic
+    assert "AANGEPAST" in tweede_critic
+
+    eerste_critic = llm.calls[4]["messages"][0]["content"]
+    assert "WAT JE VORIGE RONDE ZEI" not in eerste_critic, "ronde 1 heeft geen geschiedenis"
+
+
+def test_elk_element_draagt_zijn_rondegeschiedenis():
+    """`critic_rondes` bestond al in het api-contract maar werd nooit gevuld — terwijl juist dat de
+    geschiedenis is die de Critic, de jurist én de api nodig hebben."""
+    llm = FakeLLM([
+        *_aanloop(),
+        _annoteer([{"id": "el-a", "klasse": "Rechtsfeit", "tekst": "De ontvanger", "lid": "1"}]),
+        _critic([{"id": "el-a", "aandacht": "rood", "motivatie": "mis", "actie": "vervang",
+                  "voorstel_klasse": "Rechtssubject"}]),
+        _annoteer([{"id": "el-a", "klasse": "Rechtssubject", "tekst": "De ontvanger", "lid": "1"}]),
+        _critic([{"id": "el-a", "aandacht": "groen", "motivatie": "nu juist"}]),
+    ])
+    elementen, _ = _annoteer_uitkomst(llm)
+
+    rondes = elementen[0]["critic_rondes"]
+    assert [r["ronde"] for r in rondes] == [1, 2]
+    assert [r["aandacht"] for r in rondes] == ["rood", "groen"]
+    assert rondes[0]["voorstel_klasse"] == "Rechtssubject"

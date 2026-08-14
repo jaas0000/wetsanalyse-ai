@@ -93,6 +93,23 @@ class AnnotatieAlternatief(BaseModel):
     motivatie: str = ""
 
 
+class CriticRonde(BaseModel):
+    """Wat de Critic in één pas van dit element vond, en wat hij ermee wilde.
+
+    Spiegelt `CriticRonde` in `api/app/annotatie_contracts.py`; de api merget ze op `ronde` en vult
+    `tijd` zelf. Deze regels zijn drie dingen tegelijk: het geheugen van de Critic in een volgende
+    ronde, het spoor dat de jurist op de kaart terugziet, en de reden dat de lus kan zien of een punt
+    al eens is gemaakt.
+    """
+
+    ronde: int
+    aandacht: str = ""                 # groen | geel | rood
+    motivatie: str = ""
+    actie: str = "behoud"              # behoud | vervang | verwijder
+    voorstel_klasse: str = ""
+    voorstel_tekst: str = ""
+
+
 class AnnotatieVoorstel(BaseModel):
     """Eén door de agent voorgesteld JAS-annotatie-element voor een artikel.
 
@@ -112,6 +129,7 @@ class AnnotatieVoorstel(BaseModel):
     vindplaats: str = ""               # bwbId/artikel/lid/jci-notatie
     aandacht: str = ""                 # "" | groen | geel | rood — gezet door de Critic-node
     critic: str = ""                   # korte Critic-motivatie bij het aandacht-niveau
+    critic_rondes: list[CriticRonde] = []   # het heen-en-weer per ronde; leeg tot de eerste Critic-pas
 
 
 class CriticOordeel(BaseModel):
