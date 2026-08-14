@@ -164,6 +164,11 @@ Drie dingen die je verder moet kennen voordat je hieraan werkt:
   oordeel daarop; op positie koppelen brak zodra een ronde een element toevoegde of wegliet. Geeft
   het model een `id` mee, dan blijft dat behouden — zo matcht de api het bij een volgende ronde op
   hetzelfde element en blijven de beslissingen van de jurist staan.
+- **Dezelfde markering komt maar één keer terug.** Een fragment is niet zijn id maar zijn inhoud:
+  `sleutel_van(klasse, tekst, lid)`. `_verwerk` ontdubbelt daarop binnen een ronde en de merge in
+  `herzie_node` doet het over rondes heen — een herziening die een bestaand fragment opnieuw
+  voorstelt zónder id kreeg anders een vers id, en dan stond de markering er twee keer. Het **oudste
+  id wint**, want daaraan hangen de beslissingen van de jurist en het auditspoor.
 - **Verworpen fragmenten gaan niet verloren.** `_verwerk` geeft ze terug met een reden
   (`niet_letterlijk` of `ongeldige_klasse`) in plaats van ze te tellen. Een bijna-goed citaat is met
   die aanwijzing prima te repareren — dat is de goedkoopste kwaliteitswinst in de keten.

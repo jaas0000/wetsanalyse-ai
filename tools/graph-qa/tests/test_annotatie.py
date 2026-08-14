@@ -1,7 +1,9 @@
 """Robuuste JAS-JSON-parser (_parse_elementen) — de grounding-helper die de annoteer-stap gebruikt."""
 from __future__ import annotations
 
-from agent.annotatie import _parse_elementen
+import json
+
+from agent.annotatie import _parse_elementen, _verwerk
 
 
 def test_parse_fenced_json():
@@ -127,3 +129,37 @@ def test_ontbrekend_neemt_een_letterlijk_fragment_mee():
            ' "tekst": "indien de belastingschuldige in gebreke is"}]}')
     _, ontbrekend = _verwerk_critic(txt, [])
     assert ontbrekend[0].tekst == "indien de belastingschuldige in gebreke is"
+
+
+CORPUS = "De ontvanger verleent uitstel van betaling indien de schuldenaar daarom verzoekt."
+
+
+def _json(elementen):
+    return json.dumps({"elementen": elementen})
+
+
+def test_hetzelfde_fragment_twee_keer_levert_een_element():
+    """Herhaalt het model zich binnen één ronde, dan krijgt de jurist anders twee gelijke kaartjes."""
+    voorstellen, _ = _verwerk(_json([
+        {"klasse": "Rechtssubject", "tekst": "De ontvanger", "lid": "1"},
+        {"klasse": "Rechtssubject", "tekst": "De  ontvanger", "lid": "1"},   # andere spatiëring
+    ]), CORPUS, "BWBR0004770", "9")
+    assert len(voorstellen) == 1
+
+
+def test_het_eerste_voorkomen_wint_want_dat_draagt_het_id():
+    """Aan het id uit een eerdere ronde hangen de beslissingen van de jurist."""
+    voorstellen, _ = _verwerk(_json([
+        {"id": "el-oud", "klasse": "Rechtssubject", "tekst": "De ontvanger", "lid": "1"},
+        {"klasse": "Rechtssubject", "tekst": "De ontvanger", "lid": "1"},
+    ]), CORPUS, "BWBR0004770", "9")
+    assert [v.id for v in voorstellen] == ["el-oud"]
+
+
+def test_zelfde_fragment_in_een_andere_klasse_is_geen_duplicaat():
+    """Twijfel tussen twee klassen op hetzelfde fragment is een legitieme uitkomst."""
+    voorstellen, _ = _verwerk(_json([
+        {"klasse": "Rechtssubject", "tekst": "De ontvanger", "lid": "1"},
+        {"klasse": "Rechtsobject", "tekst": "De ontvanger", "lid": "1"},
+    ]), CORPUS, "BWBR0004770", "9")
+    assert len(voorstellen) == 2

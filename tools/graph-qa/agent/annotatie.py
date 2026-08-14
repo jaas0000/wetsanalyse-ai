@@ -31,6 +31,17 @@ def _normaliseer(s: str) -> str:
     return _WS.sub(" ", s or "").strip()
 
 
+def sleutel_van(klasse: str, tekst: str, lid: str) -> tuple[str, str, str]:
+    """Identiteit van een markering los van zijn id: klasse + fragment + lid.
+
+    Twee elementen met dezelfde sleutel zijn dezelfde markering, ook al dragen ze een ander id. Dat
+    gebeurt als een herziening een bestaand fragment opnieuw voorstelt zonder het id mee te sturen —
+    en dan krijgt de jurist twee identieke kaartjes te reviewen. Dezelfde regel als de terugval in
+    de api-merge (`annotatie.py:_sleutel`), zodat beide kanten hetzelfde als duplicaat zien.
+    """
+    return (klasse.strip(), _normaliseer(tekst).lower(), (lid or "").strip())
+
+
 def _balanced_objecten(text: str) -> Iterator[str]:
     """Yield elke gebalanceerde {…}-substring op élk niveau (string-/escape-bewust).
 
@@ -110,6 +121,7 @@ def _verwerk(
     if not rauw and llm_text.strip():
         logger.warning("annotatie: geen element-objecten uit de respons gehaald")
 
+    gezien: dict[tuple[str, str, str], AnnotatieVoorstel] = {}
     for e in rauw:
         klasse = str(e.get("klasse", "")).strip()
         fragment = str(e.get("tekst", "")).strip()
@@ -128,22 +140,27 @@ def _verwerk(
             for a in e.get("alternatieven", [])
             if isinstance(a, dict) and str(a.get("klasse", "")).strip() in GELDIGE_JAS_KLASSEN
         ]
+        # Twee keer hetzelfde fragment in één ronde: het model herhaalt zich. De eerste telt —
+        # die draagt eventueel het id uit een eerdere ronde, en daaraan hangen de beslissingen.
+        sleutel = sleutel_van(klasse, fragment, lid)
+        if sleutel in gezien:
+            continue
         vindplaats = f"{bwb_id} art. {artikel}" + (f" lid {lid}" if lid else "")
         # Een id uit een eerdere ronde behouden (herziening van een bestaand element); anders een
         # nieuw id. Zo blijft de koppeling met de Critic én met de api-elementen intact.
         bestaand_id = str(e.get("id", "")).strip()
-        voorstellen.append(
-            AnnotatieVoorstel(
-                id=bestaand_id or uuid.uuid4().hex[:12],
-                klasse=klasse,
-                tekst=fragment,
-                lid=lid,
-                toelichting=str(e.get("toelichting", "")).strip(),
-                alternatieven=alts,
-                grounded=True,
-                vindplaats=vindplaats,
-            )
+        voorstel = AnnotatieVoorstel(
+            id=bestaand_id or uuid.uuid4().hex[:12],
+            klasse=klasse,
+            tekst=fragment,
+            lid=lid,
+            toelichting=str(e.get("toelichting", "")).strip(),
+            alternatieven=alts,
+            grounded=True,
+            vindplaats=vindplaats,
         )
+        gezien[sleutel] = voorstel
+        voorstellen.append(voorstel)
     return voorstellen, verworpen
 
 

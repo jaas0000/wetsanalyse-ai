@@ -324,3 +324,31 @@ def test_een_onproductieve_herziening_telt_ook_mee():
     assert llm.index == 9, f"aanloop(3) + annoteer + critic + 2x(herzie+critic) = 9, niet {llm.index}"
     assert len(elementen) == 1, "de mislukte herzieningen laten het voorstel staan"
     assert elementen[0]["klasse"] == "Rechtsfeit"
+
+
+def test_een_herziening_zonder_id_dupliceert_het_element_niet():
+    """Het geval van dev: de herziening stelt een bestaand fragment opnieuw voor, maar vergeet het id.
+
+    Zonder koppeling op inhoud kreeg dat een vers id en stond dezelfde markering er twee keer — twee
+    identieke kaartjes in de reviewlijst. Het oudste id wint, want daaraan hangen de beslissingen van
+    de jurist en het auditspoor.
+    """
+    llm = FakeLLM([
+        *_aanloop(),
+        _annoteer([{"id": "el-a", "klasse": "Rechtssubject", "tekst": "De ontvanger", "lid": "1"}]),
+        _critic([{"id": "el-a", "aandacht": "groen", "motivatie": "ok"}],
+                [{"klasse": "Voorwaarde", "reden": "de conditie is niet gemarkeerd",
+                  "tekst": "indien de schuldenaar daarom verzoekt"}]),
+        # De herziening voegt de Voorwaarde toe en herhaalt het subject — zonder id.
+        _annoteer([
+            {"klasse": "Rechtssubject", "tekst": "De ontvanger", "lid": "1"},
+            {"klasse": "Voorwaarde", "tekst": "indien de schuldenaar daarom verzoekt", "lid": "1"},
+        ]),
+        _critic([{"id": "el-a", "aandacht": "groen", "motivatie": "ok"}]),
+    ])
+    elementen, _ = _annoteer_uitkomst(llm)
+
+    assert len(elementen) == 2, f"subject + voorwaarde, geen duplicaat: {[e['tekst'] for e in elementen]}"
+    subject = next(e for e in elementen if e["klasse"] == "Rechtssubject")
+    assert subject["id"] == "el-a", "het oudste id blijft, anders raakt het werk van de jurist los"
+    assert subject["aandacht"] == "groen", "inhoudelijk ongewijzigd, dus het oordeel geldt nog"

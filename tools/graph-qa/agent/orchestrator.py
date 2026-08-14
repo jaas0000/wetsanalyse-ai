@@ -26,7 +26,7 @@ from langgraph.config import get_stream_writer
 from langgraph.graph import END, START, StateGraph
 
 from .agent_common import truncate
-from .annotatie import _verwerk, _verwerk_critic
+from .annotatie import _verwerk, _verwerk_critic, sleutel_van
 from .annotatie_prompt import (
     annotatie_systeemprompt,
     annotatie_userprompt,
@@ -688,8 +688,20 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
 
         te_verwijderen = {f.get("id") for f in feedback if f.get("actie") == "verwijder"}
         samengevoegd = {v["id"]: v for v in voorstellen if v.get("id") not in te_verwijderen}
+        # Een herziening die een bestaand fragment opnieuw voorstelt ZONDER het id mee te sturen,
+        # krijgt een vers id — en dan staat dezelfde markering er twee keer. Dat viel op dev op:
+        # "bij zijn in functie treden" tweemaal als Rechtsfeit. Koppel daarom ook op de inhoud.
+        op_inhoud = {
+            sleutel_van(v.get("klasse", ""), v.get("tekst", ""), v.get("lid", "")): v["id"]
+            for v in samengevoegd.values()
+        }
         for nieuw_v in herzien:
             nieuw_dict = nieuw_v.model_dump()
+            bestaand_id = op_inhoud.get(sleutel_van(nieuw_v.klasse, nieuw_v.tekst, nieuw_v.lid))
+            if bestaand_id and bestaand_id != nieuw_v.id:
+                # Het OUDSTE id wint: daar hangen de beslissingen van de jurist en het auditspoor aan.
+                nieuw_dict["id"] = bestaand_id
+                nieuw_v = nieuw_v.model_copy(update={"id": bestaand_id})
             vorig = samengevoegd.get(nieuw_v.id)
             # Een herziening levert verse voorstellen zonder oordeel. Is het element inhoudelijk
             # ongewijzigd, dan geldt het vorige oordeel nog gewoon — dat weggooien zou een groen
