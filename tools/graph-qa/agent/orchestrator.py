@@ -392,6 +392,37 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
             "Dit is een ADVIESVRAAG bij een bestaande JAS-annotatie. Geef uitsluitend onderbouwing en "
             "duiding; stel geen nieuwe annotatie voor en zeg niet dat je iets hebt gewijzigd.",
         ]
+        # Zonder deze afbakening motiveert het model álle markeringen die het in de gesprekshistorie
+        # ziet staan — de annotatiebeurt zit immers in dezelfde thread. Wie één element aanklikt en
+        # "motiveer" vraagt, verwacht één motivering. De laatste zin is de tegenkracht tegen dat
+        # geheugen: zonder die toevoeging pakt het model er alsnog zijn eerdere voorstellen bij.
+        if c.get("fragment"):
+            buren = [b for b in (c.get("bestaande_elementen") or []) if isinstance(b, dict)]
+            regels += [
+                "",
+                # Niet "ONDERWERP": dat woord gebruikt de basis-systeemprompt al voor de
+                # onderwerp-afbakening van de agent (wel/geen wetgevingsvraag).
+                f'AFBAKENING VAN DEZE VRAAG — het gaat over dit ene fragment: "{c["fragment"]}". '
+                "Motiveer alleen dat element.",
+                "Een andere markering uit dezelfde bepaling mag je erbij halen wanneer die NODIG is om "
+                "dit element te onderbouwen — samenhang, afbakening, of het rechtsgevolg waar een "
+                "voorwaarde bij hoort. Houd dat kort en breng het terug naar het onderwerp.",
+                "Geef die andere markeringen GEEN eigen motivering, ook niet als je ze eerder in dit "
+                "gesprek hebt voorgesteld.",
+            ]
+            if buren:
+                # Meesturen in plaats van op het geheugen vertrouwen: anders hangt het antwoord af van
+                # wat er toevallig nog in de historie stond, en verschilt het per gesprek.
+                regels += [
+                    "",
+                    "--- ANDERE MARKERINGEN IN DEZE BEPALING (niet motiveren; alleen ter ondersteuning) ---",
+                ]
+                for b in buren[:20]:
+                    klasse = str(b.get("klasse", "")).strip()
+                    tekst = truncate(str(b.get("tekst", "")).strip(), 200)
+                    if klasse and tekst:
+                        regels.append(f'{klasse} — "{tekst}"')
+                regels.append("--- EINDE ---")
         return "\n".join(regels)
 
     def agent_node(state: State) -> dict[str, Any]:

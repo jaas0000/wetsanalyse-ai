@@ -270,6 +270,30 @@ describe("vraagContextVan", () => {
     expect(ctx.lid).toBe("2");
   });
 
+  it("stuurt de andere markeringen mee, zonder het gevraagde element", () => {
+    // Meesturen in plaats van op het gespreksgeheugen leunen: anders verschilt het antwoord op
+    // dezelfde vraag per gesprek.
+    const metElementen = {
+      ...doc,
+      elementen: [
+        el("e1", { klasse: "Rechtsobject", tekst: "aanslag" }),
+        el("e2", { klasse: "Tijdsaanduiding", tekst: "zes weken" }),
+        el("e3", { klasse: "Voorwaarde", tekst: "indien", lifecycle: "rejected" }),
+      ],
+    } as unknown as AnnotatieDocument;
+
+    const ctx = vraagContextVan("abc", metElementen, info, el("e1", { klasse: "Rechtsobject", tekst: "aanslag" }));
+    expect(ctx.bestaande_elementen?.map((b) => b.id)).toEqual(["e2"]);
+  });
+
+  it("begrenst het aantal meegestuurde markeringen", () => {
+    const veel = {
+      ...doc,
+      elementen: Array.from({ length: 30 }, (_, i) => el(`x${i}`)),
+    } as unknown as AnnotatieDocument;
+    expect(vraagContextVan("abc", veel, info, el("anders")).bestaande_elementen).toHaveLength(20);
+  });
+
   it("geeft de getoonde artikeltekst als corpus", () => {
     const ctx = vraagContextVan("abc", doc, info, el("e1"));
     expect(ctx.corpus).toBe("Eerste lid.\n\nTweede lid.");

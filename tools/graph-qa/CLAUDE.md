@@ -145,6 +145,18 @@ routeert hard naar de `duiding`-specialist. Een adviesvraag kan daardoor *topolo
 wijzigen — die route emit geen `doel`/`element`-events. Dat is een garantie, geen prompt-belofte. Het
 contextblok (bepaling, klasse, fragment, corpus) gaat mee in de systeemprompt.
 
+- **Eén element als onderwerp.** Staat er een `fragment` in de context, dan bakent `_advies_context`
+  de vraag daartoe af: andere markeringen mogen erbij worden gehaald wanneer dat NODIG is om dít
+  element te onderbouwen, maar krijgen geen eigen motivering — "ook niet als je ze eerder in dit
+  gesprek hebt voorgesteld". Die laatste zin is de tegenkracht tegen het gespreksgeheugen: de
+  annotatiebeurt zit in dezelfde thread, dus zonder afbakening motiveerde het model alles wat het in
+  de historie zag staan. Gebruik het woord "ONDERWERP" hier niet als kopje — dat is in de
+  basis-systeemprompt al de onderwerp-afbakening van de agent (wel/geen wetgevingsvraag).
+- **De buren komen uit de context, niet uit het geheugen.** De werkplek stuurt de overige
+  (niet-verworpen) markeringen mee in `context.bestaande_elementen`; `_advies_context` rendert ze
+  onder "ANDERE MARKERINGEN IN DEZE BEPALING (niet motiveren)", begrensd op 20. Zonder dat hing het
+  antwoord af van wat er toevallig nog in de historie stond en verschilde het per gesprek.
+
 **Een ONDERWERP in plaats van een bepaling** ("annoteer alles over aansprakelijkheid van de
 bestuurder") levert geen annotatie maar een keuze. De ophaal-agent zoekt dan met
 `semantic_search`/`search_wetgeving` en geeft `{"kandidaten": [...]}` terug; `annoteer_node` ziet dat,

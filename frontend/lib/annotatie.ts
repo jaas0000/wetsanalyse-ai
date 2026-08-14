@@ -185,6 +185,10 @@ export function volgendeElement(
 
 // --- een vraag over één markering ------------------------------------------------------------------
 
+/** Hoeveel andere markeringen er hoogstens meegaan. Een bepaling kan er tientallen hebben; dan is de
+ *  lijst geen hulp meer maar promptvulling. */
+const MAX_BUREN = 20;
+
 /** Bouw het contextblok voor een adviesvraag bij een element.
  *
  *  De agent kan niet in het document kijken; deze context vertelt hem waar de vraag over gaat. `lid`
@@ -206,8 +210,17 @@ export function vraagContextVan(
     klasse: el.klasse,
     fragment: el.tekst,
     corpus: info?.leden_teksten.map((l) => l.tekst).join("\n\n"),
+    // De overige markeringen gaan mee, zodat de agent er bij de onderbouwing naar kan verwijzen
+    // (samenhang, afbakening) zonder ervoor terug te vallen op het gespreksgeheugen. Zou hij dat wel
+    // doen, dan verschilt het antwoord op dezelfde vraag per gesprek. Verworpen elementen blijven
+    // eruit — die zijn juist afgekeurd — en het gevraagde element ook: dat staat al als `fragment`.
+    bestaande_elementen: (doc?.elementen ?? [])
+      .filter((e) => e.id !== el.id && e.lifecycle !== "rejected")
+      .slice(0, MAX_BUREN)
+      .map((e) => ({ id: e.id, klasse: e.klasse, tekst: e.tekst, lid: e.lid, herkomst: e.herkomst })),
   };
 }
+
 
 /** Korte aanduiding van waar een vraag over gaat, voor de chip én voor het bewaarde bericht.
  *
