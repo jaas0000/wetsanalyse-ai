@@ -147,6 +147,49 @@ bepaling uitkomen dan de jurist aanwees. Er is bewust géén "annoteer ze allema
 een eigen document met een eigen review. De kandidaten zitten niet in het berichtcontract van de api;
 wat na een herlaadbeurt overblijft is de opsomming uit `kandidatenAlsTekst`.
 
+### De artefact-werkbank
+
+Vanaf **1280px** (`lib/useBreedScherm.ts`) staat het artefact als **eigen kolom naast de chat** in
+plaats van eroverheen: `Dialog` heeft daarvoor de variant **`kolom`** — geen backdrop, geen
+`aria-modal` en géén focus-trap (die zou je opsluiten terwijl de chat er juist naast bereikbaar moet
+zijn); Escape sluit in alle varianten. Daaronder blijft het de bestaande `side`-sheet. De splitsing
+zit in `WerkplekClient` zelf en niet in `WorkbenchShell`, anders moeten `docs`/`infos` en alle
+handlers omhoog en weer terug omlaag.
+
+Binnen het artefact hebben **wettekst en reviewlijst elk hun eigen scroll** (tekst `max-h-[45%]`
+bovenin). Eén gedeelde scroller liet de tekst uit beeld lopen zodra je verderop in de lijst kwam.
+Selecteren scrolt **beide kanten op** in beeld: de markering in de tekst (`DocumentPaneel`) én de
+kaart in de lijst (`ReviewQueue`), met `prefers-reduced-motion` gerespecteerd.
+
+- **De kaart is compact**; details (toelichting, Critic-motivatie, alternatieven, adviesdraadje,
+  opmerking) vouwen open bij selectie. Eén begrip stuurt alles: `actief`. Een **openstaande
+  kanttekening** blijft ook ingeklapt zichtbaar — dat signaal mag je niet missen.
+- **De lijst ordent zichzelf** (`sorteerReview`): te beoordelen vóór beslist, daarbinnen rood → geel
+  → groen, daarbinnen de volgorde in de tekst. Stabiel, dus kaarten verspringen niet onder je handen.
+  Filter: *alles* / *te beoordelen* / *met aandacht*.
+- **Zwevende markeringen worden benoemd.** Is een fragment niet meer in de tekst te vinden
+  (`vindPositie` → `-1`), dan verdween de markering eerder stilzwijgend. Nu staat het op de kaart en
+  in de teller. (Zelfde les als Hypothesis' "orphans".)
+- **Toetsenbord**: `j`/`k` (of ↓/↑) door de getoonde lijst, `a` akkoord, `x` verwerpen, `c` klasse,
+  `Escape` loslaten. De listener doet **niets zolang de focus in een invoerveld staat** — anders keur
+  je iets goed door "a" te typen in een toelichting. Na `Akkoord` springt de selectie door naar het
+  volgende dat nog aandacht vraagt; knop en toets lopen via dezelfde `onAkkoord`.
+- De **volgorde en de open bedieningsrij leven in `ArtefactPaneel`**, niet in de lijst: zo doorloopt
+  het toetsenbord gegarandeerd dezelfde volgorde als je ziet, en staat er nooit op twee kaarten
+  tegelijk een rij open.
+
+### Toegankelijkheid (WCAG 2.2 AA, NLDS-niveau)
+
+- Markeringen in de tekst zijn **`<button>`**, geen `<mark onClick>`: anders zijn ze niet focusbaar
+  en niet met het toetsenbord te bedienen (2.1.1). `<button>` is phrasing content en mag dus in de
+  lopende tekst staan.
+- **Klikdoelen ≥ 24×24 CSS-px** (2.5.8) via `min-h-[24px]` op chips/knoppen, met de bestaande
+  `coarse:`-variant naar 44px op aanraakschermen (het AAA-niveau 2.5.5 dat NLDS aanhoudt).
+- Eén **`.focus-ring`-utility** in `globals.css` (2.4.13, AAA): dubbele ring zodat de focus ook op de
+  donkere JAS-klassekleuren opvalt. Gebruik die in plaats van een eigen `focus-visible:outline`.
+- Elke wijziging wordt **aangekondigd** via de `sr-only aria-live`-regio in `WerkplekClient`
+  (`beslissingMelding`). Zonder dat gebeurt annoteren voor een schermlezer volledig stil.
+
 ### Reviewen zonder formulier
 
 De reviewkaart kent geen modi meer (`Aanpassen` → veld → reden → `Opslaan`). Elk veld schrijft

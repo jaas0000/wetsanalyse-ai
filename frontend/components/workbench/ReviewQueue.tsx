@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { AdviesDraadje } from "@/components/workbench/AdviesDraadje";
-import { redenVoorWijziging } from "@/lib/annotatie";
+import { isBeslist, redenVoorWijziging, type ReviewFilter } from "@/lib/annotatie";
 import { JAS_KLASSEN, jasStyle } from "@/lib/jas";
 import type { AnnotatieElement, BeslissingInvoer, ReviewReason, Wijziging } from "@/lib/types";
 
@@ -24,13 +24,16 @@ const AANDACHT: Record<string, { emoji: string; label: string; rand: string; tin
   rood: { emoji: "🔴", label: "rood — waarschijnlijk fout", rand: "border-l-aandacht-rood-rand", tint: "bg-aandacht-rood-bg/40" },
 };
 
-const BESLIST = ["human_approved", "edited", "rejected"];
-
 const KNOP_SUCCES = "bg-succes text-paper hover:brightness-110";
 const KNOP_INFO = "bg-info text-paper hover:brightness-110";
-const KNOP_BASIS = "rounded-lg px-2.5 py-1.5 text-xs font-medium transition disabled:opacity-50";
+// Klikdoelen halen minimaal 24x24 CSS-px (WCAG 2.2 AA, 2.5.8) en groeien op aanraakschermen naar
+// 44px — het AAA-niveau (2.5.5) dat NL Design System voor overheidsdiensten aanhoudt.
+const KNOP_BASIS =
+  "focus-ring inline-flex min-h-[24px] items-center rounded-lg px-2.5 py-1.5 text-xs font-medium " +
+  "transition coarse:min-h-[44px] disabled:opacity-50";
 const CHIP =
-  "rounded-full border border-line px-2 py-0.5 text-[0.7rem] text-ink transition hover:border-lint hover:bg-surface disabled:opacity-50";
+  "focus-ring inline-flex min-h-[24px] items-center rounded-full border border-line px-2.5 py-0.5 " +
+  "text-[0.7rem] text-ink transition hover:border-lint hover:bg-surface coarse:min-h-[44px] disabled:opacity-50";
 
 /** Wie dit element maakte en wat ermee gebeurde, in mensentaal.
  *
@@ -112,7 +115,7 @@ function InlineVeld({
           setConcept(waarde);
           setBewerkt(true);
         }}
-        className={`w-full rounded px-1 py-0.5 text-left transition hover:bg-surface ${waarde ? "" : "text-faint"}`}
+        className={`focus-ring min-h-[24px] w-full rounded px-1 py-0.5 text-left transition hover:bg-surface coarse:min-h-[44px] ${waarde ? "" : "text-faint"}`}
       >
         {waarde || placeholder}
       </button>
@@ -133,7 +136,7 @@ function InlineVeld({
         }
       }}
       placeholder={placeholder}
-      className="w-full rounded-field border border-lint bg-paper px-2 py-1 text-xs text-ink focus:outline-none"
+      className="min-h-[24px] w-full rounded-field border border-lint bg-paper px-2 py-1 text-xs text-ink focus:outline-none coarse:min-h-[44px]"
     />
   );
 }
@@ -144,6 +147,10 @@ function DecisionCard({
   onKies,
   onBeslissing,
   onVerwijder,
+  zwevend,
+  open,
+  onOpen,
+  onAkkoord,
   onAdvies,
 }: {
   el: AnnotatieElement;
@@ -152,24 +159,53 @@ function DecisionCard({
   onBeslissing: (req: BeslissingInvoer) => Promise<void>;
   /** Alleen bij een eigen markering: die kun je écht wissen. Weglaten verbergt de wisknop. */
   onVerwijder?: () => Promise<void>;
+  /** Het fragment is niet (meer) letterlijk in de wettekst te vinden — dan valt de markering weg. */
+  zwevend?: boolean;
+  /** Welke bedieningsrij openstaat. Van buitenaf gestuurd zodat het toetsenbord (`c`/`x`) hem ook
+   *  kan openen — en zodat er nooit twee kaarten tegelijk een rij open hebben staan. */
+  open: OpenRij;
+  onOpen: (rij: OpenRij) => void;
+  /** Goedkeuren. Loopt langs de lijst-eigenaar zodat de knop en de `a`-toets hetzelfde doen —
+   *  inclusief het doorspringen naar het volgende element dat nog aandacht vraagt. */
+  onAkkoord: () => Promise<void>;
   /** Vraag de assistent om uitleg bij dít element. Weglaten verbergt het draadje. */
   onAdvies?: (el: AnnotatieElement, vraag: string, opToken: (t: string) => void) => Promise<void>;
 }) {
-  const [palet, setPalet] = useState(false);
-  const [wegHalen, setWegHalen] = useState(false);   // × aangeklikt: redenen (agent) of "Wissen?" (mens)
   const [notitie, setNotitie] = useState(false);
+  const palet = open === "klasse";
+  const wegHalen = open === "verwerp";
   const [bezig, setBezig] = useState(false);
+  const kaartRef = useRef<HTMLDivElement>(null);
 
-  const beslist = BESLIST.includes(el.lifecycle);
+  const beslist = isBeslist(el);
   const aandacht = el.aandacht ? AANDACHT[el.aandacht] : null;
   const eigen = el.herkomst === "mens";
+  // Alleen de kaart waaraan je werkt toont zijn details. Alles altijd tonen kostte drie kaarten per
+  // scherm; zo passen er tien in en blijft de lijst te overzien.
+  const uitgeklapt = actief;
+
+  // Klik je een markering in de tekst aan, dan hoort de bijbehorende kaart in beeld te komen — de
+  // tegenhanger van het in beeld scrollen van de markering in `DocumentPaneel`.
+  useEffect(() => {
+    if (!actief || !kaartRef.current) return;
+    const rustig = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    kaartRef.current.scrollIntoView({ block: "nearest", behavior: rustig ? "auto" : "smooth" });
+  }, [actief]);
+
+  // Selectie kwijt? Dan ook het opmerkingveld dicht. Tijdens het renderen bijstellen (het
+  // gedocumenteerde React-patroon voor "state afstemmen op een gewijzigde prop") in plaats van in een
+  // effect: zo is er geen tussenframe met een open veld op een kaart waar je niet meer aan werkt.
+  const [vorigActief, setVorigActief] = useState(actief);
+  if (vorigActief !== actief) {
+    setVorigActief(actief);
+    if (!actief) setNotitie(false);
+  }
 
   async function verstuur(req: BeslissingInvoer) {
     setBezig(true);
     try {
       await onBeslissing(req);
-      setPalet(false);
-      setWegHalen(false);
+      onOpen("geen");
     } finally {
       setBezig(false);
     }
@@ -182,6 +218,7 @@ function DecisionCard({
 
   return (
     <div
+      ref={kaartRef}
       onClick={onKies}
       className={`rounded-kaart border border-line border-l-4 bg-white p-3 shadow-zacht transition ${
         beslist ? "opacity-75" : aandacht ? `${aandacht.rand} ${aandacht.tint}` : "border-l-line"
@@ -200,10 +237,10 @@ function DecisionCard({
             disabled={bezig}
             onClick={(e) => {
               e.stopPropagation();
-              setPalet((v) => !v);
+              onOpen(palet ? "geen" : "klasse");
             }}
             title="Andere klasse kiezen"
-            className={`rounded px-2 py-0.5 text-xs font-semibold transition hover:ring-1 hover:ring-lint disabled:opacity-50 ${jasStyle(el.klasse)}`}
+            className={`focus-ring inline-flex min-h-[24px] items-center rounded px-2 py-0.5 text-xs font-semibold transition hover:ring-1 hover:ring-lint coarse:min-h-[44px] disabled:opacity-50 ${jasStyle(el.klasse)}`}
           >
             {el.klasse} ▾
           </button>
@@ -215,7 +252,14 @@ function DecisionCard({
             <button
               type="button"
               disabled={bezig}
-              onClick={() => void verstuur({ type: "approve" })}
+              onClick={async () => {
+                setBezig(true);
+                try {
+                  await onAkkoord();
+                } finally {
+                  setBezig(false);
+                }
+              }}
               className={`${KNOP_BASIS} ${KNOP_SUCCES}`}
             >
               Akkoord
@@ -225,10 +269,10 @@ function DecisionCard({
             <button
               type="button"
               disabled={bezig}
-              onClick={() => setWegHalen((v) => !v)}
+              onClick={() => onOpen(wegHalen ? "geen" : "verwerp")}
               aria-label={eigen ? "Markering wissen" : "Voorstel verwerpen"}
               title={eigen ? "Wissen" : "Verwerpen"}
-              className="rounded-lg p-1.5 text-muted transition hover:bg-surface hover:text-fout"
+              className="focus-ring inline-flex min-h-[24px] min-w-[24px] items-center justify-center rounded-lg p-1.5 text-muted transition hover:bg-surface hover:text-fout coarse:min-h-[44px] coarse:min-w-[44px]"
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
                 <path d="M18 6 6 18M6 6l12 12" />
@@ -246,7 +290,7 @@ function DecisionCard({
               type="button"
               disabled={bezig}
               onClick={() => void wijzig({ klasse: k })}
-              className={`min-h-[28px] rounded-full border px-2 py-0.5 text-xs transition coarse:min-h-[36px] disabled:opacity-50 ${jasStyle(k)}`}
+              className={`focus-ring inline-flex min-h-[28px] items-center rounded-full border px-2 py-0.5 text-xs transition coarse:min-h-[44px] disabled:opacity-50 ${jasStyle(k)}`}
             >
               {k}
             </button>
@@ -269,7 +313,7 @@ function DecisionCard({
                   await onVerwijder?.();
                 } finally {
                   setBezig(false);
-                  setWegHalen(false);
+                  onOpen("geen");
                 }
               }}
               className={`${CHIP} border-fout font-medium text-fout`}
@@ -297,19 +341,38 @@ function DecisionCard({
 
       <p className="mt-2 border-l-2 border-line pl-2.5 text-sm italic text-ink">“{el.tekst}”</p>
 
-      <div className="mt-1.5 text-xs text-muted" onClick={(e) => e.stopPropagation()}>
-        <InlineVeld
-          waarde={el.toelichting}
-          placeholder="Toelichting toevoegen…"
-          onBewaar={(nieuw) => wijzig({ toelichting: nieuw })}
-        />
-      </div>
+      {/* Een markering die niet in de tekst te vinden is verdween eerder stilzwijgend uit de
+          weergave. Dan lijkt hij weg terwijl hij er nog is — zeg het gewoon. */}
+      {zwevend && (
+        <p className="mt-1.5 flex items-center gap-1 text-xs text-aandacht-geel-tekst">
+          <span aria-hidden>⚠</span> Niet terug te vinden in de tekst — pas het fragment aan of
+          verwerp de markering.
+        </p>
+      )}
 
-      {el.critic && <p className="mt-1 text-xs italic text-muted">Critic: {el.critic}</p>}
+      {uitgeklapt && (
+        <div className="mt-1.5 text-xs text-muted" onClick={(e) => e.stopPropagation()}>
+          <InlineVeld
+            waarde={el.toelichting}
+            placeholder="Toelichting toevoegen…"
+            onBewaar={(nieuw) => wijzig({ toelichting: nieuw })}
+          />
+        </div>
+      )}
+
+      {uitgeklapt && el.critic && <p className="mt-1 text-xs italic text-muted">Critic: {el.critic}</p>}
 
       {/* Kanttekening bij een markering die de JURIST zelf maakte. Bewust een andere vorm dan de kaart
           zelf: dit is advies dat je naast je neer mag leggen, geen voorstel om te beoordelen. */}
-      {el.critic_suggestie?.motivatie && el.critic_suggestie.status === "open" && (
+      {/* Een openstaande kanttekening blijft ook ingeklapt zichtbaar: dat signaal mag je niet missen
+          doordat het achter een selectie verstopt zit. */}
+      {!uitgeklapt && el.critic_suggestie?.motivatie && el.critic_suggestie.status === "open" && (
+        <p className="mt-1.5 truncate text-xs text-muted">
+          <span className="font-medium text-ink">Kanttekening:</span> {el.critic_suggestie.motivatie}
+        </p>
+      )}
+
+      {uitgeklapt && el.critic_suggestie?.motivatie && el.critic_suggestie.status === "open" && (
         <div
           className="mt-2 rounded-kaart border border-dashed border-line bg-surface p-2"
           onClick={(e) => e.stopPropagation()}
@@ -346,7 +409,7 @@ function DecisionCard({
         </div>
       )}
 
-      {el.alternatieven.length > 0 && (
+      {uitgeklapt && el.alternatieven.length > 0 && (
         <div className="mt-1.5 flex flex-wrap items-center gap-1 text-xs text-muted" onClick={(e) => e.stopPropagation()}>
           <span>Twijfel — klik om te wisselen:</span>
           {el.alternatieven.map((a) => (
@@ -355,7 +418,7 @@ function DecisionCard({
               disabled={bezig}
               title={a.motivatie}
               onClick={() => void wijzig({ klasse: a.klasse })}
-              className={`rounded px-1.5 py-0.5 text-xs font-medium ${jasStyle(a.klasse)} hover:ring-1 hover:ring-lint`}
+              className={`focus-ring inline-flex min-h-[24px] items-center rounded px-1.5 py-0.5 text-xs font-medium coarse:min-h-[44px] ${jasStyle(a.klasse)} hover:ring-1 hover:ring-lint`}
             >
               {a.klasse}
             </button>
@@ -363,11 +426,11 @@ function DecisionCard({
         </div>
       )}
 
-      {onAdvies && <AdviesDraadje onVraag={(v, opToken) => onAdvies(el, v, opToken)} />}
+      {uitgeklapt && onAdvies && <AdviesDraadje onVraag={(v, opToken) => onAdvies(el, v, opToken)} />}
 
       <div className="mt-2 flex items-center justify-between gap-2 border-t border-line/60 pt-1.5 text-[0.65rem] text-muted">
         <span className="min-w-0 flex-1" onClick={(e) => e.stopPropagation()}>
-          {notitie ? (
+          {!uitgeklapt ? null : notitie ? (
             <InlineVeld
               waarde=""
               placeholder="Opmerking bij de review…"
@@ -377,7 +440,11 @@ function DecisionCard({
               }}
             />
           ) : (
-            <button type="button" onClick={() => setNotitie(true)} className="underline-offset-2 hover:underline">
+            <button
+              type="button"
+              onClick={() => setNotitie(true)}
+              className="focus-ring inline-flex min-h-[24px] items-center rounded underline-offset-2 hover:underline coarse:min-h-[44px]"
+            >
               Opmerking…
             </button>
           )}
@@ -391,29 +458,54 @@ function DecisionCard({
   );
 }
 
+/** Welke bedieningsrij op de actieve kaart openstaat. */
+export type OpenRij = "geen" | "klasse" | "verwerp";
+
+const FILTERS: { waarde: ReviewFilter; label: string }[] = [
+  { waarde: "alles", label: "Alles" },
+  { waarde: "te_beoordelen", label: "Te beoordelen" },
+  { waarde: "aandacht", label: "Met aandacht" },
+];
+
 export function ReviewQueue({
   elementen,
+  getoond,
+  filter,
+  onFilter,
   actiefId,
+  zwevendeIds,
+  open,
+  onOpen,
+  onAkkoord,
   onKies,
   onBeslissing,
   onVerwijder,
   onAdvies,
 }: {
+  /** Alle elementen — voor de tellingen in de kop. */
   elementen: AnnotatieElement[];
+  /** De gesorteerde, gefilterde lijst zoals hij getoond wordt. Komt van buiten zodat het toetsenbord
+   *  precies dezelfde volgorde doorloopt als je ziet. */
+  getoond: AnnotatieElement[];
+  filter: ReviewFilter;
+  onFilter: (f: ReviewFilter) => void;
   actiefId?: string;
+  /** Elementen waarvan het fragment niet in de wettekst te vinden is (berekend door het artefact). */
+  zwevendeIds?: Set<string>;
+  open: OpenRij;
+  onOpen: (rij: OpenRij) => void;
+  onAkkoord: (elementId: string) => Promise<void>;
   onKies: (id?: string) => void;
   onBeslissing: (elementId: string, req: BeslissingInvoer) => Promise<void>;
   /** Eigen markering wissen. Weglaten maakt de lijst alleen-beoordeelbaar. */
   onVerwijder?: (elementId: string) => Promise<void>;
   onAdvies?: (el: AnnotatieElement, vraag: string, opToken: (t: string) => void) => Promise<void>;
 }) {
-  const telling = elementen.reduce<Record<string, number>>((acc, el) => {
-    acc[el.lifecycle] = (acc[el.lifecycle] ?? 0) + 1;
-    return acc;
-  }, {});
   const totaal = elementen.length;
-  const beslist = elementen.filter((el) => BESLIST.includes(el.lifecycle)).length;
-  const teReviewen = (telling.voorgesteld ?? 0) + (telling.critic_checked ?? 0);
+  const beslist = elementen.filter(isBeslist).length;
+  const teReviewen = totaal - beslist;
+  const metAandacht = elementen.filter((el) => el.aandacht === "rood" || el.aandacht === "geel").length;
+  const zwevend = zwevendeIds?.size ?? 0;
   const perc = totaal ? Math.round((beslist / totaal) * 100) : 0;
   const afgerond = totaal > 0 && beslist === totaal;
 
@@ -431,22 +523,61 @@ export function ReviewQueue({
             </span>
           ) : (
             <span className="flex items-center gap-2 text-[0.65rem] text-muted">
-              {teReviewen > 0 && <span>🟡 {teReviewen}</span>}
-              {telling.human_approved ? <span>🟢 {telling.human_approved}</span> : null}
-              {telling.rejected ? <span>🔴 {telling.rejected}</span> : null}
+              {teReviewen > 0 && <span>{teReviewen} te gaan</span>}
+              {zwevend > 0 && (
+                <span className="text-aandacht-geel-tekst">⚠ {zwevend} niet in de tekst</span>
+              )}
             </span>
           )}
         </div>
         <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-line/60" role="progressbar" aria-valuenow={perc} aria-valuemin={0} aria-valuemax={100}>
           <div className={`h-full rounded-full transition-all ${afgerond ? "bg-succes" : "bg-lint"}`} style={{ width: `${perc}%` }} />
         </div>
+
+        {/* Drie knoppen in plaats van een dropdown: bij drie standen is kiezen sneller dan uitklappen. */}
+        <div className="mt-2.5 flex flex-wrap gap-1" role="group" aria-label="Filter de reviewlijst">
+          {FILTERS.map((f) => {
+            const aantal =
+              f.waarde === "alles" ? totaal : f.waarde === "te_beoordelen" ? teReviewen : metAandacht;
+            return (
+              <button
+                key={f.waarde}
+                type="button"
+                aria-pressed={filter === f.waarde}
+                onClick={() => onFilter(f.waarde)}
+                className={`focus-ring min-h-[24px] rounded-full border px-2.5 py-0.5 text-[0.7rem] transition coarse:min-h-[44px] ${
+                  filter === f.waarde
+                    ? "border-lint bg-lint text-paper"
+                    : "border-line text-muted hover:border-lint hover:text-ink"
+                }`}
+              >
+                {f.label} ({aantal})
+              </button>
+            );
+          })}
+        </div>
+
+        <p className="mt-2 text-[0.65rem] text-faint">
+          Sneltoetsen: <kbd>j</kbd>/<kbd>k</kbd> volgende · <kbd>a</kbd> akkoord · <kbd>x</kbd> verwerpen
+          · <kbd>c</kbd> klasse · <kbd>Esc</kbd> loslaten
+        </p>
       </div>
 
-      {elementen.map((el) => (
+      {getoond.length === 0 && (
+        <p className="rounded-kaart border border-dashed border-line px-3 py-4 text-center text-xs text-muted">
+          Geen elementen in deze selectie.
+        </p>
+      )}
+
+      {getoond.map((el) => (
         <DecisionCard
           key={el.id}
           el={el}
           actief={el.id === actiefId}
+          zwevend={zwevendeIds?.has(el.id)}
+          open={el.id === actiefId ? open : "geen"}
+          onOpen={onOpen}
+          onAkkoord={() => onAkkoord(el.id)}
           onKies={() => onKies(el.id)}
           onBeslissing={(req) => onBeslissing(el.id, req)}
           onVerwijder={onVerwijder && el.herkomst === "mens" ? () => onVerwijder(el.id) : undefined}

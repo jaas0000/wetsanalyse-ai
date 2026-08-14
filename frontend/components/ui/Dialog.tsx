@@ -10,7 +10,9 @@ export type DialogVariant =
   /** Gecentreerd venster (instellingen). Op mobiel een bijna-volledig-scherm sheet. */
   | "center"
   /** Van rechts inschuivend paneel (artefact). Op mobiel een bottom-sheet. */
-  | "side";
+  | "side"
+  /** Eigen kolom naast de inhoud (artefact op een breed scherm). NIET modaal. */
+  | "kolom";
 
 const PANEEL_CLASS: Record<DialogVariant, string> = {
   center:
@@ -19,6 +21,7 @@ const PANEEL_CLASS: Record<DialogVariant, string> = {
   side:
     "absolute inset-x-0 bottom-0 top-[8%] flex flex-col rounded-t-vorm bg-paper shadow-kaart outline-none animate-rise " +
     "sm:inset-y-0 sm:right-0 sm:left-auto sm:top-0 sm:w-[min(46rem,92vw)] sm:rounded-none sm:rounded-l-vorm",
+  kolom: "flex h-full w-full flex-col border-l border-line bg-paper outline-none",
 };
 
 interface Props {
@@ -29,14 +32,19 @@ interface Props {
   children: ReactNode;
 }
 
-/** Modaal venster: backdrop die op klik sluit, Escape sluit, en de focus blijft binnen het paneel.
+/** Venster in drie vormen: gecentreerd (`center`), inschuivend (`side`) of als eigen kolom naast de
+ *  inhoud (`kolom`).
  *
- *  Eén implementatie voor beide vormen die de werkplek gebruikt — het artefact-paneel (`side`) en de
- *  instellingen (`center`) — zodat er niet twee focus-traps naast elkaar leven die uit de pas kunnen
- *  lopen. De vormgeving komt uit de tokens (`bg-paper`, `shadow-kaart`, `rounded-vorm`); mobiel is
- *  het in beide gevallen een sheet met safe-area-respect. */
+ *  Eén implementatie voor alle drie zodat er niet meerdere focus-traps naast elkaar leven die uit de
+ *  pas kunnen lopen. De vormgeving komt uit de tokens (`bg-paper`, `shadow-kaart`, `rounded-vorm`);
+ *  mobiel is het bij `center`/`side` een sheet met safe-area-respect.
+ *
+ *  **`kolom` is bewust niet modaal**: geen backdrop, geen `aria-modal`, en géén focus-trap. Het
+ *  paneel staat dan náást de chat, en die moet juist bereikbaar blijven — een trap zou je erin
+ *  opsluiten. Escape sluit wél, dat is in alle drie de vormen dezelfde uitweg. */
 export function Dialog({ label, variant = "center", onSluit, children }: Props) {
   const paneelRef = useRef<HTMLDivElement>(null);
+  const modaal = variant !== "kolom";
 
   useEffect(() => {
     const opKey = (e: KeyboardEvent) => {
@@ -44,7 +52,7 @@ export function Dialog({ label, variant = "center", onSluit, children }: Props) 
         onSluit();
         return;
       }
-      if (e.key === "Tab" && paneelRef.current) {
+      if (modaal && e.key === "Tab" && paneelRef.current) {
         const f = paneelRef.current.querySelectorAll<HTMLElement>(FOCUSBAAR);
         if (f.length === 0) return;
         const first = f[0];
@@ -60,9 +68,24 @@ export function Dialog({ label, variant = "center", onSluit, children }: Props) 
       }
     };
     window.addEventListener("keydown", opKey);
-    paneelRef.current?.focus();
+    // Alleen bij een modaal venster de focus verplaatsen: bij de kolomvorm zou dat de cursor
+    // wegtrekken uit het chatveld waar je net iets aan het typen was.
+    if (modaal) paneelRef.current?.focus();
     return () => window.removeEventListener("keydown", opKey);
-  }, [onSluit]);
+  }, [onSluit, modaal]);
+
+  if (!modaal) {
+    return (
+      <section
+        ref={paneelRef}
+        tabIndex={-1}
+        aria-label={label}
+        className={PANEEL_CLASS[variant]}
+      >
+        {children}
+      </section>
+    );
+  }
 
   return (
     <div className="fixed inset-0 z-40" role="dialog" aria-modal="true" aria-label={label}>

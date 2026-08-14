@@ -31,6 +31,7 @@ import type {
   VoorstelElement,
 } from "@/lib/types";
 import { kandidaatLabel, kandidaatPrompt, kandidatenAlsTekst, mergeVoorstellen } from "@/lib/annotatie";
+import { useBreedScherm } from "@/lib/useBreedScherm";
 import { wettenOverheidHref } from "@/lib/url";
 
 type Item =
@@ -39,6 +40,18 @@ type Item =
   | { id: string; type: "annotatie"; slug: string; ontbrekend?: OntbrekendItem[] }
   // De vraag noemde een onderwerp: de agent vond bepalingen, de jurist kiest er één.
   | { id: string; type: "kandidaten"; tekst: string; kandidaten: AgentKandidaat[] };
+
+/** Wat er zojuist is vastgelegd, in één zin voor de schermlezer. */
+function beslissingMelding(req: BeslissingInvoer): string {
+  if (req.type === "approve") return "Akkoord bevonden.";
+  if (req.type === "reject") return "Verworpen.";
+  if (req.type === "comment") return "Opmerking opgeslagen.";
+  const w = req.wijziging ?? {};
+  if (w.klasse) return `Klasse gewijzigd naar ${w.klasse}.`;
+  if (w.tekst) return `Fragment aangepast naar ${w.tekst}.`;
+  if (w.toelichting !== undefined) return w.toelichting ? "Toelichting opgeslagen." : "Toelichting gewist.";
+  return "Wijziging opgeslagen.";
+}
 
 function uid(): string {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
@@ -71,6 +84,9 @@ export function WerkplekClient({ initialGesprekId, onGesprekAangemaakt, onGewijz
   const [artefactSlug, setArtefactSlug] = useState<string | undefined>();
   // Zichtbaarheid van de "naar beneden"-pil: aan zodra de gebruiker weg van de bodem scrolt.
   const [toonNaarBeneden, setToonNaarBeneden] = useState(false);
+  // Wat er zojuist is opgeslagen, voor schermlezers. Zonder dit gebeurt elke annotatie-wijziging
+  // volledig stil: de kaart verandert visueel, maar er wordt niets aangekondigd.
+  const [melding, setMelding] = useState("");
   const lijstRef = useRef<HTMLDivElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
   // Synchrone guard tegen dubbel-verzenden (twee Enters in dezelfde tick): de `bezig`-state komt te laat
@@ -79,6 +95,9 @@ export function WerkplekClient({ initialGesprekId, onGesprekAangemaakt, onGewijz
   // "Stick-to-bottom": alleen automatisch meescrollen als de gebruiker al onderaan staat, zodat
   // omhoogscrollen tijdens het streamen niet telkens wordt teruggetrokken.
   const stickRef = useRef(true);
+  // Past het artefact naast de chat? Dan wordt het een eigen kolom in plaats van een overlay, en
+  // blijft de assistent bereikbaar tijdens het reviewen.
+  const breed = useBreedScherm();
 
   // Hydrateer één keer bij mount: bestaande gespreksberichten → thread. Lees de id uit een MOUNT-vaste
   // ref, niet uit de reactieve prop: bij de eerste beurt zet de shell `activeId` (→ prop null→id) zónder
@@ -318,6 +337,7 @@ export function WerkplekClient({ initialGesprekId, onGesprekAangemaakt, onGewijz
     const oud = new Set((docs[slug]?.elementen ?? []).map((e) => e.id));
     const bij = await voegElementToe(slug, invoer);
     setDocs((m) => ({ ...m, [slug]: bij }));
+    setMelding(`Gemarkeerd als ${invoer.klasse}.`);
     // Zet de verse markering meteen in beeld. De tekst toont alleen de geselecteerde, dus zonder dit
     // lijkt zelf markeren niets te doen: je selectie verdwijnt en er komt geen kleur voor terug.
     const nieuw = bij.elementen.find((e) => !oud.has(e.id));
@@ -335,6 +355,7 @@ export function WerkplekClient({ initialGesprekId, onGesprekAangemaakt, onGewijz
       return { ...m, [slug]: { ...doc, elementen: doc.elementen.filter((e) => e.id !== elementId) } };
     });
     setActiefId((huidig) => (huidig === elementId ? undefined : huidig));
+    setMelding("Markering gewist.");
   }
 
   /** Adviesvraag bij één element: `modus: "advies"` stuurt de agent naar de antwoord-route, die
@@ -384,6 +405,7 @@ export function WerkplekClient({ initialGesprekId, onGesprekAangemaakt, onGewijz
     try {
       const bij = await beslis(slug, elementId, req);
       setDocs((m) => ({ ...m, [slug]: bij }));
+      setMelding(beslissingMelding(req));
     } catch (e) {
       setItems((xs) => [...xs, { id: uid(), type: "antwoord", tekst: `⚠️ Beslissing mislukt: ${foutTekst(e)}` }]);
     }
@@ -396,11 +418,34 @@ export function WerkplekClient({ initialGesprekId, onGesprekAangemaakt, onGewijz
     }
   }
 
+  const artefact = artefactSlug && docs[artefactSlug] && infos[artefactSlug] && (
+    <ArtefactPaneel
+      variant={breed ? "kolom" : "side"}
+      doc={docs[artefactSlug]}
+      info={infos[artefactSlug]}
+      ontbrekend={
+        (items.find((x) => x.type === "annotatie" && x.slug === artefactSlug) as
+          | { ontbrekend?: OntbrekendItem[] }
+          | undefined)?.ontbrekend
+      }
+      actiefId={actiefId}
+      // Nog eens op dezelfde markering klikken laat hem weer los. Selecteren zet de tekst in
+      // focus (alleen die markering), dus zonder toggle zou je er niet meer uit komen.
+      onKies={(id) => setActiefId((huidig) => (id && id === huidig ? undefined : id))}
+      onBeslissing={(elementId, req) => beslissing(artefactSlug, elementId, req)}
+      onEigenMarkering={(invoer) => eigenMarkering(artefactSlug, invoer)}
+      onWisEigenMarkering={(elementId) => wisEigenMarkering(artefactSlug, elementId)}
+      onAdvies={(el, vraag, opToken) => advies(artefactSlug, el, vraag, opToken)}
+      onSluit={() => setArtefactSlug(undefined)}
+    />
+  );
+
   return (
-    <div className="relative flex min-h-0 flex-1 flex-col">
+    <div className="flex min-h-0 min-w-0 flex-1">
+    <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
       {/* Beknopte statusmelding voor schermlezers (niet de hele thread live maken → geen token-spam). */}
       <p className="sr-only" aria-live="polite">
-        {bezig ? "Bezig met antwoorden…" : ""}
+        {bezig ? "Bezig met antwoorden…" : melding}
       </p>
       {bewaarFout && (
         <div role="status" className="shrink-0 border-b border-fout/30 bg-fout/10 px-4 py-2 text-center text-[0.8125rem] text-fout">
@@ -525,27 +570,14 @@ export function WerkplekClient({ initialGesprekId, onGesprekAangemaakt, onGewijz
         </div>
       </div>
 
-      {/* Annotatie-artefact (slide-in) */}
-      {artefactSlug && docs[artefactSlug] && infos[artefactSlug] && (
-        <ArtefactPaneel
-          doc={docs[artefactSlug]}
-          info={infos[artefactSlug]}
-          ontbrekend={
-            (items.find((x) => x.type === "annotatie" && x.slug === artefactSlug) as
-              | { ontbrekend?: OntbrekendItem[] }
-              | undefined)?.ontbrekend
-          }
-          actiefId={actiefId}
-          // Nog eens op dezelfde markering klikken laat hem weer los. Selecteren zet de tekst in
-          // focus (alleen die markering), dus zonder toggle zou je er niet meer uit komen.
-          onKies={(id) => setActiefId((huidig) => (id && id === huidig ? undefined : id))}
-          onBeslissing={(elementId, req) => beslissing(artefactSlug, elementId, req)}
-          onEigenMarkering={(invoer) => eigenMarkering(artefactSlug, invoer)}
-          onWisEigenMarkering={(elementId) => wisEigenMarkering(artefactSlug, elementId)}
-          onAdvies={(el, vraag, opToken) => advies(artefactSlug, el, vraag, opToken)}
-          onSluit={() => setArtefactSlug(undefined)}
-        />
-      )}
+      {/* Op een smal scherm schuift het artefact als overlay over de chat heen. */}
+      {!breed && artefact}
+    </div>
+
+    {/* Op een breed scherm staat het ernaast: chat en review tegelijk in beeld. */}
+    {breed && artefact && (
+      <div className="hidden w-[min(34rem,42vw)] shrink-0 xl:block">{artefact}</div>
+    )}
     </div>
   );
 }

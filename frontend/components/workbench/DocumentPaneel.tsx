@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 
 import { jasStyle } from "@/lib/jas";
 import { lidUitOffset, offsetUit, snapSelectie, vindPositie } from "@/lib/selectie";
@@ -67,6 +67,15 @@ export function DocumentPaneel({
   const segmenten = useMemo(() => segmenteer(bron, elementen, actiefId), [bron, elementen, actiefId]);
   const gekozen = actiefId ? elementen.find((e) => e.id === actiefId) : undefined;
   const tekstRef = useRef<HTMLParagraphElement>(null);
+  const markRef = useRef<HTMLButtonElement>(null);
+
+  // De gekozen markering in beeld brengen. Zonder dit sta je bij een lange bepaling naar de verkeerde
+  // alinea te kijken terwijl je in de lijst al drie elementen verder bent.
+  useEffect(() => {
+    if (!actiefId || !markRef.current) return;
+    const rustig = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    markRef.current.scrollIntoView({ block: "center", behavior: rustig ? "auto" : "smooth" });
+  }, [actiefId]);
 
   /** Zet een DOM-selectie om naar offsets in `bron`.
    *
@@ -134,23 +143,31 @@ export function DocumentPaneel({
           )}
         </div>
       )}
+      {/* Leeskolom: ~66 tekens per regel. Bij de volle paneelbreedte loopt een regel tegen de 90 en
+          moet het oog te ver terug om de volgende regel te vinden. */}
       <p
         ref={tekstRef}
         onMouseUp={verwerkSelectie}
-        className="whitespace-pre-wrap text-[0.95rem] leading-7 text-ink"
+        className="max-w-[66ch] whitespace-pre-wrap text-[0.95rem] leading-7 text-ink"
       >
         {segmenten.map((s, i) =>
           s.klasse ? (
-            <mark
+            // Een knop en geen `<mark onClick>`: dat laatste is niet focusbaar en dus niet met het
+            // toetsenbord te bedienen (WCAG 2.1.1). `<button>` is phrasing content, dus het mag hier
+            // in de lopende tekst staan.
+            <button
               key={i}
+              ref={s.id === actiefId ? markRef : undefined}
+              type="button"
               onClick={() => onKies?.(s.id)}
+              aria-label={`${s.klasse}: ${s.tekst}${s.herkomst === "mens" ? " — door jou gemarkeerd" : ""}`}
               title={s.herkomst === "mens" ? `${s.klasse} — door jou gemarkeerd` : s.klasse}
-              className={`cursor-pointer rounded px-0.5 ${jasStyle(s.klasse)} ${
+              className={`focus-ring cursor-pointer rounded px-0.5 text-left ${jasStyle(s.klasse)} ${
                 s.herkomst === "mens" ? "underline decoration-dotted underline-offset-2" : ""
               } ${actiefId && s.id === actiefId ? "ring-2 ring-lint" : ""}`}
             >
               {s.tekst}
-            </mark>
+            </button>
           ) : (
             <span key={i}>{s.tekst}</span>
           ),

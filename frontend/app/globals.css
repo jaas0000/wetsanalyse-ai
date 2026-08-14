@@ -93,6 +93,17 @@ a {
   background: rgb(var(--lint) / 0.16);
 }
 
+/* Eén focusweergave voor de hele app. NL Design System volgt voor 2.4.13 het AAA-niveau: de
+   focusindicator moet dik genoeg en contrastrijk genoeg zijn om op elke achtergrond op te vallen —
+   ook op de JAS-klassekleuren, die van lichtgrijs tot dieprood lopen. Vandaar de dubbele ring: een
+   witte binnenrand tegen donkere vlakken, lintblauw eromheen tegen lichte.
+   Gebruik: `className="focus-ring"` in plaats van een eigen focus-visible:outline per component. */
+.focus-ring:focus-visible {
+  outline: 2px solid rgb(var(--lint));
+  outline-offset: 2px;
+  box-shadow: 0 0 0 2px rgb(var(--paper));
+}
+
 /* Dunne, smaakvolle scrollbar. */
 ::-webkit-scrollbar {
   width: 10px;

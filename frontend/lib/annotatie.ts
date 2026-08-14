@@ -115,3 +115,67 @@ export function overlaptSelectie(
 ): boolean {
   return selectie.start <= bereik.eind && selectie.eind >= bereik.start;
 }
+
+// --- de reviewlijst ordenen -----------------------------------------------------------------------
+
+/** Elementen waar de jurist al over besloten heeft. Ook `edited`: een aanpassing ís een besluit. */
+export const BESLIST_LIFECYCLES = ["human_approved", "edited", "rejected"];
+
+export type ReviewFilter = "alles" | "te_beoordelen" | "aandacht";
+
+export function isBeslist(el: AnnotatieElement): boolean {
+  return BESLIST_LIFECYCLES.includes(el.lifecycle);
+}
+
+/** Hoort dit element bij de gekozen filterstand? */
+export function pastInFilter(el: AnnotatieElement, filter: ReviewFilter): boolean {
+  if (filter === "te_beoordelen") return !isBeslist(el);
+  if (filter === "aandacht") return el.aandacht === "rood" || el.aandacht === "geel";
+  return true;
+}
+
+const AANDACHT_RANG: Record<string, number> = { rood: 0, geel: 1, groen: 2 };
+
+/** Sorteer de reviewlijst: eerst wat nog beoordeeld moet worden, daarbinnen op aandacht.
+ *
+ *  Het 🟢🟡🔴-niveau bestaat om de aandacht te sturen, maar in de agent-volgorde staat een rood
+ *  oordeel net zo makkelijk onderaan. **Stabiel**: bij een gelijke sleutel blijft de oorspronkelijke
+ *  volgorde (= de volgorde in de tekst) staan, zodat kaarten niet onder je handen verspringen.
+ */
+export function sorteerReview(elementen: AnnotatieElement[]): AnnotatieElement[] {
+  return elementen
+    .map((el, i) => ({ el, i }))
+    .sort((a, b) => {
+      const beslistA = isBeslist(a.el) ? 1 : 0;
+      const beslistB = isBeslist(b.el) ? 1 : 0;
+      if (beslistA !== beslistB) return beslistA - beslistB;
+      const rangA = AANDACHT_RANG[a.el.aandacht ?? ""] ?? 3;
+      const rangB = AANDACHT_RANG[b.el.aandacht ?? ""] ?? 3;
+      if (rangA !== rangB) return rangA - rangB;
+      return a.i - b.i;
+    })
+    .map(({ el }) => el);
+}
+
+/** Het volgende (of vorige) element in de getoonde volgorde.
+ *
+ *  `alleenTeBeoordelen` is het auto-advance-gedrag na een akkoord: doorspringen naar het volgende dat
+ *  nog aandacht vraagt in plaats van naar het eerstvolgende in de lijst. Geeft `undefined` als er
+ *  niets meer is — dan blijft de selectie staan in plaats van naar het begin te springen.
+ */
+export function volgendeElement(
+  lijst: AnnotatieElement[],
+  actiefId: string | undefined,
+  richting: 1 | -1 = 1,
+  alleenTeBeoordelen = false,
+): AnnotatieElement | undefined {
+  const kandidaten = alleenTeBeoordelen ? lijst.filter((el) => !isBeslist(el)) : lijst;
+  if (kandidaten.length === 0) return undefined;
+
+  const huidig = kandidaten.findIndex((el) => el.id === actiefId);
+  if (huidig < 0) {
+    // Niets geselecteerd (of het actieve element valt buiten de kandidaten): begin bij de rand.
+    return richting === 1 ? kandidaten[0] : kandidaten[kandidaten.length - 1];
+  }
+  return kandidaten[huidig + richting];
+}

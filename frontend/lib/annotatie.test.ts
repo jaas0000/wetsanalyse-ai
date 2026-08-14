@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   documentStatusLabel,
+  pastInFilter,
+  sorteerReview,
+  volgendeElement,
   gewijzigdeVelden,
   overlaptSelectie,
   redenVoorWijziging,
@@ -160,5 +163,81 @@ describe("overlaptSelectie", () => {
   it("herkent een selectie die er los van staat", () => {
     expect(overlaptSelectie({ start: 0, eind: 9 }, bereik)).toBe(false);
     expect(overlaptSelectie({ start: 27, eind: 40 }, bereik)).toBe(false);
+  });
+});
+
+// --- de lijst ordenen -----------------------------------------------------------------------------
+
+function el(id: string, extra: Partial<AnnotatieElement> = {}): AnnotatieElement {
+  return { ...ELEMENT, id, ...extra } as AnnotatieElement;
+}
+
+describe("sorteerReview", () => {
+  it("zet te beoordelen vóór beslist", () => {
+    const lijst = [el("a", { lifecycle: "human_approved" }), el("b"), el("c", { lifecycle: "rejected" })];
+    expect(sorteerReview(lijst).map((e) => e.id)).toEqual(["b", "a", "c"]);
+  });
+
+  it("zet rood vóór geel vóór groen vóór geen oordeel", () => {
+    const lijst = [el("geen"), el("groen", { aandacht: "groen" }), el("rood", { aandacht: "rood" }),
+                   el("geel", { aandacht: "geel" })];
+    expect(sorteerReview(lijst).map((e) => e.id)).toEqual(["rood", "geel", "groen", "geen"]);
+  });
+
+  it("is stabiel: gelijke sleutels houden hun volgorde in de tekst", () => {
+    // Anders verspringen kaarten onder je handen zodra er iets verandert.
+    const lijst = [el("1"), el("2"), el("3")];
+    expect(sorteerReview(lijst).map((e) => e.id)).toEqual(["1", "2", "3"]);
+  });
+
+  it("laat de invoer ongemoeid", () => {
+    const lijst = [el("a", { aandacht: "groen" }), el("b", { aandacht: "rood" })];
+    sorteerReview(lijst);
+    expect(lijst.map((e) => e.id)).toEqual(["a", "b"]);
+  });
+});
+
+describe("pastInFilter", () => {
+  it("filtert op te beoordelen", () => {
+    expect(pastInFilter(el("a"), "te_beoordelen")).toBe(true);
+    expect(pastInFilter(el("b", { lifecycle: "human_approved" }), "te_beoordelen")).toBe(false);
+  });
+
+  it("filtert op aandacht — groen telt niet mee", () => {
+    expect(pastInFilter(el("r", { aandacht: "rood" }), "aandacht")).toBe(true);
+    expect(pastInFilter(el("g", { aandacht: "groen" }), "aandacht")).toBe(false);
+    expect(pastInFilter(el("x"), "aandacht")).toBe(false);
+  });
+
+  it("laat bij 'alles' alles door", () => {
+    expect(pastInFilter(el("b", { lifecycle: "rejected" }), "alles")).toBe(true);
+  });
+});
+
+describe("volgendeElement", () => {
+  const lijst = [el("1"), el("2", { lifecycle: "human_approved" }), el("3")];
+
+  it("loopt vooruit en achteruit door de lijst", () => {
+    expect(volgendeElement(lijst, "1")?.id).toBe("2");
+    expect(volgendeElement(lijst, "2", -1)?.id).toBe("1");
+  });
+
+  it("stopt aan het eind in plaats van rond te lopen", () => {
+    // Rondlopen laat je onbedoeld een tweede ronde beginnen zonder dat je het doorhebt.
+    expect(volgendeElement(lijst, "3")).toBeUndefined();
+    expect(volgendeElement(lijst, "1", -1)).toBeUndefined();
+  });
+
+  it("begint bij de rand als er niets geselecteerd is", () => {
+    expect(volgendeElement(lijst, undefined)?.id).toBe("1");
+    expect(volgendeElement(lijst, undefined, -1)?.id).toBe("3");
+  });
+
+  it("slaat bij auto-advance de beslist-elementen over", () => {
+    expect(volgendeElement(lijst, "1", 1, true)?.id).toBe("3");
+  });
+
+  it("geeft niets terug als de lijst leeg is", () => {
+    expect(volgendeElement([], undefined)).toBeUndefined();
   });
 });
