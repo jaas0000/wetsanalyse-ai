@@ -102,3 +102,35 @@ describe("segmenteer — ankers", () => {
     expect(segs.filter((s) => s.klasse).map((s) => s.id)).toEqual(["a", "b"]);
   });
 });
+
+
+// --- focus: een markering binnen een langere markering zichtbaar maken -------------------------
+
+describe("segmenteer — focus op één markering", () => {
+  const ZIN = "De ontvanger kan uitstel van betaling verlenen aan de belastingschuldige.";
+  const ELEMENTEN = [
+    { id: "lang", klasse: "Afleidingsregel", tekst: ZIN },
+    { id: "kort", klasse: "Rechtsobject", tekst: "uitstel van betaling" },
+  ];
+
+  it("toont zonder focus alleen de langste — dat is precies het probleem", () => {
+    const gemarkeerd = segmenteer(ZIN, ELEMENTEN).filter((s) => s.klasse);
+    expect(gemarkeerd.map((s) => s.id)).toEqual(["lang"]);
+  });
+
+  it("toont met focus alleen de geselecteerde, ook als die binnen een langere valt", () => {
+    const gemarkeerd = segmenteer(ZIN, ELEMENTEN, "kort").filter((s) => s.klasse);
+    expect(gemarkeerd.map((s) => s.id)).toEqual(["kort"]);
+    expect(gemarkeerd[0].tekst).toBe("uitstel van betaling");
+  });
+
+  it("houdt de tekst intact in focus", () => {
+    expect(segmenteer(ZIN, ELEMENTEN, "kort").map((s) => s.tekst).join("")).toBe(ZIN);
+  });
+
+  it("valt terug op alles als het actieve id niet (meer) bestaat", () => {
+    // Bv. na een intrekking: liever alle markeringen dan een lege tekst.
+    const gemarkeerd = segmenteer(ZIN, ELEMENTEN, "weg").filter((s) => s.klasse);
+    expect(gemarkeerd.map((s) => s.id)).toEqual(["lang"]);
+  });
+});

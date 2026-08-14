@@ -517,7 +517,9 @@ export function WerkplekClient({ initialGesprekId, onGesprekAangemaakt, onGewijz
               | undefined)?.ontbrekend
           }
           actiefId={actiefId}
-          onKies={setActiefId}
+          // Nog eens op dezelfde markering klikken laat hem weer los. Selecteren zet de tekst in
+          // focus (alleen die markering), dus zonder toggle zou je er niet meer uit komen.
+          onKies={(id) => setActiefId((huidig) => (id && id === huidig ? undefined : id))}
           onBeslissing={(elementId, req) => beslissing(artefactSlug, elementId, req)}
           onEigenMarkering={(invoer) => eigenMarkering(artefactSlug, invoer)}
           onAdvies={(el, vraag, opToken) => advies(artefactSlug, el, vraag, opToken)}

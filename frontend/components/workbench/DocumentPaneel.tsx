@@ -32,8 +32,15 @@ interface Segment {
  *      opgebroken.
  *
  *  De positie komt uit `vindPositie`: eerst het anker (exacte offsets), dan de omringende tekst,
- *  dan het eerste vrije voorkomen. Zo blijven twee identieke fragmenten in één artikel uit elkaar. */
-export function segmenteer(bron: string, elementen: Markeerbaar[]): Segment[] {
+ *  dan het eerste vrije voorkomen. Zo blijven twee identieke fragmenten in één artikel uit elkaar.
+ *
+ *  **`actiefId` zet de tekst in focus:** dan telt alleen die ene markering mee. Zonder dat is een
+ *  markering die binnen een langere valt — een Rechtsobject in een zin die als geheel een
+ *  Afleidingsregel is — onzichtbaar, want overlappende segmenten kunnen niet naast elkaar bestaan.
+ *  Selecteren maakt hem dus zichtbaar in plaats van hem alleen in de lijst te laten oplichten. */
+export function segmenteer(bron: string, elementen: Markeerbaar[], actiefId?: string): Segment[] {
+  const gefocust = actiefId ? elementen.find((e) => e.id === actiefId) : undefined;
+  if (gefocust) elementen = [gefocust];
   const bezet: { start: number; eind: number; klasse: string; id?: string; herkomst?: string }[] = [];
   const gesorteerd = [...elementen].sort((a, b) => {
     const mensA = a.herkomst === "mens" ? 0 : 1;
@@ -82,7 +89,9 @@ export function DocumentPaneel({
   onSelectie?: (sel: { fragment: string; start: number; eind: number; lid: string; bron: string; x: number; y: number }) => void;
 }) {
   const bron = useMemo(() => leden.join("\n\n"), [leden]);
-  const segmenten = useMemo(() => segmenteer(bron, elementen), [bron, elementen]);
+  const segmenten = useMemo(() => segmenteer(bron, elementen, actiefId), [bron, elementen, actiefId]);
+  // Verbergt de focus-modus markeringen? Alleen dan hoort er een weg terug in beeld te staan.
+  const inFocus = Boolean(actiefId && elementen.some((e) => e.id === actiefId) && elementen.length > 1);
   const tekstRef = useRef<HTMLParagraphElement>(null);
 
   /** Zet een DOM-selectie om naar offsets in `bron`.
@@ -128,6 +137,18 @@ export function DocumentPaneel({
   return (
     <div className="rounded-kaart border border-line bg-white p-5 shadow-zacht">
       {opschrift && <h2 className="mb-3 font-display text-lg font-semibold text-lint">{opschrift}</h2>}
+      {inFocus && (
+        <div className="mb-3 flex items-center justify-between gap-3 rounded-kaart bg-lint/5 px-3 py-2 text-xs text-muted">
+          <span>Eén markering in beeld — overlappende markeringen zijn zo los te zien.</span>
+          <button
+            type="button"
+            onClick={() => onKies?.(undefined)}
+            className="shrink-0 font-medium text-lint underline underline-offset-2 hover:no-underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-lint"
+          >
+            Toon alle
+          </button>
+        </div>
+      )}
       <p
         ref={tekstRef}
         onMouseUp={verwerkSelectie}

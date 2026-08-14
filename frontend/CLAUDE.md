@@ -159,6 +159,11 @@ De jurist kan in `DocumentPaneel` tekst selecteren en die zelf markeren. Drie di
   `segmenteer` gebruikt die in drie stappen (offsets → context → eerste vrije voorkomen), waardoor
   twee identieke fragmenten in één artikel uit elkaar blijven en een markering een herimport
   overleeft. `vindplaats` blijft de mensleesbare bronaanduiding; daar horen geen offsets in.
+- **Selecteren zet de tekst in focus.** Overlappende markeringen kunnen niet naast elkaar bestaan:
+  is een hele zin een Afleidingsregel, dan verdwijnt het Rechtsobject dat erbinnen valt uit beeld.
+  Met `actiefId` segmenteert `segmenteer` alleen die ene markering, zodat je hem los kunt zien; het
+  paneel toont dan een "Toon alle"-terugweg en nog eens klikken laat de focus los. Bestaat het
+  actieve id niet meer (bv. na een intrekking), dan valt het terug op alle markeringen.
 - **Bij overlap wint de jurist.** `segmenteer` sorteert mens vóór agent (daarna langste eerst) —
   dezelfde regel als server-side, waar een mens-element bevroren is. Een verdrongen agent-voorstel
   wijkt uit naar een ander voorkomen of verdwijnt uit de tekst, maar blijft in de reviewlijst staan.
