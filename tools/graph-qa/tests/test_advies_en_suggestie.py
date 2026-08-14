@@ -223,3 +223,41 @@ def test_een_rood_oordeel_op_eigen_werk_start_geen_herziening():
     assert llm.index == 5, "geen herzieningsronde: aanloop + annoteer + critic"
     suggesties = [e["suggestie"] for e in events if e["type"] == "suggestie"]
     assert suggesties[0]["aandacht"] == "rood", "de kanttekening komt wél door"
+
+
+def test_markering_uit_een_andere_bepaling_gaat_de_critic_niet_in():
+    """Een eigen markering die niet in de opgehaalde tekst staat, hoort er niet bij te zitten.
+
+    De werkplek stuurde ooit de markeringen van álle geopende documenten mee; dan legt de Critic een
+    fragment uit artikel 36 naast de tekst van artikel 9 en oordeelt hij over iets wat hij niet kan
+    zien. Dat wordt hier structureel afgevangen: dezelfde letterlijkheidseis als voor de agent zelf.
+    """
+    llm = FakeLLM([
+        response([text_block("WORKERS: annotatie\nPLAN: annoteer art 9 lid 1")], "end_turn"),
+        response([tool_block("t1", "get_lid", {"bwb_id": "BWBR0004770", "artikel": "9", "lid": "1"})], "tool_use"),
+        response([text_block('{"bwbId":"BWBR0004770","artikel":"9","lid":"1"}')], "end_turn"),
+        response([text_block(json.dumps({"elementen": [
+            {"id": "agent-1", "klasse": "Rechtssubject", "tekst": "De ontvanger", "lid": "1"},
+        ]}))], "end_turn"),
+        response([text_block(json.dumps({"oordelen": [
+            {"id": "agent-1", "aandacht": "groen", "motivatie": "helder"},
+        ], "ontbrekend": []}))], "end_turn"),
+    ])
+    events = _run(answer_stream(
+        "annoteer artikel 9 lid 1",
+        context=ChatContext(bestaande_elementen=[
+            # staat wél in de tekst van art. 9 lid 1
+            {"id": "mens-hier", "klasse": "Voorwaarde", "tekst": "indien de schuldenaar daarom verzoekt",
+             "lid": "1", "herkomst": "mens"},
+            # komt uit een heel andere bepaling
+            {"id": "mens-elders", "klasse": "Rechtssubject", "tekst": "de bestuurder van het lichaam",
+             "lid": "1", "herkomst": "mens"},
+        ]),
+        settings=make_settings(enable_decomposition=True), llm=llm, graph=FakeGraph(result=LID_TSV),
+    ))
+
+    critic_prompt = llm.calls[4]["messages"][0]["content"]
+    assert "indien de schuldenaar daarom verzoekt" in critic_prompt
+    assert "de bestuurder van het lichaam" not in critic_prompt, "vreemd fragment gaat de prompt niet in"
+    assert "mens-elders" not in [e.get("suggestie", {}).get("element_id") for e in events
+                                 if e["type"] == "suggestie"]

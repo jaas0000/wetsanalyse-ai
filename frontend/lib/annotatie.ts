@@ -1,4 +1,5 @@
 import { jasVolgorde } from "./jas";
+import type { LidRegel } from "./selectie";
 import type {
   AgentContext,
   AgentKandidaat,
@@ -29,6 +30,26 @@ export const DOCUMENT_STATUS_STYLE: Record<DocumentStatus, string> = {
 
 export function documentStatusLabel(status: DocumentStatus): string {
   return DOCUMENT_STATUS_LABEL[status] ?? status;
+}
+
+// --- de brontekst van een bepaling ------------------------------------------------------------------
+
+/** De artikeltekst als regels: wat er op het scherm komt, mét het lidnummer dat erbij hoort.
+ *
+ *  Eén plek waar de weergave wordt opgebouwd, zodat het documentpaneel, de sortering, de ankers en de
+ *  lid-toewijzing over dezelfde tekst praten. Het lidnummer reist apart mee omdat het niet uit de
+ *  volgorde is af te leiden (zie `lidUitOffset`). Lege leden vallen weg — die zouden een lege regel in
+ *  de bron zetten en alle offsets erna verschuiven. */
+export function regelsVan(info: GraafArtikel): LidRegel[] {
+  return info.leden_teksten
+    .filter((l) => l.tekst.trim())
+    .map((l) => ({ lid: l.lid ?? "", regel: l.lid ? `${l.lid}. ${l.tekst}` : l.tekst }));
+}
+
+/** De regels als één brontekst. Twee nieuwe regels ertussen — dezelfde scheiding waar `lidUitOffset`
+ *  en de ankers van uitgaan. */
+export function bronVan(regels: LidRegel[]): string {
+  return regels.map((r) => r.regel).join("\n\n");
 }
 
 /** Voeg een binnenkomend `element`-event samen met wat er al verzameld is.
@@ -242,6 +263,24 @@ export function vraagContextVan(
   };
 }
 
+
+/** De eigen markeringen die als context meegaan met een ANNOTATIE-beurt.
+ *
+ *  De Critic kijkt ermee mee op eigen werk. Dat kan alleen zinnig over de bepaling die hij voor zich
+ *  heeft, dus gaat hier één document in — niet alles wat er in het gesprek is geopend. Dat laatste
+ *  deed de werkplek eerder wél (`Object.values(docs).flatMap(...)`), waardoor een markering bij
+ *  artikel 36 werd beoordeeld tegen de tekst van artikel 8.
+ *
+ *  Verworpen markeringen blijven eruit en de lijst is begrensd, net als bij `vraagContextVan`.
+ */
+export function eigenMarkeringenVoorContext(
+  doc: AnnotatieDocument | undefined,
+): NonNullable<AgentContext["bestaande_elementen"]> {
+  return (doc?.elementen ?? [])
+    .filter((e) => e.herkomst === "mens" && e.lifecycle !== "rejected")
+    .slice(0, MAX_BUREN)
+    .map((e) => ({ id: e.id, klasse: e.klasse, tekst: e.tekst, lid: e.lid, herkomst: e.herkomst }));
+}
 
 /** Korte aanduiding van waar een vraag over gaat, voor de chip én voor het bewaarde bericht.
  *

@@ -32,8 +32,8 @@ import type {
   VoorstelElement,
 } from "@/lib/types";
 import {
-  BESLIST_LIFECYCLES, kandidaatLabel, kandidaatPrompt, kandidatenAlsTekst, mergeVoorstellen,
-  vraagContextLabel, vraagContextVan,
+  BESLIST_LIFECYCLES, eigenMarkeringenVoorContext, kandidaatLabel, kandidaatPrompt,
+  kandidatenAlsTekst, mergeVoorstellen, vraagContextLabel, vraagContextVan,
 } from "@/lib/annotatie";
 import { useBreedScherm } from "@/lib/useBreedScherm";
 import { jasStyle } from "@/lib/jas";
@@ -292,11 +292,10 @@ export function WerkplekClient({ initialGesprekId, onGesprekAangemaakt, onGewijz
     let bronnen: Bron[] = [];
     try {
       // Markeringen die de jurist al maakte gaan mee: de Critic kan er dan een kanttekening bij
-      // zetten. De agent kan niet zelf in het document kijken — dat leeft in de api.
-      const reedsEigen = Object.values(docs)
-        .flatMap((d) => d.elementen)
-        .filter((e) => e.herkomst === "mens")
-        .map((e) => ({ id: e.id, klasse: e.klasse, tekst: e.tekst, lid: e.lid, herkomst: e.herkomst }));
+      // zetten. De agent kan niet zelf in het document kijken — dat leeft in de api. Alleen de
+      // bepaling die nú open staat: de Critic beoordeelt ze tegen de tekst die hij zelf ophaalt, dus
+      // markeringen uit een ander artikel kan hij daar per definitie niet in terugvinden.
+      const reedsEigen = eigenMarkeringenVoorContext(artefactSlug ? docs[artefactSlug] : undefined);
 
       await annoteerAgentStream(
         prompt,

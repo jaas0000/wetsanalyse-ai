@@ -59,14 +59,32 @@ export function maakAnker(bron: string, start: number, eind: number, lid = ""): 
   };
 }
 
-/** In welk lid valt deze offset? `leden` in dezelfde volgorde als waarmee `bron` is samengesteld
- *  (`leden.join("\n\n")`). Geeft het 1-based lidnummer als string, of "" als het niet uitkomt. */
-export function lidUitOffset(leden: string[], start: number): string {
+/** Eén regel van de brontekst, met het lidnummer dat erbij hoort.
+ *
+ *  De regel is de tekst zoals hij in de bron staat — inclusief het "3. "-voorvoegsel — want daar zijn
+ *  de offsets tegen berekend. Het lidnummer staat er los naast, want dat is niet uit de plek in de
+ *  lijst af te leiden: zie `lidUitOffset`. */
+export interface LidRegel {
+  /** Het lidnummer zoals het in de wet staat ("2a"), of "" bij een artikel zonder genummerde leden. */
+  lid: string;
+  /** De regel zoals hij in de brontekst staat, inclusief het nummer-voorvoegsel. */
+  regel: string;
+}
+
+/** In welk lid valt deze offset? `regels` in dezelfde volgorde als waarmee de bron is samengesteld
+ *  (`bronVan`). Geeft het lidnummer terug, of "" als de offset erbuiten valt.
+ *
+ *  Let op het verschil met de plek in de lijst: dit gaf eerder `String(i + 1)` terug, en dat is alleen
+ *  bij een compleet artikel met leden 1..n hetzelfde. Bij een op één lid afgebakend document levert de
+ *  graaf alléén dat lid — dan is de index 0 en het lidnummer bijvoorbeeld 3 — en bij een ingevoegd lid
+ *  (2a) lopen ze sowieso uiteen. Het lidnummer belandt in het element, het anker en het auditspoor,
+ *  dus een gok is hier geen optie. */
+export function lidUitOffset(regels: LidRegel[], start: number): string {
   let pos = 0;
-  for (let i = 0; i < leden.length; i++) {
-    const eind = pos + leden[i].length;
-    if (start < eind) return String(i + 1);
-    pos = eind + 2; // de "\n\n" tussen de leden
+  for (const r of regels) {
+    const eind = pos + r.regel.length;
+    if (start < eind) return r.lid;
+    pos = eind + 2; // de "\n\n" tussen de regels
   }
   return "";
 }

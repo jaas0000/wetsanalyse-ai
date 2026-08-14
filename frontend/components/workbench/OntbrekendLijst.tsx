@@ -3,7 +3,7 @@
 import { useState } from "react";
 
 import { jasStyle } from "@/lib/jas";
-import { lidUitOffset, maakAnker, vindPositie } from "@/lib/selectie";
+import { lidUitOffset, maakAnker, vindPositie, type LidRegel } from "@/lib/selectie";
 import type { AnnotatieElement, OntbrekendItem } from "@/lib/types";
 
 /** Wat de Critic nog mist, als werkvoorraad in plaats van als mededeling.
@@ -24,14 +24,15 @@ import type { AnnotatieElement, OntbrekendItem } from "@/lib/types";
 export function OntbrekendLijst({
   items,
   bron,
-  leden,
+  regels,
   elementen,
   onToevoegen,
 }: {
   items: OntbrekendItem[];
   /** De samengevoegde artikeltekst — hierin wordt het fragment opgezocht. */
   bron: string;
-  leden: string[];
+  /** De regels mét hun lidnummer, voor de lid-toewijzing van een toegevoegd item. */
+  regels: LidRegel[];
   /** Wat er al ligt, om te herkennen wat inmiddels is gemarkeerd. */
   elementen: AnnotatieElement[];
   onToevoegen?: (invoer: {
@@ -111,7 +112,7 @@ export function OntbrekendLijst({
                       onClick={async () => {
                         setBezig(i);
                         try {
-                          const lid = lidUitOffset(leden, start);
+                          const lid = lidUitOffset(regels, start);
                           await onToevoegen!({
                             klasse: item.klasse,
                             tekst: fragment,

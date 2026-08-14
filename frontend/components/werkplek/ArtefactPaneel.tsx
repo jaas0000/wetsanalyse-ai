@@ -9,17 +9,13 @@ import { OntbrekendLijst } from "@/components/workbench/OntbrekendLijst";
 import { ReviewQueue, type OpenRij } from "@/components/workbench/ReviewQueue";
 import { SelectiePopover, type SelectieDoel } from "@/components/workbench/SelectiePopover";
 import {
-  DOCUMENT_STATUS_LABEL, DOCUMENT_STATUS_STYLE, overlaptSelectie, pastInFilter, sorteerReview,
-  volgendeElement, type ReviewFilter,
+  DOCUMENT_STATUS_LABEL, DOCUMENT_STATUS_STYLE, bronVan, overlaptSelectie, pastInFilter, regelsVan,
+  sorteerReview, volgendeElement, type ReviewFilter,
 } from "@/lib/annotatie";
 import { maakAnker, vindPositie } from "@/lib/selectie";
 import type {
   AnnotatieDocument, AnnotatieElement, BeslissingInvoer, GraafArtikel, OntbrekendItem,
 } from "@/lib/types";
-
-function ledenVan(info: GraafArtikel): string[] {
-  return info.leden_teksten.map((l) => (l.lid ? `${l.lid}. ${l.tekst}` : l.tekst)).filter(Boolean);
-}
 
 interface Props {
   /** `side` = inschuivende overlay (smal scherm), `kolom` = eigen kolom naast de chat (breed). */
@@ -50,7 +46,10 @@ export function ArtefactPaneel({
   onWisEigenMarkering, onVraag, onSluit,
 }: Props) {
   const opschrift = `${info.citeertitel || doc.bwbId} — artikel ${info.artikel}${doc.lid ? ` lid ${doc.lid}` : ""}`;
-  const bron = useMemo(() => ledenVan(info).join("\n\n"), [info]);
+  // Eén keer per artikel opbouwen, niet per render: de regels zijn de identiteit waarop het
+  // documentpaneel zijn eigen `useMemo`'s hangt, dus een verse array per render zette die uit.
+  const regels = useMemo(() => regelsVan(info), [info]);
+  const bron = useMemo(() => bronVan(regels), [regels]);
 
   // Eén lus, twee antwoorden — beide uit dezelfde `vindPositie` als de weergave, dus ze kloppen
   // altijd met wat je ziet:
@@ -205,22 +204,35 @@ export function ArtefactPaneel({
     }
   }
 
-  async function markeer(klasse: string, toelichting: string) {
-    if (!selectie || !onEigenMarkering) return;
+  /** Zelf markeren, of een ontbrekend element toevoegen: beide lopen hierlangs zodat een mislukking
+   *  in de melding van het paneel landt. De ontbrekend-lijst kreeg eerder `onEigenMarkering`
+   *  rechtstreeks doorgegeven en faalde daardoor stil — de klik leek genegeerd te worden. */
+  async function markeer(invoer: {
+    klasse: string; tekst: string; lid: string; toelichting: string; anker: ReturnType<typeof maakAnker>;
+  }): Promise<void> {
+    if (!onEigenMarkering) return;
     setFout(null);
     try {
-      await onEigenMarkering({
-        klasse,
-        tekst: selectie.fragment,
-        lid: selectie.lid,
-        toelichting,
-        anker: maakAnker(selectie.bron, selectie.start, selectie.eind, selectie.lid),
-      });
+      // Heeft de bepaling geen genummerde leden, dan valt het lid terug op de afbakening van het
+      // document zelf — beter dat dan een leeg veld op een document dat wél over één lid gaat.
+      await onEigenMarkering({ ...invoer, lid: invoer.lid || doc.lid || "" });
       setSelectie(null);
       window.getSelection()?.removeAllRanges();
     } catch (e) {
       setFout(e instanceof Error ? e.message : "Markeren is niet gelukt.");
     }
+  }
+
+  /** De selectie in de tekst als markering vastleggen. */
+  async function markeerSelectie(klasse: string, toelichting: string) {
+    if (!selectie) return;
+    await markeer({
+      klasse,
+      tekst: selectie.fragment,
+      lid: selectie.lid,
+      toelichting,
+      anker: maakAnker(selectie.bron, selectie.start, selectie.eind, selectie.lid),
+    });
   }
 
   return (
@@ -255,7 +267,7 @@ export function ArtefactPaneel({
           <div className="max-h-[45%] overflow-y-auto pb-3">
           <DocumentPaneel
             opschrift=""
-            leden={ledenVan(info)}
+            regels={regels}
             // Verworpen markeringen niet in de tekst oplichten (de reviewer keurde ze net af); ze
             // blijven wél in de ReviewQueue zichtbaar met hun "verworpen"-status.
             elementen={doc.elementen
@@ -305,9 +317,9 @@ export function ArtefactPaneel({
             <OntbrekendLijst
               items={ontbrekend}
               bron={bron}
-              leden={ledenVan(info)}
+              regels={regels}
               elementen={doc.elementen}
-              onToevoegen={onEigenMarkering}
+              onToevoegen={onEigenMarkering ? markeer : undefined}
             />
           )}
           </div>
@@ -318,7 +330,7 @@ export function ArtefactPaneel({
             doel={selectie}
             aanpasbaar={teCorrigeren ? { klasse: teCorrigeren.klasse, tekst: teCorrigeren.tekst } : undefined}
             onPasAan={teCorrigeren ? pasFragmentAan : undefined}
-            onKies={markeer}
+            onKies={markeerSelectie}
             onSluit={() => setSelectie(null)}
           />
         )}

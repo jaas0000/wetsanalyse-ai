@@ -31,6 +31,18 @@ def _normaliseer(s: str) -> str:
     return _WS.sub(" ", s or "").strip()
 
 
+def komt_letterlijk_voor(corpus: str, fragment: str) -> bool:
+    """Staat dit fragment letterlijk in de opgehaalde tekst?
+
+    Dezelfde eis (en dezelfde normalisatie) waarmee `_verwerk` de voorstellen van het model afkeurt,
+    maar los bruikbaar — bijvoorbeeld voor de markeringen die de jurist meestuurt. Ook die moeten in
+    de bepaling staan die is opgehaald: een Critic-oordeel over een fragment dat hij niet voor zich
+    heeft is geen oordeel.
+    """
+    norm = _normaliseer(fragment)
+    return bool(norm) and _normaliseer(corpus).find(norm) >= 0
+
+
 def sleutel_van(klasse: str, tekst: str, lid: str) -> tuple[str, str, str]:
     """Identiteit van een markering los van zijn id: klasse + fragment + lid.
 

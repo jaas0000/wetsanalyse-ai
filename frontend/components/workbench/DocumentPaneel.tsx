@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useRef } from "react";
 
 import { jasStyle } from "@/lib/jas";
-import { lidUitOffset, offsetUit, snapSelectie, vindPositie } from "@/lib/selectie";
+import { lidUitOffset, offsetUit, snapSelectie, vindPositie, type LidRegel } from "@/lib/selectie";
+import { bronVan } from "@/lib/annotatie";
 import type { Anker } from "@/lib/types";
 
 /** Minimaal element voor highlighting: klasse + letterlijk fragment (+ optioneel id/anker/herkomst). */
@@ -49,21 +50,23 @@ export function segmenteer(bron: string, elementen: Markeerbaar[], actiefId?: st
 
 export function DocumentPaneel({
   opschrift,
-  leden,
+  regels,
   elementen,
   actiefId,
   onKies,
   onSelectie,
 }: {
   opschrift: string;
-  leden: string[];
+  /** De artikeltekst als regels mét hun lidnummer (`regelsVan`). Niet als kale strings: het lidnummer
+   *  is niet uit de volgorde af te leiden, en een markering draagt het wél. */
+  regels: LidRegel[];
   elementen: Markeerbaar[];
   actiefId?: string;
   onKies?: (id?: string) => void;
   /** De jurist heeft tekst geselecteerd om zelf te markeren. Weglaten = alleen-lezen. */
   onSelectie?: (sel: { fragment: string; start: number; eind: number; lid: string; bron: string; x: number; y: number }) => void;
 }) {
-  const bron = useMemo(() => leden.join("\n\n"), [leden]);
+  const bron = useMemo(() => bronVan(regels), [regels]);
   const segmenten = useMemo(() => segmenteer(bron, elementen, actiefId), [bron, elementen, actiefId]);
   const gekozen = actiefId ? elementen.find((e) => e.id === actiefId) : undefined;
   const tekstRef = useRef<HTMLParagraphElement>(null);
@@ -110,7 +113,7 @@ export function DocumentPaneel({
       fragment: bron.slice(start, eind),
       start,
       eind,
-      lid: lidUitOffset(leden, start),
+      lid: lidUitOffset(regels, start),
       bron,
       x: rect.left + rect.width / 2,
       y: rect.bottom,

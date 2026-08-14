@@ -26,7 +26,7 @@ from langgraph.config import get_stream_writer
 from langgraph.graph import END, START, StateGraph
 
 from .agent_common import truncate
-from .annotatie import _verwerk, _verwerk_critic, sleutel_van
+from .annotatie import _verwerk, _verwerk_critic, komt_letterlijk_voor, sleutel_van
 from .annotatie_prompt import (
     annotatie_systeemprompt,
     annotatie_userprompt,
@@ -668,6 +668,14 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
         # Markeringen die de JURIST zelf maakte gaan mee als BEVROREN voorstellen: de Critic mag er
         # iets van vinden (dat is een tweede paar ogen op eigen werk), maar ze doen niet mee in de
         # herzieningslus en worden nooit gewijzigd. De api weigert dat trouwens ook.
+        # Ze moeten wél over DEZE bepaling gaan: een fragment dat niet letterlijk in het opgehaalde
+        # corpus staat, kan de Critic niet beoordelen. Zonder deze grens oordeelt hij over een
+        # markering uit een ander artikel die de werkplek meestuurde — en dat leest als een
+        # kanttekening op werk dat hier niet ligt.
+        meegestuurd = [
+            e for e in ((state.get("context") or {}).get("bestaande_elementen") or [])
+            if e.get("herkomst") == "mens" and e.get("tekst")
+        ]
         eigen = [
             {
                 "id": e.get("id", ""), "klasse": e.get("klasse", ""), "tekst": e.get("tekst", ""),
@@ -675,9 +683,14 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
                 "grounded": True, "vindplaats": "", "aandacht": "", "critic": "",
                 "van_jurist": True,
             }
-            for e in ((state.get("context") or {}).get("bestaande_elementen") or [])
-            if e.get("herkomst") == "mens" and e.get("tekst")
+            for e in meegestuurd
+            if komt_letterlijk_voor(corpus, str(e.get("tekst", "")))
         ]
+        if len(eigen) < len(meegestuurd):
+            logger.info(
+                "eigen markeringen buiten deze bepaling overgeslagen",
+                extra={"meegestuurd": len(meegestuurd), "beoordeeld": len(eigen)},
+            )
 
         # De verworpen fragmenten gaan mee de state in: de herzieningsronde (zie `route_na_critic`)
         # kan het model daarmee zijn eigen bijna-goede citaten laten repareren.

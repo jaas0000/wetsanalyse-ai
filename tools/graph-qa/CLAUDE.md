@@ -186,6 +186,11 @@ als nieuwe opdracht in.
 binnen en gaan als BEVROREN voorstellen (`van_jurist`) mee de Critic in: ze doen niet mee in de
 herzieningslus, komen niet terug als `element`-event, en hun oordeel gaat als apart
 `suggestie`-event naar de werkplek. Ook een rood oordeel op eigen werk start dus geen herziening.
+Ze moeten wél **letterlijk in het opgehaalde corpus staan** (`komt_letterlijk_voor`) — dezelfde eis als
+voor de agent zelf. De werkplek stuurde ooit de markeringen van álle geopende documenten mee, en dan
+oordeelt de Critic over een fragment uit een andere bepaling dat hij niet voor zich heeft. Die grens
+ligt hier en niet alleen in de frontend: het is dezelfde brongetrouwheidsregel, dus hij hoort op de
+plek te staan waar het corpus bekend is.
 
 Drie dingen die je verder moet kennen voordat je hieraan werkt:
 

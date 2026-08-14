@@ -289,12 +289,21 @@ toelichting → `interpretatie`, meerdere velden → `anders`). Vragen wat je zo
 
 ### Zelf annoteren (tekstselectie)
 
-De jurist kan in `DocumentPaneel` tekst selecteren en die zelf markeren. Drie dingen om te kennen:
+De jurist kan in `DocumentPaneel` tekst selecteren en die zelf markeren. Vijf dingen om te kennen:
 
 - **De rekenkern staat in `lib/selectie.ts`**, niet in het component: vitest draait node-env zonder
   DOM, dus alleen zo is die logica te testen. Het component doet enkel de `TreeWalker`-wandeling en
   geeft knooplengtes door aan `offsetUit`. Dat werkt doordat de alinea één aaneengesloten reeks
   `span`/`mark` is waarvan de tekstknopen samen exact de bron vormen.
+- **De brontekst is een lijst `LidRegel`, geen lijst strings** (`regelsVan`/`bronVan` in
+  `lib/annotatie.ts`). Het lidnummer reist naast de regel mee omdat het **niet uit de volgorde is af
+  te leiden**: bij een op één lid afgebakend document levert de graaf alléén dat lid — index 0, lid 3 —
+  en ingevoegde leden heten 2a. `lidUitOffset` gaf eerder `String(i + 1)` terug en legde een eigen
+  markering dus op het verkeerde lid vast, tot in het anker en het auditspoor.
+- **De context bij een annotatiebeurt is één document.** `eigenMarkeringenVoorContext(doc)` levert de
+  eigen, niet-verworpen markeringen van de bepaling die openstaat — niet alles wat er in het gesprek
+  is geopend. Anders legt de Critic een fragment uit artikel 36 naast de tekst van artikel 8.
+  graph-qa handhaaft diezelfde grens nog eens tegen het corpus dat het zelf ophaalde.
 - **Elk element draagt een `anker`**: exacte offsets + quote-met-context + een hash van de bron.
   `segmenteer` gebruikt die in drie stappen (offsets → context → eerste voorkomen), waardoor twee
   identieke fragmenten in één artikel uit elkaar blijven en een markering een herimport overleeft. `vindplaats` blijft de mensleesbare bronaanduiding; daar horen geen offsets in.

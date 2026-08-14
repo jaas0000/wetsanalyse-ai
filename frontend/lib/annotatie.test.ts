@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  bronVan,
+  eigenMarkeringenVoorContext,
   documentStatusLabel,
+  regelsVan,
   pastInFilter,
   sorteerReview,
   volgendeElement,
@@ -14,7 +17,7 @@ import {
   kandidatenAlsTekst,
   mergeVoorstellen,
 } from "./annotatie";
-import type { AnnotatieDocument, AnnotatieElement, VoorstelElement } from "./types";
+import type { AnnotatieDocument, AnnotatieElement, GraafArtikel, VoorstelElement } from "./types";
 
 describe("documentStatusLabel", () => {
   it("mapt de drie documentstatussen naar NL-labels", () => {
@@ -363,5 +366,80 @@ describe("vraagContextLabel", () => {
     expect(vraagContextLabel(el("e1", { klasse: "Voorwaarde", tekst: "indien" }))).toBe(
       "Voorwaarde — “indien”",
     );
+  });
+});
+
+// --- de brontekst en de lidnummers -----------------------------------------------------------------
+
+describe("regelsVan", () => {
+  const artikel = (leden: { lid: string; tekst: string }[]): GraafArtikel => ({
+    bwbId: "BWBR0004770", artikel: "8", citeertitel: "Invorderingswet 1990", opschrift: "",
+    leden_teksten: leden,
+  });
+
+  it("houdt het lidnummer bij de regel waarin het staat", () => {
+    const regels = regelsVan(artikel([{ lid: "3", tekst: "De ontvanger maant aan." }]));
+    expect(regels).toEqual([{ lid: "3", regel: "3. De ontvanger maant aan." }]);
+  });
+
+  it("laat het nummer weg bij een artikel zonder genummerde leden", () => {
+    expect(regelsVan(artikel([{ lid: "", tekst: "Deze wet berust op…" }]))).toEqual([
+      { lid: "", regel: "Deze wet berust op…" },
+    ]);
+  });
+
+  it("slaat lege leden over", () => {
+    const regels = regelsVan(artikel([{ lid: "1", tekst: "Eerste." }, { lid: "2", tekst: "  " }]));
+    expect(regels).toEqual([{ lid: "1", regel: "1. Eerste." }]);
+  });
+
+  it("levert een bron waarin de offsets van de regels kloppen", () => {
+    const regels = regelsVan(artikel([{ lid: "1", tekst: "Eerste." }, { lid: "2", tekst: "Tweede." }]));
+    const bron = bronVan(regels);
+    expect(bron).toBe("1. Eerste.\n\n2. Tweede.");
+    expect(bron.indexOf("Tweede")).toBe("1. Eerste.\n\n2. ".length);
+  });
+});
+
+describe("eigenMarkeringenVoorContext", () => {
+  const el = (p: Partial<AnnotatieElement>): AnnotatieElement =>
+    ({
+      id: "e1", klasse: "Rechtssubject", tekst: "de ontvanger", lid: "1", toelichting: "",
+      vindplaats: "", herkomst: "agent", lifecycle: "proposed", alternatieven: [],
+      critic_rondes: [], aandacht: null, critic: "", anker: null, ...p,
+    }) as AnnotatieElement;
+
+  const doc = (elementen: AnnotatieElement[]): AnnotatieDocument =>
+    ({
+      slug: "iw-art8", bwbId: "BWBR0004770", artikel: "8", lid: "1", werkgebied: "IW 1990",
+      status: "in_review", elementen,
+    }) as AnnotatieDocument;
+
+  it("neemt alleen de markeringen van de jurist mee", () => {
+    const uit = eigenMarkeringenVoorContext(
+      doc([el({ id: "a", herkomst: "agent" }), el({ id: "m", herkomst: "mens" })]),
+    );
+    expect(uit.map((e) => e.id)).toEqual(["m"]);
+  });
+
+  it("laat verworpen markeringen weg", () => {
+    const uit = eigenMarkeringenVoorContext(
+      doc([
+        el({ id: "m1", herkomst: "mens" }),
+        el({ id: "m2", herkomst: "mens", lifecycle: "rejected" }),
+      ]),
+    );
+    expect(uit.map((e) => e.id)).toEqual(["m1"]);
+  });
+
+  it("geeft niets terug zonder document", () => {
+    // Een verse annotatie-opdracht heeft nog geen document; dan is er ook geen eigen werk om
+    // langs de Critic te leggen. Eerder gingen hier de markeringen van álle geopende documenten in.
+    expect(eigenMarkeringenVoorContext(undefined)).toEqual([]);
+  });
+
+  it("begrenst de lijst", () => {
+    const veel = Array.from({ length: 40 }, (_, i) => el({ id: `m${i}`, herkomst: "mens" }));
+    expect(eigenMarkeringenVoorContext(doc(veel))).toHaveLength(20);
   });
 });

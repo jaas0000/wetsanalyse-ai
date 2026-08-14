@@ -64,17 +64,44 @@ describe("bronHash", () => {
 });
 
 describe("lidUitOffset", () => {
-  const leden = ["Eerste lid tekst.", "Tweede lid tekst.", "Derde lid."];
+  const regels = [
+    { lid: "1", regel: "1. Eerste lid tekst." },
+    { lid: "2", regel: "2. Tweede lid tekst." },
+    { lid: "3", regel: "3. Derde lid." },
+  ];
 
   it("wijst een offset toe aan het juiste lid", () => {
-    // De bron is leden.join("\n\n"), dus tussen elk lid zitten twee tekens.
-    expect(lidUitOffset(leden, 0)).toBe("1");
-    expect(lidUitOffset(leden, 16)).toBe("1");
-    expect(lidUitOffset(leden, 19)).toBe("2");
-    expect(lidUitOffset(leden, 38)).toBe("3");
+    // De bron is de regels aaneengeschakeld met "\n\n", dus tussen elke regel zitten twee tekens.
+    expect(lidUitOffset(regels, 0)).toBe("1");
+    expect(lidUitOffset(regels, 19)).toBe("1");
+    expect(lidUitOffset(regels, 22)).toBe("2");
+    expect(lidUitOffset(regels, 44)).toBe("3");
   });
 
-  it("geeft leeg terug voorbij het laatste lid", () => {
-    expect(lidUitOffset(leden, 9999)).toBe("");
+  it("geeft het lidnummer terug, niet de plek in de lijst", () => {
+    // Een op één lid afgebakend document levert alléén dat lid — de index is dan 0 en het
+    // lidnummer 3. Vroeger kwam hier "1" uit en werd de markering op het verkeerde lid vastgelegd.
+    const alleenLid3 = [{ lid: "3", regel: "3. De ontvanger kan uitstel verlenen." }];
+    expect(lidUitOffset(alleenLid3, 0)).toBe("3");
+    expect(lidUitOffset(alleenLid3, 30)).toBe("3");
+  });
+
+  it("kan overweg met een lid dat geen getal is", () => {
+    // Ingevoegde leden heten 2a, 2b … — daar loopt tellen sowieso stuk.
+    const metLetterlid = [
+      { lid: "1", regel: "1. Eerste." },
+      { lid: "2a", regel: "2a. Ingevoegd." },
+      { lid: "3", regel: "3. Derde." },
+    ];
+    expect(lidUitOffset(metLetterlid, 12)).toBe("2a");
+    expect(lidUitOffset(metLetterlid, 30)).toBe("3");
+  });
+
+  it("geeft leeg terug bij een artikel zonder genummerde leden", () => {
+    expect(lidUitOffset([{ lid: "", regel: "De ontvanger kan uitstel verlenen." }], 3)).toBe("");
+  });
+
+  it("geeft leeg terug voorbij de laatste regel", () => {
+    expect(lidUitOffset(regels, 9999)).toBe("");
   });
 });
