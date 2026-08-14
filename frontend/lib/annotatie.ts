@@ -1,3 +1,4 @@
+import { jasVolgorde } from "./jas";
 import type {
   AgentContext,
   AgentKandidaat,
@@ -137,24 +138,44 @@ export function pastInFilter(el: AnnotatieElement, filter: ReviewFilter): boolea
   return true;
 }
 
-const AANDACHT_RANG: Record<string, number> = { rood: 0, geel: 1, groen: 2 };
+/** Lidnummer als getal, voor sorteren. Lexicaal zou "10" vóór "2" zetten; een leeg lid komt eerst. */
+function lidRang(lid: string): number {
+  const n = Number.parseInt(lid, 10);
+  return Number.isNaN(n) ? -1 : n;
+}
 
-/** Sorteer de reviewlijst: eerst wat nog beoordeeld moet worden, daarbinnen op aandacht.
+/** Sorteer de reviewlijst in één vaste, inhoudelijke volgorde: de canonieke JAS-tabel.
  *
- *  Het 🟢🟡🔴-niveau bestaat om de aandacht te sturen, maar in de agent-volgorde staat een rood
- *  oordeel net zo makkelijk onderaan. **Stabiel**: bij een gelijke sleutel blijft de oorspronkelijke
- *  volgorde (= de volgorde in de tekst) staan, zodat kaarten niet onder je handen verspringen.
+ *  Eerder woog aandacht (🔴🟡🟢) en voortgang het zwaarst. Beide veranderen terwijl je reviewt: keur
+ *  je iets goed, dan sprong het naar achteren en schoof de rest op — je raakte je plek kwijt en een
+ *  kaart stond nooit twee keer op dezelfde hoogte. Scherpstellen op twijfelgevallen doen de filters.
+ *
+ *  Sleutels van grof naar fijn: klasse (wa-tabelvolgorde) → lid → positie in de tekst →
+ *  invoervolgorde. Geen van die vier verandert door reviewen; alleen als jíj de klasse wijzigt
+ *  verhuist een element, en dan hóórt het ergens anders.
+ *
+ *  `posities` is de offset per element-id in de brontekst (het artefact berekent die met dezelfde
+ *  `vindPositie` als de weergave). Ontbreekt hij, dan sorteert deze functie een niveau grover in
+ *  plaats van te struikelen; een element dat niet in de tekst te vinden is komt achteraan binnen
+ *  zijn eigen klasse.
  */
-export function sorteerReview(elementen: AnnotatieElement[]): AnnotatieElement[] {
+export function sorteerReview(
+  elementen: AnnotatieElement[],
+  posities?: Map<string, number>,
+): AnnotatieElement[] {
+  const positie = (el: AnnotatieElement) => posities?.get(el.id) ?? Number.POSITIVE_INFINITY;
   return elementen
     .map((el, i) => ({ el, i }))
     .sort((a, b) => {
-      const beslistA = isBeslist(a.el) ? 1 : 0;
-      const beslistB = isBeslist(b.el) ? 1 : 0;
-      if (beslistA !== beslistB) return beslistA - beslistB;
-      const rangA = AANDACHT_RANG[a.el.aandacht ?? ""] ?? 3;
-      const rangB = AANDACHT_RANG[b.el.aandacht ?? ""] ?? 3;
-      if (rangA !== rangB) return rangA - rangB;
+      const klasse = jasVolgorde(a.el.klasse) - jasVolgorde(b.el.klasse);
+      if (klasse !== 0) return klasse;
+      const lid = lidRang(a.el.lid) - lidRang(b.el.lid);
+      if (lid !== 0) return lid;
+      // Let op: niet `pa - pb` — met twee keer Infinity levert dat NaN, en met één Infinity een
+      // waarde die de "niet gevonden"-kaart niet betrouwbaar achteraan zet.
+      const pa = positie(a.el);
+      const pb = positie(b.el);
+      if (pa !== pb) return pa === Number.POSITIVE_INFINITY ? 1 : pb === Number.POSITIVE_INFINITY ? -1 : pa - pb;
       return a.i - b.i;
     })
     .map(({ el }) => el);

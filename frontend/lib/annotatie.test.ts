@@ -175,25 +175,75 @@ function el(id: string, extra: Partial<AnnotatieElement> = {}): AnnotatieElement
 }
 
 describe("sorteerReview", () => {
-  it("zet te beoordelen vóór beslist", () => {
-    const lijst = [el("a", { lifecycle: "human_approved" }), el("b"), el("c", { lifecycle: "rejected" })];
-    expect(sorteerReview(lijst).map((e) => e.id)).toEqual(["b", "a", "c"]);
+  it("volgt de canonieke JAS-tabelvolgorde, niet de invoervolgorde", () => {
+    const lijst = [
+      el("vw", { klasse: "Voorwaarde" }),
+      el("subj", { klasse: "Rechtssubject" }),
+      el("feit", { klasse: "Rechtsfeit" }),
+      el("obj", { klasse: "Rechtsobject" }),
+    ];
+    expect(sorteerReview(lijst).map((e) => e.id)).toEqual(["subj", "obj", "feit", "vw"]);
   });
 
-  it("zet rood vóór geel vóór groen vóór geen oordeel", () => {
-    const lijst = [el("geen"), el("groen", { aandacht: "groen" }), el("rood", { aandacht: "rood" }),
-                   el("geel", { aandacht: "geel" })];
-    expect(sorteerReview(lijst).map((e) => e.id)).toEqual(["rood", "geel", "groen", "geen"]);
+  it("zet een onbekende klasse achteraan", () => {
+    const lijst = [el("x", { klasse: "Iets Onbekends" }), el("subj", { klasse: "Rechtssubject" })];
+    expect(sorteerReview(lijst).map((e) => e.id)).toEqual(["subj", "x"]);
   });
 
-  it("is stabiel: gelijke sleutels houden hun volgorde in de tekst", () => {
-    // Anders verspringen kaarten onder je handen zodra er iets verandert.
+  it("sorteert het lid numeriek, niet lexicaal", () => {
+    // "10" < "2" als je op tekst sorteert; dat is precies de val.
+    const lijst = [
+      el("tien", { klasse: "Rechtsobject", lid: "10" }),
+      el("twee", { klasse: "Rechtsobject", lid: "2" }),
+      el("geen", { klasse: "Rechtsobject", lid: "" }),
+    ];
+    expect(sorteerReview(lijst).map((e) => e.id)).toEqual(["geen", "twee", "tien"]);
+  });
+
+  it("sorteert binnen een klasse op de plek in de tekst", () => {
+    const lijst = [el("laat", { klasse: "Rechtsobject" }), el("vroeg", { klasse: "Rechtsobject" })];
+    const posities = new Map([["laat", 80], ["vroeg", 10]]);
+    expect(sorteerReview(lijst, posities).map((e) => e.id)).toEqual(["vroeg", "laat"]);
+  });
+
+  it("zet een markering die niet in de tekst te vinden is achteraan binnen zijn klasse", () => {
+    const lijst = [
+      el("zwevend", { klasse: "Rechtsobject" }),
+      el("gevonden", { klasse: "Rechtsobject" }),
+      el("later", { klasse: "Voorwaarde" }),
+    ];
+    const posities = new Map([["gevonden", 10], ["later", 5]]);
+    // "zwevend" heeft geen positie: achteraan bij de Rechtsobjecten, maar nog wél vóór de Voorwaarde.
+    expect(sorteerReview(lijst, posities).map((e) => e.id)).toEqual(["gevonden", "zwevend", "later"]);
+  });
+
+  it("verandert NIET als een element wordt beoordeeld", () => {
+    // Dit is het hele punt: eerder sprong een goedgekeurd element naar achteren en schoof de rest op.
+    const voor = [
+      el("a", { klasse: "Rechtssubject", aandacht: "groen" }),
+      el("b", { klasse: "Rechtsobject", aandacht: "rood" }),
+      el("c", { klasse: "Rechtsfeit" }),
+    ];
+    const na = [
+      el("a", { klasse: "Rechtssubject", aandacht: "groen", lifecycle: "human_approved" }),
+      el("b", { klasse: "Rechtsobject", aandacht: "rood" }),
+      el("c", { klasse: "Rechtsfeit", lifecycle: "rejected" }),
+    ];
+    expect(sorteerReview(na).map((e) => e.id)).toEqual(sorteerReview(voor).map((e) => e.id));
+  });
+
+  it("is stabiel bij een volledig gelijke sleutel", () => {
     const lijst = [el("1"), el("2"), el("3")];
     expect(sorteerReview(lijst).map((e) => e.id)).toEqual(["1", "2", "3"]);
   });
 
+  it("werkt zonder positiekaart", () => {
+    const lijst = [el("vw", { klasse: "Voorwaarde" }), el("subj", { klasse: "Rechtssubject" })];
+    expect(sorteerReview(lijst).map((e) => e.id)).toEqual(["subj", "vw"]);
+  });
+
   it("laat de invoer ongemoeid", () => {
-    const lijst = [el("a", { aandacht: "groen" }), el("b", { aandacht: "rood" })];
+    const lijst = [el("a", { klasse: "Voorwaarde" }), el("b", { klasse: "Rechtssubject" })];
     sorteerReview(lijst);
     expect(lijst.map((e) => e.id)).toEqual(["a", "b"]);
   });

@@ -52,16 +52,20 @@ export function ArtefactPaneel({
   const opschrift = `${info.citeertitel || doc.bwbId} — artikel ${info.artikel}${doc.lid ? ` lid ${doc.lid}` : ""}`;
   const bron = useMemo(() => ledenVan(info).join("\n\n"), [info]);
 
-  // Welke markeringen zijn niet (meer) in de wettekst terug te vinden? Die vielen stilzwijgend weg uit
-  // de weergave — dan lijken ze verdwenen terwijl ze er nog zijn. Dezelfde `vindPositie` als de
-  // weergave gebruikt, dus het antwoord klopt met wat je ziet.
-  const zwevendeIds = useMemo(() => {
-    const uit = new Set<string>();
+  // Eén lus, twee antwoorden — beide uit dezelfde `vindPositie` als de weergave, dus ze kloppen
+  // altijd met wat je ziet:
+  //  • welke markeringen niet (meer) in de wettekst te vinden zijn (die vielen stilzwijgend weg);
+  //  • waar elke markering staat, als sorteersleutel binnen een JAS-klasse.
+  const { zwevendeIds, posities } = useMemo(() => {
+    const zwevend = new Set<string>();
+    const pos = new Map<string, number>();
     for (const el of doc.elementen) {
       if (el.lifecycle === "rejected") continue;
-      if (vindPositie(bron, el.tekst.trim(), el.anker, []) < 0) uit.add(el.id);
+      const idx = vindPositie(bron, el.tekst.trim(), el.anker, []);
+      if (idx < 0) zwevend.add(el.id);
+      else pos.set(el.id, idx);
     }
-    return uit;
+    return { zwevendeIds: zwevend, posities: pos };
   }, [doc.elementen, bron]);
   const [selectie, setSelectie] = useState<(SelectieDoel & { start: number; eind: number; lid: string; bron: string }) | null>(null);
   const [fout, setFout] = useState<string | null>(null);
@@ -87,10 +91,10 @@ export function ArtefactPaneel({
 
   // De getoonde volgorde: sorteren op de VOLLEDIGE lijst, dan pas filteren — zo verandert een
   // filterwissel de onderlinge volgorde niet. Hier berekend en niet in de lijst, zodat het toetsenbord
-  // gegarandeerd dezelfde volgorde doorloopt als je ziet.
+  // gegarandeerd dezelfde volgorde doorloopt als je ziet en de positiekaart maar op één plek bestaat.
   const getoond = useMemo(
-    () => sorteerReview(doc.elementen).filter((el) => pastInFilter(el, filter)),
-    [doc.elementen, filter],
+    () => sorteerReview(doc.elementen, posities).filter((el) => pastInFilter(el, filter)),
+    [doc.elementen, filter, posities],
   );
 
   /** Sneltoetsen. Bewust inactief zodra de focus in een invoerveld staat: anders keur je iets goed

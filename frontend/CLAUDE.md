@@ -164,9 +164,12 @@ kaart in de lijst (`ReviewQueue`), met `prefers-reduced-motion` gerespecteerd.
 - **De kaart is compact**; details (toelichting, Critic-motivatie, alternatieven, adviesdraadje,
   opmerking) vouwen open bij selectie. Eén begrip stuurt alles: `actief`. Een **openstaande
   kanttekening** blijft ook ingeklapt zichtbaar — dat signaal mag je niet missen.
-- **De lijst ordent zichzelf** (`sorteerReview`): te beoordelen vóór beslist, daarbinnen rood → geel
-  → groen, daarbinnen de volgorde in de tekst. Stabiel, dus kaarten verspringen niet onder je handen.
-  Filter: *alles* / *te beoordelen* / *met aandacht*.
+- **Eén vaste volgorde** (`sorteerReview`): de canonieke **JAS-tabelvolgorde** (`jasVolgorde` uit
+  `lib/jas.ts`) → lid (numeriek!) → plek in de tekst → invoervolgorde. Géén van die sleutels verandert
+  door reviewen; eerder woog aandacht en voortgang het zwaarst, waardoor een goedgekeurd element naar
+  achteren sprong en je je plek kwijtraakte. Scherpstellen doen de filters: *alles* / *te beoordelen*
+  / *met aandacht*. De positie per element komt uit `ArtefactPaneel`, dat hem in dezelfde lus berekent
+  als de zwevende markeringen — één `vindPositie`, dus lijst en tekst spreken elkaar nooit tegen.
 - **Zwevende markeringen worden benoemd.** Is een fragment niet meer in de tekst te vinden
   (`vindPositie` → `-1`), dan verdween de markering eerder stilzwijgend. Nu staat het op de kaart en
   in de teller. (Zelfde les als Hypothesis' "orphans".)
