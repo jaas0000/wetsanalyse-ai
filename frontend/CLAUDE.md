@@ -156,17 +156,15 @@ De jurist kan in `DocumentPaneel` tekst selecteren en die zelf markeren. Drie di
   geeft knooplengtes door aan `offsetUit`. Dat werkt doordat de alinea één aaneengesloten reeks
   `span`/`mark` is waarvan de tekstknopen samen exact de bron vormen.
 - **Elk element draagt een `anker`**: exacte offsets + quote-met-context + een hash van de bron.
-  `segmenteer` gebruikt die in drie stappen (offsets → context → eerste vrije voorkomen), waardoor
-  twee identieke fragmenten in één artikel uit elkaar blijven en een markering een herimport
-  overleeft. `vindplaats` blijft de mensleesbare bronaanduiding; daar horen geen offsets in.
-- **Selecteren zet de tekst in focus.** Overlappende markeringen kunnen niet naast elkaar bestaan:
-  is een hele zin een Afleidingsregel, dan verdwijnt het Rechtsobject dat erbinnen valt uit beeld.
-  Met `actiefId` segmenteert `segmenteer` alleen die ene markering, zodat je hem los kunt zien; het
-  paneel toont dan een "Toon alle"-terugweg en nog eens klikken laat de focus los. Bestaat het
-  actieve id niet meer (bv. na een intrekking), dan valt het terug op alle markeringen.
-- **Bij overlap wint de jurist.** `segmenteer` sorteert mens vóór agent (daarna langste eerst) —
-  dezelfde regel als server-side, waar een mens-element bevroren is. Een verdrongen agent-voorstel
-  wijkt uit naar een ander voorkomen of verdwijnt uit de tekst, maar blijft in de reviewlijst staan.
+  `segmenteer` gebruikt die in drie stappen (offsets → context → eerste voorkomen), waardoor twee
+  identieke fragmenten in één artikel uit elkaar blijven en een markering een herimport overleeft. `vindplaats` blijft de mensleesbare bronaanduiding; daar horen geen offsets in.
+- **De tekst toont hoogstens ÉÉN markering: de geselecteerde.** Alles tegelijk kleuren was
+  onleesbaar én onvolledig — twee markeringen kunnen niet op dezelfde tekst liggen, dus wat binnen
+  een langere markering viel (een Rechtsobject in een zin die als geheel een Afleidingsregel is)
+  verdween uit beeld. De reviewlijst is de ingang; de tekst laat zien wáár het gekozen element
+  staat. Nog eens klikken verbergt hem weer, en een eigen verse markering wordt meteen actief.
+  Daarmee is er ook geen overlap-prioritering meer nodig in `segmenteer`; de bevriezingsregel
+  (mens wint) leeft server-side.
 
 Eigen markeringen gaan via `POST .../elementen` (niet de PUT: dat is de uitkomst van een
 agent-ronde) en zijn meteen `human_approved`. Verwijderen kan alleen bij je eigen markeringen; een

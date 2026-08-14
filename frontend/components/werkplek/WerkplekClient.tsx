@@ -314,8 +314,13 @@ export function WerkplekClient({ initialGesprekId, onGesprekAangemaakt, onGewijz
     slug: string,
     invoer: { klasse: string; tekst: string; lid: string; toelichting: string; anker: Anker },
   ) {
+    const oud = new Set((docs[slug]?.elementen ?? []).map((e) => e.id));
     const bij = await voegElementToe(slug, invoer);
     setDocs((m) => ({ ...m, [slug]: bij }));
+    // Zet de verse markering meteen in beeld. De tekst toont alleen de geselecteerde, dus zonder dit
+    // lijkt zelf markeren niets te doen: je selectie verdwijnt en er komt geen kleur voor terug.
+    const nieuw = bij.elementen.find((e) => !oud.has(e.id));
+    if (nieuw) setActiefId(nieuw.id);
   }
 
   /** Adviesvraag bij één element: `modus: "advies"` stuurt de agent naar de antwoord-route, die

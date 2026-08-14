@@ -22,54 +22,29 @@ interface Segment {
   herkomst?: string;
 }
 
-/** Bepaal niet-overlappende markeringen in `bron`.
+/** Knip `bron` in segmenten, met hoogstens ÉÉN gemarkeerd: de geselecteerde.
  *
- *  Volgorde bepaalt wie bij overlap wint, en die volgorde is een inhoudelijke keuze:
- *   1. **de jurist vóór de agent** — dezelfde regel als server-side, waar een mens-element bevroren
- *      is. Wat jij zelf markeerde blijft staan; een agent-voorstel wijkt uit naar een ander
- *      voorkomen of verdwijnt uit de tekst (het blijft wél in de reviewlijst staan).
- *   2. **langste fragment eerst**, zodat een lange markering niet door een kort deelfragment wordt
- *      opgebroken.
+ *  Alles tegelijk kleuren was onleesbaar én onvolledig. Twee markeringen kunnen niet op dezelfde
+ *  tekst liggen, dus een markering die binnen een langere valt — een Rechtsobject in een zin die als
+ *  geheel een Afleidingsregel is — verdween gewoon uit beeld. Nu is de reviewlijst de ingang en laat
+ *  de tekst zien wáár het gekozen element staat; zonder selectie blijft de tekst schoon.
  *
- *  De positie komt uit `vindPositie`: eerst het anker (exacte offsets), dan de omringende tekst,
- *  dan het eerste vrije voorkomen. Zo blijven twee identieke fragmenten in één artikel uit elkaar.
- *
- *  **`actiefId` zet de tekst in focus:** dan telt alleen die ene markering mee. Zonder dat is een
- *  markering die binnen een langere valt — een Rechtsobject in een zin die als geheel een
- *  Afleidingsregel is — onzichtbaar, want overlappende segmenten kunnen niet naast elkaar bestaan.
- *  Selecteren maakt hem dus zichtbaar in plaats van hem alleen in de lijst te laten oplichten. */
+ *  De positie komt uit `vindPositie`: eerst het anker (exacte offsets), dan de omringende tekst, dan
+ *  het eerste voorkomen. Dat houdt twee identieke fragmenten in één artikel uit elkaar — zonder
+ *  anker zou de tweede "De ontvanger" op de eerste landen.
+ */
 export function segmenteer(bron: string, elementen: Markeerbaar[], actiefId?: string): Segment[] {
-  const gefocust = actiefId ? elementen.find((e) => e.id === actiefId) : undefined;
-  if (gefocust) elementen = [gefocust];
-  const bezet: { start: number; eind: number; klasse: string; id?: string; herkomst?: string }[] = [];
-  const gesorteerd = [...elementen].sort((a, b) => {
-    const mensA = a.herkomst === "mens" ? 0 : 1;
-    const mensB = b.herkomst === "mens" ? 0 : 1;
-    return mensA !== mensB ? mensA - mensB : b.tekst.length - a.tekst.length;
-  });
-  for (const el of gesorteerd) {
-    const fragment = el.tekst.trim();
-    if (!fragment) continue;
-    const idx = vindPositie(bron, fragment, el.anker, bezet);
-    if (idx < 0) continue;
-    bezet.push({
-      start: idx, eind: idx + fragment.length,
-      klasse: el.klasse, id: el.id, herkomst: el.herkomst,
-    });
-  }
-  bezet.sort((a, b) => a.start - b.start);
+  const el = actiefId ? elementen.find((e) => e.id === actiefId) : undefined;
+  const fragment = el?.tekst.trim() ?? "";
+  const start = fragment ? vindPositie(bron, fragment, el?.anker, []) : -1;
+  if (!el || start < 0) return [{ tekst: bron }];
 
-  const segmenten: Segment[] = [];
-  let pos = 0;
-  for (const b of bezet) {
-    if (b.start > pos) segmenten.push({ tekst: bron.slice(pos, b.start) });
-    segmenten.push({
-      tekst: bron.slice(b.start, b.eind), klasse: b.klasse, id: b.id, herkomst: b.herkomst,
-    });
-    pos = b.eind;
-  }
-  if (pos < bron.length) segmenten.push({ tekst: bron.slice(pos) });
-  return segmenten;
+  const eind = start + fragment.length;
+  return [
+    ...(start > 0 ? [{ tekst: bron.slice(0, start) }] : []),
+    { tekst: bron.slice(start, eind), klasse: el.klasse, id: el.id, herkomst: el.herkomst },
+    ...(eind < bron.length ? [{ tekst: bron.slice(eind) }] : []),
+  ];
 }
 
 export function DocumentPaneel({
@@ -90,8 +65,7 @@ export function DocumentPaneel({
 }) {
   const bron = useMemo(() => leden.join("\n\n"), [leden]);
   const segmenten = useMemo(() => segmenteer(bron, elementen, actiefId), [bron, elementen, actiefId]);
-  // Verbergt de focus-modus markeringen? Alleen dan hoort er een weg terug in beeld te staan.
-  const inFocus = Boolean(actiefId && elementen.some((e) => e.id === actiefId) && elementen.length > 1);
+  const gekozen = actiefId ? elementen.find((e) => e.id === actiefId) : undefined;
   const tekstRef = useRef<HTMLParagraphElement>(null);
 
   /** Zet een DOM-selectie om naar offsets in `bron`.
@@ -137,16 +111,27 @@ export function DocumentPaneel({
   return (
     <div className="rounded-kaart border border-line bg-white p-5 shadow-zacht">
       {opschrift && <h2 className="mb-3 font-display text-lg font-semibold text-lint">{opschrift}</h2>}
-      {inFocus && (
+      {elementen.length > 0 && (
         <div className="mb-3 flex items-center justify-between gap-3 rounded-kaart bg-lint/5 px-3 py-2 text-xs text-muted">
-          <span>Eén markering in beeld — overlappende markeringen zijn zo los te zien.</span>
-          <button
-            type="button"
-            onClick={() => onKies?.(undefined)}
-            className="shrink-0 font-medium text-lint underline underline-offset-2 hover:no-underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-lint"
-          >
-            Toon alle
-          </button>
+          {gekozen ? (
+            <>
+              <span>
+                <span className="font-medium text-ink">{gekozen.klasse}</span> in beeld
+              </span>
+              <button
+                type="button"
+                onClick={() => onKies?.(undefined)}
+                className="shrink-0 font-medium text-lint underline underline-offset-2 hover:no-underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-lint"
+              >
+                Verbergen
+              </button>
+            </>
+          ) : (
+            <span>
+              Kies een markering in de lijst om te zien waar hij staat, of selecteer tekst om zelf te
+              markeren.
+            </span>
+          )}
         </div>
       )}
       <p
