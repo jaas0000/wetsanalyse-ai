@@ -384,3 +384,44 @@ async def test_eigen_markering_valideert_de_klasse(client):
     # en andermans document lekt niet
     assert (await client.post(f"{BASIS}/andermans-doc/elementen",
                               json={"klasse": "Rechtssubject", "tekst": "x"})).status_code == 404
+
+
+# --- de Critic kijkt mee op eigen markeringen: advies, nooit een wijziging ----------------------
+
+async def test_suggestie_landt_op_eigen_markering_zonder_die_te_wijzigen(client):
+    slug = await _maak_doc(client)
+    r = await client.post(f"{BASIS}/{slug}/elementen",
+                          json={"klasse": "Voorwaarde", "tekst": "indien betaling uitblijft", "lid": "1"})
+    eigen_id = next(e["id"] for e in r.json()["elementen"] if e["herkomst"] == "mens")
+
+    doc = (await client.put(f"{BASIS}/{slug}/elementen", json={
+        "elementen": [{"klasse": "Rechtssubject", "tekst": "de ontvanger"}],
+        "suggesties": [{"element_id": eigen_id, "aandacht": "geel",
+                        "motivatie": "zou dit niet een Rechtsfeit zijn?",
+                        "voorstel_klasse": "Rechtsfeit"}],
+        "ronde": 1,
+    })).json()
+
+    van_mens = next(e for e in doc["elementen"] if e["id"] == eigen_id)
+    assert van_mens["klasse"] == "Voorwaarde", "de markering zelf blijft ongemoeid"
+    assert van_mens["aandacht"] is None, "een suggestie is geen aandacht-oordeel"
+    assert van_mens["critic_suggestie"]["motivatie"].startswith("zou dit")
+    assert van_mens["critic_suggestie"]["voorstel_klasse"] == "Rechtsfeit"
+    assert van_mens["critic_suggestie"]["status"] == "open"
+
+    acties = [a["actie"] for a in (await client.get(f"{BASIS}/{slug}/audit")).json()]
+    assert "critic-suggestie" in acties
+
+
+async def test_suggestie_op_een_agentelement_wordt_genegeerd(client):
+    """Op een agent-element hoort een oordeel gewoon in `aandacht`, niet als suggestie."""
+    slug = await _maak_doc(client)
+    doc = (await _put(client, slug, [{"klasse": "Rechtssubject", "tekst": "de ontvanger"}])).json()
+    agent_id = doc["elementen"][0]["id"]
+
+    doc = (await client.put(f"{BASIS}/{slug}/elementen", json={
+        "elementen": [{"id": agent_id, "klasse": "Rechtssubject", "tekst": "de ontvanger"}],
+        "suggesties": [{"element_id": agent_id, "aandacht": "rood", "motivatie": "nee"}],
+        "ronde": 1,
+    })).json()
+    assert doc["elementen"][0]["critic_suggestie"] is None

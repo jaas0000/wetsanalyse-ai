@@ -214,10 +214,23 @@ class ElementInvoer(BaseModel):
     anker: Anker | None = None
 
 
+class SuggestieInvoer(BaseModel):
+    """Kanttekening van de Critic bij een element dat de JURIST maakte."""
+
+    element_id: str
+    aandacht: Aandacht | None = None
+    motivatie: str = ""
+    voorstel_klasse: str = ""
+    voorstel_tekst: str = ""
+
+
 class ElementenInvoer(BaseModel):
     """De volledige uitkomst van één agent-ronde voor dit document."""
 
     elementen: list[ElementInvoer]
+    # Oordelen over MENS-elementen komen hier binnen, niet in `elementen`: die zijn bevroren en
+    # mogen niet als voorstel terugkomen. Ze landen in `critic_suggestie` — advies, geen wijziging.
+    suggesties: list[SuggestieInvoer] = []
     ronde: int = 0
     # Agent-elementen die in deze ronde niet meer voorkomen: intrekken (default) of laten staan.
     # Elementen van de jurist en elementen met een beslissing worden nooit ingetrokken.

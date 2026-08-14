@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { AdviesDraadje } from "@/components/workbench/AdviesDraadje";
 import { JAS_KLASSEN, jasStyle } from "@/lib/jas";
 import type { AnnotatieElement, BeslissingInvoer, ReviewReason } from "@/lib/types";
 
@@ -46,11 +47,14 @@ function DecisionCard({
   actief,
   onKies,
   onBeslissing,
+  onAdvies,
 }: {
   el: AnnotatieElement;
   actief: boolean;
   onKies: () => void;
   onBeslissing: (req: BeslissingInvoer) => Promise<void>;
+  /** Vraag de assistent om uitleg bij dít element. Weglaten verbergt het draadje. */
+  onAdvies?: (el: AnnotatieElement, vraag: string, opToken: (t: string) => void) => Promise<void>;
 }) {
   const [actie, setActie] = useState<Actie>(null);
   const [reden, setReden] = useState<ReviewReason>("interpretatie");
@@ -102,6 +106,54 @@ function DecisionCard({
       <p className="mt-2 border-l-2 border-line pl-2.5 text-sm italic text-ink">“{el.tekst}”</p>
       {el.toelichting && <p className="mt-1.5 text-xs text-muted">{el.toelichting}</p>}
       {el.critic && <p className="mt-1 text-xs italic text-muted">Critic: {el.critic}</p>}
+
+      {/* Kanttekening bij een markering die de JURIST zelf maakte. Bewust een ander vorm dan een
+          decision-card: dit is advies dat je naast je neer mag leggen, geen voorstel om te beoordelen.
+          Accepteren wordt een `edit` (de klasse wijzigt), afwijzen een `comment` — zo blijft in het
+          auditspoor staan dát de Critic iets vond en wat jij daarmee deed. */}
+      {el.critic_suggestie?.motivatie && el.critic_suggestie.status === "open" && (
+        <div
+          className="mt-2 rounded-kaart border border-dashed border-line bg-surface p-2"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <p className="text-xs text-muted">
+            <span className="font-medium text-ink">Kanttekening van de assistent:</span>{" "}
+            {el.critic_suggestie.motivatie}
+            {el.critic_suggestie.voorstel_klasse && (
+              <> Voorstel: <span className={`rounded px-1 ${jasStyle(el.critic_suggestie.voorstel_klasse)}`}>
+                {el.critic_suggestie.voorstel_klasse}
+              </span></>
+            )}
+          </p>
+          <div className="mt-1.5 flex flex-wrap gap-1.5">
+            {el.critic_suggestie.voorstel_klasse && (
+              <button
+                disabled={bezig}
+                onClick={() =>
+                  verstuur({
+                    type: "edit",
+                    review_reason: "verkeerde_klasse",
+                    comment: "Kanttekening van de assistent overgenomen.",
+                    wijziging: { klasse: el.critic_suggestie!.voorstel_klasse },
+                  })
+                }
+                className={`${KNOP_BASIS} ${KNOP_SUCCES}`}
+              >
+                Overnemen
+              </button>
+            )}
+            <button
+              disabled={bezig}
+              onClick={() =>
+                verstuur({ type: "comment", comment: "Kanttekening van de assistent afgewezen." })
+              }
+              className={`${KNOP_BASIS} ${KNOP_INFO}`}
+            >
+              Naast me neerleggen
+            </button>
+          </div>
+        </div>
+      )}
       {el.alternatieven.length > 0 &&
         (beslist ? (
           <p className="mt-1 text-xs text-muted">Twijfel: {el.alternatieven.map((a) => a.klasse).join(", ")}</p>
@@ -124,6 +176,8 @@ function DecisionCard({
             ))}
           </div>
         ))}
+
+      {onAdvies && <AdviesDraadje onVraag={(v, opToken) => onAdvies(el, v, opToken)} />}
 
       {!beslist && actie === null && (
         <div className="mt-2.5 flex flex-wrap gap-1.5" onClick={(e) => e.stopPropagation()}>
@@ -254,11 +308,13 @@ export function ReviewQueue({
   actiefId,
   onKies,
   onBeslissing,
+  onAdvies,
 }: {
   elementen: AnnotatieElement[];
   actiefId?: string;
   onKies: (id?: string) => void;
   onBeslissing: (elementId: string, req: BeslissingInvoer) => Promise<void>;
+  onAdvies?: (el: AnnotatieElement, vraag: string, opToken: (t: string) => void) => Promise<void>;
 }) {
   const telling = elementen.reduce<Record<string, number>>((acc, el) => {
     acc[el.lifecycle] = (acc[el.lifecycle] ?? 0) + 1;
@@ -302,6 +358,7 @@ export function ReviewQueue({
           actief={el.id === actiefId}
           onKies={() => onKies(el.id)}
           onBeslissing={(req) => onBeslissing(el.id, req)}
+          onAdvies={onAdvies}
         />
       ))}
     </div>

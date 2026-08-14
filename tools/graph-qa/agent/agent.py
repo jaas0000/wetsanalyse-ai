@@ -82,6 +82,8 @@ async def answer_stream(
     question: str,
     conversation_id: str | None = None,
     *,
+    modus: str = "auto",
+    context: Any = None,
     settings: Settings | None = None,
     llm: LLMPort | None = None,
     graph: GraphPort | None = None,
@@ -127,6 +129,8 @@ async def answer_stream(
     init: dict[str, Any] = {
         "question": question,
         "messages": [{"role": "user", "content": question}],
+        "modus": modus,
+        "context": context.model_dump() if hasattr(context, "model_dump") else (context or {}),
         "source_trace": [],
         "turns": 0,
         "corrected": False,

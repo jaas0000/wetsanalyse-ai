@@ -19,6 +19,7 @@ import {
 } from "@/lib/api";
 import type {
   Anker,
+  AnnotatieElement,
   AgentDoel,
   AnnotatieDocument,
   BeslissingInvoer,
@@ -210,10 +211,18 @@ export function WerkplekClient({ initialGesprekId, onGesprekAangemaakt, onGewijz
     // (annoteerder ⇄ Critic), en dan wint de laatste versie.
     let els: VoorstelElement[] = [];
     const ontbrekend: OntbrekendItem[] = [];
+    const suggesties: { element_id: string; aandacht: string; motivatie: string }[] = [];
     let tekst = "";
     let denk = "";
     let bronnen: Bron[] = [];
     try {
+      // Markeringen die de jurist al maakte gaan mee: de Critic kan er dan een kanttekening bij
+      // zetten. De agent kan niet zelf in het document kijken — dat leeft in de api.
+      const reedsEigen = Object.values(docs)
+        .flatMap((d) => d.elementen)
+        .filter((e) => e.herkomst === "mens")
+        .map((e) => ({ id: e.id, klasse: e.klasse, tekst: e.tekst, lid: e.lid, herkomst: e.herkomst }));
+
       await annoteerAgentStream(
         prompt,
         {
@@ -236,8 +245,11 @@ export function WerkplekClient({ initialGesprekId, onGesprekAangemaakt, onGewijz
           onDoel: (d) => (doelRef.d = d),
           onElement: (e) => (els = mergeVoorstellen(els, e)),
           onOntbrekend: (xs) => ontbrekend.push(...xs),
+          onSuggestie: (s) => suggesties.push(s),
         },
         gid,
+        undefined,
+        reedsEigen.length ? { context: { bestaande_elementen: reedsEigen } } : undefined,
       );
 
       const doel = doelRef.d;
@@ -257,7 +269,7 @@ export function WerkplekClient({ initialGesprekId, onGesprekAangemaakt, onGewijz
           lid: doel.lid || null,
           werkgebied: doel.citeertitel || "",
         });
-        const bijgewerkt = await zetElementen(document.slug, els);
+        const bijgewerkt = await zetElementen(document.slug, els, 0, suggesties);
         setDocs((m) => ({ ...m, [bijgewerkt.slug]: bijgewerkt }));
         setInfos((m) => ({ ...m, [bijgewerkt.slug]: graaf }));
         setItems((xs) =>
@@ -288,6 +300,49 @@ export function WerkplekClient({ initialGesprekId, onGesprekAangemaakt, onGewijz
   ) {
     const bij = await voegElementToe(slug, invoer);
     setDocs((m) => ({ ...m, [slug]: bij }));
+  }
+
+  /** Adviesvraag bij één element: `modus: "advies"` stuurt de agent naar de antwoord-route, die
+   *  geen element-events uitstuurt — de annotatie kan er dus niet door wijzigen. Het paar
+   *  vraag/antwoord bewaren we óók als gespreksbericht, zodat de thread één verhaal blijft. */
+  async function advies(
+    slug: string,
+    el: AnnotatieElement,
+    vraag: string,
+    opToken: (t: string) => void,
+  ) {
+    const doc = docs[slug];
+    const info = infos[slug];
+    let antwoord = "";
+    await annoteerAgentStream(
+      vraag,
+      {
+        onToken: (t) => {
+          antwoord += t;
+          opToken(t);
+        },
+      },
+      gesprekId ?? undefined,
+      undefined,
+      {
+        modus: "advies",
+        context: {
+          slug,
+          bwbId: doc?.bwbId,
+          artikel: doc?.artikel,
+          lid: el.lid || doc?.lid,
+          element_id: el.id,
+          klasse: el.klasse,
+          fragment: el.tekst,
+          corpus: info?.leden_teksten.map((l) => l.tekst).join("\n\n"),
+        },
+      },
+    );
+    if (gesprekId) {
+      const plek = `${doc?.bwbId ?? ""} art. ${doc?.artikel ?? ""}${el.lid ? ` lid ${el.lid}` : ""}`;
+      void persisteer(gesprekId, "user", { tekst: `Advies bij ${plek} — «${el.tekst}»: ${vraag}` });
+      void persisteer(gesprekId, "assistant", { tekst: antwoord });
+    }
   }
 
   async function beslissing(slug: string, elementId: string, req: BeslissingInvoer) {
@@ -436,6 +491,7 @@ export function WerkplekClient({ initialGesprekId, onGesprekAangemaakt, onGewijz
           onKies={setActiefId}
           onBeslissing={(elementId, req) => beslissing(artefactSlug, elementId, req)}
           onEigenMarkering={(invoer) => eigenMarkering(artefactSlug, invoer)}
+          onAdvies={(el, vraag, opToken) => advies(artefactSlug, el, vraag, opToken)}
           onSluit={() => setArtefactSlug(undefined)}
         />
       )}

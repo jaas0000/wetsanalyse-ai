@@ -166,7 +166,10 @@ async def chat(
     )
 
     async def event_generator() -> AsyncIterator[dict]:
-        async for event in answer_stream(request.question, request.conversation_id):
+        async for event in answer_stream(
+            request.question, request.conversation_id,
+            modus=request.modus, context=request.context,
+        ):
             yield {"data": json.dumps(event, ensure_ascii=False)}
 
     return EventSourceResponse(event_generator())

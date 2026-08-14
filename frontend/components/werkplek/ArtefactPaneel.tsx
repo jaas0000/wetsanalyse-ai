@@ -10,7 +10,9 @@ import { SelectiePopover, type SelectieDoel } from "@/components/workbench/Selec
 import { DOCUMENT_STATUS_LABEL, DOCUMENT_STATUS_STYLE } from "@/lib/annotatie";
 import { jasStyle } from "@/lib/jas";
 import { maakAnker } from "@/lib/selectie";
-import type { AnnotatieDocument, BeslissingInvoer, GraafArtikel, OntbrekendItem } from "@/lib/types";
+import type {
+  AnnotatieDocument, AnnotatieElement, BeslissingInvoer, GraafArtikel, OntbrekendItem,
+} from "@/lib/types";
 
 function ledenVan(info: GraafArtikel): string[] {
   return info.leden_teksten.map((l) => (l.lid ? `${l.lid}. ${l.tekst}` : l.tekst)).filter(Boolean);
@@ -28,6 +30,8 @@ interface Props {
     klasse: string; tekst: string; lid: string; toelichting: string;
     anker: ReturnType<typeof maakAnker>;
   }) => Promise<void>;
+  /** Adviesvraag bij één element. Wijzigt nooit iets: de agent draait op de antwoord-route. */
+  onAdvies?: (el: AnnotatieElement, vraag: string, opToken: (t: string) => void) => Promise<void>;
   onSluit: () => void;
 }
 
@@ -35,7 +39,7 @@ interface Props {
  *  brongetrouwe artikeltekst (links, letterlijke highlights) en de review-queue (rechts). Los van de
  *  chatstroom, zoals een Claude-artefact. */
 export function ArtefactPaneel({
-  doc, info, ontbrekend, actiefId, onKies, onBeslissing, onEigenMarkering, onSluit,
+  doc, info, ontbrekend, actiefId, onKies, onBeslissing, onEigenMarkering, onAdvies, onSluit,
 }: Props) {
   const opschrift = `${info.citeertitel || doc.bwbId} — artikel ${info.artikel}${doc.lid ? ` lid ${doc.lid}` : ""}`;
   const [selectie, setSelectie] = useState<(SelectieDoel & { start: number; eind: number; lid: string; bron: string }) | null>(null);
@@ -108,7 +112,13 @@ export function ArtefactPaneel({
           )}
           {fout && <Melding type="fout" compact>{fout}</Melding>}
           {doc.elementen.length > 0 ? (
-            <ReviewQueue elementen={doc.elementen} actiefId={actiefId} onKies={onKies} onBeslissing={onBeslissing} />
+            <ReviewQueue
+              elementen={doc.elementen}
+              actiefId={actiefId}
+              onKies={onKies}
+              onBeslissing={onBeslissing}
+              onAdvies={onAdvies}
+            />
           ) : (
             <p className="text-sm text-muted">Geen elementen.</p>
           )}

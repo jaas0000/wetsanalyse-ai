@@ -246,6 +246,10 @@ class State(TypedDict, total=False):
     critic_ontbrekend: list[dict[str, Any]]
     critic_gefaald: bool
     critic_ronde: int                            # hoeveel HERZIENINGEN deze beurt al zijn gedaan
+    # Wat de werkplek meestuurt over de bepaling/markering die in beeld staat. `modus == "advies"`
+    # betekent: een vraag bij een bestaande annotatie, die niets mag wijzigen.
+    modus: str
+    context: dict[str, Any]
 
 
 def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGraph:
@@ -268,6 +272,18 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
     def supervisor_node(state: State) -> dict[str, Any]:
         """Bepaalt de worker-keten (antwoord/annotatie) voor deze vraag; zet de eerste worker actief."""
         writer = get_stream_writer()
+
+        if state.get("modus") == "advies":
+            # Een adviesvraag bij een bestaande annotatie: geen LLM-keuze, hard naar de
+            # duiding-specialist. Dat is een topologische garantie in plaats van een belofte in een
+            # prompt — de antwoord-route emit geen `doel`/`element`-events, dus advies vragen kán de
+            # annotatie niet wijzigen. Scheelt bovendien een LLM-call.
+            writer({"type": "status", "message": "Advies bij de annotatie"})
+            return {
+                "specialist": "duiding", "worker_plan": ["duiding"], "worker_idx": 0,
+                "plan": "adviesvraag bij een bestaande annotatie",
+            }
+
         resp = llm.create(
             model=model,
             max_tokens=300,
@@ -309,6 +325,35 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
             return _entry_node(state)
         return "einde"
 
+    def _advies_context(state: State) -> str:
+        """Contextblok voor een adviesvraag: waar gaat het over, en wat mag de agent niet doen.
+
+        De 'wijzig niets'-instructie is hier een toelichting, geen slot — dat slot is topologisch
+        (deze route emit geen element-events). Het staat er zodat het antwoord de juiste vorm heeft:
+        een onderbouwing, geen voorstel voor een nieuwe annotatie.
+        """
+        if state.get("modus") != "advies":
+            return ""
+        c = state.get("context") or {}
+        regels = ["", "--- WAAR DE VRAAG OVER GAAT ---"]
+        plek = " ".join(x for x in (c.get("bwbId", ""), f"art. {c['artikel']}" if c.get("artikel") else "",
+                                    f"lid {c['lid']}" if c.get("lid") else "") if x)
+        if plek:
+            regels.append(f"Bepaling: {plek}")
+        if c.get("klasse"):
+            regels.append(f"Voorgestelde JAS-klasse: {c['klasse']}")
+        if c.get("fragment"):
+            regels.append(f'Fragment: "{c["fragment"]}"')
+        if c.get("corpus"):
+            regels.append(f"\nArtikeltekst:\n{truncate(str(c['corpus']), 6000)}")
+        regels += [
+            "--- EINDE ---",
+            "",
+            "Dit is een ADVIESVRAAG bij een bestaande JAS-annotatie. Geef uitsluitend onderbouwing en "
+            "duiding; stel geen nieuwe annotatie voor en zeg niet dat je iets hebt gewijzigd.",
+        ]
+        return "\n".join(regels)
+
     def agent_node(state: State) -> dict[str, Any]:
         writer = get_stream_writer()
         # De annotatie-route draait de agent⇄tools-lus als OPHAAL-agent (retrieval-specialist): hij
@@ -321,6 +366,7 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
         if state.get("plan"):
             system = f"{system}\n\nAANPAK (door jou gepland):\n{state['plan']}"
         system += _memory_context(state)
+        system += _advies_context(state)
 
         # De annotatie-worker produceert JSON, geen leesbaar antwoord — díe narratie tonen we niet
         # (annoteer_node emit straks een korte samenvatting). De narratie van een gewone worker is de
@@ -424,10 +470,24 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
             writer({"type": "token", "content": leeg})
             return {"answer": leeg, "voorstellen": [], "verworpen_fragmenten": [],
                     "messages": [{"role": "assistant", "content": leeg}]}
+        # Markeringen die de JURIST zelf maakte gaan mee als BEVROREN voorstellen: de Critic mag er
+        # iets van vinden (dat is een tweede paar ogen op eigen werk), maar ze doen niet mee in de
+        # herzieningslus en worden nooit gewijzigd. De api weigert dat trouwens ook.
+        eigen = [
+            {
+                "id": e.get("id", ""), "klasse": e.get("klasse", ""), "tekst": e.get("tekst", ""),
+                "lid": e.get("lid", ""), "toelichting": "", "alternatieven": [],
+                "grounded": True, "vindplaats": "", "aandacht": "", "critic": "",
+                "van_jurist": True,
+            }
+            for e in ((state.get("context") or {}).get("bestaande_elementen") or [])
+            if e.get("herkomst") == "mens" and e.get("tekst")
+        ]
+
         # De verworpen fragmenten gaan mee de state in: de herzieningsronde (zie `route_na_critic`)
         # kan het model daarmee zijn eigen bijna-goede citaten laten repareren.
         return {
-            "voorstellen": [v.model_dump() for v in voorstellen],
+            "voorstellen": [v.model_dump() for v in voorstellen] + eigen,
             "verworpen_fragmenten": [x.model_dump() for x in verworpen],
             "answer": "",
         }
@@ -512,7 +572,8 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
             return "emit"                                   # nooit de annotatie breken
         if int(state.get("critic_ronde") or 0) >= settings.critic_max_rondes:
             return "emit"
-        feedback = state.get("critic_feedback") or []
+        eigen_ids = {v.get("id") for v in (state.get("voorstellen") or []) if v.get("van_jurist")}
+        feedback = [f for f in (state.get("critic_feedback") or []) if f.get("id") not in eigen_ids]
         te_doen = (
             any(f.get("actie") in ("vervang", "verwijder") or f.get("aandacht") == "rood" for f in feedback)
             or bool(state.get("critic_ontbrekend"))
@@ -527,13 +588,18 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
         `verwijder`-instructie laat een element verdwijnen. Zo kan een doordrammende Critic geen goede
         elementen wegvagen, en levert een half-mislukte herziening nooit minder op dan we al hadden.
         """
-        voorstellen = list(state.get("voorstellen") or [])
+        alle = list(state.get("voorstellen") or [])
+        # Markeringen van de jurist gaan de herziening NIET in: de agent herschrijft ze niet, ook niet
+        # als de Critic er iets van vindt. Die bevinding komt terug als suggestie, niet als wijziging.
+        van_jurist = [v for v in alle if v.get("van_jurist")]
+        voorstellen = [v for v in alle if not v.get("van_jurist")]
         if not voorstellen:
             return {}
         doel = _bepaal_doel(state)
         corpus = _corpus_uit_trace(state.get("source_trace", []))
         aanduiding = doel.get("artikel") or doel.get("nummer") or ""
-        feedback = state.get("critic_feedback") or []
+        feedback = [f for f in (state.get("critic_feedback") or [])
+                    if f.get("id") not in {v.get("id") for v in van_jurist}]
 
         try:
             resp = llm.create(
@@ -575,7 +641,7 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
             samengevoegd[nieuw_v.id] = nieuw_dict
 
         return {
-            "voorstellen": list(samengevoegd.values()),
+            "voorstellen": list(samengevoegd.values()) + van_jurist,
             "verworpen_fragmenten": [x.model_dump() for x in verworpen],
             "critic_feedback": [],
             "critic_ronde": int(state.get("critic_ronde") or 0) + 1,
@@ -595,17 +661,31 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
 
         met_aandacht = 0
         for v in voorstellen:
+            if v.get("van_jurist"):
+                # Geen `element`-event: dit element bestaat al in het document en mag niet opnieuw
+                # als voorstel binnenkomen. Alleen het oordeel gaat mee, als suggestie.
+                if v.get("aandacht"):
+                    writer({"type": "suggestie", "suggestie": {
+                        "element_id": v.get("id", ""), "aandacht": v.get("aandacht", ""),
+                        "motivatie": v.get("critic", ""),
+                    }})
+                continue
             if v.get("aandacht") in ("geel", "rood"):
                 met_aandacht += 1
             writer({"type": "element", "element": v})
         writer({"type": "ontbrekend", "items": ontbrekend})
 
+        eigen = [v for v in voorstellen if v.get("van_jurist")]
+        voorstellen = [v for v in voorstellen if not v.get("van_jurist")]
         plek = f"artikel {aanduiding}" + (f" lid {doel['lid']}" if doel.get("lid") else "")
         delen = [f"Ik heb {len(voorstellen)} JAS-elementen voorgesteld voor {plek}"]
         if met_aandacht:
             delen.append(f"{met_aandacht} met aandacht")
         if ontbrekend:
             delen.append(f"{len(ontbrekend)} mogelijk ontbrekend")
+        met_suggestie = sum(1 for v in eigen if v.get("aandacht") in ("geel", "rood"))
+        if met_suggestie:
+            delen.append(f"{met_suggestie} kanttekening bij je eigen markeringen")
         herzieningen = int(state.get("critic_ronde") or 0)
         if herzieningen:
             delen.append(f"na {herzieningen} herziening" + ("en" if herzieningen > 1 else ""))

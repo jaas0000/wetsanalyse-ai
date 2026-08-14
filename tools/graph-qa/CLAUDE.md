@@ -137,6 +137,16 @@ kost de lus dus niets.
   de init van `answer_stream`. Zonder die reset begint een tweede beurt in dezelfde thread met een
   volle teller (de checkpointer bewaart de state) en wordt de lus overgeslagen.
 
+**Advies bij twijfel** (`modus: "advies"` op `POST /v1/chat`): de supervisor kiest dan niet zelf maar
+routeert hard naar de `duiding`-specialist. Een adviesvraag kan daardoor *topologisch* geen annotatie
+wijzigen — die route emit geen `doel`/`element`-events. Dat is een garantie, geen prompt-belofte. Het
+contextblok (bepaling, klasse, fragment, corpus) gaat mee in de systeemprompt.
+
+**De Critic kijkt ook mee op markeringen van de jurist.** Die komen via `context.bestaande_elementen`
+binnen en gaan als BEVROREN voorstellen (`van_jurist`) mee de Critic in: ze doen niet mee in de
+herzieningslus, komen niet terug als `element`-event, en hun oordeel gaat als apart
+`suggestie`-event naar de werkplek. Ook een rood oordeel op eigen werk start dus geen herziening.
+
 Drie dingen die je verder moet kennen voordat je hieraan werkt:
 
 - **Elk voorstel draagt een `id`** dat `_verwerk` toekent (niet het model). De Critic koppelt zijn
@@ -163,7 +173,7 @@ Drie dingen die je verder moet kennen voordat je hieraan werkt:
   bouwer in `graph/queries.py`. `raw_sparql` blijft de afgeschermde ontsnapping.
 - **DI, geen globale clients.** Afhankelijkheden achter een poort + adapter, zodat ze faken te zijn.
 - **SSE-event-contract.** De event-types (`status`/`reason`/`token`/`sources`/`grounding`/`done`/`error`,
-  plus `doel`/`element`/`ontbrekend` van de annotatie-worker — alles over `POST /v1/chat`) zijn het
+  plus `doel`/`element`/`ontbrekend`/`suggestie` van de annotatie-worker — alles over `POST /v1/chat`) zijn het
   contract met de consumenten (de werkplek); wijzig ze
   bewust en gelijktijdig. **`reason` = het denkproces** (tool-narratie, live gestreamd); **`token` = alléén
   het eindantwoord** — hou die twee gescheiden zodat de werkplek ze los kan tonen. De annotatie-keten is

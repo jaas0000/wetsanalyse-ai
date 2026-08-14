@@ -84,7 +84,9 @@ UITVOER — geef UITSLUITEND geldige JSON terug, zonder omliggende tekst of code
 ], "ontbrekend": [
   {{"klasse": "<een van: {klassen}>", "reden": "<korte reden>", "tekst": "<optioneel, letterlijk fragment>"}}
 ]}}
-Geef voor ELK aangeleverd element precies één oordeel, met het `id` zoals het is aangeleverd. `ontbrekend` mag leeg zijn."""
+Geef voor ELK aangeleverd element precies één oordeel, met het `id` zoals het is aangeleverd. `ontbrekend` mag leeg zijn.
+
+ELEMENTEN GEMARKEERD MET "DOOR DE JURIST" heeft een mens zelf aangebracht. Beoordeel ze net zo eerlijk, maar weet dat je oordeel daar een SUGGESTIE is die de jurist naast zich neer mag leggen: gebruik `actie: "behoud"` tenzij je echt denkt dat er iets mis is, en formuleer de motivatie als een vraag of overweging, niet als een correctie."""
 
 
 def critic_userprompt(voorstellen: list[dict], artikeltekst: str) -> str:
@@ -95,8 +97,11 @@ def critic_userprompt(voorstellen: list[dict], artikeltekst: str) -> str:
         # Zowel het id (waarop het oordeel wordt gekoppeld) als de positie: valt het id weg in de
         # respons, dan is er nog een terugval. Zie `_verwerk_critic`.
         eigen_id = v.get("id", "") or f"pos-{i}"
+        # Markeringen van de jurist krijgen een label: de Critic mag er iets van vinden, maar zijn
+        # oordeel wordt daar een SUGGESTIE — de mens heeft het laatste woord.
+        merk = " | DOOR DE JURIST" if v.get("van_jurist") else ""
         regels.append(
-            f'[{i}] id={eigen_id} | klasse={v.get("klasse", "")} | tekst="{v.get("tekst", "")}"{alt_tekst}'
+            f'[{i}] id={eigen_id} | klasse={v.get("klasse", "")} | tekst="{v.get("tekst", "")}"{alt_tekst}{merk}'
         )
     lijst = "\n".join(regels) if regels else "(geen voorstellen)"
     return (

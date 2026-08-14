@@ -8,9 +8,44 @@ from typing import Literal
 from pydantic import BaseModel
 
 
+class BestaandElement(BaseModel):
+    """Een element dat al in het annotatie-document staat, meegestuurd door de werkplek.
+
+    De agent kan niet zelf in het document kijken (dat leeft in de api), dus de werkplek geeft door
+    wat er al ligt. De Critic kan zo ook meekijken op wat de JURIST heeft gemarkeerd — als suggestie,
+    nooit als wijziging.
+    """
+
+    id: str = ""
+    klasse: str = ""
+    tekst: str = ""
+    lid: str = ""
+    herkomst: str = "agent"        # agent | mens
+
+
+class ChatContext(BaseModel):
+    """Waar de vraag over gaat. Alleen ingevuld als de werkplek een specifieke bepaling of markering
+    in beeld heeft; bij een gewone vraag blijft dit leeg."""
+
+    slug: str = ""
+    bwbId: str = ""
+    artikel: str = ""
+    lid: str = ""
+    element_id: str = ""
+    klasse: str = ""
+    fragment: str = ""             # de selectie of de tekst van het element
+    corpus: str = ""               # de getoonde artikeltekst
+    bestaande_elementen: list[BestaandElement] = []
+
+
 class ChatRequest(BaseModel):
     question: str
     conversation_id: str | None = None  # stuur mee voor gespreksgeheugen
+    # "advies" = een vraag bij een bestaande annotatie. De supervisor kiest dan niet zelf, maar
+    # routeert hard naar de antwoord-worker: zo kan een adviesvraag structureel geen annotatie
+    # wijzigen (die route emit simpelweg geen doel/element-events).
+    modus: Literal["auto", "advies"] = "auto"
+    context: ChatContext | None = None
 
 
 class Source(BaseModel):

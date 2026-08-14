@@ -278,13 +278,14 @@ export async function zetElementen(
   slug: string,
   elementen: VoorstelElement[],
   ronde = 0,
+  suggesties: { element_id: string; aandacht: string; motivatie: string }[] = [],
 ): Promise<AnnotatieDocument> {
   // De server MERGET dit met wat er al staat (op id, anders op tekst); `ronde` komt in de audit
   // zodat achteraf te zien is welke agent-ronde welk element opleverde.
   const res = await fetch(`/api/annotatie/documenten/${pathSegment(slug)}/elementen`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ elementen, ronde }),
+    body: JSON.stringify({ elementen, ronde, suggesties }),
   });
   return json<AnnotatieDocument>(res);
 }
@@ -376,6 +377,19 @@ export async function verwijderGesprek(id: string): Promise<void> {
 /** Stuur een vrije prompt naar de unified agent (BFF → graph-qa /v1/chat, SSE). De supervisor kiest
  *  per beurt `antwoord` (streamt tekst-`token`s + `sources`) of `annotatie` (`doel` + `element`).
  *  `conversationId` houdt het gespreksgeheugen vast (thread_id). */
+/** Context bij een adviesvraag of een annotatie: waar gaat het over. */
+export interface AgentContext {
+  slug?: string;
+  bwbId?: string;
+  artikel?: string;
+  lid?: string;
+  element_id?: string;
+  klasse?: string;
+  fragment?: string;
+  corpus?: string;
+  bestaande_elementen?: { id: string; klasse: string; tekst: string; lid: string; herkomst: string }[];
+}
+
 export async function annoteerAgentStream(
   prompt: string,
   handlers: {
@@ -386,14 +400,22 @@ export async function annoteerAgentStream(
     onDoel?: (doel: AgentDoel) => void;
     onElement?: (el: VoorstelElement) => void;
     onOntbrekend?: (items: OntbrekendItem[]) => void;
+    /** Kanttekening van de Critic bij een markering die de JURIST maakte. Nooit een wijziging. */
+    onSuggestie?: (s: { element_id: string; aandacht: string; motivatie: string }) => void;
   },
   conversationId?: string,
   signal?: AbortSignal,
+  extra?: { modus?: "auto" | "advies"; context?: AgentContext },
 ): Promise<void> {
   const res = await fetch("/api/annotatie/agent", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ question: prompt, conversation_id: conversationId }),
+    body: JSON.stringify({
+      question: prompt,
+      conversation_id: conversationId,
+      ...(extra?.modus ? { modus: extra.modus } : {}),
+      ...(extra?.context ? { context: extra.context } : {}),
+    }),
     signal,
   });
   if (!res.ok) throw await parseError(res);
@@ -427,6 +449,7 @@ export async function annoteerAgentStream(
               element?: VoorstelElement;
               items?: OntbrekendItem[];
               sources?: Bron[];
+              suggestie?: { element_id: string; aandacht: string; motivatie: string };
             }
           | null;
         if (!ev) continue;
@@ -437,6 +460,7 @@ export async function annoteerAgentStream(
         else if (ev.type === "doel" && ev.doel) handlers.onDoel?.(ev.doel);
         else if (ev.type === "element" && ev.element) handlers.onElement?.(ev.element);
         else if (ev.type === "ontbrekend") handlers.onOntbrekend?.(ev.items ?? []);
+        else if (ev.type === "suggestie" && ev.suggestie) handlers.onSuggestie?.(ev.suggestie);
         else if (ev.type === "error") throw { status: 502, detail: ev.message ?? "Agent mislukt." } as ApiError;
       }
     }

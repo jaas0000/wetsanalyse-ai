@@ -25,7 +25,8 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response, 
 
 from ..annotatie_contracts import (
     AnnotatieDocument, AnnotatieElement, AuditRecord, Beslissing, BeslissingInvoer, BeslissingType,
-    DocumentCreate, DocumentSamenvatting, ElementInvoer, ElementenInvoer, Lifecycle,
+    CriticSuggestie, DocumentCreate, DocumentSamenvatting, ElementInvoer, ElementenInvoer,
+    Lifecycle,
     MensElementInvoer,
 )
 from ..annotatie_store import CONFLICT, GEEN_ELEMENT, AnnotatieStore, etag_van
@@ -237,6 +238,21 @@ async def zet_elementen(
                 regels.append(("element-herzien", el.id, {"ronde": req.ronde, "diff": diff}))
             elif critic_bij:
                 el.lifecycle = Lifecycle.critic_checked if el.aandacht is not None else el.lifecycle
+
+        # Kanttekeningen bij eigen markeringen. Alleen op mens-elementen: op een agent-element
+        # hoort een oordeel gewoon in `aandacht` thuis.
+        for s in req.suggesties:
+            el = op_id.get(s.element_id)
+            if el is None or el.herkomst != "mens":
+                continue
+            el.critic_suggestie = CriticSuggestie(
+                aandacht=s.aandacht, motivatie=s.motivatie,
+                voorstel_klasse=s.voorstel_klasse, voorstel_tekst=s.voorstel_tekst,
+            )
+            regels.append(("critic-suggestie", el.id, {
+                "ronde": req.ronde, "aandacht": s.aandacht.value if s.aandacht else None,
+                "motivatie": s.motivatie,
+            }))
 
         if req.trek_ontbrekende_in:
             behouden = []
