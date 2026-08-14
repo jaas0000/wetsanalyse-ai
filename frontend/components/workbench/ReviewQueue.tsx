@@ -213,6 +213,19 @@ function DecisionCard({
     }
   }
 
+  /** Open een bedieningsrij op DEZE kaart.
+   *
+   *  De rij hangt aan de actieve kaart (`open={el.id === actiefId ? … : "geen"}`), en de knoppen
+   *  stoppen hun klik zodat de kaart-onClick niet ook nog vuurt. Gevolg: op een niet-actieve kaart
+   *  gebeurde er zichtbaar niets — en klapte het palet open op de kaart die wél actief was. Eerst
+   *  selecteren dus. Alleen als de kaart het nog niet is: `onKies` is een toggle, en op de actieve
+   *  kaart zou hij de selectie juist opheffen.
+   */
+  function openRij(rij: OpenRij) {
+    if (!actief) onKies();
+    onOpen(rij);
+  }
+
   /** Eén wijziging wegschrijven met een afgeleide reden — geen dropdown, geen opslaan-knop. */
   async function wijzig(w: Wijziging) {
     await verstuur({ type: "edit", review_reason: redenVoorWijziging(el, w), wijziging: w });
@@ -246,7 +259,7 @@ function DecisionCard({
             disabled={bezig}
             onClick={(e) => {
               e.stopPropagation();
-              onOpen(palet ? "geen" : "klasse");
+              openRij(palet ? "geen" : "klasse");
             }}
             title="Andere klasse kiezen"
             className={`focus-ring inline-flex min-h-[24px] items-center rounded px-2 py-0.5 text-xs font-semibold transition hover:ring-1 hover:ring-lint coarse:min-h-[44px] disabled:opacity-50 ${jasStyle(el.klasse)}`}
@@ -280,7 +293,7 @@ function DecisionCard({
             <button
               type="button"
               disabled={bezig}
-              onClick={() => onOpen(wegHalen ? "geen" : "verwerp")}
+              onClick={() => openRij(wegHalen ? "geen" : "verwerp")}
               aria-label={eigen ? "Markering wissen" : "Voorstel verwerpen"}
               title={eigen ? "Wissen" : "Verwerpen"}
               className="focus-ring inline-flex min-h-[24px] min-w-[24px] items-center justify-center rounded-lg p-1.5 text-muted transition hover:bg-surface hover:text-fout coarse:min-h-[44px] coarse:min-w-[44px]"

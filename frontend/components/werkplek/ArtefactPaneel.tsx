@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { Dialog, type DialogVariant } from "@/components/ui/Dialog";
 import { Melding } from "@/components/ui/Melding";
@@ -97,6 +97,17 @@ export function ArtefactPaneel({
     [doc.elementen, filter, posities],
   );
 
+  /** Escape pelt één laag af in plaats van meteen het hele paneel te sluiten: eerst de selectie in
+   *  de tekst, dan de open bedieningsrij, dan het gekozen element — en pas als er niets meer open
+   *  staat gaat het paneel dicht. Dit hangt aan `Dialog` omdat die anders als eerste aan de beurt is
+   *  (zie `onEscape` daar); een eigen luisteraar hier kwam er nooit aan toe. */
+  const opEscape = useCallback(() => {
+    if (selectie) setSelectie(null);
+    else if (open !== "geen") setOpen("geen");
+    else if (actiefId) onKies(undefined);
+    else onSluit();
+  }, [selectie, open, actiefId, onKies, onSluit]);
+
   /** Sneltoetsen. Bewust inactief zodra de focus in een invoerveld staat: anders keur je iets goed
    *  door "a" te typen in een toelichting. Escape werkt altijd — dat is de uitweg. */
   useEffect(() => {
@@ -106,12 +117,6 @@ export function ArtefactPaneel({
         !!doel && (doel.tagName === "INPUT" || doel.tagName === "TEXTAREA" || doel.isContentEditable);
       if (e.metaKey || e.ctrlKey || e.altKey) return;
 
-      if (e.key === "Escape") {
-        // Eerst de open bedieningsrij dichtdoen, pas daarna de selectie loslaten.
-        if (open !== "geen") setOpen("geen");
-        else if (actiefId) onKies(undefined);
-        return;
-      }
       if (inVeld) return;
 
       const stap = (richting: 1 | -1) => {
@@ -219,7 +224,7 @@ export function ArtefactPaneel({
   }
 
   return (
-    <Dialog label={`Annotatie: ${opschrift}`} variant={variant} onSluit={onSluit}>
+    <Dialog label={`Annotatie: ${opschrift}`} variant={variant} onSluit={onSluit} onEscape={opEscape}>
       <>
         {/* Kop */}
         <div className="flex shrink-0 items-start justify-between gap-3 border-b border-line px-5 py-3.5 pt-[max(0.875rem,env(safe-area-inset-top))]">

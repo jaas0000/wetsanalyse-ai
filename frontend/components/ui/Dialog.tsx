@@ -29,6 +29,13 @@ interface Props {
   label: string;
   variant?: DialogVariant;
   onSluit: () => void;
+  /** Wat Escape doet, als dat niet simpelweg sluiten is.
+   *
+   *  Een venster met eigen lagen erin (een open bedieningsrij, een popover, een selectie) wil dat
+   *  Escape éérst de bovenste laag afpelt. Dat kan het venster niet zelf: beide luisteraars hangen
+   *  aan `window`, en deze staat er als eerste op — een `stopPropagation` van binnenuit komt te laat.
+   *  Dus geeft de eigenaar zijn eigen afhandeling mee. Achtergrondklik blijft `onSluit`. */
+  onEscape?: () => void;
   children: ReactNode;
 }
 
@@ -42,14 +49,14 @@ interface Props {
  *  **`kolom` is bewust niet modaal**: geen backdrop, geen `aria-modal`, en géén focus-trap. Het
  *  paneel staat dan náást de chat, en die moet juist bereikbaar blijven — een trap zou je erin
  *  opsluiten. Escape sluit wél, dat is in alle drie de vormen dezelfde uitweg. */
-export function Dialog({ label, variant = "center", onSluit, children }: Props) {
+export function Dialog({ label, variant = "center", onSluit, onEscape, children }: Props) {
   const paneelRef = useRef<HTMLDivElement>(null);
   const modaal = variant !== "kolom";
 
   useEffect(() => {
     const opKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
-        onSluit();
+        (onEscape ?? onSluit)();
         return;
       }
       if (modaal && e.key === "Tab" && paneelRef.current) {
@@ -68,11 +75,15 @@ export function Dialog({ label, variant = "center", onSluit, children }: Props) 
       }
     };
     window.addEventListener("keydown", opKey);
-    // Alleen bij een modaal venster de focus verplaatsen: bij de kolomvorm zou dat de cursor
-    // wegtrekken uit het chatveld waar je net iets aan het typen was.
-    if (modaal) paneelRef.current?.focus();
     return () => window.removeEventListener("keydown", opKey);
-  }, [onSluit, modaal]);
+  }, [onSluit, onEscape, modaal]);
+
+  // De focus verplaatsen hoort bij het ópenen, niet bij het (her)registreren van de luisteraar —
+  // anders trekt elke wisseling van een callback de cursor terug naar het paneel, midden in het
+  // veld waar je aan het typen was. Alleen modaal: bij de kolomvorm staat de chat er juist naast.
+  useEffect(() => {
+    if (modaal) paneelRef.current?.focus();
+  }, [modaal]);
 
   if (!modaal) {
     return (
