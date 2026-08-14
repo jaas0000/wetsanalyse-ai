@@ -26,10 +26,21 @@ export async function POST(req: Request) {
       cache: "no-store",
     });
   } catch (err) {
-    logger.warn("Agent-proxy: onbereikbaar", { fout: (err as Error).message });
-    return new Response(
-      `event: error\ndata: ${JSON.stringify({ detail: `Agent onbereikbaar (${(err as Error).message})` })}\n\n`,
-      { status: 502, headers: { "Content-Type": "text/event-stream" } },
+    // Bewust JSON en géén SSE-frame. De stroom is nooit begonnen, dus de client zit nog in
+    // `if (!res.ok) throw await parseError(res)` en komt aan de frames niet toe: een SSE-body bij een
+    // 502 werd stilzwijgend weggegooid en de gebruiker las "Bad Gateway" in plaats van wat er aan de
+    // hand was. Eén foutkanaal per antwoord — hetzelfde als de artikel-route hiernaast.
+    const verlopen = (err as Error).name === "TimeoutError";
+    logger.warn(verlopen ? "Agent-proxy: geen antwoord op tijd" : "Agent-proxy: onbereikbaar", {
+      fout: (err as Error).message,
+    });
+    return Response.json(
+      {
+        detail: verlopen
+          ? `De agent antwoordde niet binnen ${Math.round(UPSTREAM_TIMEOUT_MS / 1000)} seconden.`
+          : `Agent onbereikbaar (${(err as Error).message})`,
+      },
+      { status: verlopen ? 504 : 502 },
     );
   }
 

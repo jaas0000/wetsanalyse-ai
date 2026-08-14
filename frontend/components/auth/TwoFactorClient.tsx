@@ -63,6 +63,9 @@ export function TwoFactorClient() {
       // Harde navigatie, zie de toelichting in LoginClient.tsx: de disclaimer-gate kan hier
       // omleiden, en dat combineert niet goed met een soft router.push.
       window.location.href = veiligPad(params.get("callbackUrl"), window.location.origin);
+    } catch {
+      // Zie LoginClient: een transportfout is geen antwoord en viel dus buiten alle afhandeling.
+      setFout("De code kon niet worden gecontroleerd — de dienst is niet bereikbaar. Probeer het zo opnieuw.");
     } finally {
       setBezig(false);
     }

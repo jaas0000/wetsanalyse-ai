@@ -359,7 +359,11 @@ tokens/secrets/inhoud loggen. In de vitest-node-omgeving wordt `server-only` ges
 - **Login = Auth.js (NextAuth v5), API is identiteitsbron.** De hele app zit achter een login met
   **userid** + wachtwoord (`auth.ts` + `auth.config.ts`; `proxy.ts` — de Next 16-opvolger van
   de `middleware`-conventie — bewaakt élke route en
-  stuurt niet-ingelogden naar `/login`). Inloggen gaat uitsluitend met de userid; e-mail wordt bij
+  stuurt niet-ingelogden naar `/login`). De **matcher** verankert de bestandsextensies op het einde
+  en zondert `/api/` uit van die tak: zonder dat viel elk pad met ".png" eríń (`/api/gesprekken/abc.png`)
+  buiten de gate, en een route-parameter mag er nu eenmaal uitzien als een bestandsnaam.
+  `proxy.test.ts` leest het patroon uit de bron en legt dat vast — houd de matcher daarom een
+  **letterlijke string**, want Next analyseert hem statisch bij het bouwen. Inloggen gaat uitsluitend met de userid; e-mail wordt bij
   het aanmaken verplicht/uniek geregistreerd maar is geen inlog-identiteit. De sessie is een
   httpOnly JWT-cookie (`AUTH_SECRET`) die de `userid` + rol draagt; de Credentials-provider
   verifieert server→server bij de API (`lib/server.ts → verifyCredentials` → `/v1/auth/verify`). De
