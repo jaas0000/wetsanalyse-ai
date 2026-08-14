@@ -72,6 +72,27 @@ export function DocumentPaneel({
   const tekstRef = useRef<HTMLParagraphElement>(null);
   const markRef = useRef<HTMLButtonElement>(null);
 
+  // Een selectie eindigt niet altijd met een muisklik. Met Shift+pijltjes komt er geen enkel
+  // muisevent langs — dan is zelf markeren met het toetsenbord onmogelijk (WCAG 2.1.1) — en op een
+  // aanraakscherm laat het verslepen van een selectiegreep geen `mouseup` achter. Beide luisteraars
+  // hangen aan het document omdat de vinger of de cursor buiten de alinea kan loslaten;
+  // `verwerkSelectie` controleert zelf al of de selectie wél binnen de tekst valt.
+  useEffect(() => {
+    if (!onSelectie) return;
+    const opToets = (e: KeyboardEvent) => {
+      // Alleen na een selectie-gebaar kijken: anders draait dit bij elke toetsaanslag in de pagina.
+      if (e.shiftKey || e.key === "Shift") verwerkSelectie();
+    };
+    document.addEventListener("keyup", opToets);
+    document.addEventListener("touchend", verwerkSelectie);
+    return () => {
+      document.removeEventListener("keyup", opToets);
+      document.removeEventListener("touchend", verwerkSelectie);
+    };
+    // Bewust zonder dependency-array: `verwerkSelectie` leest de actuele bron en moet elke render
+    // vers zijn, net als de sneltoetsen in het artefactpaneel.
+  });
+
   // De gekozen markering in beeld brengen. Zonder dit sta je bij een lange bepaling naar de verkeerde
   // alinea te kijken terwijl je in de lijst al drie elementen verder bent.
   useEffect(() => {

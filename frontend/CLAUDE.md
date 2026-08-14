@@ -41,7 +41,10 @@ De **harde scheidingslijn**: alles met een token is server-only.
   en -body **ongewijzigd** teruggeeft (incl. 401/404/409/429/503 + `Retry-After`/`Location`/
   `Content-Type`-headers), zodat de client correcte foutafhandeling houdt. `init.admin: true`
   injecteert het admin-token i.p.v. het client-token. Verzin in nieuwe routes geen eigen
-  fetch-logica — leid alles via deze helper. De **SSE-uitzondering** is de werkplek-agent-route
+  fetch-logica — leid alles via deze helper. Hij bewaakt ook de **wachttijd**: Node's `fetch` kent
+  geen standaardtimeout, dus een upstream die wél verbindt maar niet antwoordt liet de UI eeuwig in
+  zijn laadstand staan. Default 30 s → **504** met een leesbare reden (onbereikbaar blijft 502);
+  `timeoutMs` per route hoger waar dat hoort (de modeltest doet een echte LLM-aanroep: 120 s). De **SSE-uitzondering** is de werkplek-agent-route
   (`app/api/annotatie/agent/route.ts`): geen `proxy()`, maar rauwe passthrough van `upstream.body`
   met `X-Accel-Buffering: no` en `Cache-Control: no-transform` (NPM moet proxy-buffering óók uit
   hebben) — zie §*Werkplek*.
@@ -289,8 +292,14 @@ toelichting → `interpretatie`, meerdere velden → `anders`). Vragen wat je zo
 
 ### Zelf annoteren (tekstselectie)
 
-De jurist kan in `DocumentPaneel` tekst selecteren en die zelf markeren. Vijf dingen om te kennen:
+De jurist kan in `DocumentPaneel` tekst selecteren en die zelf markeren. Zes dingen om te kennen:
 
+- **Een selectie eindigt niet altijd met een muisklik.** Naast `onMouseUp` luistert
+  `DocumentPaneel` op documentniveau naar `keyup` (Shift-gebaren) en `touchend`: met Shift+pijltjes
+  komt er geen muisevent langs — dan is zelf markeren met het toetsenbord onmogelijk (WCAG 2.1.1) —
+  en het verslepen van een selectiegreep op een aanraakscherm laat er ook geen achter. Het paneel
+  ruimt de DOM-selectie op als het de popover sluit (`sluitSelectie`), anders klapt die bij de
+  volgende tik meteen weer open.
 - **De rekenkern staat in `lib/selectie.ts`**, niet in het component: vitest draait node-env zonder
   DOM, dus alleen zo is die logica te testen. Het component doet enkel de `TreeWalker`-wandeling en
   geeft knooplengtes door aan `offsetUit`. Dat werkt doordat de alinea één aaneengesloten reeks
@@ -337,8 +346,12 @@ tokens/secrets/inhoud loggen. In de vitest-node-omgeving wordt `server-only` ges
   Components; geen token in `NEXT_PUBLIC_*`. Nieuwe upstream-calls lopen via een Route Handler.
 - **Geen onbetrouwde waarde rechtstreeks in een `href`.** Velden uit de analyse-pipeline/LLM
   (`bronreferentie`, `verwijzing.doel.target`) kunnen een `javascript:`/`data:`-scheme bevatten —
-  React escaped tekst, maar niet de href-scheme. Route ze altijd via `bronHref`/`wettenOverheidHref`
-  in `lib/url.ts` (jci-uri → wetten.overheid.nl-deeplink; onbetrouwd schema → platte tekst).
+  React escaped tekst, maar niet de href-scheme. Route ze altijd via **`bronHref`** in `lib/url.ts` —
+  één functie voor alle vormen die de agent levert (jci, graaf-IRI `https://ipalm.nl/bwb/…`, kaal
+  BWB-id, complete wetten.overheid.nl-URL); onbekend of onbetrouwbaar → `undefined` ⇒ platte tekst.
+  Er stonden twee bijna gelijknamige helpers en de bronnenlijst greep de verkeerde: die plakte een
+  graaf-IRI achter `wetten.overheid.nl/` en kwam door de hostcontrole heen, dus stond er een
+  klikbare link naar een 404 onder elk antwoord.
 - **Status/headers ongewijzigd doorgeven.** De API bezit het gedrag (409 bij verkeerde state, 429 +
   `Retry-After`, 404 op andermans id). De BFF maskeert dat niet; de UI reageert erop.
 - **Admin-pad apart.** `/api/admin/*` → `proxy(..., { admin: true })` → `/v1/admin/*`. Het admin-token

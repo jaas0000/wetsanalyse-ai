@@ -96,16 +96,26 @@ export function ArtefactPaneel({
     [doc.elementen, filter, posities],
   );
 
+  /** De selectie loslaten, inclusief die in de DOM.
+   *
+   *  Dat laatste is nodig sinds een selectie ook op `touchend`/`keyup` wordt opgepikt: laat je alleen
+   *  de state los, dan staat de tekst in de browser nog steeds geselecteerd en klapt de popover bij de
+   *  eerstvolgende tik of Shift-toets meteen weer open. */
+  const sluitSelectie = useCallback(() => {
+    setSelectie(null);
+    window.getSelection()?.removeAllRanges();
+  }, []);
+
   /** Escape pelt één laag af in plaats van meteen het hele paneel te sluiten: eerst de selectie in
    *  de tekst, dan de open bedieningsrij, dan het gekozen element — en pas als er niets meer open
    *  staat gaat het paneel dicht. Dit hangt aan `Dialog` omdat die anders als eerste aan de beurt is
    *  (zie `onEscape` daar); een eigen luisteraar hier kwam er nooit aan toe. */
   const opEscape = useCallback(() => {
-    if (selectie) setSelectie(null);
+    if (selectie) sluitSelectie();
     else if (open !== "geen") setOpen("geen");
     else if (actiefId) onKies(undefined);
     else onSluit();
-  }, [selectie, open, actiefId, onKies, onSluit]);
+  }, [selectie, open, actiefId, onKies, onSluit, sluitSelectie]);
 
   /** Sneltoetsen. Bewust inactief zodra de focus in een invoerveld staat: anders keur je iets goed
    *  door "a" te typen in een toelichting. Escape werkt altijd — dat is de uitweg. */
@@ -197,8 +207,7 @@ export function ArtefactPaneel({
           anker: maakAnker(selectie.bron, selectie.start, selectie.eind, selectie.lid),
         },
       });
-      setSelectie(null);
-      window.getSelection()?.removeAllRanges();
+      sluitSelectie();
     } catch (e) {
       setFout(e instanceof Error ? e.message : "Aanpassen is niet gelukt.");
     }
@@ -216,8 +225,7 @@ export function ArtefactPaneel({
       // Heeft de bepaling geen genummerde leden, dan valt het lid terug op de afbakening van het
       // document zelf — beter dat dan een leeg veld op een document dat wél over één lid gaat.
       await onEigenMarkering({ ...invoer, lid: invoer.lid || doc.lid || "" });
-      setSelectie(null);
-      window.getSelection()?.removeAllRanges();
+      sluitSelectie();
     } catch (e) {
       setFout(e instanceof Error ? e.message : "Markeren is niet gelukt.");
     }
@@ -331,7 +339,7 @@ export function ArtefactPaneel({
             aanpasbaar={teCorrigeren ? { klasse: teCorrigeren.klasse, tekst: teCorrigeren.tekst } : undefined}
             onPasAan={teCorrigeren ? pasFragmentAan : undefined}
             onKies={markeerSelectie}
-            onSluit={() => setSelectie(null)}
+            onSluit={sluitSelectie}
           />
         )}
       </>

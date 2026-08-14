@@ -37,7 +37,7 @@ import {
 } from "@/lib/annotatie";
 import { useBreedScherm } from "@/lib/useBreedScherm";
 import { jasStyle } from "@/lib/jas";
-import { wettenOverheidHref } from "@/lib/url";
+import { bronHref } from "@/lib/url";
 
 type Item =
   | { id: string; type: "user"; tekst: string; over?: string }
@@ -897,7 +897,7 @@ function Bronnen({ bronnen }: { bronnen: Bron[] }) {
       {open && (
         <div className="mt-1.5 break-words rounded-kaart border border-line bg-surface px-3 py-2 text-xs text-muted [overflow-wrap:anywhere]">
           {bronnen.map((b, i) => {
-            const href = wettenOverheidHref(b.uri);
+            const href = bronHref(b.uri);
             return (
               <span key={i}>
                 {i > 0 && ", "}
