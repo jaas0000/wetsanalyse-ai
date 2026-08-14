@@ -112,7 +112,32 @@ de SSE), timing-safe token-check.
 
 ### De annotatie-keten
 
-`ophaal (agent ⇄ tools) → annoteer → critic`. Drie dingen die je moet kennen voordat je hieraan werkt:
+```
+ophaal (agent ⇄ tools) → annoteer → critic →(route_na_critic)→ herzie → critic
+                                            └──────────────────────────→ emit → advance
+```
+
+De **herzieningslus**: de Critic wijst aan wát er mis is, de annoteerder herstelt het, en pas daarna
+ziet de jurist de uitkomst. Begrensd door `settings.critic_max_rondes` (env `CRITIC_MAX_RONDES`,
+default 2 herzieningen). De route springt er alleen in als er iets te doen is — een rood oordeel, een
+vervang/verwijder-instructie, een gemist element of een verworpen fragment. Bij een schone annotatie
+kost de lus dus niets.
+
+- **`critic_max_rondes=0` reproduceert exact het oude gedrag.** Dat is de terugvaloptie in productie:
+  één env-var, geen deploy-rollback. Er is een test die dat bewaakt.
+- **`emit_node` is de enige plek die annotatie-events uitstuurt.** Zou de Critic dat doen, dan zag de
+  werkplek elke tussenversie van de lus voorbijkomen.
+- **Faalgedrag: nooit minder dan we al hadden.** Critic faalt → direct emitten met de voorstellen
+  ongemoeid (ook hun eerdere oordeel). Herziening faalt of levert niets gegronds → vorige voorstellen
+  behouden. De merge is een union; alleen een expliciete `verwijder`-instructie laat iets verdwijnen.
+- **Een herziening die een element ongewijzigd laat, behoudt het oordeel.** Is het element wél
+  aangepast, dan is de aandacht leeg tot de volgende Critic-pas — die versie is nog niet beoordeeld,
+  en er een oud oordeel op plakken zou schijnzekerheid zijn.
+- De rondeteller telt **herzieningen**, niet Critic-passes, en wordt gereset in `advance_node` én in
+  de init van `answer_stream`. Zonder die reset begint een tweede beurt in dezelfde thread met een
+  volle teller (de checkpointer bewaart de state) en wordt de lus overgeslagen.
+
+Drie dingen die je verder moet kennen voordat je hieraan werkt:
 
 - **Elk voorstel draagt een `id`** dat `_verwerk` toekent (niet het model). De Critic koppelt zijn
   oordeel daarop; op positie koppelen brak zodra een ronde een element toevoegde of wegliet. Geeft

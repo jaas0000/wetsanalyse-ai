@@ -65,6 +65,12 @@ class Settings(BaseModel):
     max_subquestions: int = 5         # cap op het aantal deelvragen (kosten/latency begrenzen)
     sub_max_turns: int = 8            # agent⇄tools-beurten per deelvraag (los van max_turns)
 
+    # Herzieningslus annoteerder ⇄ Critic: hoeveel keer de annoteerder een Critic-instructie mag
+    # verwerken vóór de jurist het ziet. Elke ronde kost een annoteer- én een critic-call met het
+    # volle corpus, dus dit is de kosten-/latency-knop. **0 = uit**, en dan is de keten exact de
+    # oude `annoteer → critic → emit` — de veiligheidsklep om dit zonder rollback terug te draaien.
+    critic_max_rondes: int = 2
+
     # Geheugen (LangGraph-checkpointer). Voorrang: `checkpoint_db_url` (Postgres, gedeeld → horizontaal
     # veilig) → anders `checkpoint_db_path` (durable AsyncSqliteSaver, per-instance) → anders in-memory.
     checkpoint_db_url: str | None = None
@@ -99,6 +105,7 @@ class Settings(BaseModel):
             "enable_decomposition": e.get("ENABLE_DECOMPOSITION"),
             "max_subquestions": e.get("MAX_SUBQUESTIONS"),
             "sub_max_turns": e.get("SUB_MAX_TURNS"),
+            "critic_max_rondes": e.get("CRITIC_MAX_RONDES"),
             "qa_api_token": _read_secret(e, "QA_API_TOKEN"),
             "cors_origins": cors or None,
             "rate_limit": e.get("QA_RATE_LIMIT"),

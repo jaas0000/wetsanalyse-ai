@@ -133,6 +133,15 @@ async def answer_stream(
         "answer": "",
         "sub_questions": [],
         "sub_findings": [],
+        # Annotatie-velden: MOETEN mee in de reset. De checkpointer bewaart de state per thread, dus
+        # zonder dit begint een tweede beurt met `critic_ronde` van de vorige annotatie en wordt de
+        # herzieningslus overgeslagen.
+        "voorstellen": [],
+        "verworpen_fragmenten": [],
+        "critic_feedback": [],
+        "critic_ontbrekend": [],
+        "critic_gefaald": False,
+        "critic_ronde": 0,
     }
 
     tracer = get_tracer(__name__)

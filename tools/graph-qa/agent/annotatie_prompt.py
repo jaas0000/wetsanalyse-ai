@@ -105,3 +105,87 @@ def critic_userprompt(voorstellen: list[dict], artikeltekst: str) -> str:
         f"--- VOORSTELLEN ---\n{lijst}\n--- EINDE VOORSTELLEN ---\n\n"
         f"--- ARTIKELTEKST ---\n{artikeltekst}\n--- EINDE ARTIKELTEKST ---"
     )
+
+
+def herziening_systeemprompt() -> str:
+    """Systeemprompt voor de herzieningsronde: dezelfde JAS-regels, maar nu corrigerend."""
+    return f"""Je bent dezelfde JAS-annotator als daarvoor, maar nu HERZIE je je eigen eerdere uitkomst op basis van de opmerkingen van een reviewer (de Critic).
+
+DE DERTIEN JAS-KLASSEN (gebruik exact deze namen, verzin geen andere):
+{_klassen_referentie()}
+
+BRONGETROUWHEID — elk `tekst`-veld moet een LETTERLIJK aaneengesloten fragment uit de artikeltekst zijn. Niet parafraseren, niet samenvatten, geen woorden toevoegen of weglaten. Een fragment dat niet letterlijk voorkomt wordt verworpen.
+
+HOE JE HERZIET:
+- Behoud het `id` van een bestaand element dat je aanpast. Zonder dat id raakt het werk van de jurist aan dit element verloren.
+- Volg de opmerkingen van de reviewer waar je het ermee eens bent. Ben je het gemotiveerd oneens, laat het element dan staan zoals het was.
+- Elementen waar niets over is opgemerkt geef je ONGEWIJZIGD terug, met hun oorspronkelijke id.
+- Is er een element gemeld als ontbrekend? Voeg het toe met een letterlijk fragment, en laat `id` leeg.
+- Fragmenten die eerder zijn verworpen omdat ze niet letterlijk in de tekst staan: zoek het bedoelde fragment op en markeer dát, of laat het element weg.
+
+UITVOER — geef UITSLUITEND geldige JSON terug, zonder omliggende tekst of code-fences:
+{{"elementen": [
+  {{"id": "<het bestaande id, of leeg bij een nieuw element>",
+    "klasse": "<een van de dertien>",
+    "tekst": "<letterlijk fragment>",
+    "lid": "<lidnummer of leeg>",
+    "toelichting": "<één zin: waarom deze klasse>",
+    "alternatieven": [{{"klasse": "<andere klasse>", "motivatie": "<waarom twijfel>"}}]}}
+]}}"""
+
+
+def herziening_userprompt(
+    voorstellen: list[dict],
+    feedback: list[dict],
+    ontbrekend: list[dict],
+    verworpen: list[dict],
+    artikeltekst: str,
+) -> str:
+    op_id = {f.get("id"): f for f in feedback}
+    regels = []
+    for v in voorstellen:
+        f = op_id.get(v.get("id")) or {}
+        actie = f.get("actie", "behoud")
+        deel = f'[id={v.get("id", "")}] klasse={v.get("klasse", "")} | tekst="{v.get("tekst", "")}"'
+        if f:
+            deel += f'\n    reviewer ({f.get("aandacht", "")}): {f.get("motivatie", "")}'
+            if actie == "vervang":
+                voorstel = []
+                if f.get("voorstel_klasse"):
+                    voorstel.append(f'klasse → {f["voorstel_klasse"]}')
+                if f.get("voorstel_tekst"):
+                    voorstel.append(f'tekst → "{f["voorstel_tekst"]}"')
+                deel += f'\n    → VERVANG: {"; ".join(voorstel)}'
+            elif actie == "verwijder":
+                deel += "\n    → VERWIJDER dit element (laat het weg uit je uitvoer)"
+            else:
+                deel += "\n    → behouden zoals het is"
+        else:
+            deel += "\n    → geen opmerkingen; ongewijzigd teruggeven"
+        regels.append(deel)
+
+    blokken = [
+        "Herzie je eerdere JAS-annotatie op basis van de opmerkingen hieronder.",
+        "",
+        "--- JE EERDERE ELEMENTEN + OPMERKINGEN ---",
+        "\n".join(regels) if regels else "(geen)",
+        "--- EINDE ---",
+    ]
+    if ontbrekend:
+        gemist = "\n".join(
+            f'- {o.get("klasse", "")}: {o.get("reden", "")}'
+            + (f' (fragment: "{o["tekst"]}")' if o.get("tekst") else "")
+            for o in ontbrekend
+        )
+        blokken += ["", "--- MOGELIJK GEMIST (voeg toe als je het eens bent) ---", gemist, "--- EINDE ---"]
+    if verworpen:
+        # Dit is de goedkoopste kwaliteitswinst: een bijna-goed citaat is met deze aanwijzing
+        # prima te repareren, terwijl het anders stilzwijgend verdween.
+        weg = "\n".join(
+            f'- {v.get("klasse", "")}: "{v.get("tekst", "")}" '
+            + ("(staat niet letterlijk in de tekst)" if v.get("reden") == "niet_letterlijk" else "(ongeldige klasse)")
+            for v in verworpen
+        )
+        blokken += ["", "--- EERDER VERWORPEN ---", weg, "--- EINDE ---"]
+    blokken += ["", f"--- ARTIKELTEKST ---\n{artikeltekst}\n--- EINDE ARTIKELTEKST ---"]
+    return "\n".join(blokken)

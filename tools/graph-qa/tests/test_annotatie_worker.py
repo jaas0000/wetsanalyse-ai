@@ -4,6 +4,10 @@ ANNOTEER-stap. Draait de échte LangGraph (prod-config: decompositie aan) met Fa
 FakeLLM-volgorde per annotatie: supervisor(create) → ophaal-agent turn1(stream, tool_use) →
 ophaal-agent turn2(stream, doel-JSON) → annoteer-stap(create, elementen-JSON) → critic-stap(create,
 oordelen-JSON). De Critic mag falen zonder de annotatie te breken (elementen dan zonder aandacht).
+
+De scenario's hieronder draaien met `critic_max_rondes=0`: dat is de keten ZONDER herzieningslus, en
+tegelijk het bewijs dat die veiligheidsklep het oude gedrag exact reproduceert. De lus zelf staat in
+`test_critic_lus.py`.
 """
 from __future__ import annotations
 
@@ -49,7 +53,7 @@ def test_ophalen_dan_annoteren_grondt_lid():
     ])
     events = _run(answer_stream(
         "annoteer artikel 9 lid 1 van de Invorderingswet 1990",
-        settings=make_settings(enable_decomposition=True), llm=llm, graph=FakeGraph(result=LID_TSV),
+        settings=make_settings(enable_decomposition=True, critic_max_rondes=0), llm=llm, graph=FakeGraph(result=LID_TSV),
     ))
 
     doel = next(e for e in events if e["type"] == "doel")["doel"]
@@ -82,7 +86,7 @@ def test_get_bepaling_route_voor_decimaal_nummer():
     ])
     events = _run(answer_stream(
         "annoteer artikel 9 lid 1 van de Leidraad Invordering 2008",
-        settings=make_settings(enable_decomposition=True), llm=llm, graph=FakeGraph(result=bep_tsv),
+        settings=make_settings(enable_decomposition=True, critic_max_rondes=0), llm=llm, graph=FakeGraph(result=bep_tsv),
     ))
     doel = next(e for e in events if e["type"] == "doel")["doel"]
     assert doel["nummer"] == "9.1" and doel["artikel"] == "9.1"
@@ -108,7 +112,7 @@ def test_critic_geel_bump_bij_alternatieven():
     ])
     events = _run(answer_stream(
         "annoteer artikel 9 lid 1 van de Invorderingswet 1990",
-        settings=make_settings(enable_decomposition=True), llm=llm, graph=FakeGraph(result=LID_TSV),
+        settings=make_settings(enable_decomposition=True, critic_max_rondes=0), llm=llm, graph=FakeGraph(result=LID_TSV),
     ))
     el = next(e["element"] for e in events if e["type"] == "element")
     assert el["aandacht"] == "geel"       # groen → geel gebumpt door de alternatieven
@@ -127,7 +131,7 @@ def test_critic_faalt_stil_elementen_komen_door():
     ])
     events = _run(answer_stream(
         "annoteer artikel 9 lid 1 van de Invorderingswet 1990",
-        settings=make_settings(enable_decomposition=True), llm=llm, graph=FakeGraph(result=LID_TSV),
+        settings=make_settings(enable_decomposition=True, critic_max_rondes=0), llm=llm, graph=FakeGraph(result=LID_TSV),
     ))
     elementen = [e["element"] for e in events if e["type"] == "element"]
     assert len(elementen) == 2
@@ -170,7 +174,7 @@ def test_gewone_vraag_blijft_antwoord_geen_annotatie():
         response([text_block("Zes weken (BWBR0004770 art. 9).")], "end_turn"),      # solve-antwoord
     ])
     events = _run(answer_stream(
-        "wat is de betaaltermijn?", settings=make_settings(enable_decomposition=True), llm=llm, graph=FakeGraph(result=LID_TSV),
+        "wat is de betaaltermijn?", settings=make_settings(enable_decomposition=True, critic_max_rondes=0), llm=llm, graph=FakeGraph(result=LID_TSV),
     ))
     assert not any(e["type"] in ("doel", "element") for e in events)
     tokens = "".join(e["content"] for e in events if e["type"] == "token")
@@ -200,7 +204,7 @@ def test_elementen_dragen_een_stabiel_id_en_critic_koppelt_daarop():
     ])
     events = _run(answer_stream(
         "annoteer artikel 9 lid 1 van de Invorderingswet 1990",
-        settings=make_settings(enable_decomposition=True), llm=llm, graph=FakeGraph(result=LID_TSV),
+        settings=make_settings(enable_decomposition=True, critic_max_rondes=0), llm=llm, graph=FakeGraph(result=LID_TSV),
     ))
 
     els = {e["element"]["id"]: e["element"] for e in events if e["type"] == "element"}
@@ -224,7 +228,7 @@ def test_verworpen_fragment_breekt_de_annotatie_niet():
     ])
     events = _run(answer_stream(
         "annoteer artikel 9 lid 1 van de Invorderingswet 1990",
-        settings=make_settings(enable_decomposition=True), llm=llm, graph=FakeGraph(result=LID_TSV),
+        settings=make_settings(enable_decomposition=True, critic_max_rondes=0), llm=llm, graph=FakeGraph(result=LID_TSV),
     ))
     els = [e["element"] for e in events if e["type"] == "element"]
     assert [el["klasse"] for el in els] == ["Rechtssubject"]
