@@ -11,7 +11,9 @@ POST   /v1/annotatie/documenten                                  — maak docume
 GET    /v1/annotatie/documenten?limit=&offset=                   — eigen documenten (samenvatting)
 GET    /v1/annotatie/documenten/{slug}                           — volledig document
 DELETE /v1/annotatie/documenten/{slug}                           — verwijder eigen document
-PUT    /v1/annotatie/documenten/{slug}/elementen                 — voorgestelde elementen zetten
+PUT    /v1/annotatie/documenten/{slug}/elementen                 — uitkomst van een agent-ronde (merge)
+POST   /v1/annotatie/documenten/{slug}/elementen                 — eigen markering toevoegen (jurist)
+DELETE /v1/annotatie/documenten/{slug}/elementen/{id}            — eigen markering verwijderen
 POST   /v1/annotatie/documenten/{slug}/elementen/{id}/beslissing — human-decision
 GET    /v1/annotatie/documenten/{slug}/audit                     — append-only tijdlijn
 """
@@ -24,6 +26,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response, 
 from ..annotatie_contracts import (
     AnnotatieDocument, AnnotatieElement, AuditRecord, Beslissing, BeslissingInvoer, BeslissingType,
     DocumentCreate, DocumentSamenvatting, ElementInvoer, ElementenInvoer, Lifecycle,
+    MensElementInvoer,
 )
 from ..annotatie_store import CONFLICT, GEEN_ELEMENT, AnnotatieStore, etag_van
 from ..auth import require_client
@@ -265,6 +268,80 @@ async def zet_elementen(
     ])
     response.headers["ETag"] = etag_van(doc)
     return doc
+
+
+@router.post("/documenten/{slug}/elementen", status_code=status.HTTP_201_CREATED,
+             response_model=AnnotatieDocument)
+async def voeg_element_toe(
+    slug: str,
+    req: MensElementInvoer,
+    user_id: str = Depends(actieve_userid),
+    client_id: str = Depends(require_client),
+    store: AnnotatieStore = Depends(get_annotatie_store),
+):
+    """Eén element dat de JURIST zelf aanmaakt (een tekstselectie in het documentpaneel).
+
+    Apart van de PUT, want dat is "de uitkomst van een agent-ronde" en dit is iets anders: het komt
+    er los bij en raakt de rest niet. `herkomst="mens"` en meteen `human_approved` — de mens hoeft
+    zijn eigen markering niet nog eens goed te keuren.
+    """
+    if req.klasse not in GELDIGE_JAS_KLASSEN:
+        raise HTTPException(status_code=422, detail=f"Onbekende JAS-klasse: {req.klasse}")
+    if not req.tekst.strip():
+        raise HTTPException(status_code=422, detail="Een markering heeft een tekstfragment nodig.")
+
+    element_id = uuid.uuid4().hex[:12]
+
+    def voeg_toe(doc: AnnotatieDocument):
+        doc.elementen.append(AnnotatieElement(
+            id=element_id, klasse=req.klasse, tekst=req.tekst, lid=req.lid,
+            toelichting=req.toelichting, vindplaats=req.vindplaats, anker=req.anker,
+            herkomst="mens", lifecycle=Lifecycle.human_approved,
+        ))
+        return None
+
+    uitkomst = await store.muteer_document(slug, user_id, voeg_toe)
+    if uitkomst is None:
+        raise HTTPException(status_code=404, detail=f"Onbekend annotatie-document: {slug}")
+    await store.schrijf_audit(
+        slug, client_id, user_id, "element-toegevoegd", element_id=element_id,
+        detail={"klasse": req.klasse, "tekst": req.tekst, "lid": req.lid},
+    )
+    return uitkomst
+
+
+@router.delete("/documenten/{slug}/elementen/{element_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def verwijder_element(
+    slug: str,
+    element_id: str,
+    user_id: str = Depends(actieve_userid),
+    client_id: str = Depends(require_client),
+    store: AnnotatieStore = Depends(get_annotatie_store),
+):
+    """Verwijder een EIGEN markering. Agent-elementen verdwijnen niet: die verwerp je (`reject`),
+    zodat het auditspoor laat zien dát er een voorstel was en wat ermee gebeurde."""
+    verwijderd: dict = {}
+
+    def verwijder(doc: AnnotatieDocument):
+        el = next((x for x in doc.elementen if x.id == element_id), None)
+        if el is None:
+            return GEEN_ELEMENT
+        if el.herkomst != "mens":
+            return CONFLICT
+        verwijderd.update({"klasse": el.klasse, "tekst": el.tekst})
+        doc.elementen = [x for x in doc.elementen if x.id != element_id]
+        return None
+
+    uitkomst = await store.muteer_document(slug, user_id, verwijder)
+    if uitkomst is None or uitkomst is GEEN_ELEMENT:
+        raise HTTPException(status_code=404, detail="Onbekend element.")
+    if uitkomst is CONFLICT:
+        raise HTTPException(
+            status_code=409,
+            detail="Alleen je eigen markeringen kun je verwijderen; verwerp een agent-voorstel.",
+        )
+    await store.schrijf_audit(slug, client_id, user_id, "element-verwijderd",
+                              element_id=element_id, detail=verwijderd)
 
 
 @router.post("/documenten/{slug}/elementen/{element_id}/beslissing", response_model=AnnotatieDocument)

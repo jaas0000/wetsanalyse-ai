@@ -308,3 +308,79 @@ async def test_legacy_element_met_mens_herkomst_wordt_gerepareerd(client):
     # Een écht mens-element (geen beslissingen) blijft ongemoeid.
     eigen = AnnotatieElement.model_validate({"id": "e1", "klasse": "Voorwaarde", "tekst": "t", "herkomst": "mens"})
     assert eigen.herkomst == "mens" and eigen.gewijzigd_door == ""
+
+
+# --- de jurist maakt zelf een markering ---------------------------------------------------------
+
+async def test_eigen_markering_overleeft_een_agentronde(client):
+    """De kern van 'één document, twee bijdragers': wat de jurist zelf markeert blijft staan, ook
+    als de agent daarna een volledige ronde over hetzelfde artikel doet."""
+    slug = await _maak_doc(client)
+    r = await client.post(f"{BASIS}/{slug}/elementen", json={
+        "klasse": "Rechtssubject", "tekst": "de ontvanger", "lid": "1",
+        "anker": {"lid": "1", "start": 0, "eind": 12, "voor": "", "na": " kan", "bron_hash": "abc123"},
+    })
+    assert r.status_code == 201
+    eigen = next(e for e in r.json()["elementen"] if e["herkomst"] == "mens")
+    assert eigen["lifecycle"] == "human_approved", "je eigen markering hoef je niet goed te keuren"
+    assert eigen["anker"]["start"] == 0
+
+    # De agent doet een ronde met heel andere elementen en trekt de rest in.
+    doc = (await _put(client, slug, [
+        {"klasse": "Voorwaarde", "tekst": "indien betaling uitblijft"},
+    ], ronde=1)).json()
+
+    op_herkomst = {e["herkomst"] for e in doc["elementen"]}
+    assert op_herkomst == {"mens", "agent"}
+    behouden = next(e for e in doc["elementen"] if e["herkomst"] == "mens")
+    assert behouden["id"] == eigen["id"] and behouden["anker"]["bron_hash"] == "abc123"
+
+
+async def test_agentvoorstel_neemt_een_eigen_markering_niet_over(client):
+    """Zelfde tekst, maar van de jurist: de terugval op tekst mag die niet stilzwijgend claimen."""
+    slug = await _maak_doc(client)
+    r = await client.post(f"{BASIS}/{slug}/elementen",
+                          json={"klasse": "Rechtssubject", "tekst": "de ontvanger", "lid": "1"})
+    eigen_id = next(e["id"] for e in r.json()["elementen"] if e["herkomst"] == "mens")
+
+    doc = (await _put(client, slug, [
+        {"klasse": "Rechtsbetrekking", "tekst": "de ontvanger", "lid": "1"},
+    ], ronde=1)).json()
+
+    assert len(doc["elementen"]) == 2, "de agent krijgt een eigen element, niet dat van de jurist"
+    van_mens = next(e for e in doc["elementen"] if e["id"] == eigen_id)
+    assert van_mens["klasse"] == "Rechtssubject", "onaangeroerd"
+
+
+async def test_eigen_markering_verwijderen_kan_agentvoorstel_niet(client):
+    slug = await _maak_doc(client)
+    r = await client.post(f"{BASIS}/{slug}/elementen",
+                          json={"klasse": "Rechtssubject", "tekst": "de ontvanger"})
+    eigen_id = next(e["id"] for e in r.json()["elementen"] if e["herkomst"] == "mens")
+
+    doc = (await _put(client, slug, [{"klasse": "Voorwaarde", "tekst": "indien betaling uitblijft"}],
+                      ronde=1)).json()
+    agent_id = next(e["id"] for e in doc["elementen"] if e["herkomst"] == "agent")
+
+    # Een agent-voorstel verwerp je (met reden), je verwijdert het niet — anders verdwijnt het
+    # spoor dat er een voorstel wás.
+    assert (await client.delete(f"{BASIS}/{slug}/elementen/{agent_id}")).status_code == 409
+    assert (await client.delete(f"{BASIS}/{slug}/elementen/{eigen_id}")).status_code == 204
+    assert (await client.delete(f"{BASIS}/{slug}/elementen/bestaat-niet")).status_code == 404
+
+    over = (await client.get(f"{BASIS}/{slug}")).json()["elementen"]
+    assert [e["id"] for e in over] == [agent_id]
+
+    acties = [a["actie"] for a in (await client.get(f"{BASIS}/{slug}/audit")).json()]
+    assert "element-toegevoegd" in acties and "element-verwijderd" in acties
+
+
+async def test_eigen_markering_valideert_de_klasse(client):
+    slug = await _maak_doc(client)
+    assert (await client.post(f"{BASIS}/{slug}/elementen",
+                              json={"klasse": "Onzin", "tekst": "de ontvanger"})).status_code == 422
+    assert (await client.post(f"{BASIS}/{slug}/elementen",
+                              json={"klasse": "Rechtssubject", "tekst": "   "})).status_code == 422
+    # en andermans document lekt niet
+    assert (await client.post(f"{BASIS}/andermans-doc/elementen",
+                              json={"klasse": "Rechtssubject", "tekst": "x"})).status_code == 404

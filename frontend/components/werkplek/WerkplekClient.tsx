@@ -15,8 +15,10 @@ import {
   maakGesprek,
   voegBerichtToe,
   zetElementen,
+  voegElementToe,
 } from "@/lib/api";
 import type {
+  Anker,
   AgentDoel,
   AnnotatieDocument,
   BeslissingInvoer,
@@ -278,6 +280,16 @@ export function WerkplekClient({ initialGesprekId, onGesprekAangemaakt, onGewijz
     }
   }
 
+  /** De jurist markeert zelf een fragment. Gooit door naar het paneel, dat de fout bij de selectie
+   *  toont — daar staat de gebruiker met zijn aandacht, niet onderin de chatthread. */
+  async function eigenMarkering(
+    slug: string,
+    invoer: { klasse: string; tekst: string; lid: string; toelichting: string; anker: Anker },
+  ) {
+    const bij = await voegElementToe(slug, invoer);
+    setDocs((m) => ({ ...m, [slug]: bij }));
+  }
+
   async function beslissing(slug: string, elementId: string, req: BeslissingInvoer) {
     try {
       const bij = await beslis(slug, elementId, req);
@@ -423,6 +435,7 @@ export function WerkplekClient({ initialGesprekId, onGesprekAangemaakt, onGewijz
           actiefId={actiefId}
           onKies={setActiefId}
           onBeslissing={(elementId, req) => beslissing(artefactSlug, elementId, req)}
+          onEigenMarkering={(invoer) => eigenMarkering(artefactSlug, invoer)}
           onSluit={() => setArtefactSlug(undefined)}
         />
       )}

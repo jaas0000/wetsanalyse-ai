@@ -20,6 +20,7 @@ import type {
   AdminBerichtenPaginaOut,
   AdminBerichtOut,
   AgentDoel,
+  Anker,
   AnnotatieDocument,
   AuditRecord,
   Bericht,
@@ -286,6 +287,30 @@ export async function zetElementen(
     body: JSON.stringify({ elementen, ronde }),
   });
   return json<AnnotatieDocument>(res);
+}
+
+/** Voeg een EIGEN markering toe (tekstselectie van de jurist). Aparte route van `zetElementen`:
+ *  dat is de uitkomst van een agent-ronde, dit komt er los bij en raakt de rest niet. */
+export async function voegElementToe(
+  slug: string,
+  element: { klasse: string; tekst: string; lid?: string; toelichting?: string; vindplaats?: string; anker?: Anker },
+): Promise<AnnotatieDocument> {
+  const res = await fetch(`/api/annotatie/documenten/${pathSegment(slug)}/elementen`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(element),
+  });
+  return json<AnnotatieDocument>(res);
+}
+
+/** Verwijder een eigen markering. Agent-voorstellen verwerp je (`beslis` met `reject`); die
+ *  verdwijnen niet, zodat het auditspoor laat zien dát er een voorstel was. */
+export async function verwijderElement(slug: string, elementId: string): Promise<void> {
+  const res = await fetch(
+    `/api/annotatie/documenten/${pathSegment(slug)}/elementen/${pathSegment(elementId)}`,
+    { method: "DELETE" },
+  );
+  if (!res.ok) throw await parseError(res);
 }
 
 export async function beslis(

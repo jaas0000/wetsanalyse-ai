@@ -1,10 +1,15 @@
 "use client";
 
+import { useState } from "react";
+
 import { Dialog } from "@/components/ui/Dialog";
+import { Melding } from "@/components/ui/Melding";
 import { DocumentPaneel } from "@/components/workbench/DocumentPaneel";
 import { ReviewQueue } from "@/components/workbench/ReviewQueue";
+import { SelectiePopover, type SelectieDoel } from "@/components/workbench/SelectiePopover";
 import { DOCUMENT_STATUS_LABEL, DOCUMENT_STATUS_STYLE } from "@/lib/annotatie";
 import { jasStyle } from "@/lib/jas";
+import { maakAnker } from "@/lib/selectie";
 import type { AnnotatieDocument, BeslissingInvoer, GraafArtikel, OntbrekendItem } from "@/lib/types";
 
 function ledenVan(info: GraafArtikel): string[] {
@@ -18,14 +23,41 @@ interface Props {
   actiefId?: string;
   onKies: (id?: string) => void;
   onBeslissing: (elementId: string, req: BeslissingInvoer) => Promise<void>;
+  /** De jurist markeert zelf een fragment. Weglaten maakt het paneel alleen-lezen. */
+  onEigenMarkering?: (invoer: {
+    klasse: string; tekst: string; lid: string; toelichting: string;
+    anker: ReturnType<typeof maakAnker>;
+  }) => Promise<void>;
   onSluit: () => void;
 }
 
 /** Het annotatie-artefact: een van rechts inschuivend paneel (desktop) / bottom-sheet (mobiel) met de
  *  brongetrouwe artikeltekst (links, letterlijke highlights) en de review-queue (rechts). Los van de
  *  chatstroom, zoals een Claude-artefact. */
-export function ArtefactPaneel({ doc, info, ontbrekend, actiefId, onKies, onBeslissing, onSluit }: Props) {
+export function ArtefactPaneel({
+  doc, info, ontbrekend, actiefId, onKies, onBeslissing, onEigenMarkering, onSluit,
+}: Props) {
   const opschrift = `${info.citeertitel || doc.bwbId} — artikel ${info.artikel}${doc.lid ? ` lid ${doc.lid}` : ""}`;
+  const [selectie, setSelectie] = useState<(SelectieDoel & { start: number; eind: number; lid: string; bron: string }) | null>(null);
+  const [fout, setFout] = useState<string | null>(null);
+
+  async function markeer(klasse: string, toelichting: string) {
+    if (!selectie || !onEigenMarkering) return;
+    setFout(null);
+    try {
+      await onEigenMarkering({
+        klasse,
+        tekst: selectie.fragment,
+        lid: selectie.lid,
+        toelichting,
+        anker: maakAnker(selectie.bron, selectie.start, selectie.eind, selectie.lid),
+      });
+      setSelectie(null);
+      window.getSelection()?.removeAllRanges();
+    } catch (e) {
+      setFout(e instanceof Error ? e.message : "Markeren is niet gelukt.");
+    }
+  }
 
   return (
     <Dialog label={`Annotatie: ${opschrift}`} variant="side" onSluit={onSluit}>
@@ -62,10 +94,19 @@ export function ArtefactPaneel({ doc, info, ontbrekend, actiefId, onKies, onBesl
             // blijven wél in de ReviewQueue zichtbaar met hun "verworpen"-status.
             elementen={doc.elementen
               .filter((e) => e.lifecycle !== "rejected")
-              .map((e) => ({ id: e.id, klasse: e.klasse, tekst: e.tekst }))}
+              .map((e) => ({
+                id: e.id, klasse: e.klasse, tekst: e.tekst, herkomst: e.herkomst, anker: e.anker,
+              }))}
             actiefId={actiefId}
             onKies={onKies}
+            onSelectie={onEigenMarkering ? setSelectie : undefined}
           />
+          {onEigenMarkering && (
+            <p className="-mt-2 text-xs text-faint">
+              Tip: selecteer een stuk tekst om het zelf te markeren.
+            </p>
+          )}
+          {fout && <Melding type="fout" compact>{fout}</Melding>}
           {doc.elementen.length > 0 ? (
             <ReviewQueue elementen={doc.elementen} actiefId={actiefId} onKies={onKies} onBeslissing={onBeslissing} />
           ) : (
@@ -85,6 +126,10 @@ export function ArtefactPaneel({ doc, info, ontbrekend, actiefId, onKies, onBesl
             </div>
           )}
         </div>
+
+        {selectie && (
+          <SelectiePopover doel={selectie} onKies={markeer} onSluit={() => setSelectie(null)} />
+        )}
       </>
     </Dialog>
   );

@@ -138,6 +138,26 @@ Twee kleine domeinen die aan de app-shell hangen, niet aan de oude paginanavigat
 Beide panelen halen hun teller periodiek/bij openen op en falen **stil**: een hapering mag de
 werkplek niet blokkeren, de badge is een hint.
 
+### Zelf annoteren (tekstselectie)
+
+De jurist kan in `DocumentPaneel` tekst selecteren en die zelf markeren. Drie dingen om te kennen:
+
+- **De rekenkern staat in `lib/selectie.ts`**, niet in het component: vitest draait node-env zonder
+  DOM, dus alleen zo is die logica te testen. Het component doet enkel de `TreeWalker`-wandeling en
+  geeft knooplengtes door aan `offsetUit`. Dat werkt doordat de alinea één aaneengesloten reeks
+  `span`/`mark` is waarvan de tekstknopen samen exact de bron vormen.
+- **Elk element draagt een `anker`**: exacte offsets + quote-met-context + een hash van de bron.
+  `segmenteer` gebruikt die in drie stappen (offsets → context → eerste vrije voorkomen), waardoor
+  twee identieke fragmenten in één artikel uit elkaar blijven en een markering een herimport
+  overleeft. `vindplaats` blijft de mensleesbare bronaanduiding; daar horen geen offsets in.
+- **Bij overlap wint de jurist.** `segmenteer` sorteert mens vóór agent (daarna langste eerst) —
+  dezelfde regel als server-side, waar een mens-element bevroren is. Een verdrongen agent-voorstel
+  wijkt uit naar een ander voorkomen of verdwijnt uit de tekst, maar blijft in de reviewlijst staan.
+
+Eigen markeringen gaan via `POST .../elementen` (niet de PUT: dat is de uitkomst van een
+agent-ronde) en zijn meteen `human_approved`. Verwijderen kan alleen bij je eigen markeringen; een
+agent-voorstel verwérp je, zodat het auditspoor laat zien dát er een voorstel was.
+
 ## Observability
 
 `instrumentation.ts` registreert OpenTelemetry via `@vercel/otel` (gated op
