@@ -172,6 +172,11 @@ Drie dingen die je verder moet kennen voordat je hieraan werkt:
 - **Verworpen fragmenten gaan niet verloren.** `_verwerk` geeft ze terug met een reden
   (`niet_letterlijk` of `ongeldige_klasse`) in plaats van ze te tellen. Een bijna-goed citaat is met
   die aanwijzing prima te repareren — dat is de goedkoopste kwaliteitswinst in de keten.
+- **Een gemist element zonder fragment is waardeloos.** De Critic moet bij `ontbrekend` het
+  letterlijke fragment meegeven; kan hij het niet aanwijzen (impliciet subject bv.), dan begint de
+  reden met `"impliciet:"` en blijft `tekst` leeg. Zonder fragment kan de annoteerder het in de
+  herziening niet toevoegen (het moet letterlijk in de tekst staan) en kan de werkplek er geen
+  "toevoegen"-knop van maken — dan blijft het een mededeling waar niemand iets mee kan.
 - **De Critic geeft instructies, geen klachten.** Naast `aandacht` + `motivatie` levert hij
   `actie` (`behoud|vervang|verwijder`) met een `voorstel_klasse`/`voorstel_tekst`. `verwijder` mag
   alleen bij rood, en `vervang` zonder voorstel degradeert naar `behoud` — anders is het geen

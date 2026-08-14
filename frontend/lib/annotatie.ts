@@ -1,6 +1,9 @@
 import type {
+  AgentContext,
   AgentKandidaat,
+  AnnotatieDocument,
   AnnotatieElement,
+  GraafArtikel,
   DocumentStatus,
   ReviewReason,
   VoorstelElement,
@@ -178,4 +181,40 @@ export function volgendeElement(
     return richting === 1 ? kandidaten[0] : kandidaten[kandidaten.length - 1];
   }
   return kandidaten[huidig + richting];
+}
+
+// --- een vraag over één markering ------------------------------------------------------------------
+
+/** Bouw het contextblok voor een adviesvraag bij een element.
+ *
+ *  De agent kan niet in het document kijken; deze context vertelt hem waar de vraag over gaat. `lid`
+ *  valt terug op het document als het element zelf er geen heeft (bij een artikel zonder leden), en
+ *  het corpus is de getoonde artikeltekst — dezelfde die de jurist voor zich ziet.
+ */
+export function vraagContextVan(
+  slug: string,
+  doc: AnnotatieDocument | undefined,
+  info: GraafArtikel | undefined,
+  el: AnnotatieElement,
+): AgentContext {
+  return {
+    slug,
+    bwbId: doc?.bwbId,
+    artikel: doc?.artikel,
+    lid: el.lid || doc?.lid,
+    element_id: el.id,
+    klasse: el.klasse,
+    fragment: el.tekst,
+    corpus: info?.leden_teksten.map((l) => l.tekst).join("\n\n"),
+  };
+}
+
+/** Korte aanduiding van waar een vraag over gaat, voor de chip én voor het bewaarde bericht.
+ *
+ *  Zonder deze regel leest een herladen gesprek als een losse vraag zonder onderwerp: de chip is
+ *  UI-state en gaat niet mee naar de api.
+ */
+export function vraagContextLabel(el: AnnotatieElement, doc?: AnnotatieDocument): string {
+  const plek = doc ? ` (art. ${doc.artikel}${el.lid ? ` lid ${el.lid}` : ""})` : "";
+  return `${el.klasse} — “${el.tekst}”${plek}`;
 }

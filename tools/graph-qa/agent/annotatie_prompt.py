@@ -69,7 +69,10 @@ AANDACHT-NIVEAU per element — géén verzonnen zekerheidscijfer, maar een oord
 - "geel": twijfel of een aandachtspunt — jurist moet even kijken (bv. plausibel alternatief, grensgeval).
 - "rood": waarschijnlijk fout — verkeerde klasse of niet-onderbouwd fragment.
 
-ONTBREKEND: benoem JAS-klassen die waarschijnlijk óók in de tekst voorkomen maar niet zijn gemarkeerd (met een korte reden). Neem waar mogelijk het LETTERLIJKE fragment op dat gemarkeerd zou moeten worden — dan kan het meteen worden toegevoegd. Verzin niets buiten de aangeleverde tekst.
+ONTBREKEND: benoem JAS-klassen die waarschijnlijk óók in de tekst voorkomen maar niet zijn gemarkeerd.
+- Geef ALTIJD het `tekst`-veld met het LETTERLIJKE fragment uit de artikeltekst dat gemarkeerd zou moeten worden — woord voor woord, zonder aanhalingstekens eromheen. Zonder fragment kan niemand er iets mee: de annotator kan het niet toevoegen (elk element moet letterlijk te vinden zijn) en de jurist moet het zelf gaan zoeken.
+- Lukt dat echt niet omdat het element alleen impliciet aanwezig is (bv. een subject dat de tekst niet noemt), laat `tekst` dan leeg en begin de `reden` met "impliciet:". Zeg dus dát je het niet kunt aanwijzen in plaats van het te omschrijven alsof het er staat.
+- Verzin niets buiten de aangeleverde tekst.
 
 ACTIE per element — niet alleen wát er mis is, maar wat ermee moet gebeuren:
 - "behoud": laat het element zoals het is (ook bij "geel": een aandachtspunt voor de jurist, geen correctie).

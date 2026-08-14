@@ -3,6 +3,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { ArtefactPaneel } from "@/components/werkplek/ArtefactPaneel";
+import { Melding } from "@/components/ui/Melding";
 import { Markdown } from "@/components/werkplek/Markdown";
 import {
   annoteerAgentStream,
@@ -30,12 +31,16 @@ import type {
   OntbrekendItem,
   VoorstelElement,
 } from "@/lib/types";
-import { kandidaatLabel, kandidaatPrompt, kandidatenAlsTekst, mergeVoorstellen } from "@/lib/annotatie";
+import {
+  BESLIST_LIFECYCLES, kandidaatLabel, kandidaatPrompt, kandidatenAlsTekst, mergeVoorstellen,
+  vraagContextLabel, vraagContextVan,
+} from "@/lib/annotatie";
 import { useBreedScherm } from "@/lib/useBreedScherm";
+import { jasStyle } from "@/lib/jas";
 import { wettenOverheidHref } from "@/lib/url";
 
 type Item =
-  | { id: string; type: "user"; tekst: string }
+  | { id: string; type: "user"; tekst: string; over?: string }
   | { id: string; type: "antwoord"; tekst: string; denk?: string; bronnen?: Bron[] }
   | { id: string; type: "annotatie"; slug: string; ontbrekend?: OntbrekendItem[] }
   // De vraag noemde een onderwerp: de agent vond bepalingen, de jurist kiest er één.
@@ -53,8 +58,18 @@ function beslissingMelding(req: BeslissingInvoer): string {
   return "Wijziging opgeslagen.";
 }
 
+/** Hoeveel elementen wachten nog op een oordeel? Zelfde regel als de reviewlijst. */
+function teBeoordelen(doc: AnnotatieDocument): number {
+  return doc.elementen.filter((el) => !BESLIST_LIFECYCLES.includes(el.lifecycle)).length;
+}
+
 function uid(): string {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
+
+/** Is dit een door onszelf afgebroken stream, of een echte fout? */
+function isAfgebroken(e: unknown): boolean {
+  return (e as Error)?.name === "AbortError";
 }
 
 function foutTekst(e: unknown): string {
@@ -87,11 +102,21 @@ export function WerkplekClient({ initialGesprekId, onGesprekAangemaakt, onGewijz
   // Wat er zojuist is opgeslagen, voor schermlezers. Zonder dit gebeurt elke annotatie-wijziging
   // volledig stil: de kaart verandert visueel, maar er wordt niets aangekondigd.
   const [melding, setMelding] = useState("");
+  // Waar de volgende vraag over gaat, gezet vanuit een reviewkaart. Zolang dit staat gaat de beurt
+  // als adviesvraag (met contextblok) in plaats van als gewone vraag.
+  const [vraagOver, setVraagOver] = useState<{ slug: string; el: AnnotatieElement } | null>(null);
+  // Het artefact openen haalt document + wettekst op. Dat mag niet stil gebeuren: zonder deze twee
+  // leverde een mislukte graaf-call een klik op waar lettérlijk niets van gebeurde.
+  const [artefactLaadt, setArtefactLaadt] = useState<string | null>(null);
+  const [artefactFout, setArtefactFout] = useState<{ slug: string; melding: string } | null>(null);
   const lijstRef = useRef<HTMLDivElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
   // Synchrone guard tegen dubbel-verzenden (twee Enters in dezelfde tick): de `bezig`-state komt te laat
   // — vóór de eerste `await` (maakGesprek) is die nog false, wat twee gesprekken zou aanmaken.
   const bezigRef = useRef(false);
+  // Waarmee een lopende beurt is af te breken. Een annotatie duurt tot ~90 seconden; zonder dit is
+  // een verkeerd gestelde vraag anderhalve minuut wachten.
+  const afbrekenRef = useRef<AbortController | null>(null);
   // "Stick-to-bottom": alleen automatisch meescrollen als de gebruiker al onderaan staat, zodat
   // omhoogscrollen tijdens het streamen niet telkens wordt teruggetrokken.
   const stickRef = useRef(true);
@@ -172,18 +197,23 @@ export function WerkplekClient({ initialGesprekId, onGesprekAangemaakt, onGewijz
   }
 
   async function openArtefact(slug: string) {
-    const doc = docs[slug] ?? (await laadDoc(slug));
-    if (!doc) return;
-    if (!infos[slug]) {
-      try {
+    setArtefactFout(null);
+    setArtefactLaadt(slug);
+    try {
+      const doc = docs[slug] ?? (await laadDoc(slug));
+      if (!doc) throw new Error("Het annotatiedocument is niet op te halen.");
+      if (!infos[slug]) {
         const graaf = await haalArtikelGraaf(doc.bwbId, doc.artikel, doc.lid);
         setInfos((m) => ({ ...m, [slug]: graaf }));
-      } catch {
-        /* zonder graaf geen paneel */
-        return;
       }
+      setArtefactSlug(slug);
+    } catch (e) {
+      // Zichtbaar falen: de wettekst komt uit de graaf en die kan plat liggen. Een lege klik laat de
+      // jurist denken dat de knop stuk is.
+      setArtefactFout({ slug, melding: foutTekst(e) });
+    } finally {
+      setArtefactLaadt(null);
     }
-    setArtefactSlug(slug);
   }
 
   /** Persisteer één beurt. Mislukken mag de chat niet blokkeren — maar ook niet stil gebeuren:
@@ -204,10 +234,22 @@ export function WerkplekClient({ initialGesprekId, onGesprekAangemaakt, onGewijz
     bezigRef.current = true;
     setInvoer("");
 
+    // Een vraag bij een markering gaat als ADVIES: dezelfde thread, maar met contextblok en langs de
+    // antwoordroute — die kan topologisch geen annotatie wijzigen.
+    const context = vraagOver;
+    setVraagOver(null);
+    const contextLabel = context ? vraagContextLabel(context.el, docs[context.slug]) : "";
+    // Op een smal scherm ligt het artefact óver de chat: stap opzij zodat je het antwoord ziet komen.
+    if (context && !breed) setArtefactSlug(undefined);
+
     // Toon de user-bubbel + antwoord-placeholder OPTIMISTISCH, vóór het (bij een nieuw gesprek) awaiten
     // van maakGesprek — anders "verdwijnt" het bericht tijdens die round-trip.
     const antId = uid();
-    setItems((xs) => [...xs, { id: uid(), type: "user", tekst: prompt }, { id: antId, type: "antwoord", tekst: "" }]);
+    setItems((xs) => [
+      ...xs,
+      { id: uid(), type: "user", tekst: prompt, over: contextLabel || undefined },
+      { id: antId, type: "antwoord", tekst: "" },
+    ]);
     setBezig(true);
     stickRef.current = true; // een nieuwe beurt springt altijd naar de bodem
 
@@ -227,7 +269,12 @@ export function WerkplekClient({ initialGesprekId, onGesprekAangemaakt, onGewijz
       }
     }
 
-    void persisteer(gid, "user", { tekst: prompt });
+    // De chip is UI-state en reist niet mee naar de api; zonder deze regel leest een herladen gesprek
+    // als een losse vraag zonder onderwerp.
+    void persisteer(gid, "user", { tekst: contextLabel ? `Bij ${contextLabel}: ${prompt}` : prompt });
+
+    const beheerser = new AbortController();
+    afbrekenRef.current = beheerser;
 
     const doelRef: { d: AgentDoel | null } = { d: null };
     // Ontdubbeld verzamelen: de agent kan hetzelfde element in meerdere rondes opnieuw sturen
@@ -273,8 +320,15 @@ export function WerkplekClient({ initialGesprekId, onGesprekAangemaakt, onGewijz
           onKandidaten: (k) => (kandidaten = k),
         },
         gid,
-        undefined,
-        reedsEigen.length ? { context: { bestaande_elementen: reedsEigen } } : undefined,
+        beheerser.signal,
+        context
+          ? {
+              modus: "advies",
+              context: vraagContextVan(context.slug, docs[context.slug], infos[context.slug], context.el),
+            }
+          : reedsEigen.length
+            ? { context: { bestaande_elementen: reedsEigen } }
+            : undefined,
       );
 
       if (kandidaten.length) {
@@ -321,11 +375,25 @@ export function WerkplekClient({ initialGesprekId, onGesprekAangemaakt, onGewijz
       }
       onGewijzigd();
     } catch (e) {
-      updateItem(antId, { tekst: `⚠️ ${foutTekst(e)}` });
+      // Zelf afgebroken is geen fout: bewaar wat er al stond, gemarkeerd als afgebroken. Weggooien
+      // wat de agent al schreef is niet wat "stop" betekent.
+      if (isAfgebroken(e)) {
+        const bewaard = `${tekst.trim()}${tekst.trim() ? "\n\n" : ""}_(afgebroken)_`;
+        updateItem(antId, { tekst: bewaard });
+        void persisteer(gid, "assistant", { tekst: bewaard, denk, bronnen });
+      } else {
+        updateItem(antId, { tekst: `⚠️ ${foutTekst(e)}` });
+      }
     } finally {
+      afbrekenRef.current = null;
       setBezig(false);
       bezigRef.current = false;
     }
+  }
+
+  /** Breek de lopende beurt af. De `finally` hierboven bewaart wat er al binnen was. */
+  function stop() {
+    afbrekenRef.current?.abort();
   }
 
   /** De jurist markeert zelf een fragment. Gooit door naar het paneel, dat de fout bij de selectie
@@ -358,56 +426,15 @@ export function WerkplekClient({ initialGesprekId, onGesprekAangemaakt, onGewijz
     setMelding("Markering gewist.");
   }
 
-  /** Adviesvraag bij één element: `modus: "advies"` stuurt de agent naar de antwoord-route, die
-   *  geen element-events uitstuurt — de annotatie kan er dus niet door wijzigen. Het paar
-   *  vraag/antwoord bewaren we óók als gespreksbericht, zodat de thread één verhaal blijft. */
-  async function advies(
-    slug: string,
-    el: AnnotatieElement,
-    vraag: string,
-    opToken: (t: string) => void,
-  ) {
-    const doc = docs[slug];
-    const info = infos[slug];
-    let antwoord = "";
-    await annoteerAgentStream(
-      vraag,
-      {
-        onToken: (t) => {
-          antwoord += t;
-          opToken(t);
-        },
-      },
-      gesprekId ?? undefined,
-      undefined,
-      {
-        modus: "advies",
-        context: {
-          slug,
-          bwbId: doc?.bwbId,
-          artikel: doc?.artikel,
-          lid: el.lid || doc?.lid,
-          element_id: el.id,
-          klasse: el.klasse,
-          fragment: el.tekst,
-          corpus: info?.leden_teksten.map((l) => l.tekst).join("\n\n"),
-        },
-      },
-    );
-    if (gesprekId) {
-      const plek = `${doc?.bwbId ?? ""} art. ${doc?.artikel ?? ""}${el.lid ? ` lid ${el.lid}` : ""}`;
-      void persisteer(gesprekId, "user", { tekst: `Advies bij ${plek} — «${el.tekst}»: ${vraag}` });
-      void persisteer(gesprekId, "assistant", { tekst: antwoord });
-    }
-  }
-
   async function beslissing(slug: string, elementId: string, req: BeslissingInvoer) {
     try {
       const bij = await beslis(slug, elementId, req);
       setDocs((m) => ({ ...m, [slug]: bij }));
       setMelding(beslissingMelding(req));
     } catch (e) {
-      setItems((xs) => [...xs, { id: uid(), type: "antwoord", tekst: `⚠️ Beslissing mislukt: ${foutTekst(e)}` }]);
+      // Doorgooien: het artefact toont de fout bij de kaart waar hij ontstond. In de chatthread zou
+      // hij het gesprek vervuilen met techniek, ver van de plek waar je aan het werk bent.
+      throw e;
     }
   }
 
@@ -417,6 +444,9 @@ export function WerkplekClient({ initialGesprekId, onGesprekAangemaakt, onGewijz
       void verstuur();
     }
   }
+
+  // De laatste annotatie in dit gesprek: die hoort altijd één klik weg te zijn.
+  const laatsteAnnotatie = [...items].reverse().find((x) => x.type === "annotatie")?.slug;
 
   const artefact = artefactSlug && docs[artefactSlug] && infos[artefactSlug] && (
     <ArtefactPaneel
@@ -435,7 +465,10 @@ export function WerkplekClient({ initialGesprekId, onGesprekAangemaakt, onGewijz
       onBeslissing={(elementId, req) => beslissing(artefactSlug, elementId, req)}
       onEigenMarkering={(invoer) => eigenMarkering(artefactSlug, invoer)}
       onWisEigenMarkering={(elementId) => wisEigenMarkering(artefactSlug, elementId)}
-      onAdvies={(el, vraag, opToken) => advies(artefactSlug, el, vraag, opToken)}
+      onVraag={(el) => {
+        setVraagOver({ slug: artefactSlug, el });
+        taRef.current?.focus();
+      }}
       onSluit={() => setArtefactSlug(undefined)}
     />
   );
@@ -447,6 +480,44 @@ export function WerkplekClient({ initialGesprekId, onGesprekAangemaakt, onGewijz
       <p className="sr-only" aria-live="polite">
         {bezig ? "Bezig met antwoorden…" : melding}
       </p>
+      {/* De annotatie blijft bereikbaar. De chip in de thread scrolt weg zodra het gesprek doorloopt;
+          dan is er geen weg terug naar het werk waar je middenin zat. */}
+      {!artefactSlug && laatsteAnnotatie && docs[laatsteAnnotatie] && (
+        <button
+          type="button"
+          onClick={() => void openArtefact(laatsteAnnotatie)}
+          disabled={artefactLaadt === laatsteAnnotatie}
+          className="focus-ring flex w-full shrink-0 items-center gap-2 border-b border-line bg-surface px-4 py-2 text-left text-xs text-muted transition hover:bg-surface-2 disabled:opacity-60"
+        >
+          <span className="truncate">
+            <span className="font-medium text-ink">
+              {docs[laatsteAnnotatie].werkgebied || docs[laatsteAnnotatie].bwbId} — art.{" "}
+              {docs[laatsteAnnotatie].artikel}
+            </span>{" "}
+            · {docs[laatsteAnnotatie].elementen.length} elementen
+            {teBeoordelen(docs[laatsteAnnotatie]) > 0 && ` · ${teBeoordelen(docs[laatsteAnnotatie])} te beoordelen`}
+          </span>
+          <span className="ml-auto shrink-0 font-medium text-lint">
+            {artefactLaadt === laatsteAnnotatie ? "Openen…" : "Openen"}
+          </span>
+        </button>
+      )}
+
+      {artefactFout && (
+        <div className="shrink-0 px-4 pt-2">
+          <Melding type="fout" compact>
+            De annotatie kon niet worden geopend ({artefactFout.melding}).{" "}
+            <button
+              type="button"
+              onClick={() => void openArtefact(artefactFout.slug)}
+              className="focus-ring rounded font-medium underline underline-offset-2"
+            >
+              Opnieuw proberen
+            </button>
+          </Melding>
+        </div>
+      )}
+
       {bewaarFout && (
         <div role="status" className="shrink-0 border-b border-fout/30 bg-fout/10 px-4 py-2 text-center text-[0.8125rem] text-fout">
           Dit gesprek wordt op dit moment niet bewaard ({bewaarFout}). Wat je hier ziet verdwijnt bij
@@ -479,7 +550,12 @@ export function WerkplekClient({ initialGesprekId, onGesprekAangemaakt, onGewijz
 
           {items.map((item) =>
             item.type === "user" ? (
-              <div key={item.id} className="flex animate-rise justify-end">
+              <div key={item.id} className="flex animate-rise flex-col items-end gap-1">
+                {item.over && (
+                  <span className="max-w-[85%] truncate rounded-full bg-surface px-2.5 py-0.5 text-[0.7rem] text-muted">
+                    bij {item.over}
+                  </span>
+                )}
                 <div className="max-w-[85%] whitespace-pre-wrap break-words rounded-bubbel bg-lint/10 px-4 py-2.5 text-sm text-ink">
                   {item.tekst}
                 </div>
@@ -538,6 +614,28 @@ export function WerkplekClient({ initialGesprekId, onGesprekAangemaakt, onGewijz
       {/* Invoerbalk — gepind onderaan, gecentreerd, auto-groeiend */}
       <div className="shrink-0 bg-paper">
         <div className="mx-auto max-w-3xl px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2">
+          {/* Waar de volgende vraag over gaat. Zichtbaar zolang hij geldt, want anders stel je
+              ongemerkt een adviesvraag over een element dat je allang niet meer voor je hebt. */}
+          {vraagOver && (
+            <div className="mb-1.5 flex items-center gap-1.5">
+              <span className="inline-flex min-w-0 items-center gap-1.5 rounded-full border border-lint/30 bg-lint/5 px-2.5 py-1 text-xs text-lint">
+                <span className={`shrink-0 rounded px-1 text-[0.7rem] ${jasStyle(vraagOver.el.klasse)}`}>
+                  {vraagOver.el.klasse}
+                </span>
+                <span className="truncate">“{vraagOver.el.tekst}”</span>
+                <button
+                  type="button"
+                  onClick={() => setVraagOver(null)}
+                  aria-label="Vraag niet aan dit element koppelen"
+                  className="focus-ring shrink-0 rounded-full p-0.5 hover:bg-lint/10"
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden>
+                    <path d="M18 6 6 18M6 6l12 12" />
+                  </svg>
+                </button>
+              </span>
+            </div>
+          )}
           <div className="flex items-end gap-2 rounded-bubbel border border-line bg-white px-2 py-1.5 shadow-zacht transition-shadow focus-within:border-lint focus-within:shadow-kaart">
             <textarea
               ref={taRef}
@@ -545,18 +643,22 @@ export function WerkplekClient({ initialGesprekId, onGesprekAangemaakt, onGewijz
               onChange={(e) => setInvoer(e.target.value)}
               onKeyDown={opToets}
               rows={1}
-              placeholder="Stel een vraag of vraag een annotatie…"
+              placeholder={vraagOver ? "Wat wil je weten over deze markering?" : "Stel een vraag of vraag een annotatie…"}
               className="max-h-[200px] flex-1 resize-none bg-transparent px-2 py-2 text-sm text-ink placeholder:text-faint focus:outline-none"
             />
+            {/* Tijdens het antwoorden is dit de stopknop: hetzelfde plekje, andere betekenis — je hoeft
+                niet te zoeken waar je moet klikken om te onderbreken. */}
             <button
               type="button"
-              onClick={() => verstuur()}
-              disabled={bezig || !invoer.trim()}
-              aria-label="Versturen"
-              className="mb-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent text-paper transition-colors hover:bg-accent-soft disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-lint"
+              onClick={() => (bezig ? stop() : verstuur())}
+              disabled={!bezig && !invoer.trim()}
+              aria-label={bezig ? "Stoppen" : "Versturen"}
+              className="focus-ring mb-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent text-paper transition-colors hover:bg-accent-soft disabled:cursor-not-allowed disabled:opacity-40"
             >
               {bezig ? (
-                <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-paper" />
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                  <rect x="5" y="5" width="14" height="14" rx="2" />
+                </svg>
               ) : (
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                   <path d="M12 19V5M5 12l7-7 7 7" />

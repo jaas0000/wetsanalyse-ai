@@ -5,13 +5,13 @@ import { useEffect, useMemo, useState } from "react";
 import { Dialog, type DialogVariant } from "@/components/ui/Dialog";
 import { Melding } from "@/components/ui/Melding";
 import { DocumentPaneel } from "@/components/workbench/DocumentPaneel";
+import { OntbrekendLijst } from "@/components/workbench/OntbrekendLijst";
 import { ReviewQueue, type OpenRij } from "@/components/workbench/ReviewQueue";
 import { SelectiePopover, type SelectieDoel } from "@/components/workbench/SelectiePopover";
 import {
   DOCUMENT_STATUS_LABEL, DOCUMENT_STATUS_STYLE, overlaptSelectie, pastInFilter, sorteerReview,
   volgendeElement, type ReviewFilter,
 } from "@/lib/annotatie";
-import { jasStyle } from "@/lib/jas";
 import { maakAnker, vindPositie } from "@/lib/selectie";
 import type {
   AnnotatieDocument, AnnotatieElement, BeslissingInvoer, GraafArtikel, OntbrekendItem,
@@ -37,8 +37,8 @@ interface Props {
   }) => Promise<void>;
   /** Eigen markering wissen. Een agent-voorstel verwérp je — dat gaat via `onBeslissing`. */
   onWisEigenMarkering?: (elementId: string) => Promise<void>;
-  /** Adviesvraag bij één element. Wijzigt nooit iets: de agent draait op de antwoord-route. */
-  onAdvies?: (el: AnnotatieElement, vraag: string, opToken: (t: string) => void) => Promise<void>;
+  /** Zet een vraag over een element klaar in het centrale chatvenster (met context). */
+  onVraag?: (el: AnnotatieElement) => void;
   onSluit: () => void;
 }
 
@@ -47,7 +47,7 @@ interface Props {
  *  chatstroom, zoals een Claude-artefact. */
 export function ArtefactPaneel({
   variant = "side", doc, info, ontbrekend, actiefId, onKies, onBeslissing, onEigenMarkering,
-  onWisEigenMarkering, onAdvies, onSluit,
+  onWisEigenMarkering, onVraag, onSluit,
 }: Props) {
   const opschrift = `${info.citeertitel || doc.bwbId} — artikel ${info.artikel}${doc.lid ? ` lid ${doc.lid}` : ""}`;
   const bron = useMemo(() => ledenVan(info).join("\n\n"), [info]);
@@ -143,11 +143,34 @@ export function ArtefactPaneel({
     // die de handler aanraakt, met als enige winst dat de listener minder vaak wisselt.
   });
 
+  /** Elke beslissing loopt hierlangs, zodat een mislukking bij de kaart landt en niet in de
+   *  chatthread. De aanroeper (`WerkplekClient`) gooit de fout bewust dóór. */
+  async function beslis(elementId: string, req: BeslissingInvoer) {
+    setFout(null);
+    try {
+      await onBeslissing(elementId, req);
+    } catch (e) {
+      setFout(e instanceof Error ? e.message : "De wijziging is niet opgeslagen.");
+      throw e;
+    }
+  }
+
+  /** Wissen loopt om dezelfde reden hierlangs: de fout hoort bij de kaart, niet in de chat. */
+  async function wis(elementId: string) {
+    setFout(null);
+    try {
+      await onWisEigenMarkering?.(elementId);
+    } catch (e) {
+      setFout(e instanceof Error ? e.message : "De markering is niet gewist.");
+      throw e;
+    }
+  }
+
   /** Goedkeuren en doorspringen naar het volgende dat nog aandacht vraagt. Dat doorspringen is de
    *  hele winst van een reviewlijst; blijven staan op iets dat af is kost per element een klik. */
   async function keurGoed(elementId: string) {
     const volgend = volgendeElement(getoond, elementId, 1, true);
-    await onBeslissing(elementId, { type: "approve" });
+    await beslis(elementId, { type: "approve" });
     setOpen("geen");
     onKies(volgend?.id);
   }
@@ -158,7 +181,7 @@ export function ArtefactPaneel({
     if (!selectie || !teCorrigeren) return;
     setFout(null);
     try {
-      await onBeslissing(teCorrigeren.id, {
+      await beslis(teCorrigeren.id, {
         type: "edit",
         review_reason: "tekst",
         wijziging: {
@@ -243,8 +266,13 @@ export function ArtefactPaneel({
           )}
           </div>
 
+          {fout && (
+            <div className="py-2">
+              <Melding type="fout" compact>{fout}</Melding>
+            </div>
+          )}
+
           <div className="min-h-0 flex-1 space-y-4 overflow-y-auto py-3 pb-[max(1rem,env(safe-area-inset-bottom))]">
-          {fout && <Melding type="fout" compact>{fout}</Melding>}
           {doc.elementen.length > 0 ? (
             <ReviewQueue
               elementen={doc.elementen}
@@ -257,25 +285,21 @@ export function ArtefactPaneel({
               onOpen={setOpen}
               onAkkoord={keurGoed}
               onKies={onKies}
-              onBeslissing={onBeslissing}
-              onVerwijder={onWisEigenMarkering}
-              onAdvies={onAdvies}
+              onBeslissing={beslis}
+              onVerwijder={onWisEigenMarkering ? wis : undefined}
+              onVraag={onVraag}
             />
           ) : (
             <p className="text-sm text-muted">Geen elementen.</p>
           )}
           {ontbrekend && ontbrekend.length > 0 && (
-            <div className="rounded-kaart border border-dashed border-line bg-surface p-3">
-              <p className="text-xs font-medium text-muted">Mogelijk ontbrekend (Critic-suggestie)</p>
-              <ul className="mt-1.5 space-y-1">
-                {ontbrekend.map((o, i) => (
-                  <li key={i} className="flex items-start gap-1.5 text-xs">
-                    <span className={`shrink-0 rounded px-1.5 py-0.5 font-medium ${jasStyle(o.klasse)}`}>{o.klasse}</span>
-                    {o.reden && <span className="text-muted">{o.reden}</span>}
-                  </li>
-                ))}
-              </ul>
-            </div>
+            <OntbrekendLijst
+              items={ontbrekend}
+              bron={bron}
+              leden={ledenVan(info)}
+              elementen={doc.elementen}
+              onToevoegen={onEigenMarkering}
+            />
           )}
           </div>
         </div>

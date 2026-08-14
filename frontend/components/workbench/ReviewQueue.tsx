@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from "react";
 
-import { AdviesDraadje } from "@/components/workbench/AdviesDraadje";
 import { isBeslist, redenVoorWijziging, type ReviewFilter } from "@/lib/annotatie";
 import { JAS_KLASSEN, jasStyle } from "@/lib/jas";
 import type { AnnotatieElement, BeslissingInvoer, ReviewReason, Wijziging } from "@/lib/types";
@@ -151,7 +150,7 @@ function DecisionCard({
   open,
   onOpen,
   onAkkoord,
-  onAdvies,
+  onVraag,
 }: {
   el: AnnotatieElement;
   actief: boolean;
@@ -168,8 +167,8 @@ function DecisionCard({
   /** Goedkeuren. Loopt langs de lijst-eigenaar zodat de knop en de `a`-toets hetzelfde doen —
    *  inclusief het doorspringen naar het volgende element dat nog aandacht vraagt. */
   onAkkoord: () => Promise<void>;
-  /** Vraag de assistent om uitleg bij dít element. Weglaten verbergt het draadje. */
-  onAdvies?: (el: AnnotatieElement, vraag: string, opToken: (t: string) => void) => Promise<void>;
+  /** Zet een vraag over dít element klaar in het centrale chatvenster. Weglaten verbergt de knop. */
+  onVraag?: () => void;
 }) {
   const [notitie, setNotitie] = useState(false);
   const palet = open === "klasse";
@@ -206,6 +205,9 @@ function DecisionCard({
     try {
       await onBeslissing(req);
       onOpen("geen");
+    } catch {
+      // De melding staat al boven de lijst (het artefact vangt hem); hier alleen zorgen dat de kaart
+      // uit zijn bezig-stand komt en de rij open blijft, zodat je het opnieuw kunt proberen.
     } finally {
       setBezig(false);
     }
@@ -256,6 +258,8 @@ function DecisionCard({
                 setBezig(true);
                 try {
                   await onAkkoord();
+                } catch {
+                  /* de melding staat boven de lijst */
                 } finally {
                   setBezig(false);
                 }
@@ -311,6 +315,8 @@ function DecisionCard({
                 setBezig(true);
                 try {
                   await onVerwijder?.();
+                } catch {
+                  /* de melding staat boven de lijst */
                 } finally {
                   setBezig(false);
                   onOpen("geen");
@@ -426,7 +432,24 @@ function DecisionCard({
         </div>
       )}
 
-      {uitgeklapt && onAdvies && <AdviesDraadje onVraag={(v, opToken) => onAdvies(el, v, opToken)} />}
+      {/* Vragen doe je in het centrale gespreksvenster, niet in een tweede chatje hier. Deze knop zet
+          de vraag daar klaar mét de context van dit element; het antwoord komt in de thread — inclusief
+          bronnen en grounding, die een draadje in de kaart nooit toonde. */}
+      {uitgeklapt && onVraag && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onVraag();
+          }}
+          className="focus-ring mt-2 inline-flex min-h-[24px] items-center gap-1.5 rounded-lg border border-line px-2 py-1 text-xs text-lint transition hover:border-lint hover:bg-surface coarse:min-h-[44px]"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+          </svg>
+          Vraag de assistent
+        </button>
+      )}
 
       <div className="mt-2 flex items-center justify-between gap-2 border-t border-line/60 pt-1.5 text-[0.65rem] text-muted">
         <span className="min-w-0 flex-1" onClick={(e) => e.stopPropagation()}>
@@ -480,7 +503,7 @@ export function ReviewQueue({
   onKies,
   onBeslissing,
   onVerwijder,
-  onAdvies,
+  onVraag,
 }: {
   /** Alle elementen — voor de tellingen in de kop. */
   elementen: AnnotatieElement[];
@@ -499,7 +522,8 @@ export function ReviewQueue({
   onBeslissing: (elementId: string, req: BeslissingInvoer) => Promise<void>;
   /** Eigen markering wissen. Weglaten maakt de lijst alleen-beoordeelbaar. */
   onVerwijder?: (elementId: string) => Promise<void>;
-  onAdvies?: (el: AnnotatieElement, vraag: string, opToken: (t: string) => void) => Promise<void>;
+  /** Zet een vraag over een element klaar in het centrale chatvenster. */
+  onVraag?: (el: AnnotatieElement) => void;
 }) {
   const totaal = elementen.length;
   const beslist = elementen.filter(isBeslist).length;
@@ -581,7 +605,7 @@ export function ReviewQueue({
           onKies={() => onKies(el.id)}
           onBeslissing={(req) => onBeslissing(el.id, req)}
           onVerwijder={onVerwijder && el.herkomst === "mens" ? () => onVerwijder(el.id) : undefined}
-          onAdvies={onAdvies}
+          onVraag={onVraag ? () => onVraag(el) : undefined}
         />
       ))}
     </div>

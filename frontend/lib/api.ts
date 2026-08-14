@@ -19,6 +19,7 @@ import type {
 import type {
   AdminBerichtenPaginaOut,
   AdminBerichtOut,
+  AgentContext,
   AgentDoel,
   AgentKandidaat,
   Anker,
@@ -378,19 +379,6 @@ export async function verwijderGesprek(id: string): Promise<void> {
 /** Stuur een vrije prompt naar de unified agent (BFF → graph-qa /v1/chat, SSE). De supervisor kiest
  *  per beurt `antwoord` (streamt tekst-`token`s + `sources`) of `annotatie` (`doel` + `element`).
  *  `conversationId` houdt het gespreksgeheugen vast (thread_id). */
-/** Context bij een adviesvraag of een annotatie: waar gaat het over. */
-export interface AgentContext {
-  slug?: string;
-  bwbId?: string;
-  artikel?: string;
-  lid?: string;
-  element_id?: string;
-  klasse?: string;
-  fragment?: string;
-  corpus?: string;
-  bestaande_elementen?: { id: string; klasse: string; tekst: string; lid: string; herkomst: string }[];
-}
-
 export async function annoteerAgentStream(
   prompt: string,
   handlers: {

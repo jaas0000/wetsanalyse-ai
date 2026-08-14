@@ -178,6 +178,40 @@ kaart in de lijst (`ReviewQueue`), met `prefers-reduced-motion` gerespecteerd.
   het toetsenbord gegarandeerd dezelfde volgorde als je ziet, en staat er nooit op twee kaarten
   tegelijk een rij open.
 
+### Eén gesprek: vragen gaan altijd via het centrale venster
+
+De reviewkaart had een eigen mini-chat (`AdviesDraadje`). Die bestond alleen omdat het artefact
+modaal was; nu het ernaast staat is hij **verwijderd**. In plaats daarvan zet *Vraag de assistent* op
+de kaart een vraag klaar in het chatveld:
+
+- `WerkplekClient` houdt `vraagOver` (slug + element). Zolang dat staat toont een **chip** boven het
+  invoerveld waar de vraag over gaat, en gaat de beurt met `modus: "advies"` + `vraagContextVan(...)`.
+  De chip verdwijnt na het versturen — anders wordt je vólgende vraag ongemerkt ook een adviesvraag.
+- Het antwoord is een gewone beurt en krijgt daarmee **bronnen, grounding en de kopieerknop**, die het
+  draadje in de kaart geen van alle had.
+- De chip is UI-state en reist niet mee naar de api; het bewaarde bericht krijgt daarom een
+  contextregel (`Bij <klasse> — "<fragment>" (art. 36): <vraag>`), zoals `kandidatenAlsTekst`.
+- Op een **smal scherm** sluit het artefact bij het versturen: daar ligt het over de chat heen en zou
+  je het antwoord niet zien binnenkomen.
+
+**Stoppen kan.** De verzendknop wordt tijdens het streamen een stopknop (`AbortController` →
+`annoteerAgentStream(..., signal)`). Een `AbortError` is géén fout: wat er al stond blijft staan met
+`_(afgebroken)_` erachter en wordt zo ook bewaard.
+
+**Niets faalt meer stil.** Het artefact openen toont een laadstand en bij een fout een `Melding` met
+*Opnieuw proberen* (voorheen: een klik waar letterlijk niets van gebeurde als de graaf plat lag). Een
+mislukte beslissing landt in de `Melding` ván het artefact — `WerkplekClient.beslissing` gooit hem
+door en `ArtefactPaneel.beslis`/`wis` vangen hem — niet meer als chatbericht in de thread.
+
+**De annotatie blijft bereikbaar** via een balk boven de chat (`art. 36 · 10 elementen · 3 te
+beoordelen · Openen`) zodra het paneel dicht is; de chip in de thread scrolt immers weg.
+
+**"Mogelijk ontbrekend" is werkvoorraad, geen mededeling** (`components/workbench/OntbrekendLijst.tsx`).
+Staat er een letterlijk fragment bij dat in de tekst voorkomt → *Toevoegen als \<klasse\>*, één klik,
+met anker. Anders zegt het kaartje waaróm het niet kan (geen fragment aangewezen, of het fragment
+staat niet letterlijk in de tekst). Wegleggen kan altijd, maar is **sessie-only**: `ontbrekend` hoort
+bij het chatbericht, niet bij het annotatiedocument, en er is geen veld voor "afgehandeld".
+
 ### Toegankelijkheid (WCAG 2.2 AA, NLDS-niveau)
 
 - Markeringen in de tekst zijn **`<button>`**, geen `<mark onClick>`: anders zijn ze niet focusbaar

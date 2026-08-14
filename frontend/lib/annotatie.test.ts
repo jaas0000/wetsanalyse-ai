@@ -4,6 +4,8 @@ import {
   pastInFilter,
   sorteerReview,
   volgendeElement,
+  vraagContextLabel,
+  vraagContextVan,
   gewijzigdeVelden,
   overlaptSelectie,
   redenVoorWijziging,
@@ -12,7 +14,7 @@ import {
   kandidatenAlsTekst,
   mergeVoorstellen,
 } from "./annotatie";
-import type { AnnotatieElement, VoorstelElement } from "./types";
+import type { AnnotatieDocument, AnnotatieElement, VoorstelElement } from "./types";
 
 describe("documentStatusLabel", () => {
   it("mapt de drie documentstatussen naar NL-labels", () => {
@@ -239,5 +241,53 @@ describe("volgendeElement", () => {
 
   it("geeft niets terug als de lijst leeg is", () => {
     expect(volgendeElement([], undefined)).toBeUndefined();
+  });
+});
+
+// --- een vraag over één markering -----------------------------------------------------------------
+
+describe("vraagContextVan", () => {
+  const doc = {
+    slug: "abc", bwbId: "BWBR0004770", artikel: "36", lid: "2", elementen: [],
+  } as unknown as AnnotatieDocument;
+  const info = {
+    bwbId: "BWBR0004770", artikel: "36", citeertitel: "IW 1990", opschrift: "",
+    leden_teksten: [{ lid: "1", tekst: "Eerste lid." }, { lid: "2", tekst: "Tweede lid." }],
+  };
+
+  it("vult waar de vraag over gaat", () => {
+    const ctx = vraagContextVan("abc", doc, info, el("e1", { klasse: "Rechtsobject", tekst: "aanslag", lid: "1" }));
+    expect(ctx).toMatchObject({
+      slug: "abc", bwbId: "BWBR0004770", artikel: "36", lid: "1",
+      element_id: "e1", klasse: "Rechtsobject", fragment: "aanslag",
+    });
+  });
+
+  it("valt terug op het lid van het document als het element er geen heeft", () => {
+    // Bij een artikel zonder leden staat het lid alleen op het document; zonder terugval zou de
+    // agent de verkeerde (of geen) bepaling voor zich krijgen.
+    const ctx = vraagContextVan("abc", doc, info, el("e2", { lid: "" }));
+    expect(ctx.lid).toBe("2");
+  });
+
+  it("geeft de getoonde artikeltekst als corpus", () => {
+    const ctx = vraagContextVan("abc", doc, info, el("e1"));
+    expect(ctx.corpus).toBe("Eerste lid.\n\nTweede lid.");
+  });
+});
+
+describe("vraagContextLabel", () => {
+  it("benoemt klasse, fragment en vindplaats", () => {
+    // Deze regel wordt ook opgeslagen bij het bericht: de chip is UI-state en reist niet mee.
+    const label = vraagContextLabel(el("e1", { klasse: "Voorwaarde", tekst: "indien", lid: "1" }), {
+      artikel: "36",
+    } as AnnotatieDocument);
+    expect(label).toBe("Voorwaarde — “indien” (art. 36 lid 1)");
+  });
+
+  it("laat de vindplaats weg als het document onbekend is", () => {
+    expect(vraagContextLabel(el("e1", { klasse: "Voorwaarde", tekst: "indien" }))).toBe(
+      "Voorwaarde — “indien”",
+    );
   });
 });

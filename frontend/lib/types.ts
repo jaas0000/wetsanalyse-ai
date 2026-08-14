@@ -277,6 +277,19 @@ export interface AgentKandidaat {
   fragment?: string;
 }
 
+/** Context bij een adviesvraag of een annotatie: waar gaat het over. */
+export interface AgentContext {
+  slug?: string;
+  bwbId?: string;
+  artikel?: string;
+  lid?: string;
+  element_id?: string;
+  klasse?: string;
+  fragment?: string;
+  corpus?: string;
+  bestaande_elementen?: { id: string; klasse: string; tekst: string; lid: string; herkomst: string }[];
+}
+
 /** Een bron onder een agent-antwoord (uit het `sources`-SSE-event). */
 export interface Bron {
   label: string;
@@ -312,6 +325,10 @@ export interface VoorstelElement {
 export interface OntbrekendItem {
   klasse: string;
   reden: string;
+  /** Het letterlijke fragment dat gemarkeerd zou moeten worden. Ontbreekt als de Critic het element
+   *  alleen impliciet in de tekst ziet — dan is het niet toe te voegen (elk element moet letterlijk
+   *  in de wettekst staan) en zegt de UI dat ook. */
+  tekst?: string;
 }
 
 // --- Gesprekken (chatgeschiedenis) — afgeleid van api/app/gesprek_contracts.py ---
