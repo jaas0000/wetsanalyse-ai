@@ -105,6 +105,71 @@ def _kandidaten_uit_json(text: str) -> list[dict[str, str]]:
     return uit[:8]
 
 
+# --- meldingen over het samenspel -----------------------------------------------------------------
+#
+# De annotatieketen doet er 60-90 seconden over en stuurde daarin geen enkel event: de jurist keek
+# naar een leeg scherm en zag het heen-en-weer tussen annoteerder en Critic niet. Deze regels vullen
+# dat gat. Ze zijn pure functies zodat de bewoording te testen is zonder een hele graaf te draaien.
+
+def _toolregel(call: dict[str, Any]) -> str:
+    """`get_lid(BWBR0004770, art. 9, lid 1)` — de tool mét waar hij naar kijkt.
+
+    Alleen de tool-naam zei te weinig: bij drie opeenvolgende `get_lid`-aanroepen zag je niet dat het
+    om verschillende bepalingen ging.
+    """
+    inp = call.get("input") or {}
+    delen = [str(inp[k]).strip() for k in ("bwb_id", "artikel", "nummer", "lid", "query", "term")
+             if str(inp.get(k, "")).strip()]
+    return f"{call.get('name', '?')}({', '.join(truncate(d, 60) for d in delen)})" if delen else str(call.get("name", "?"))
+
+
+def _annoteer_melding(voorstellen: list[Any], verworpen: list[Any]) -> str:
+    """Wat de annoteerder opleverde, inclusief wat er sneuvelde en waarom."""
+    regel = f"Annoteerder · {len(voorstellen) + len(verworpen)} fragmenten, {len(voorstellen)} gegrond"
+    if not verworpen:
+        return regel
+    per_reden: dict[str, int] = {}
+    for v in verworpen:
+        reden = getattr(v, "reden", "") or "onbekend"
+        per_reden[reden] = per_reden.get(reden, 0) + 1
+    uitleg = {"niet_letterlijk": "niet letterlijk", "ongeldige_klasse": "ongeldige klasse"}
+    details = ", ".join(f"{n}× {uitleg.get(r, r)}" for r, n in per_reden.items())
+    return f"{regel} — {len(verworpen)} verworpen ({details})"
+
+
+def _critic_melding(oordelen: dict[str, Any], ontbrekend: list[Any]) -> str:
+    """Tellingen per aandacht-niveau; de oordelen zelf staan al op de reviewkaarten."""
+    telling: dict[str, int] = {}
+    for o in oordelen.values():
+        niveau = getattr(o, "aandacht", "") or "geen oordeel"
+        telling[niveau] = telling.get(niveau, 0) + 1
+    volgorde = ["rood", "geel", "groen", "geen oordeel"]
+    delen = [f"{telling[n]} {n}" for n in volgorde if telling.get(n)]
+    regel = "Critic · " + (", ".join(delen) if delen else "geen oordelen")
+    if ontbrekend:
+        regel += f" · {len(ontbrekend)} mogelijk gemist"
+    return regel
+
+
+def _herzien_melding(ronde: int, voor: list[dict[str, Any]], na: list[dict[str, Any]]) -> str:
+    """Wat de annoteerder met de kritiek deed. Dít is het samenspel: aangepast versus behouden."""
+    oud = {v.get("id"): v for v in voor}
+    aangepast = sum(
+        1 for v in na
+        if v.get("id") in oud
+        and any(oud[v["id"]].get(k) != v.get(k) for k in ("klasse", "tekst", "lid"))
+    )
+    ongewijzigd = sum(1 for v in na if v.get("id") in oud) - aangepast
+    toegevoegd = sum(1 for v in na if v.get("id") not in oud)
+    verdwenen = sum(1 for v in voor if v.get("id") not in {x.get("id") for x in na})
+    delen = [f"{aangepast} aangepast", f"{ongewijzigd} ongewijzigd"]
+    if toegevoegd:
+        delen.append(f"{toegevoegd} toegevoegd")
+    if verdwenen:
+        delen.append(f"{verdwenen} verwijderd")
+    return f"Herziening {ronde} · " + ", ".join(delen)
+
+
 def _doel_uit_toolcalls(messages: list[dict[str, Any]]) -> dict[str, str]:
     """Gezaghebbend doel = de LAATSTE fetch-tool-call (get_lid/get_artikel/get_bepaling) die de agent
     deed — wat hij écht ophaalde. get_bepaling levert een `nummer` (bv. '9.1' voor een divisie); dat
@@ -334,7 +399,7 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
         text = "".join(b.text for b in resp.content if b.type == "text")
         worker_plan, plan = parse_supervisor(text)
         eerste = worker_plan[0]
-        writer({"type": "status", "message": f"Specialist: {eerste} — {plan[:80]}"})
+        writer({"type": "status", "message": f"Supervisor → {eerste}-worker · {plan[:80]}"})
         return {"specialist": eerste, "plan": plan, "worker_plan": worker_plan, "worker_idx": 0}
 
     def _entry_node(state: State) -> str:
@@ -537,6 +602,9 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
             writer({"type": "token", "content": melding})
             return {"answer": melding, "voorstellen": [], "messages": [{"role": "assistant", "content": melding}]}
 
+        plek = f"art. {aanduiding}" + (f" lid {doel['lid']}" if doel.get("lid") else "")
+        writer({"type": "status", "message": f"Annoteerder · leest {plek} ({len(corpus)} tekens)"})
+
         resp = llm.create(
             model=model,
             max_tokens=8192,
@@ -546,13 +614,15 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
         )
         llm_text = "".join(b.text for b in resp.content if b.type == "text")
         voorstellen, verworpen = _verwerk(llm_text, corpus, doel.get("bwbId", ""), aanduiding, doel.get("lid", ""))
+        writer({"type": "status", "message": _annoteer_melding(voorstellen, verworpen)})
 
         # Stuur de opgehaalde tekst mee zodat de frontend precies dít toont (één bron, ook voor divisies).
         doel_uit = {**doel, "leden_teksten": [{"lid": doel.get("lid", ""), "tekst": corpus}]}
         writer({"type": "doel", "doel": doel_uit})
         if not voorstellen:
-            plek = f"artikel {aanduiding}" + (f" lid {doel['lid']}" if doel.get("lid") else "")
-            leeg = f"Ik vond geen JAS-elementen om te markeren in {plek}."
+            leeg = f"Ik vond geen JAS-elementen om te markeren in artikel {aanduiding}" + (
+                f" lid {doel['lid']}." if doel.get("lid") else "."
+            )
             writer({"type": "token", "content": leeg})
             return {"answer": leeg, "voorstellen": [], "verworpen_fragmenten": [],
                     "messages": [{"role": "assistant", "content": leeg}]}
@@ -588,10 +658,12 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
 
         Faalt de Critic → `critic_gefaald`, elementen komen door met lege aandacht en de lus wordt
         overgeslagen (nooit de annotatie breken)."""
+        writer = get_stream_writer()
         voorstellen = list(state.get("voorstellen") or [])
         if not voorstellen:
             return {}  # annoteer_node heeft de lege/foutmelding al geëmit
 
+        writer({"type": "status", "message": f"Critic · beoordeelt {len(voorstellen)} markeringen"})
         corpus = _corpus_uit_trace(state.get("source_trace", []))
 
         oordelen: dict[str, Any] = {}
@@ -612,6 +684,8 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
             logger.warning("critic: beoordeling mislukt; elementen zonder aandacht doorgelaten", exc_info=True)
 
         if gefaald:
+            writer({"type": "status",
+                    "message": "Critic · overgeslagen (fout) — de voorstellen blijven staan"})
             # Laat de voorstellen ONGEMOEID. In een tweede ronde staat er al een oordeel van de
             # eerste pas op; dat overschrijven met lege waarden zou een geslaagde beoordeling
             # ongedaan maken omdat een latere poging mislukte.
@@ -634,6 +708,8 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
             v["critic"] = motivatie
             if oordeel is not None:
                 feedback.append({"id": v.get("id", ""), **oordeel.model_dump()})
+
+        writer({"type": "status", "message": _critic_melding(oordelen, ontbrekend)})
 
         # `voorstellen` expliciet teruggeven: eerder werkten de aandacht-velden alleen door omdat het
         # dezelfde dict-objecten waren. Dat is fragiel zodra er meerdere rondes over de state lopen.
@@ -674,6 +750,7 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
         `verwijder`-instructie laat een element verdwijnen. Zo kan een doordrammende Critic geen goede
         elementen wegvagen, en levert een half-mislukte herziening nooit minder op dan we al hadden.
         """
+        writer = get_stream_writer()
         alle = list(state.get("voorstellen") or [])
         # Markeringen van de jurist gaan de herziening NIET in: de agent herschrijft ze niet, ook niet
         # als de Critic er iets van vindt. Die bevinding komt terug als suggestie, niet als wijziging.
@@ -711,10 +788,14 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
             )
         except Exception:  # noqa: BLE001 — een mislukte herziening mag de annotatie niet breken
             logger.warning("herziening: mislukt; vorige voorstellen behouden", exc_info=True)
+            writer({"type": "status",
+                    "message": f"Herziening {ronde} · mislukt — vorige voorstellen behouden"})
             return {"critic_feedback": [], "critic_ronde": ronde}
 
         if not herzien:
             logger.warning("herziening: leverde niets gegronds op; vorige voorstellen behouden")
+            writer({"type": "status",
+                    "message": f"Herziening {ronde} · leverde niets gegronds op — vorige voorstellen behouden"})
             return {"critic_feedback": [], "critic_ronde": ronde}
 
         te_verwijderen = {f.get("id") for f in feedback if f.get("actie") == "verwijder"}
@@ -743,8 +824,10 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
                 nieuw_dict["critic"] = vorig.get("critic", "")
             samengevoegd[nieuw_v.id] = nieuw_dict
 
+        uit = list(samengevoegd.values())
+        writer({"type": "status", "message": _herzien_melding(ronde, voorstellen, uit)})
         return {
-            "voorstellen": list(samengevoegd.values()) + van_jurist,
+            "voorstellen": uit + van_jurist,
             "verworpen_fragmenten": [x.model_dump() for x in verworpen],
             "critic_feedback": [],
             "critic_ronde": ronde,
@@ -793,6 +876,7 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
         if herzieningen:
             delen.append(f"na {herzieningen} herziening" + ("en" if herzieningen > 1 else ""))
         samenvatting = "; ".join(delen) + "."
+        writer({"type": "status", "message": f"Klaar · {len(voorstellen)} elementen ter beoordeling"})
         writer({"type": "token", "content": samenvatting})
 
         # Geheugen: leg een leesbaar spoor van de annotatie vast (met de elementen) zodat een
@@ -806,7 +890,7 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
     def tools_node(state: State) -> dict[str, Any]:
         writer = get_stream_writer()
         pending = state.get("pending_tools", [])
-        writer({"type": "status", "message": f"Graaf bevragen: {', '.join(t['name'] for t in pending)}..."})
+        writer({"type": "status", "message": "Graaf bevragen · " + ", ".join(_toolregel(t) for t in pending)})
         trace = list(state.get("source_trace", []))
         results = []
         for tu in pending:

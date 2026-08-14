@@ -352,3 +352,91 @@ def test_een_herziening_zonder_id_dupliceert_het_element_niet():
     subject = next(e for e in elementen if e["klasse"] == "Rechtssubject")
     assert subject["id"] == "el-a", "het oudste id blijft, anders raakt het werk van de jurist los"
     assert subject["aandacht"] == "groen", "inhoudelijk ongewijzigd, dus het oordeel geldt nog"
+
+
+# --- het samenspel is te volgen ------------------------------------------------------------------
+#
+# De keten deed er 60-90 seconden over en stuurde in die tijd geen enkel event: de jurist keek naar
+# een leeg scherm terwijl annoteerder en Critic aan het werk waren.
+
+def _statusregels(events) -> list[str]:
+    return [e["message"] for e in events if e["type"] == "status"]
+
+
+def test_elke_fase_meldt_zich_met_naam_en_uitkomst():
+    llm = FakeLLM([
+        *_aanloop(),
+        _annoteer([{"id": "el-a", "klasse": "Rechtsfeit", "tekst": "De ontvanger", "lid": "1"}]),
+        _critic([{"id": "el-a", "aandacht": "rood", "motivatie": "dit is een subject",
+                  "actie": "vervang", "voorstel_klasse": "Rechtssubject"}]),
+        _annoteer([{"id": "el-a", "klasse": "Rechtssubject", "tekst": "De ontvanger", "lid": "1"}]),
+        _critic([{"id": "el-a", "aandacht": "groen", "motivatie": "nu juist"}]),
+    ])
+    _, events = _annoteer_uitkomst(llm)
+    regels = _statusregels(events)
+    tekst = "\n".join(regels)
+
+    for merk in ("Supervisor →", "Graaf bevragen ·", "Annoteerder ·", "Critic ·", "Herziening 1 ·", "Klaar ·"):
+        assert merk in tekst, f"{merk!r} ontbreekt in de tijdlijn:\n{tekst}"
+
+    # De volgorde vertelt het verhaal: eerst annoteren, dan de kritiek, dan de correctie.
+    volgorde = [i for i, r in enumerate(regels)
+                if r.startswith(("Annoteerder ·", "Critic ·", "Herziening 1 ·", "Klaar ·"))]
+    assert volgorde == sorted(volgorde)
+    assert regels.index(next(r for r in regels if r.startswith("Herziening 1"))) > \
+        regels.index(next(r for r in regels if r.startswith("Critic ·")))
+
+
+def test_de_melding_telt_wat_er_daadwerkelijk_uitkomt():
+    """Een teller die niet klopt met de lijst eronder ondermijnt het hele doel van meekijken."""
+    llm = FakeLLM([
+        *_aanloop(),
+        _annoteer([
+            {"id": "el-a", "klasse": "Rechtssubject", "tekst": "De ontvanger", "lid": "1"},
+            {"id": "el-b", "klasse": "Voorwaarde", "tekst": "indien de schuldenaar daarom verzoekt", "lid": "1"},
+            {"id": "el-c", "klasse": "Rechtsfeit", "tekst": "staat niet in de tekst", "lid": "1"},
+        ]),
+        _critic([{"id": "el-a", "aandacht": "groen", "motivatie": "ok"},
+                 {"id": "el-b", "aandacht": "groen", "motivatie": "ok"}]),
+    ])
+    elementen, events = _annoteer_uitkomst(llm)
+    regels = _statusregels(events)
+
+    annoteer = next(r for r in regels if r.startswith("Annoteerder ·") and "gegrond" in r)
+    assert "3 fragmenten, 2 gegrond" in annoteer
+    assert "1 verworpen (1× niet letterlijk)" in annoteer
+    assert f"Klaar · {len(elementen)} elementen ter beoordeling" in regels
+
+
+def test_zonder_lus_geen_herzieningsregel():
+    llm = FakeLLM([
+        *_aanloop(),
+        _annoteer([{"id": "el-a", "klasse": "Rechtssubject", "tekst": "De ontvanger", "lid": "1"}]),
+        _critic([{"id": "el-a", "aandacht": "rood", "motivatie": "mis", "actie": "vervang",
+                  "voorstel_klasse": "Voorwaarde"}]),
+    ])
+    events = _run(answer_stream(
+        "annoteer artikel 9 lid 1 van de Invorderingswet 1990",
+        settings=make_settings(enable_decomposition=True, critic_max_rondes=0),
+        llm=llm, graph=FakeGraph(result=LID_TSV),
+    ))
+    assert not any(r.startswith("Herziening") for r in _statusregels(events))
+
+
+def test_een_uitgevallen_critic_meldt_zich():
+    """Stil doorgaan zou de indruk wekken dat alles beoordeeld is."""
+    class Stukke(FakeLLM):
+        def create(self, **kw):
+            if "CRITIC" in (kw.get("system") or "").upper():
+                raise RuntimeError("critic plat")
+            return super().create(**kw)
+
+    llm = Stukke([
+        *_aanloop(),
+        _annoteer([{"id": "el-a", "klasse": "Rechtssubject", "tekst": "De ontvanger", "lid": "1"}]),
+    ])
+    events = _run(answer_stream(
+        "annoteer artikel 9 lid 1 van de Invorderingswet 1990",
+        settings=make_settings(enable_decomposition=True), llm=llm, graph=FakeGraph(result=LID_TSV),
+    ))
+    assert any("overgeslagen (fout)" in r for r in _statusregels(events))

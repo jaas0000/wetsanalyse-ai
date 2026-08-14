@@ -213,6 +213,14 @@ Drie dingen die je verder moet kennen voordat je hieraan werkt:
   `annoteer → critic → advance`: `annoteer_node` grondt de voorstellen (state), `critic_node` zet per
   element een **aandacht**-niveau (groen|geel|rood) + `critic`-motivatie, emit de `element`-events en één
   `ontbrekend`-event (waarschijnlijk ontbrekende JAS-klassen). De Critic mag de annotatie nooit breken.
+- **De keten meldt zich.** De annotatiefase duurt 60-90 s; daar tussenin ging vroeger geen enkel
+  event uit, dus de jurist keek naar een leeg scherm. Elke stap stuurt nu een `status`-regel met zijn
+  naam en uitkomst: `Supervisor → …` / `Graaf bevragen · get_lid(BWBR…, 9, 1)` / `Annoteerder · N
+  fragmenten, M gegrond` / `Critic · 1 rood, 2 geel · 1 mogelijk gemist` / `Herziening 1 · X
+  aangepast, Y ongewijzigd` / `Klaar · N elementen`. Ook de faalpaden melden zich (Critic
+  overgeslagen, herziening leverde niets op) — stil doorgaan wekt de indruk dat alles beoordeeld is.
+  De bewoording zit in pure functies (`_annoteer_melding`, `_critic_melding`, `_herzien_melding`,
+  `_toolregel`) zodat hij te testen is; de werkplek bewaart de reeks bij de annotatie.
 - **Onderwerp-afbakening & injectie.** De agent antwoordt alleen over de wetgeving in de graaf en
   behandelt graaftekst als data. Verzwak `SYSTEM_PROMPT`/`_ROUTER_SYSTEM` hierin niet zonder reden.
 

@@ -42,7 +42,10 @@ import { wettenOverheidHref } from "@/lib/url";
 type Item =
   | { id: string; type: "user"; tekst: string; over?: string }
   | { id: string; type: "antwoord"; tekst: string; denk?: string; bronnen?: Bron[] }
-  | { id: string; type: "annotatie"; slug: string; ontbrekend?: OntbrekendItem[] }
+  // `denk` = de tijdlijn van het samenspel (supervisor → ophaal → annoteerder ⇄ Critic). Die werd
+  // eerder weggegooid zodra de beurt een annotatie bleek; juist bij een annotatie wil je achteraf
+  // kunnen zien hoe hij tot stand kwam.
+  | { id: string; type: "annotatie"; slug: string; ontbrekend?: OntbrekendItem[]; denk?: string }
   // De vraag noemde een onderwerp: de agent vond bepalingen, de jurist kiest er één.
   | { id: string; type: "kandidaten"; tekst: string; kandidaten: AgentKandidaat[] };
 
@@ -140,7 +143,8 @@ export function WerkplekClient({ initialGesprekId, onGesprekAangemaakt, onGewijz
             b.rol === "user"
               ? { id: uid(), type: "user" as const, tekst: b.tekst }
               : b.annotatie_slug
-                ? { id: uid(), type: "annotatie" as const, slug: b.annotatie_slug, ontbrekend: b.ontbrekend }
+                ? { id: uid(), type: "annotatie" as const, slug: b.annotatie_slug,
+                    ontbrekend: b.ontbrekend, denk: b.denk }
                 : { id: uid(), type: "antwoord" as const, tekst: b.tekst, denk: b.denk, bronnen: b.bronnen },
           ),
         );
@@ -364,11 +368,13 @@ export function WerkplekClient({ initialGesprekId, onGesprekAangemaakt, onGewijz
         setInfos((m) => ({ ...m, [bijgewerkt.slug]: graaf }));
         setItems((xs) =>
           xs.map((x) =>
-            x.id === antId ? { id: antId, type: "annotatie", slug: bijgewerkt.slug, ontbrekend } : x,
+            x.id === antId
+              ? { id: antId, type: "annotatie", slug: bijgewerkt.slug, ontbrekend, denk }
+              : x,
           ),
         );
         setArtefactSlug(bijgewerkt.slug); // schuif het artefact meteen in
-        void persisteer(gid, "assistant", { annotatie_slug: bijgewerkt.slug, ontbrekend });
+        void persisteer(gid, "assistant", { annotatie_slug: bijgewerkt.slug, ontbrekend, denk });
       } else {
         if (!tekst.trim()) updateItem(antId, { tekst: "(geen antwoord)" });
         void persisteer(gid, "assistant", { tekst: tekst.trim() || "(geen antwoord)", denk, bronnen });
@@ -586,6 +592,7 @@ export function WerkplekClient({ initialGesprekId, onGesprekAangemaakt, onGewijz
               </div>
             ) : (
               <div key={item.id} className="animate-rise">
+                {item.denk && <DenkProces tekst={item.denk} actief={false} label="Zo is dit tot stand gekomen" />}
                 <AnnotatieChip
                   doc={docs[item.slug]}
                   aantal={docs[item.slug]?.elementen.length}
@@ -836,7 +843,16 @@ function KopieerKnop({ tekst }: { tekst: string }) {
 
 // Inklapbaar "Denkproces"-blok (Claude-stijl): streamt live terwijl de agent werkt (`actief`) en klapt
 // automatisch dicht zodra het antwoord er is. De gebruiker kan het handmatig weer openen.
-function DenkProces({ tekst, actief }: { tekst: string; actief: boolean }) {
+function DenkProces({
+  tekst,
+  actief,
+  label = "Denkproces",
+}: {
+  tekst: string;
+  actief: boolean;
+  /** Bij een annotatie is dit geen "denkproces" maar het spoor van het samenspel tussen de agents. */
+  label?: string;
+}) {
   const [keuze, setKeuze] = useState<boolean | null>(null);
   const open = keuze ?? actief;
 
@@ -849,7 +865,7 @@ function DenkProces({ tekst, actief }: { tekst: string; actief: boolean }) {
         aria-expanded={open}
       >
         {actief && <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-accent-soft" aria-hidden />}
-        <span>{actief ? "Denkt na…" : "Denkproces"}</span>
+        <span>{actief ? "Denkt na…" : label}</span>
         <span className={`transition-transform ${open ? "rotate-90" : ""}`} aria-hidden>
           ▸
         </span>

@@ -123,6 +123,18 @@ Bovenaan de shell staat de klikbare **testomgeving-strook**. De shell is twee ko
   `GRAPH_QA_TOKEN(_FILE)` — de frontend moet graph-qa op het gedeelde docker-netwerk kunnen
   bereiken (`lib/config.ts`).
 
+### De tijdlijn van een annotatie
+
+Een annotatiebeurt duurt 60-90 seconden. graph-qa stuurt daarin per fase een `status`-regel
+(supervisor → ophaal-agent → annoteerder ⇄ Critic → herziening → klaar); `onStatus` plakt die als
+`· <regel>` aan `denk`, en `DenkProces` toont ze **live** onder de lopende beurt.
+
+Zodra de beurt een annotatie blijkt, ging dat spoor eerder verloren: het antwoord-item werd vervangen
+door de chip. Nu draagt het `annotatie`-item een `denk`-veld, staat de tijdlijn ingeklapt boven de
+chip als *"Zo is dit tot stand gekomen"*, en wordt hij met de beurt bewaard (`denk` bestond al in
+`BerichtInvoer`) en bij hydratatie teruggehaald. Bij een platform dat om herleidbaarheid draait hoort
+achteraf te kunnen zien hoe een annotatie tot stand kwam.
+
 ### Buiten de schil: één kaart
 
 Alles wat geen app-schil is — inloggen, 2FA, de eerste beheerder, de blokkerende disclaimer en de
