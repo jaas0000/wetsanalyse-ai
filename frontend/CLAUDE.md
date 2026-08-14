@@ -212,8 +212,16 @@ beoordelen · Openen`) zodra het paneel dicht is; de chip in de thread scrolt im
 **"Mogelijk ontbrekend" is werkvoorraad, geen mededeling** (`components/workbench/OntbrekendLijst.tsx`).
 Staat er een letterlijk fragment bij dat in de tekst voorkomt → *Toevoegen als \<klasse\>*, één klik,
 met anker. Anders zegt het kaartje waaróm het niet kan (geen fragment aangewezen, of het fragment
-staat niet letterlijk in de tekst). Wegleggen kan altijd, maar is **sessie-only**: `ontbrekend` hoort
-bij het chatbericht, niet bij het annotatiedocument, en er is geen veld voor "afgehandeld".
+staat niet letterlijk in de tekst). Toegevoegde items tonen "✓ inmiddels gemarkeerd" en tellen niet
+meer mee; is alles afgehandeld, dan verdwijnt het blok.
+
+**Bewust géén "wegleggen".** Dit is informatie, geen takenlijst. Zo'n knop suggereerde een
+afhandeling die nergens landde (sessie-only, zonder reden, na herladen weer terug) — terwijl *"de
+assistent zag hier een Rechtssubject en ik vind van niet"* juist een interpretatiekeuze is die in het
+spoor thuishoort; elders in de werkplek is zoiets wél een `reject` met reden of een `comment`. En
+omdat dit lijstje de **restpost van de Critic** is, zegt structureel wegklikken iets over de kwaliteit
+van de Critic: dat signaal hoort niet in een sessie-variabele te verdwijnen. Zolang `ontbrekend` bij
+het chatbericht hoort en niet bij het annotatiedocument, is niets vastleggen eerlijker dan doen alsof.
 
 ### Toegankelijkheid (WCAG 2.2 AA, NLDS-niveau)
 

@@ -14,6 +14,12 @@ import type { AnnotatieElement, OntbrekendItem } from "@/lib/types";
  *
  *  Staat het fragment er wél bij en is het terug te vinden, dan is toevoegen één klik: het wordt jouw
  *  markering (`human_approved`), met een anker op de plek waar het gevonden is.
+ *
+ *  **Er is geen "wegleggen".** Dit is informatie, geen takenlijst: wat je toevoegt verdwijnt vanzelf
+ *  uit de openstaande lijst, en waar je het niet mee eens bent laat je staan. Een wegklik-knop
+ *  suggereerde een afhandeling die nergens werd vastgelegd — terwijl juist "de assistent zag hier een
+ *  Rechtssubject en ik vind van niet" een interpretatiekeuze is die je in het spoor zou willen
+ *  terugvinden. Zolang dat spoor er niet is, is niets vastleggen eerlijker dan doen alsof.
  */
 export function OntbrekendLijst({
   items,
@@ -33,31 +39,30 @@ export function OntbrekendLijst({
     anker: ReturnType<typeof maakAnker>;
   }) => Promise<void>;
 }) {
-  // Weggelegde items leven alleen in deze sessie: `ontbrekend` hoort bij het chatbericht, niet bij
-  // het annotatiedocument, en er is geen veld om "afgehandeld" in vast te leggen. Na herladen staan
-  // ze er dus weer — wat ook eerlijk is: ze zijn niet opgelost, alleen genegeerd.
-  const [weggelegd, setWeggelegd] = useState<Set<number>>(new Set());
   const [bezig, setBezig] = useState<number | null>(null);
-
-  const zichtbaar = items
-    .map((item, i) => ({ item, i }))
-    .filter(({ i }) => !weggelegd.has(i));
-  if (zichtbaar.length === 0) return null;
 
   const genormaliseerd = (s: string) => s.split(/\s+/).join(" ").toLowerCase();
   const alGemarkeerd = new Set(elementen.map((e) => `${e.klasse}|${genormaliseerd(e.tekst)}`));
+  const isKlaar = (item: OntbrekendItem) => {
+    const fragment = (item.tekst ?? "").trim();
+    return !!fragment && alGemarkeerd.has(`${item.klasse}|${genormaliseerd(fragment)}`);
+  };
+
+  // Alles afgehandeld? Dan hoort hier niets meer te staan. Een blok met alleen vinkjes is ruis.
+  const openstaand = items.filter((item) => !isKlaar(item)).length;
+  if (openstaand === 0) return null;
 
   return (
     <div className="rounded-kaart border border-dashed border-line bg-surface p-3">
       <p className="text-xs font-medium text-muted">
-        Mogelijk ontbrekend — de assistent denkt dat dit er ook in zit ({zichtbaar.length})
+        Mogelijk ontbrekend — de assistent denkt dat dit er ook in zit ({openstaand})
       </p>
 
       <ul className="mt-2 space-y-2">
-        {zichtbaar.map(({ item, i }) => {
+        {items.map((item, i) => {
           const fragment = (item.tekst ?? "").trim();
           const start = fragment ? vindPositie(bron, fragment, null, []) : -1;
-          const klaar = fragment && alGemarkeerd.has(`${item.klasse}|${genormaliseerd(fragment)}`);
+          const klaar = isKlaar(item);
           const toevoegbaar = !!onToevoegen && start >= 0 && !klaar;
 
           return (
@@ -87,11 +92,13 @@ export function OntbrekendLijst({
                 </p>
               )}
 
-              <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                {klaar ? (
-                  <span className="text-xs text-succes">✓ inmiddels gemarkeerd</span>
-                ) : (
-                  toevoegbaar && (
+              {/* Alleen renderen als er iets te tonen valt: zonder fragment is er geen knop en geen
+                  vinkje, en een lege regel met marge oogt als een fout. */}
+              {(klaar || toevoegbaar) && (
+                <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                  {klaar ? (
+                    <span className="text-xs text-succes">✓ inmiddels gemarkeerd</span>
+                  ) : (
                     <button
                       type="button"
                       disabled={bezig === i}
@@ -114,16 +121,9 @@ export function OntbrekendLijst({
                     >
                       Toevoegen als {item.klasse}
                     </button>
-                  )
-                )}
-                <button
-                  type="button"
-                  onClick={() => setWeggelegd((s) => new Set(s).add(i))}
-                  className="focus-ring inline-flex min-h-[24px] items-center rounded-lg border border-line px-2.5 py-1 text-xs text-muted transition hover:border-lint hover:text-ink coarse:min-h-[44px]"
-                >
-                  Wegleggen
-                </button>
-              </div>
+                  )}
+                </div>
+              )}
             </li>
           );
         })}
