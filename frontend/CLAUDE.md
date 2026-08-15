@@ -159,6 +159,13 @@ Klik je de teststrook aan vanuit de werkplek, dan onderschept `app/@modal/(.)dis
 pad en opent `DisclaimerDialog` over de werkplek heen — zelfde `DisclaimerClient`, andere schil, en je
 verlaat je gesprek niet. Verander je de tekst, dan verander je hem dus op één plek.
 
+**In de dialoogschil sluit je met `router.back()`, nooit met een link.** `DisclaimerClient` krijgt
+daarvoor `onSluiten`; kruisje, achtergrondklik, Escape en de knop onderin lopen door dezelfde functie.
+Er stond een `LinkButton href="/"` onderin, en dat sluit een intercepting-route-modal juist niet: het
+modal-slot houdt zijn toestand vast bij een soft navigation, en `/` leidt bovendien door naar
+`/workbench`. Je hield de popup én kreeg er een history-entry bij, waarna het kruisje je terugbracht
+náár de voorwaarden — op mobiel, waar de dialoog het hele scherm vult, zat je dan vast.
+
 ### Berichten en feedback
 
 Twee kleine domeinen die aan de app-shell hangen, niet aan de oude paginanavigatie:
