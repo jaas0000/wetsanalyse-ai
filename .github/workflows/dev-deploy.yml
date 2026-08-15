@@ -188,6 +188,28 @@ jobs:
           done
           echo "::error::niet alle dev-containers draaien na de deploy:$missing"; exit 1
 
+      # Elke deploy trekt nieuwe image-lagen naar de docker-LXC en laat de oude staan. Dat liep op
+      # 15 aug 2026 vol (28 GB, 92 images waarvan 40 GB ongebruikt) en legde álles op die host plat:
+      # Docker draaide nog maar kon niets meer wegschrijven. Opruimen hoort dus bij het uitrollen.
+      #
+      # `dangling=false` betekent in de Docker-API "verwijder ook getagde images die nergens aan
+      # hangen" (het equivalent van `prune -a`); `until=168h` spaart alles van de afgelopen week, zodat
+      # een tijdelijk gestopte stack zijn image nog kan vinden. Images van draaiende containers worden
+      # nooit geraakt. Faalt het opruimen, dan is dat geen reden om de deploy rood te maken.
+      - name: Oude images opruimen op de docker-LXC
+        continue-on-error: true
+        run: |
+          set -uo pipefail
+          DOCKER="$PORTAINER_URL/api/endpoints/$ENDPOINT_ID/docker"
+          FILTERS='{"dangling":{"false":true},"until":{"168h":true}}'
+          resp=$(curl -sS -X POST -H "X-API-Key: $PORTAINER_API_KEY" \
+                   --get --data-urlencode "filters=$FILTERS" "$DOCKER/images/prune" \
+                 || echo '{}')
+          vrij=$(printf '%s' "$resp" | jq -r '.SpaceReclaimed // 0')
+          aantal=$(printf '%s' "$resp" | jq -r '(.ImagesDeleted // []) | length')
+          echo "Opgeruimd: $aantal image-verwijzingen, $(( vrij / 1024 / 1024 )) MB vrijgemaakt."
+          echo "- **Opgeruimd:** $aantal image-verwijzingen, $(( vrij / 1024 / 1024 )) MB" >> "$GITHUB_STEP_SUMMARY"
+
       - name: NPM-proxyhost (optioneel — dev-host → docker-LXC:${HOST_PORT}, https)
         if: ${{ env.NPM_URL != '' && env.NPM_IDENTITY != '' }}
         run: bash deploy/dev/npm-host.sh create "$HOSTNAME_" "$FORWARD_HOST" "$HOST_PORT"
