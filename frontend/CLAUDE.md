@@ -281,6 +281,11 @@ toelichting → `interpretatie`, meerdere velden → `anders`). Vragen wat je zo
 - **Klasse** = de badge zelf; klikken opent het palet, klikken op een klasse ís de wijziging.
 - **Toelichting** is een inline veld (Enter/blur bewaart, Escape annuleert). Een gevulde toelichting
   leegmaken vraagt een tweede klik — dat doe je met één misklik en er is geen undo.
+- **Bevestigen doet de knop zelf.** Onomkeerbare handelingen vragen overal in deze app een tweede
+  klik op dezelfde plek (`components/ui/BevestigKnop.tsx`); er is geen `window.confirm` meer. Dat was
+  een systeemvenster in systeemtaal midden in een app met een eigen vormtaal — niet te stylen, niet
+  te testen, en in sommige contexten geblokkeerd. Scherp gezet ontwapent de knop vanzelf (4 s, blur
+  of Escape): een knop die scherp blijft staan is een val, juist bij die handelingen.
 - **× betekent weghalen**, met twee uitkomsten achter hetzelfde gebaar: een agent-voorstel klapt de
   redenen-chips uit (één klik = verworpen, terug te draaien met `Akkoord`), een eigen markering
   verandert in "Wissen?" en is na de tweede klik echt weg (`DELETE`).

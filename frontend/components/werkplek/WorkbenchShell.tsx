@@ -64,8 +64,10 @@ export function WorkbenchShell() {
     }
   }
 
+  /** De bevestiging zit in de knop zelf (`BevestigKnop`, twee klikken) — hetzelfde gebaar als in het
+   *  artefact. Hier stond een `window.confirm`: een systeemvenster midden in een app met een eigen
+   *  vormtaal. */
   async function verwijder(id: string) {
-    if (!window.confirm("Dit gesprek verwijderen? Dit kan niet ongedaan worden gemaakt.")) return;
     setFout(null);
     try {
       await verwijderGesprek(id);

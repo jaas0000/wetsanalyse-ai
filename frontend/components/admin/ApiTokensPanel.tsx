@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/Card";
 import { SettingGroup } from "@/components/ui/SettingRow";
 import { Field, Input } from "@/components/ui/Field";
 import { Melding } from "@/components/ui/Melding";
+import { BevestigKnop } from "@/components/ui/BevestigKnop";
 import { Tag } from "@/components/ui/Badge";
 import { createApiToken, isApiError, listApiTokens, revokeApiToken } from "@/lib/api";
 import type { ApiTokenOut } from "@/lib/types";
@@ -66,8 +67,9 @@ export function ApiTokensPanel() {
     }
   }
 
+  // De bevestiging zit in de knop (twee klikken). Wát er gebeurt staat in de regel eronder, zodat
+  // de waarschuwing niet in een systeemvenster zit dat je wegklikt zonder te lezen.
   async function onIntrek(t: ApiTokenOut) {
-    if (!confirm(`Token "${t.label || t.token_prefix}" intrekken? Toepassingen die het gebruiken verliezen toegang.`)) return;
     try {
       await revokeApiToken(t.id);
       await laad();
@@ -161,9 +163,17 @@ export function ApiTokensPanel() {
               </div>
               {t.active && (
                 <ButtonRow align="start" className="mt-3">
-                  <Button size="sm" variant="danger" onClick={() => onIntrek(t)}>
+                  <BevestigKnop
+                    onBevestig={() => onIntrek(t)}
+                    bevestigTekst="Intrekken?"
+                    className="focus-ring inline-flex min-h-[40px] shrink-0 items-center justify-center rounded-field border border-fout px-3 text-sm font-medium text-fout transition coarse:min-h-[48px]"
+                    bevestigClassName="bg-fout text-paper"
+                  >
                     Intrekken
-                  </Button>
+                  </BevestigKnop>
+                  <span className="self-center text-xs text-muted">
+                    Toepassingen die dit token gebruiken verliezen meteen toegang.
+                  </span>
                 </ButtonRow>
               )}
             </Card>

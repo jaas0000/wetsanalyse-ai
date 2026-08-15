@@ -26,6 +26,11 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: "#154273",
+  // Laat het schermtoetsenbord de layout-viewport verkleinen in plaats van eroverheen te schuiven.
+  // De werkplek is een niet-scrollende schil van 100dvh met de invoerbalk onderaan gepind; zonder
+  // dit kan het toetsenbord die balk afdekken. Chrome/Android honoreert dit; iOS Safari (nog) niet —
+  // dáár is het niet met een regel CSS op te lossen en moet iemand met een toestel kijken.
+  interactiveWidget: "resizes-content",
 };
 
 /** De layout is bewust kaal: er is geen globale chrome meer. Elk scherm draagt zijn eigen kader —

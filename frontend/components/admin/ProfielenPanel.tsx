@@ -1,5 +1,6 @@
 "use client";
 
+import { BevestigKnop } from "@/components/ui/BevestigKnop";
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { ButtonRow } from "@/components/ui/ButtonRow";
@@ -56,7 +57,6 @@ export function ProfielenPanel() {
   }
 
   async function onDelete(name: string) {
-    if (!confirm(`Profiel "${name}" verwijderen?`)) return;
     try {
       await deleteProfile(name);
       await laad();
@@ -133,9 +133,14 @@ export function ProfielenPanel() {
                       </Button>
                     )}
                     {!p.is_default && (
-                      <Button size="sm" variant="danger" onClick={() => onDelete(p.name)}>
+                      <BevestigKnop
+                        onBevestig={() => onDelete(p.name)}
+                        bevestigTekst={`"${p.name}" verwijderen?`}
+                        className="focus-ring inline-flex min-h-[40px] shrink-0 items-center justify-center rounded-field border border-fout px-3 text-sm font-medium text-fout transition coarse:min-h-[48px]"
+                        bevestigClassName="bg-fout text-paper"
+                      >
                         Verwijderen
-                      </Button>
+                      </BevestigKnop>
                     )}
                   </ButtonRow>
                 </Card>

@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/Card";
 import { SettingGroup } from "@/components/ui/SettingRow";
 import { Field, Input, Select } from "@/components/ui/Field";
 import { Melding } from "@/components/ui/Melding";
+import { BevestigKnop } from "@/components/ui/BevestigKnop";
 import { Tag } from "@/components/ui/Badge";
 import {
   createUser,
@@ -89,8 +90,8 @@ export function UsersPanel() {
     }
   }
 
+  // De bevestiging zit in de knop (twee klikken), zoals overal in deze app.
   async function onVerwijder(u: UserOut) {
-    if (!confirm(`Gebruiker "${u.userid}" verwijderen?`)) return;
     try {
       await deleteUser(u.userid);
       await laad();
@@ -188,9 +189,14 @@ export function UsersPanel() {
                 <Button size="sm" variant="secondary" onClick={() => onReset(u)}>
                   Wachtwoord resetten
                 </Button>
-                <Button size="sm" variant="danger" onClick={() => onVerwijder(u)}>
+                <BevestigKnop
+                  onBevestig={() => onVerwijder(u)}
+                  bevestigTekst={`"${u.userid}" verwijderen?`}
+                  className="focus-ring inline-flex min-h-[40px] shrink-0 items-center justify-center rounded-field border border-fout px-3 text-sm font-medium text-fout transition coarse:min-h-[48px]"
+                  bevestigClassName="bg-fout text-paper"
+                >
                   Verwijderen
-                </Button>
+                </BevestigKnop>
               </ButtonRow>
             </Card>
           ))}
