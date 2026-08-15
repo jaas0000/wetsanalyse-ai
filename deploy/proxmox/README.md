@@ -36,7 +36,13 @@ Twee storingen tegelijk, allebei buiten de applicatiecode:
 1. **Rootfs 100% vol.** 92 images op 28 GB, waarvan ~40 GB ongebruikt. Docker draaide nog maar kon
    niets meer wegschrijven, dus zweeg elke container. Opgelost met `pct resize 103 rootfs +10G`.
    Structureel: prune bij elke deploy (hierboven) én `WATCHTOWER_CLEANUP=true` op de watchtower-
-   container — die haalde bij elke update een nieuw image binnen en liet het oude staan.
+   container — die haalde bij elke update een nieuw image binnen en liet het oude staan. Beide zijn
+   gedaan; de eerste prune haalde 284 image-verwijzingen en 13,9 GB weg (100% → 33%).
+
+   Let op de bewaartermijn van de prune: `until=168h` ruimde níéts op, want álle 70 ongebruikte
+   images waren jonger dan een week. Bij dit tempo is een week bewaren hetzelfde als niet opruimen —
+   vandaar 24 uur. Watchtower draait als **losse container** (geen compose-stack), dus die env-var
+   staat nergens in een bestand: bij opnieuw opzetten moet hij er handmatig weer bij.
 2. **De LXC stond niet meer op zijn gereserveerde IP.** UniFi had `192.168.10.23` gereserveerd, de
    container zat op `192.168.10.207`, en nginx-proxy-manager wijst naar het eerste. Alles op die host
    gaf 502 terwijl de containers gewoon draaiden. Een reverse proxy die op een IP-adres mikt hoort

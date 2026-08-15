@@ -193,15 +193,19 @@ jobs:
       # Docker draaide nog maar kon niets meer wegschrijven. Opruimen hoort dus bij het uitrollen.
       #
       # `dangling=false` betekent in de Docker-API "verwijder ook getagde images die nergens aan
-      # hangen" (het equivalent van `prune -a`); `until=168h` spaart alles van de afgelopen week, zodat
-      # een tijdelijk gestopte stack zijn image nog kan vinden. Images van draaiende containers worden
+      # hangen" (het equivalent van `prune -a`). `until=24h` spaart wat vandaag is binnengehaald, zodat
+      # een stack die net even stilstaat zijn image nog vindt. Images van draaiende containers worden
       # nooit geraakt. Faalt het opruimen, dan is dat geen reden om de deploy rood te maken.
+      #
+      # Waarom 24 uur en geen week: met `168h` ruimde hij op 15 aug níéts op, terwijl er 40 GB aan
+      # ongebruikte images lag — ze waren allemaal jonger dan een week. Bij dit tempo (watchtower plus
+      # de deploys) is een week bewaren hetzelfde als niet opruimen.
       - name: Oude images opruimen op de docker-LXC
         continue-on-error: true
         run: |
           set -uo pipefail
           DOCKER="$PORTAINER_URL/api/endpoints/$ENDPOINT_ID/docker"
-          FILTERS='{"dangling":{"false":true},"until":{"168h":true}}'
+          FILTERS='{"dangling":{"false":true},"until":{"24h":true}}'
           resp=$(curl -sS -X POST -H "X-API-Key: $PORTAINER_API_KEY" \
                    --get --data-urlencode "filters=$FILTERS" "$DOCKER/images/prune" \
                  || echo '{}')
