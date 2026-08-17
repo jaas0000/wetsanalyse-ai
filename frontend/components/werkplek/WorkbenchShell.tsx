@@ -71,8 +71,15 @@ export function WorkbenchShell() {
     setFout(null);
     try {
       await verwijderGesprek(id);
+      // Meteen uit de lijst halen, en dáárna verversen. Twee redenen. Het gesprek dat je verwijdert
+      // is meestal het gesprek dat open staat, en dat pad liep alleen langs `nieuwGesprek()` — die
+      // maakt het chatvenster leeg maar raakt de lijst niet, dus bleef de rij in de sidebar staan tot
+      // je de pagina herlaadde. En zelfs op het andere pad wachtte het verdwijnen op een round trip,
+      // terwijl de DELETE hierboven al geslaagd is. De refetch blijft staan als bevestiging (titels,
+      // volgorde), niet als de bron van deze update.
+      setGesprekken((lijst) => lijst.filter((g) => g.id !== id));
       if (id === activeId) nieuwGesprek();
-      else verversLijst();
+      verversLijst();
     } catch {
       setFout("Het gesprek is niet verwijderd.");
     }
