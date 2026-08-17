@@ -71,10 +71,10 @@ beheeractie te zijn (niet iets wat stil scheeft).
   (`GET /v1/kennis/zoek`, `GET /v1/kennis/documenten`) en `routers/admin.py` uitgebreid met
   `POST/DELETE /v1/admin/kennis/documenten`. De LLM-laag krijgt naast `complete()` een **`embed()`**
   (LiteLLM `aembedding`) achter dezelfde poort + throttle als de bestaande calls.
-- **`tools/graph-qa/`** — één nieuwe getypeerde tool **`zoek_kennis`** in `agent/tools/`, met een
-  adapter achter een `KennisPort` (DI, dus faketestbaar zoals `GraphPort`). `provenance.py` en
-  `grounding.py` leren de tweede referentievorm. De systeemprompt krijgt de normhiërarchie; de
-  specialisten `duiding` en `algemeen` krijgen de tool, `definitie` niet (begrippen komen uit de wet).
+- **`tools/graph-qa/`** — **drie** nieuwe getypeerde tools in `agent/tools/`, achter een `KennisPort`
+  (DI, faketestbaar zoals `GraphPort`). `provenance.py` en `grounding.py` leren de tweede
+  referentievorm. De systeemprompt krijgt de normhiërarchie. Zie §*Agents en tools* voor de afweging
+  waarom er géén aparte agent bijkomt.
 - **`frontend/`** — beheertab *Kennisbank* (`components/admin/KennisPanel.tsx`): uploaden, lijst met
   versie/datum/status, intrekken, opnieuw indexeren. In de werkplek: de bronnenlijst onder een antwoord
   splitst in **Wet- en regelgeving** en **Beleid en handleidingen**, met versie en pagina per bron.
@@ -83,12 +83,57 @@ beheeractie te zijn (niet iets wat stil scheeft).
   `vector`-kolomtype zijn dat niet, dus dit is een bewuste, eenmalige migratiestap met de
   volgorde-afhankelijkheid die de postgres-stack al kent.
 
+## Agents en tools
+
+**Geen nieuwe agent, wel een gelaagde toolset.** De aanleiding om dit expliciet vast te leggen: in
+deze architectuur is een specialist een *declaratieve config* (focus-prompt + tool-subset in
+`agent/specialists.py`), dus een `beleid`-specialist toevoegen kost bijna niets — en juist daarom is
+het de moeite om te beargumenteren waarom het nú niet gebeurt.
+
+De supervisor kiest **één** specialist per beurt, en zet die in een `worker_plan` — een geordende
+keten, dus een reeks als `duiding → beleid` is technisch al mogelijk zonder nieuwbouw. Precies dat
+maakt de keuze omkeerbaar, en daarom begint dit met de eenvoudigste vorm:
+
+- **Nu: de kennis-tools bij de bestaande specialisten** (`duiding` en `algemeen`; `definitie` niet —
+  begrippen komen uit de wet, niet uit een handleiding). Eén specialist die zowel de graaf als de
+  kennisbank kan bevragen, combineert wet en beleid **binnen één beurt en één antwoord**. Dat is wat
+  gevraagd is. Zou de supervisor in plaats daarvan naar een aparte beleidsagent routeren, dan valt bij
+  die keuze de wetgeving buiten beeld — het routeren *splitst* wat juist samen moet komen. En een vraag
+  als *"mag ik uitstel van betaling geven?"* is niet vooraf in "wet" of "beleid" te sorteren; dat blijkt
+  pas uit het zoeken.
+- **Later, als de meting daar aanleiding voor geeft: een `beleid`-specialist** in de keten. De trigger
+  zou zijn dat de eval laat zien dat één prompt de twee bronsoorten niet scherp genoeg apart houdt, of
+  dat de toolkeuze systematisch misgaat. Kosten: een extra LLM-call per extra worker in de keten.
+- **Voor "vergelijk wat de wet zegt met wat de handleiding zegt"** bestaat het mechanisme al: de
+  **decompositie-stroom** (`ENABLE_DECOMPOSITION`, nu uit) splitst in deelvragen en synthetiseert. Dat
+  is hergebruik in plaats van een derde orkestratielaag.
+- **De annotatie-worker blijft ongemoeid.** JAS-annotatie gaat over wettekst uit de graaf. Handleidingen
+  annoteren is documentanalyse — een ander product, en het scope-risico dat onderaan benoemd staat.
+- **Geen aparte Critic voor kennis-antwoorden.** De bestaande `verify_node` (`check_grounding`) is de
+  juiste plek; die moet toch al de tweede referentievorm leren (D5). Een tweede beoordelaar erbij zou
+  dezelfde controle op een andere plek herhalen.
+
+De toolset is wél gelaagd, net als bij de graaf (die dertien tools heeft omdat retrieval gelaagd is —
+zoeken, ophalen, context, verwijzingen):
+
+| Tool | Doet | Parallel in de graaf |
+|---|---|---|
+| `zoek_kennis(query, soort?, limit)` | Hybride zoeken; levert chunks met document, versie, pagina en score | `search_wetgeving` + `semantic_search` |
+| `haal_kennis_passage(document_id, chunk\|pagina, marge)` | Zoomt uit naar de omliggende tekst | `get_artikel` / `get_context` |
+| `lijst_kennisdocumenten(soort?)` | Wat is er beschikbaar (titel, versie, datum, status) | `list_regelingen` |
+
+`haal_kennis_passage` is niet optioneel: één chunk is vaak te smal om verantwoord uit te citeren, en
+zonder inzoom-mogelijkheid gaat het model de ontbrekende context zelf aanvullen. `lijst_kennis­documenten`
+voorkomt dat Lex een handleiding aanhaalt die niet bestaat, en maakt *"welke handleidingen hebben we
+over X"* beantwoordbaar.
+
 ## Fasering
 
 ### Fase 1 — dun verticaal segment (alle lagen, één formaat, één tool)
 Upload (PDF-met-tekstlaag/MD/TXT) → extractie met pagina's → chunking (~500 tokens, overlap,
-kop-bewust) → embedding → opslag → `GET /v1/kennis/zoek` (vector-only) → `zoek_kennis` in graph-qa →
-grounding uitgebreid → prompt met normhiërarchie → beheertab + gesplitste bronnenlijst.
+kop-bewust) → embedding → opslag → `GET /v1/kennis/zoek` (vector-only) → de drie kennis-tools in
+graph-qa, bij `duiding` en `algemeen` → grounding uitgebreid → prompt met normhiërarchie →
+beheertab + gesplitste bronnenlijst.
 **Verificatie:** een document-citaat dat niet letterlijk in de chunk staat wordt geweigerd (test);
 een gemengde vraag levert beide bronsoorten, gescheiden gelabeld; `eval/golden.jsonl` krijgt
 kennis-cases.
