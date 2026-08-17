@@ -90,20 +90,28 @@ deze architectuur is een specialist een *declaratieve config* (focus-prompt + to
 `agent/specialists.py`), dus een `beleid`-specialist toevoegen kost bijna niets — en juist daarom is
 het de moeite om te beargumenteren waarom het nú niet gebeurt.
 
-De supervisor kiest **één** specialist per beurt, en zet die in een `worker_plan` — een geordende
-keten, dus een reeks als `duiding → beleid` is technisch al mogelijk zonder nieuwbouw. Precies dat
-maakt de keuze omkeerbaar, en daarom begint dit met de eenvoudigste vorm:
+Hoe de supervisor kiest, precies (`agent/supervisor.py`): hij mag **ketenen**, maar op het niveau van
+worker*type* — `WORKERS:` accepteert alleen `antwoord` en `annotatie` (bv. eerst annoteren, dan
+samenvatten). De **QA-specialist is één waarde** (`SPECIALIST: definitie|duiding|algemeen`) en elke
+`antwoord`-worker in de keten wordt op diezelfde specialist gemapt (`parse_supervisor`, regel 53). Er
+draait dus **één QA-specialist per beurt**, en een reeks als `duiding → beleid` kán vandaag níet: dat
+vraagt een specialist-per-worker in de parser plus een aangepaste supervisor-prompt.
+
+Dat is precies waarom de tool-route de juiste eerste stap is:
 
 - **Nu: de kennis-tools bij de bestaande specialisten** (`duiding` en `algemeen`; `definitie` niet —
   begrippen komen uit de wet, niet uit een handleiding). Eén specialist die zowel de graaf als de
   kennisbank kan bevragen, combineert wet en beleid **binnen één beurt en één antwoord**. Dat is wat
-  gevraagd is. Zou de supervisor in plaats daarvan naar een aparte beleidsagent routeren, dan valt bij
-  die keuze de wetgeving buiten beeld — het routeren *splitst* wat juist samen moet komen. En een vraag
-  als *"mag ik uitstel van betaling geven?"* is niet vooraf in "wet" of "beleid" te sorteren; dat blijkt
-  pas uit het zoeken.
-- **Later, als de meting daar aanleiding voor geeft: een `beleid`-specialist** in de keten. De trigger
-  zou zijn dat de eval laat zien dat één prompt de twee bronsoorten niet scherp genoeg apart houdt, of
-  dat de toolkeuze systematisch misgaat. Kosten: een extra LLM-call per extra worker in de keten.
+  gevraagd is. Zou de supervisor in plaats daarvan naar een aparte beleidsspecialist routeren, dan valt
+  bij die keuze de wetgeving buiten beeld — één `SPECIALIST:` per beurt, dus het routeren *splitst* wat
+  juist samen moet komen. En een vraag als *"mag ik uitstel van betaling geven?"* is niet vooraf in
+  "wet" of "beleid" te sorteren; dat blijkt pas uit het zoeken, en die beslissing hoort dus bij de
+  tool-keuze tijdens de beurt te liggen, niet bij de routering ervoor.
+- **Later, als de meting daar aanleiding voor geeft: een `beleid`-specialist.** Dat is géén losse
+  dict-entry: het vraagt ook een **specialist-per-worker** in `parse_supervisor` (nu mapt regel 53 elke
+  `antwoord`-worker op dezelfde specialist) en een aangepaste `SUPERVISOR_SYSTEM`. De trigger zou zijn
+  dat de eval laat zien dat één prompt de twee bronsoorten niet scherp genoeg apart houdt, of dat de
+  toolkeuze systematisch misgaat. Kosten: een extra LLM-call per extra worker in de keten.
 - **Voor "vergelijk wat de wet zegt met wat de handleiding zegt"** bestaat het mechanisme al: de
   **decompositie-stroom** (`ENABLE_DECOMPOSITION`, nu uit) splitst in deelvragen en synthetiseert. Dat
   is hergebruik in plaats van een derde orkestratielaag.
