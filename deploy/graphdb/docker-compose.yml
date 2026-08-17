@@ -15,6 +15,11 @@ services:
     image: ontotext/graphdb:11.4.0
     container_name: graphdb
     restart: unless-stopped
+    # Docker's default is 10 s en dan SIGKILL — te kort voor GraphDB, dat zijn opslaglaag moet
+    # afsluiten. Vandaar de "Detected unclean shutdown" bij de start, met recovery en het opruimen
+    # van inference-bestanden tot gevolg. Een halve minuut extra bij het stoppen is goedkoper dan
+    # een herstelronde (of, bij slechte timing, een beschadigde index) bij het starten.
+    stop_grace_period: 90s
     ports:
       - "7200:7200"                 # workbench-UI + SPARQL + ingebouwde MCP (/mcp)
     environment:
@@ -31,7 +36,15 @@ services:
     healthcheck:
       # Met GraphDB-security aan geeft /rest/repositories 401 zonder credentials — de healthcheck
       # zou de container dan onterecht als unhealthy markeren.
-      test: ["CMD-SHELL", "wget -qO- --user=$${GDB_USER} --password=$${GDB_PASSWORD} http://localhost:7200/rest/repositories || exit 1"]
+      #
+      # **curl, geen wget.** Dit stond op `wget --user=… --password=…` en dat markeerde de container
+      # permanent unhealthy terwijl GraphDB gewoon draaide: GraphDB antwoordt op de 401 met TWEE
+      # challenges (`Basic realm="GraphDB REST API endpoint"` én een parameterloze `GDB`), en de
+      # GNU wget 1.21.4 uit deze image crasht op die tweede zodra hij door --user/--password de
+      # challenge gaat parsen — SIGABRT, "Aborted (core dumped)", exit 134. Zonder credentials komt
+      # hij er niet aan toe, dus het viel alleen hier op. Een healthcheck die altijd rood staat is
+      # erger dan geen healthcheck: een echte storing valt dan niet meer op.
+      test: ["CMD-SHELL", "curl -fsS -u \"$${GDB_USER}:$${GDB_PASSWORD}\" -o /dev/null http://localhost:7200/rest/repositories"]
       interval: 30s
       timeout: 10s
       retries: 5
