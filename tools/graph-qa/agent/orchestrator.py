@@ -415,7 +415,7 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
             # duiding-specialist. Dat is een topologische garantie in plaats van een belofte in een
             # prompt — de antwoord-route emit geen `doel`/`element`-events, dus advies vragen kán de
             # annotatie niet wijzigen. Scheelt bovendien een LLM-call.
-            _stap(writer, "Assistent", "advies bij een bestaande markering")
+            _stap(writer, "Lex", "advies bij een bestaande markering")
             return {
                 "specialist": "duiding", "worker_plan": ["duiding"], "worker_idx": 0,
                 "plan": "adviesvraag bij een bestaande annotatie",

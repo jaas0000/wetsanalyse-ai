@@ -14,6 +14,14 @@ Een retrieval-augmented QA-dienst die vragen over de invorderings-/belastingwetg
 GraphDB-kennisgraaf beantwoordt — het antwoord komt **uitsluitend** uit de graaf (via een getypeerde
 toollaag), en wordt achteraf op brongetrouwheid gecontroleerd.
 
+**Naar de gebruiker heet deze agent Lex.** De naam en de kadering (hulpmiddel voor wetsanalyse, de
+jurist beoordeelt en beslist, geen juridisch advies) staan in het **IDENTITEIT-blok** van
+`SYSTEM_PROMPT` (`agent/prompts.py`) — dat is de enige plek met de volledige tekst, en omdat de
+specialisten daarop stapelen geldt hij voor alle drie. Hij stelt zich **alleen op verzoek** voor; de
+werkplek toont de korte variant in zijn lege staat. De interne rollen van de annotatieketen
+(annoteerder, Critic, herziener in `annotatie_prompt.py`) blijven **naamloos**: Lex is de dienst als
+geheel, niet elke node. In de code, het image, de stack en de env-vars blijft alles `graph-qa` heten.
+
 ## Twee lagen: `agent/` (domein) en `api/` (HTTP)
 
 De code leeft in `agent/` en `api/`; er is bewust **geen** `graph_qa/`-package (`pyproject.toml`

@@ -1,4 +1,9 @@
-# graph-qa
+# graph-qa — Lex
+
+> **De dienst heet `graph-qa`, de assistent heet Lex.** Naar de gebruiker stelt de agent zich voor als
+> **Lex**, het hulpmiddel voor wetsanalyse; de map, het image (`ghcr.io/palmw01/graph-qa`), de stack en
+> de env-vars houden hun technische naam. Zijn zelfbeschrijving staat in het IDENTITEIT-blok van
+> `agent/prompts.py`, zijn toon in `docs/schrijfrichtlijn-lex.md`.
 
 Een vraag-antwoorddienst voor **Nederlandse invorderings- en belastingwetgeving** die in een
 **GraphDB-kennisgraaf** is opgeslagen. `graph-qa` beantwoordt een natuurlijke-taalvraag door die graaf

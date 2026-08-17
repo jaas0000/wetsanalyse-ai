@@ -4,8 +4,9 @@ Next.js (App Router) + TypeScript-frontend. De app **is de werkplek**: een chat-
 tegen de graph-qa-agent (login/beheer lopen via de [Wetsanalyse-API](../api)). De home leidt door naar
 `/workbench`.
 
-**De werkplek** (`/workbench`, de *Assistent-pagina*): één gespreksvenster met **twee
-werkwijzen** — **vragen** aan de Juridische Assistent (brongetrouwe Q&A over de kennisgraaf) en
+**De werkplek** (`/workbench`, de *Lex-pagina*): één gespreksvenster met **twee
+werkwijzen** — **vragen** aan **Lex** (de assistent voor wetsanalyse; brongetrouwe Q&A over de
+kennisgraaf) en
 **JAS-annotatie** (de agent stelt JAS-elementen voor → de jurist reviewt per element:
 approve/edit/reject/comment). Die pagina praat live met de graph-qa-agent (SSE) en bewaart de
 review-state via de API. De home (`/`) leidt hierheen door.

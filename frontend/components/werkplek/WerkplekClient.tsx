@@ -124,7 +124,7 @@ export function WerkplekClient({ initialGesprekId, onGesprekAangemaakt, onGewijz
   // omhoogscrollen tijdens het streamen niet telkens wordt teruggetrokken.
   const stickRef = useRef(true);
   // Past het artefact naast de chat? Dan wordt het een eigen kolom in plaats van een overlay, en
-  // blijft de assistent bereikbaar tijdens het reviewen.
+  // blijft Lex bereikbaar tijdens het reviewen.
   const breed = useBreedScherm();
 
   // Een lopende beurt hoort te stoppen als dit venster verdwijnt (van gesprek wisselen remount het
@@ -541,10 +541,20 @@ export function WerkplekClient({ initialGesprekId, onGesprekAangemaakt, onGewijz
       {/* Thread — enige scrollende gebied; berichten in een gecentreerde leeskolom */}
       <div ref={lijstRef} onScroll={onThreadScroll} className="min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto max-w-3xl space-y-6 px-4 py-8">
+          {/* Lex stelt zich hier kort voor. Dit is de KORTE variant van het IDENTITEIT-blok in
+              tools/graph-qa/agent/prompts.py — dezelfde kadering (hulpmiddel, de jurist beslist),
+              minder woorden. De volledige tekst komt uit de agent zelf zodra iemand ernaar vraagt;
+              verander je de een, verander dan de ander mee. Een afzenderloze "Waarmee kan ik
+              helpen?" liet de gebruiker niet weten met wát hij te maken had. */}
           {items.length === 0 && (
             <div className="pt-[10dvh] text-center">
-              <p className="font-display text-2xl font-semibold text-lint">Waarmee kan ik helpen?</p>
+              <p className="font-display text-2xl font-semibold text-lint">Ik ben Lex</p>
               <p className="mx-auto mt-2 max-w-md text-sm text-muted">
+                Het hulpmiddel voor wetsanalyse in deze werkplek: ik zoek bepalingen op in de
+                kennisgraaf, citeer letterlijk en stel markeringen in JAS-klassen voor. Wat ik
+                voorstel, beoordeel jij.
+              </p>
+              <p className="mx-auto mt-3 max-w-md text-sm text-faint">
                 Stel een vraag over de wet- en regelgeving, of vraag een annotatie volgens het JAS.
               </p>
               <div className="mt-6 flex flex-wrap justify-center gap-2">
@@ -579,9 +589,9 @@ export function WerkplekClient({ initialGesprekId, onGesprekAangemaakt, onGewijz
               </div>
             ) : item.type === "antwoord" ? (
               <div key={item.id} className="group flex animate-rise gap-3">
-                <AssistentAvatar />
+                <LexAvatar />
                 <div className="min-w-0 flex-1 text-sm text-ink">
-                  <p className="mb-1 text-xs font-medium text-muted">Assistent</p>
+                  <p className="mb-1 text-xs font-medium text-muted">Lex</p>
                   {item.denk && <DenkProces tekst={item.denk} actief={bezig && !item.tekst} />}
                   {item.tekst ? (
                     streamt ? <StreamendeTekst tekst={item.tekst} /> : <Markdown tekst={item.tekst} />
@@ -594,9 +604,9 @@ export function WerkplekClient({ initialGesprekId, onGesprekAangemaakt, onGewijz
               </div>
             ) : item.type === "kandidaten" ? (
               <div key={item.id} className="group flex animate-rise gap-3">
-                <AssistentAvatar />
+                <LexAvatar />
                 <div className="min-w-0 flex-1 text-sm text-ink">
-                  <p className="mb-1 text-xs font-medium text-muted">Assistent</p>
+                  <p className="mb-1 text-xs font-medium text-muted">Lex</p>
                   {item.tekst && <Markdown tekst={item.tekst} />}
                   <KandidatenKeuze
                     kandidaten={item.kandidaten}
@@ -801,8 +811,10 @@ function Punten() {
   );
 }
 
-/** Klein avatar links van een agentantwoord (zelfde icoonstijl als de AnnotatieChip). */
-function AssistentAvatar() {
+/** Klein avatar links van een antwoord van Lex (zelfde icoonstijl als de AnnotatieChip).
+ *  Bewust een machine-icoon en geen monogram of gezicht: Lex heeft een naam om over te kunnen
+ *  praten, niet om als collega te lezen — zijn voorstellen zijn voorstellen. */
+function LexAvatar() {
   return (
     <span
       className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-lint/10 text-lint"

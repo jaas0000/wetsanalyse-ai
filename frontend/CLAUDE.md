@@ -1,7 +1,7 @@
 # CLAUDE.md — wetsanalyse-frontend
 
 Next.js (App Router) + TypeScript-webapp bovenop de graph-qa-agent (en, voor login/beheer, de
-[wetsanalyse-API](../api)). De app **is de werkplek**: `/workbench` (de *Assistent-pagina*) — één
+[wetsanalyse-API](../api)). De app **is de werkplek**: `/workbench` (de *Lex-pagina*) — één
 chat-achtig gespreksvenster voor **vragen én JAS-annotatie**, live tegen graph-qa (§*Werkplek*). De
 home (`/`) leidt daarheen door.
 
@@ -88,9 +88,16 @@ De **harde scheidingslijn**: alles met een token is server-only.
   scherm overlopen. De JAS-klassekleuren in `lib/jas.ts` zijn de **exacte labelkleuren uit
   `docs/wetsanalyse/wa-table.png`**.
 
-## Werkplek — de Assistent-pagina (`/workbench`)
+## Werkplek — de Lex-pagina (`/workbench`)
 
-De **Assistent-pagina** (`app/workbench/page.tsx`, titel "Assistent") → `components/werkplek/WorkbenchShell.tsx`:
+> **De agent heet Lex.** In beeld is dat de naam: de paginatitel, het label boven elk antwoord
+> (`WerkplekClient`), *Vraag Lex*, "voorstel van Lex", "Kanttekening van Lex". In de **code** blijft
+> alles `graph-qa` heten (map, image, stack, env-vars) en in het **berichtcontract** blijft de rol
+> `assistant` — de naam is presentatie, geen contract. De lege staat van de thread draagt de korte
+> zelfbeschrijving; de volledige staat in `tools/graph-qa/agent/prompts.py` (§IDENTITEIT) en de toon
+> in `docs/schrijfrichtlijn-lex.md`.
+
+De **Lex-pagina** (`app/workbench/page.tsx`, titel "Lex") → `components/werkplek/WorkbenchShell.tsx`:
 een **volledige chat-app-shell** (Claude/ChatGPT-achtig, in Belastingdienst-huisstijl). Er is **geen
 globale chrome**: `app/layout.tsx` bevat alleen `Providers`, `{children}` en het `modal`-slot. Elk
 scherm draagt zijn eigen kader — de shell-pagina's (`/workbench`, `/instellingen`) zetten zelf
@@ -227,7 +234,7 @@ kaart in de lijst (`ReviewQueue`), met `prefers-reduced-motion` gerespecteerd.
 ### Eén gesprek: vragen gaan altijd via het centrale venster
 
 De reviewkaart had een eigen mini-chat (`AdviesDraadje`). Die bestond alleen omdat het artefact
-modaal was; nu het ernaast staat is hij **verwijderd**. In plaats daarvan zet *Vraag de assistent* op
+modaal was; nu het ernaast staat is hij **verwijderd**. In plaats daarvan zet *Vraag Lex* op
 de kaart een vraag klaar in het chatveld:
 
 - `WerkplekClient` houdt `vraagOver` (slug + element). Zolang dat staat toont een **chip** boven het
@@ -259,8 +266,8 @@ staat niet letterlijk in de tekst). Toegevoegde items tonen "✓ inmiddels gemar
 meer mee; is alles afgehandeld, dan verdwijnt het blok.
 
 **Bewust géén "wegleggen".** Dit is informatie, geen takenlijst. Zo'n knop suggereerde een
-afhandeling die nergens landde (sessie-only, zonder reden, na herladen weer terug) — terwijl *"de
-assistent zag hier een Rechtssubject en ik vind van niet"* juist een interpretatiekeuze is die in het
+afhandeling die nergens landde (sessie-only, zonder reden, na herladen weer terug) — terwijl *"Lex
+zag hier een Rechtssubject en ik vind van niet"* juist een interpretatiekeuze is die in het
 spoor thuishoort; elders in de werkplek is zoiets wél een `reject` met reden of een `comment`. En
 omdat dit lijstje de **restpost van de Critic** is, zegt structureel wegklikken iets over de kwaliteit
 van de Critic: dat signaal hoort niet in een sessie-variabele te verdwijnen. Zolang `ontbrekend` bij
@@ -302,7 +309,7 @@ toelichting → `interpretatie`, meerdere velden → `anders`). Vragen wat je zo
   weergave), dan biedt `SelectiePopover` bovenaan *Fragment aanpassen* aan — één klik, mét een nieuw
   anker. Geen overlap = gewoon een nieuwe markering. Bewust wél die klik: een selectie die je maakte
   om te lezen mag nooit stilzwijgend een annotatie wijzigen.
-- **Geen lifecycle-jargon in beeld**: de kaart toont "voorstel van de assistent" / "door jou
+- **Geen lifecycle-jargon in beeld**: de kaart toont "voorstel van Lex" / "door jou
   aangepast" / "door jou gemarkeerd" + tijd. Het volledige spoor staat in het auditlog.
 
 ### Zelf annoteren (tekstselectie)

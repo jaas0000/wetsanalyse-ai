@@ -43,7 +43,7 @@ function statusRegel(el: AnnotatieElement): string {
   if (el.herkomst === "mens") return "door jou gemarkeerd";
   if (el.gewijzigd_door === "mens") return "door jou aangepast";
   if (el.lifecycle === "human_approved") return "akkoord bevonden";
-  return "voorstel van de assistent";
+  return "voorstel van Lex";
 }
 
 function tijdstip(el: AnnotatieElement): string {
@@ -420,7 +420,7 @@ function DecisionCard({
           onClick={(e) => e.stopPropagation()}
         >
           <p className="text-xs text-muted">
-            <span className="font-medium text-ink">Kanttekening van de assistent:</span>{" "}
+            <span className="font-medium text-ink">Kanttekening van Lex:</span>{" "}
             {el.critic_suggestie.motivatie}
             {el.critic_suggestie.voorstel_klasse && (
               <> Voorstel: <span className={`rounded px-1 ${jasStyle(el.critic_suggestie.voorstel_klasse)}`}>
@@ -441,7 +441,7 @@ function DecisionCard({
             <button
               disabled={bezig}
               onClick={() =>
-                void verstuur({ type: "comment", comment: "Kanttekening van de assistent afgewezen." })
+                void verstuur({ type: "comment", comment: "Kanttekening van Lex afgewezen." })
               }
               className={`${KNOP_BASIS} ${KNOP_INFO}`}
             >
@@ -483,7 +483,7 @@ function DecisionCard({
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
             <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
           </svg>
-          Vraag de assistent
+          Vraag Lex
         </button>
       )}
 

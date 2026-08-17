@@ -49,7 +49,7 @@ De werkplek zit in de **frontend-stack**, niet in graph-qa. Wijs de frontend naa
 (zie `frontend/`): `GRAPH_QA_URL` (default intern `http://graph-qa:8080`). De BFF-route
 `app/api/annotatie/agent` streamt `POST /v1/chat` door en `app/api/annotatie/artikel` haalt `GET /v1/artikel`
 op; `conversation_id` geeft geheugen-continuïteit per gesprek. Bij een intern-only deployment is er geen
-slot nodig. Verifieer via de Assistent-pagina (`/workbench`).
+slot nodig. Verifieer via de Lex-pagina (`/workbench`).
 
 > Wil je graph-qa tóch achter een token zetten: zet `QA_API_TOKEN_FILE=/run/secrets/qa_api_token` in deze
 > stack, leg `qa_api_token` op de host, en geef de frontend hetzelfde token mee via `GRAPH_QA_TOKEN(_FILE)`.

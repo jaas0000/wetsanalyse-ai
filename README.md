@@ -11,7 +11,7 @@ De kern is interpretatiekeuzes — inclusief twijfel en aannames — zichtbaar m
 schijnzekerheid te produceren.
 
 De draaiende kern is een gedeployde dienst: de **wetsanalyse-API**, de **webapp met de werkplek** en de
-eigen **QA/annotatie-agent (graph-qa, "de Juridische Assistent")** die op de **BWB-kennisgraaf**
+eigen **QA/annotatie-agent — Lex** (code/image: `graph-qa`) die op de **BWB-kennisgraaf**
 (GraphDB) werkt. De graaf wordt gevuld door de **BWB-importer**, die de wettekst rechtstreeks bij
 overheid.nl ophaalt. Het geheel draait op de docker-LXC van Proxmox als Portainer-stacks achter Nginx
 Proxy Manager.
@@ -21,8 +21,8 @@ Proxy Manager.
 | Onderdeel | Map | Wat het doet |
 |-----------|-----|--------------|
 | **wetsanalyse-API** | `api/` | Headless FastAPI-backend voor de werkplek: het **JAS-annotatiedomein** (`/v1/annotatie/*`), de **chatgeschiedenis** (`/v1/gesprekken/*`), **login + gebruikersbeheer** (identiteitsbron van de webapp), **LLM-modelprofielbeheer**, de **profiel-keuzelijst**, **berichten** (release notes) en **gebruikersfeedback**. PostgreSQL-opslag, per-client bearer-auth. |
-| **frontend + werkplek** | `frontend/` | Next.js-webapp (BFF). De app **is de werkplek** (`/workbench`, de *Assistent-pagina*): één chat-achtig gespreksvenster voor **vragen én JAS-annotatie**, live tegen graph-qa. Account, beheer en instellingen openen als dialoog over de werkplek heen. Achter een **login** (userid + wachtwoord, rollen, optionele 2FA). Vormgegeven volgens de **Rijkshuisstijl** (Belastingdienst-stijlvak). |
-| **graph-qa — de Juridische Assistent** | `tools/graph-qa/` | De eigen QA/annotatie-agent: beantwoordt vragen over wet- en regelgeving door de BWB-**kennisgraaf** (GraphDB via MCP) te bevragen, brongetrouw onderbouwd. Eén **unified LangGraph-agent** met een supervisor die per vraag kiest tussen de antwoord-worker (specialisten definitie/duiding/algemeen) en de annotatie-worker (ophaal → annoteer → Critic). Endpoints `POST /v1/chat` (SSE) + `GET /v1/artikel`. |
+| **frontend + werkplek** | `frontend/` | Next.js-webapp (BFF). De app **is de werkplek** (`/workbench`, de *Lex-pagina*): één chat-achtig gespreksvenster voor **vragen én JAS-annotatie**, live tegen graph-qa. Account, beheer en instellingen openen als dialoog over de werkplek heen. Achter een **login** (userid + wachtwoord, rollen, optionele 2FA). Vormgegeven volgens de **Rijkshuisstijl** (Belastingdienst-stijlvak). |
+| **graph-qa — Lex** | `tools/graph-qa/` | De eigen QA/annotatie-agent, die zich naar de gebruiker **Lex** noemt: beantwoordt vragen over wet- en regelgeving door de BWB-**kennisgraaf** (GraphDB via MCP) te bevragen, brongetrouw onderbouwd. Eén **unified LangGraph-agent** met een supervisor die per vraag kiest tussen de antwoord-worker (specialisten definitie/duiding/algemeen) en de annotatie-worker (ophaal → annoteer → Critic). Endpoints `POST /v1/chat` (SSE) + `GET /v1/artikel`. |
 | **BWB-importer** | `tools/bwb-import/` | Haalt de wettekst op bij de BWB-repository van overheid.nl, valideert tegen de officiële XSD's, parseert de structuur en schrijft RDF naar GraphDB. Per wet idempotent; wekelijkse herimport. |
 | **de kennisgraaf** | `deploy/graphdb/` | GraphDB 11.4 met repository `inning` en de ingebouwde MCP-server, achter een auth-proxy. Dagelijkse RDF-dump plus de vzdump van de LXC. |
 | **observability** | `deploy/observability/` | Verzamelstack (OTel-Collector + Tempo + Loki + Prometheus + Alloy + Grafana) met kant-en-klare dashboards en alerting. Alle onderdelen zijn geïnstrumenteerd (JSON-logs + OpenTelemetry). |

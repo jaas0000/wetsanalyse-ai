@@ -7,8 +7,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Een **agent-platform** voor **Wetsanalyse**: het gestructureerd, brongetrouw en traceerbaar duiden
 van Nederlandse wet- en regelgeving volgens de methode Wetsanalyse (Ausems, Bulles & Lokin) en het
 Juridisch Analyseschema (JAS). De kern is een gedeployde dienst — de **wetsanalyse-API**, de
-**webapp met de werkplek** en de eigen **QA/annotatie-agent (`tools/graph-qa/`, "de Juridische
-Assistent")** op de **BWB-kennisgraaf** — die draait op de docker-LXC van Proxmox (Portainer,
+**webapp met de werkplek** en de eigen **QA/annotatie-agent (`tools/graph-qa/`, **Lex**)** op de
+**BWB-kennisgraaf** — die draait op de docker-LXC van Proxmox (Portainer,
 endpoint 3). De graaf wordt gevuld door de **BWB-importer** (`tools/bwb-import/`), die de wettekst
 rechtstreeks bij overheid.nl ophaalt.
 
@@ -33,7 +33,7 @@ plaats van schijnzekerheid.
    default-profiel) en de **profiel-keuzelijst** (`/v1/profiles`). Annotatie-documenten en gesprekken
    zijn **per gebruiker gescopet**. Eigen `CLAUDE.md` + `README.md`.
 2. **`frontend/`** — Next.js-webapp (BFF) bovenop de API. De app **is de werkplek** (`/workbench`, de
-   *Assistent-pagina*): één chat-achtig gespreksvenster voor **vragen én JAS-annotatie**, live tegen
+   *Lex-pagina*): één chat-achtig gespreksvenster voor **vragen én JAS-annotatie**, live tegen
    graph-qa (SSE); de home leidt daarheen door. Account, beheer en instellingen openen als
    **dialoog over de werkplek heen** (`/instellingen/*`, intercepting routes) in plaats van als eigen
    pagina's; de beheertab (modelprofielen, gebruikers, API-tokens) zit achter een apart admin-token.
@@ -42,7 +42,8 @@ plaats van schijnzekerheid.
    eerste-beheerder-registratie via `/setup`; optionele TOTP-2FA). De UI volgt de **Rijkshuisstijl**
    (Belastingdienst-stijlvak: lintblauw, Fira-fonts, het officiële Belastingdienst-logo en
    JAS-klassekleuren uit `docs/wetsanalyse/wa-table.png`). Eigen `CLAUDE.md` + `README.md`.
-3. **`tools/graph-qa/`** — de eigen **QA/annotatie-agent** ("de Juridische Assistent") die vragen over
+3. **`tools/graph-qa/`** — de eigen **QA/annotatie-agent**, **Lex** (de naam die de gebruiker ziet; de
+   code, het image en de stack heten `graph-qa`), die vragen over
    wet- en regelgeving beantwoordt door de BWB-**kennisgraaf** (GraphDB via MCP) te bevragen en het
    antwoord **brongetrouw** te onderbouwen (grounding + bronnen uit de tool-trace). Eén **unified
    LangGraph-agent**: een **supervisor** kiest per vraag een worker-keten — de **antwoord-worker**
@@ -200,4 +201,5 @@ read-only opkomt.
   over de methode; de skill-`references/` zijn de operationele samenvatting daarvan.
 - `docs/regelspraak/` — de RegelSpraak-specificaties (PDF), voor de latere formaliseringsfase.
 - `docs/wetsanalyse-workbench/` — het plan achter de werkplek + de JAS-annotatie-ontologie.
-- `docs/observability.md` en `docs/schrijfrichtlijn-assistent.md`.
+- `docs/observability.md` en `docs/schrijfrichtlijn-lex.md` (de toon van Lex; zijn identiteit staat in
+  `tools/graph-qa/agent/prompts.py`).

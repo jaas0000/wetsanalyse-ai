@@ -14,7 +14,7 @@ export default async function LoginPagina() {
   if (needs_setup) redirect("/setup");
 
   return (
-    <AuthFrame titel="Inloggen" onderschrift="Meld je aan om met de wetsanalyse-assistent te werken.">
+    <AuthFrame titel="Inloggen" onderschrift="Meld je aan om met Lex, de assistent voor wetsanalyse, te werken.">
       <LoginClient />
     </AuthFrame>
   );

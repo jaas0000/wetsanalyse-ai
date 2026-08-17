@@ -1,6 +1,6 @@
 import { WorkbenchShell } from "@/components/werkplek/WorkbenchShell";
 
-export const metadata = { title: "Assistent · Wetsanalyse" };
+export const metadata = { title: "Lex · Wetsanalyse" };
 
 /** De werkplek beheert zijn eigen hoogte en scroll: vol-bleed, precies één viewport hoog. Die
  *  container stond eerder in de globale layout; nu die kaal is, draagt de pagina hem zelf. Zonder

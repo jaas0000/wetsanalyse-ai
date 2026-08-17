@@ -35,7 +35,7 @@ export function SelectiePopover({
   aanpasbaar,
   onKies,
   onPasAan,
-  onVraagAssistent,
+  onVraagLex,
   onSluit,
 }: {
   doel: SelectieDoel;
@@ -43,7 +43,7 @@ export function SelectiePopover({
   aanpasbaar?: { klasse: string; tekst: string };
   onKies: (klasse: string, toelichting: string) => void | Promise<void>;
   onPasAan?: () => void | Promise<void>;
-  onVraagAssistent?: (fragment: string) => void;
+  onVraagLex?: (fragment: string) => void;
   onSluit: () => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -154,9 +154,9 @@ export function SelectiePopover({
       />
 
       <div className="flex items-center justify-between">
-        {onVraagAssistent ? (
-          <Button size="sm" variant="ghost" disabled={bezig} onClick={() => onVraagAssistent(doel.fragment)}>
-            Vraag de assistent
+        {onVraagLex ? (
+          <Button size="sm" variant="ghost" disabled={bezig} onClick={() => onVraagLex(doel.fragment)}>
+            Vraag Lex
           </Button>
         ) : (
           <span />

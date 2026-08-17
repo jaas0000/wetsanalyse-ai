@@ -13,7 +13,7 @@ de identiteitsbron), het **LLM-modelprofielbeheer**, de **profiel-keuzelijst**, 
 
 | Onderdeel | Rol |
 |-----------|-----|
-| **graph-qa** | De Juridische Assistent — beantwoordt vragen, stelt JAS-annotaties voor en levert de wettekst (uit de graaf); de werkplek praat er direct mee. Eigen LLM-config. |
+| **graph-qa** | **Lex**, de assistent voor wetsanalyse — beantwoordt vragen, stelt JAS-annotaties voor en levert de wettekst (uit de graaf); de werkplek praat er direct mee. Eigen LLM-config. |
 | **wetsanalyse-api** *(deze map)* | HTTP-harness — annotatiedomein, login, LLM-/gebruikersbeheer, profiel-keuzelijst. |
 | **PostgreSQL** | Opslag — annotatie-documenten + auditlog, modelprofielen, gebruikers, API-tokens. |
 

@@ -17,7 +17,7 @@ import type { AnnotatieElement, OntbrekendItem } from "@/lib/types";
  *
  *  **Er is geen "wegleggen".** Dit is informatie, geen takenlijst: wat je toevoegt verdwijnt vanzelf
  *  uit de openstaande lijst, en waar je het niet mee eens bent laat je staan. Een wegklik-knop
- *  suggereerde een afhandeling die nergens werd vastgelegd — terwijl juist "de assistent zag hier een
+ *  suggereerde een afhandeling die nergens werd vastgelegd — terwijl juist "Lex zag hier een
  *  Rechtssubject en ik vind van niet" een interpretatiekeuze is die je in het spoor zou willen
  *  terugvinden. Zolang dat spoor er niet is, is niets vastleggen eerlijker dan doen alsof.
  */
@@ -56,7 +56,7 @@ export function OntbrekendLijst({
   return (
     <div className="rounded-kaart border border-dashed border-line bg-surface p-3">
       <p className="text-xs font-medium text-muted">
-        Mogelijk ontbrekend — de assistent denkt dat dit er ook in zit ({openstaand})
+        Mogelijk ontbrekend — Lex denkt dat dit er ook in zit ({openstaand})
       </p>
 
       <ul className="mt-2 space-y-2">
