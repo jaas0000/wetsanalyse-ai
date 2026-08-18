@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { signOut, useSession } from "next-auth/react";
 
@@ -45,6 +46,8 @@ export function GesprekSidebar({
   onSluit,
 }: Props) {
   const { data: session } = useSession();
+  const pad = usePathname();
+  const annotatiesActief = pad?.startsWith("/annotaties") ?? false;
   const [menuOpen, setMenuOpen] = useState(false);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -111,6 +114,26 @@ export function GesprekSidebar({
           </svg>
           Nieuw gesprek
         </button>
+      </div>
+
+      {/* Navigatie, bewust lichter dan de knop erboven: dat is een actie, dit is een plek. De
+          annotaties leven los van de gesprekken — een annotatie overleeft het gesprek waarin hij
+          gemaakt is, en moet dus ook zonder dat gesprek te vinden zijn. */}
+      <div className="px-3 pb-1">
+        <Link
+          href="/annotaties"
+          onClick={onSluit}
+          aria-current={annotatiesActief ? "page" : undefined}
+          className={`focus-ring flex min-h-[36px] items-center gap-2 rounded-lg px-2.5 py-2 text-sm transition-colors coarse:min-h-[44px] ${
+            annotatiesActief ? "bg-lint/10 font-medium text-lint" : "text-ink hover:bg-paper"
+          }`}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <path d="M4 5h16M4 12h10M4 19h7" />
+            <circle cx="18" cy="17" r="3" />
+          </svg>
+          Annotaties
+        </Link>
       </div>
 
       {/* Chatgeschiedenis (scrollt) */}

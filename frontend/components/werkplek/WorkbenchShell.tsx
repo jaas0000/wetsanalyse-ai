@@ -1,39 +1,35 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 
-import { Dialog } from "@/components/ui/Dialog";
-import { GesprekSidebar } from "@/components/werkplek/GesprekSidebar";
+import { AppSidebar } from "@/components/werkplek/AppSidebar";
 import { WerkplekClient } from "@/components/werkplek/WerkplekClient";
-import { hernoemGesprek, lijstGesprekken, verwijderGesprek } from "@/lib/api";
 import type { GesprekSamenvatting } from "@/lib/types";
 
 /** De volledige werkplek-app: links de sidebar (logo → chatgeschiedenis → instellingen/gebruiker),
  *  rechts het chatvenster. `activeId` stuurt de highlight; `mountKey` bepaalt wanneer het chatvenster
  *  vers remount (nieuw/openen) — een gesprek dat tijdens een lopende beurt een id krijgt, remount NIET
  *  (anders breekt de SSE-stream). Op mobiel wordt de sidebar een off-canvas drawer. */
-export function WorkbenchShell() {
+export function WorkbenchShell({
+  beginGesprekId = null,
+  beginArtefact,
+}: {
+  /** Gesprek dat bij binnenkomst open moet staan (deep-link vanuit het annotatie-overzicht). */
+  beginGesprekId?: string | null;
+  /** Annotatie die bij binnenkomst als artefact open moet staan. */
+  beginArtefact?: string;
+} = {}) {
   const [gesprekken, setGesprekken] = useState<GesprekSamenvatting[]>([]);
-  const [activeId, setActiveId] = useState<string | null>(null);
+  const [activeId, setActiveId] = useState<string | null>(beginGesprekId);
   const [mountKey, setMountKey] = useState(0);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [laden, setLaden] = useState(true); // eerste gesprekken-fetch loopt nog → sidebar-skeletons
+  // Verhoogd zodra de chat een gesprek aanmaakte: de sidebar bezit de lijst en haalt hem dan opnieuw.
+  const [verversSignaal, setVerversSignaal] = useState(0);
   // Een mislukte hernoem- of verwijderactie mag de werkplek niet blokkeren, maar hoort ook niet stil
   // te blijven: zonder melding is "de nieuwe naam staat er niet" niet te onderscheiden van "de naam
   // is niet aangeslagen", en blijft een gesprek na een bevestigde verwijdering gewoon staan.
   const [fout, setFout] = useState<string | null>(null);
-
-  const verversLijst = useCallback(() => {
-    lijstGesprekken()
-      .then(setGesprekken)
-      .catch(() => {})
-      .finally(() => setLaden(false));
-  }, []);
-
-  useEffect(() => {
-    verversLijst();
-  }, [verversLijst]);
 
   function nieuwGesprek() {
     setActiveId(null);
@@ -51,38 +47,7 @@ export function WorkbenchShell() {
   // remount, en de lijst verversen zodat het bovenaan verschijnt.
   function gesprekAangemaakt(id: string) {
     setActiveId(id);
-    verversLijst();
-  }
-
-  async function hernoem(id: string, titel: string) {
-    setFout(null);
-    try {
-      await hernoemGesprek(id, titel);
-      verversLijst();
-    } catch {
-      setFout("De nieuwe naam is niet opgeslagen.");
-    }
-  }
-
-  /** De bevestiging zit in de knop zelf (`BevestigKnop`, twee klikken) — hetzelfde gebaar als in het
-   *  artefact. Hier stond een `window.confirm`: een systeemvenster midden in een app met een eigen
-   *  vormtaal. */
-  async function verwijder(id: string) {
-    setFout(null);
-    try {
-      await verwijderGesprek(id);
-      // Meteen uit de lijst halen, en dáárna verversen. Twee redenen. Het gesprek dat je verwijdert
-      // is meestal het gesprek dat open staat, en dat pad liep alleen langs `nieuwGesprek()` — die
-      // maakt het chatvenster leeg maar raakt de lijst niet, dus bleef de rij in de sidebar staan tot
-      // je de pagina herlaadde. En zelfs op het andere pad wachtte het verdwijnen op een round trip,
-      // terwijl de DELETE hierboven al geslaagd is. De refetch blijft staan als bevestiging (titels,
-      // volgorde), niet als de bron van deze update.
-      setGesprekken((lijst) => lijst.filter((g) => g.id !== id));
-      if (id === activeId) nieuwGesprek();
-      verversLijst();
-    } catch {
-      setFout("Het gesprek is niet verwijderd.");
-    }
+    setVerversSignaal((n) => n + 1);
   }
 
   const actieveTitel = gesprekken.find((g) => g.id === activeId)?.titel || "Nieuw gesprek";
@@ -115,41 +80,19 @@ export function WorkbenchShell() {
       )}
 
       <div className="flex min-h-0 flex-1">
-      {/* Desktop-sidebar */}
-      <aside className="hidden w-[17rem] shrink-0 border-r border-line lg:block">
-        <GesprekSidebar
-          gesprekken={gesprekken}
-          activeId={activeId}
-          onNieuw={nieuwGesprek}
-          onOpen={openGesprek}
-          onHernoem={hernoem}
-          onVerwijder={verwijder}
-          laden={laden}
-        />
-      </aside>
-
-      {/* Mobiele off-canvas drawer. Via `Dialog` en niet als eigen constructie: die draagt de
-          focus-trap, Escape en de backdrop. Deze drawer had wél `role="dialog"` en `aria-modal` maar
-          geen van de mechanismen erachter, dus liep Tab achter de scrim door naar de chat eronder. */}
-      {drawerOpen && (
-        <Dialog
-          label="Gesprekken"
-          variant="drawer"
-          wrapperClassName="lg:hidden"
-          onSluit={() => setDrawerOpen(false)}
-        >
-          <GesprekSidebar
-            gesprekken={gesprekken}
-            activeId={activeId}
-            onNieuw={nieuwGesprek}
-            onOpen={openGesprek}
-            onHernoem={hernoem}
-            onVerwijder={verwijder}
-            laden={laden}
-            onSluit={() => setDrawerOpen(false)}
-          />
-        </Dialog>
-      )}
+      <AppSidebar
+        activeId={activeId}
+        onNieuw={nieuwGesprek}
+        onOpen={openGesprek}
+        onVerwijderd={(id) => {
+          if (id === activeId) nieuwGesprek();
+        }}
+        onFout={setFout}
+        onLijst={setGesprekken}
+        verversSignaal={verversSignaal}
+        drawerOpen={drawerOpen}
+        onDrawerSluit={() => setDrawerOpen(false)}
+      />
 
       {/* Rechterkolom: mobiele topbar + chatvenster */}
       <div className="flex min-w-0 flex-1 flex-col">
@@ -182,8 +125,9 @@ export function WorkbenchShell() {
         <WerkplekClient
           key={mountKey}
           initialGesprekId={activeId}
+          beginArtefact={beginArtefact}
           onGesprekAangemaakt={gesprekAangemaakt}
-          onGewijzigd={verversLijst}
+          onGewijzigd={() => setVerversSignaal((n) => n + 1)}
         />
       </div>
       </div>

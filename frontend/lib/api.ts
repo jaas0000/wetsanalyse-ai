@@ -262,8 +262,12 @@ export async function maakDocument(req: DocumentCreate): Promise<AnnotatieDocume
   return json<AnnotatieDocument>(res);
 }
 
-export async function lijstDocumenten(): Promise<DocumentSamenvatting[]> {
-  return json<DocumentSamenvatting[]>(await fetch("/api/annotatie/documenten", { cache: "no-store" }));
+export async function lijstDocumenten(limit = 200): Promise<DocumentSamenvatting[]> {
+  // Eén ruime greep: bij tientallen documenten is client-side zoeken/filteren genoeg, en de lijst
+  // moet in één keer sorteerbaar zijn. De api kan limit/offset als het ooit groeit.
+  return json<DocumentSamenvatting[]>(
+    await fetch(`/api/annotatie/documenten?limit=${limit}`, { cache: "no-store" }),
+  );
 }
 
 export async function haalDocument(slug: string): Promise<AnnotatieDocument> {
@@ -477,6 +481,20 @@ export async function haalArtikelGraaf(bwbId: string, artikel: string, lid?: str
   }`;
   const res = await fetch(`/api/annotatie/artikel?${q}`, { cache: "no-store" });
   return json<GraafArtikel>(res);
+}
+
+/** Rond de annotatie af of open hem weer. Bewust een expliciete handeling: "alle elementen
+ *  beslist" is niet hetzelfde als "ik ben klaar". */
+export async function zetDocumentStatus(
+  slug: string,
+  status: "geaccordeerd" | "in_review",
+): Promise<AnnotatieDocument> {
+  const res = await fetch(`/api/annotatie/documenten/${pathSegment(slug)}/status`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ status }),
+  });
+  return json<AnnotatieDocument>(res);
 }
 
 /** Exportformaten van een annotatiedocument. */

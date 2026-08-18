@@ -163,6 +163,7 @@ annotatie_documenten = Table(
     # blijft de bearer-client als herkomst-/tenant-veld, maar de zichtbaarheid gaat op `user_id`.
     Column("user_id", String(64), nullable=False, default=""),
     Column("client_id", String(128), nullable=False, default=""),
+    Column("citeertitel", Text, nullable=False, default=""),
     Column("werkgebied", Text, nullable=False, default=""),
     Column("bwbId", String(64), nullable=False, default=""),
     Column("artikel", String(32), nullable=False, default=""),

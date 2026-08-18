@@ -5,8 +5,8 @@ Next.js (App Router) + TypeScript-webapp bovenop de graph-qa-agent (en, voor log
 chat-achtig gespreksvenster voor **vragen én JAS-annotatie**, live tegen graph-qa (§*Werkplek*). De
 home (`/`) leidt daarheen door.
 
-> **Scope: chat-werkruimte.** De app bestaat uit de werkplek, de login-flow en het
-> instellingenvenster (account, berichten, en voor beheerders modelprofielen, gebruikers,
+> **Scope: chat-werkruimte.** De app bestaat uit de werkplek, het annotatie-overzicht, de
+> login-flow en het instellingenvenster (account, berichten, en voor beheerders modelprofielen, gebruikers,
 > API-tokens, berichtenbeheer en feedback). Analyses aanmaken/reviewen/rapporteren hoort niet tot
 > de functionaliteit.
 
@@ -147,6 +147,42 @@ door de chip. Nu draagt het `annotatie`-item een `denk`-veld, staat de tijdlijn 
 chip als *"Zo is dit tot stand gekomen"*, en wordt hij met de beurt bewaard (`denk` bestond al in
 `BerichtInvoer`) en bij hydratatie teruggehaald. Bij een platform dat om herleidbaarheid draait hoort
 achteraf te kunnen zien hoe een annotatie tot stand kwam.
+
+### Annotaties staan los van de gesprekken (`/annotaties`)
+
+Een annotatie was alleen te vinden via het gesprek waarin hij gemaakt was; verdween dat gesprek, dan
+bleef het document onbereikbaar in de database staan. Nu is het artefact een eersteklas object, naar
+het model van Claude's artifacts-tab: **een ingang in de sidebar die het hoofdgebied vult — de
+sidebar blijft staan**, je stapt niet uit de app.
+
+- **`components/werkplek/AppSidebar.tsx`** bezit de gesprekkenlijst (laden, hernoemen, verwijderen)
+  en de mobiele drawer, en wordt gedeeld door `WorkbenchShell` en de annotatiepagina's. De handlers
+  verschillen per scherm: in de werkplek wisselt een klik van gesprek in lokale state, op
+  `/annotaties` navigeert hij naar `/workbench?gesprek=<id>`. `WorkbenchShell` verhoogt
+  `verversSignaal` als een beurt een gesprek aanmaakt — de lijst woont daar niet meer.
+- **`/annotaties`** (`components/annotaties/AnnotatiesClient.tsx`) heeft twee weergaven op één lijst:
+  *te doen* (werkvoorraad: rood → geel → langst stil) en *alles* (per regeling gegroepeerd). De
+  stand staat in de URL (`?weergave=alles`, via `replace` — een weergavewissel is geen stap in de
+  geschiedenis). De kaart toont de **JAS-kleurstrip**: de klasseverdeling als balk, waar Claude een
+  thumbnail zou tonen.
+- **De sorteer-, groepeer- en zoeklogica staat in `lib/annotatieOverzicht.ts`**, niet in het
+  component: vitest draait node-env zonder DOM, dus alleen pure helpers zijn testbaar — dezelfde
+  reden die `lib/selectie.ts` al noemt.
+- **`/annotaties/[slug]`** toont het artefact op eigen benen. Bewust zonder `onVraag` (er is geen
+  chatveld om een vraag in klaar te zetten — daarvoor is *Openen in de werkplek*) en zonder
+  `ontbrekend` (dat hoort bij een chatbeurt, niet bij het document).
+
+**Eén inhoud, twee schillen.** `components/werkplek/ArtefactInhoud.tsx` draagt de wettekst, de
+reviewlijst en alle handlers; `ArtefactPaneel` is nog slechts de `Dialog`-schil eromheen en de
+annotatiepagina is de tweede schil — hetzelfde patroon als `DisclaimerClient` en
+`InstellingenInhoud`. Let op **Escape**: dat hing aan `Dialog.onEscape`, maar die schil bestaat niet
+altijd meer. De inhoud handelt het nu zelf af (selectie → bedieningsrij → gekozen element →
+`onSluiten`), en `ArtefactPaneel` geeft `Dialog` daarom een **no-op** `onEscape` mee. Zou die er ook
+op reageren, dan sprong Escape in één klap door alle lagen heen.
+
+**Afronden** zit als knop in de kop van `ArtefactInhoud` (dus in beide schillen) en zet de
+documentstatus via `zetDocumentStatus`. Expliciet, want "alle elementen beslist" is niet hetzelfde
+als klaar zijn; heropenen kan altijd.
 
 ### Buiten de schil: één kaart
 

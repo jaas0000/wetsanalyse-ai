@@ -213,6 +213,8 @@ export interface AnnotatieDocument {
   slug: string;
   user_id: string;
   client_id: string;
+  /** Naam van de regeling zoals hij in beeld komt; los van `werkgebied` (het kennisdomein). */
+  citeertitel: string;
   werkgebied: string;
   bwbId: string;
   artikel: string;
@@ -234,14 +236,23 @@ export interface AuditRecord {
   tijdstip?: string | null;
 }
 
+/** Eén regel in het annotatie-overzicht: naam, voortgang en de JAS-verdeling voor de kleurstrip,
+ *  zodat de lijst zonder tweede call kan tonen wat er nog te beoordelen is. */
 export interface DocumentSamenvatting {
   slug: string;
   bwbId: string;
   artikel: string;
   lid: string;
+  /** Weergavenaam; de server valt terug op werkgebied en dan bwbId. */
+  citeertitel: string;
   werkgebied: string;
   status: DocumentStatus;
   aantal_elementen: number;
+  te_beoordelen: number;
+  per_aandacht: Record<string, number>;
+  per_klasse: Record<string, number>;
+  /** Leeg = geen agent-ronde geregistreerd (of alleen eigen werk). */
+  laatste_model: string;
   updated?: string | null;
 }
 
@@ -249,6 +260,7 @@ export interface DocumentCreate {
   bwbId: string;
   artikel: string;
   lid?: string | null;
+  citeertitel?: string;
   werkgebied?: string;
 }
 

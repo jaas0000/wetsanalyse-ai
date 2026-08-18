@@ -16,6 +16,7 @@ import {
   maakGesprek,
   voegBerichtToe,
   verwijderElement,
+  zetDocumentStatus,
   zetElementen,
   voegElementToe,
 } from "@/lib/api";
@@ -88,9 +89,13 @@ interface Props {
   onGesprekAangemaakt: (id: string) => void;
   /** Roept terug na elke persistente wijziging zodat de sidebar-lijst kan verversen. */
   onGewijzigd: () => void;
+  /** Annotatie die bij binnenkomst open moet staan (deep-link vanuit het annotatie-overzicht). */
+  beginArtefact?: string;
 }
 
-export function WerkplekClient({ initialGesprekId, onGesprekAangemaakt, onGewijzigd }: Props) {
+export function WerkplekClient({
+  initialGesprekId, onGesprekAangemaakt, onGewijzigd, beginArtefact,
+}: Props) {
   const [gesprekId, setGesprekId] = useState<string | null>(initialGesprekId);
   const [items, setItems] = useState<Item[]>([]);
   const [docs, setDocs] = useState<Record<string, AnnotatieDocument>>({});
@@ -205,6 +210,16 @@ export function WerkplekClient({ initialGesprekId, onGesprekAangemaakt, onGewijz
       return null;
     }
   }
+
+  /** Deep-link `/workbench?annotatie=<slug>`: het artefact één keer openen bij binnenkomst.
+   *  De ref voorkomt dat het paneel weer opengaat nadat de jurist het zelf heeft gesloten. */
+  const deepLinkGeopend = useRef(false);
+  useEffect(() => {
+    if (!beginArtefact || deepLinkGeopend.current) return;
+    deepLinkGeopend.current = true;
+    void openArtefact(beginArtefact);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [beginArtefact]);
 
   async function openArtefact(slug: string) {
     setArtefactFout(null);
@@ -372,7 +387,9 @@ export function WerkplekClient({ initialGesprekId, onGesprekAangemaakt, onGewijz
           bwbId: doel.bwbId,
           artikel: doel.artikel,
           lid: doel.lid || null,
-          werkgebied: doel.citeertitel || "",
+          // De wetnaam hoort in `citeertitel`; `werkgebied` blijft leeg tot de jurist er zelf
+          // een kennisdomein van maakt. Die twee stonden eerder op één veld.
+          citeertitel: doel.citeertitel || "",
         });
         const bijgewerkt = await zetElementen(document.slug, els, 0, suggesties, run);
         setDocs((m) => ({ ...m, [bijgewerkt.slug]: bijgewerkt }));
@@ -443,6 +460,13 @@ export function WerkplekClient({ initialGesprekId, onGesprekAangemaakt, onGewijz
     setMelding("Markering gewist.");
   }
 
+  /** Afronden of heropenen. Gooit door naar het paneel, dat de fout bij de knop toont. */
+  async function status(slug: string, nieuweStatus: "geaccordeerd" | "in_review") {
+    const bij = await zetDocumentStatus(slug, nieuweStatus);
+    setDocs((m) => ({ ...m, [slug]: bij }));
+    setMelding(nieuweStatus === "geaccordeerd" ? "Annotatie afgerond." : "Annotatie heropend.");
+  }
+
   async function beslissing(slug: string, elementId: string, req: BeslissingInvoer) {
     try {
       const bij = await beslis(slug, elementId, req);
@@ -484,6 +508,7 @@ export function WerkplekClient({ initialGesprekId, onGesprekAangemaakt, onGewijz
       onBeslissing={(elementId, req) => beslissing(artefactSlug, elementId, req)}
       onEigenMarkering={(invoer) => eigenMarkering(artefactSlug, invoer)}
       onWisEigenMarkering={(elementId) => wisEigenMarkering(artefactSlug, elementId)}
+      onStatus={(nieuweStatus) => status(artefactSlug, nieuweStatus)}
       onVraag={(el) => {
         setVraagOver({ slug: artefactSlug, el });
         taRef.current?.focus();

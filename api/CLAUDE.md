@@ -99,7 +99,19 @@ De API bedient zeven dingen:
   werkplek stuurt de leden mee in de body; ontbreken ze, dan blijft dat blok weg in plaats van dat
   er iets gereconstrueerd wordt.
 
-  **`PUT elementen` is een MERGE, geen vervanging.** De agent kan meerdere rondes draaien
+  **Afronden is een expliciete handeling.** `POST /documenten/{slug}/status` zet `geaccordeerd` of
+  weer `in_review` (promoveren hoort bij het latere graaf-schrijfpad en kan hier niet). Dat loopt
+  door `muteer_document` — het enige pad met lock én eigenaarscheck; de losse `zet_status` zonder
+  die check is daarom weg. Zonder dit endpoint stond elk document eeuwig op `in_review` en liep de
+  werkvoorraad van de jurist nooit leeg.
+
+  **De lijst draagt de werkvoorraad.** `GET /documenten` levert per document ook `te_beoordelen`,
+  `per_aandacht`, `per_klasse` (de JAS-kleurstrip in de UI), `laatste_model` en een `citeertitel`
+  met terugval op `werkgebied`/`bwbId` (`annotatie_export.weergavenaam`). De telling komt uit
+  dezelfde `tel_elementen` als de export — twee tellingen naast elkaar spreken elkaar vroeg of laat
+  tegen, en juist die telling stuurt waar de jurist heen gaat.
+
+    **`PUT elementen` is een MERGE, geen vervanging.** De agent kan meerdere rondes draaien
   (annoteerder ⇄ Critic) en de jurist werkt in hetzelfde document; vervangen wiste eerder alle
   beslissingen, levenscyclus en element-id's. Matchen gaat op `id`, met de genormaliseerde tekst +
   lid als terugval voor clients zonder id. Een element waar de jurist aan te pas kwam (`herkomst ==

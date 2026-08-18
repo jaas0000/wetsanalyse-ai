@@ -185,6 +185,9 @@ class AnnotatieDocument(BaseModel):
     slug: str
     user_id: str = ""       # eigenaar (ingelogde gebruiker); de zichtbaarheid gaat hierop
     client_id: str = ""      # bearer-client (herkomst/tenant)
+    # De naam van de regeling zoals hij in beeld komt. Apart van `werkgebied`, dat een
+    # kennisdomein hoort te zijn — de werkplek zette de wetnaam daar eerder in.
+    citeertitel: str = ""
     werkgebied: str = ""
     bwbId: str
     artikel: str
@@ -213,6 +216,7 @@ class DocumentCreate(BaseModel):
     bwbId: str
     artikel: str
     lid: str | None = None
+    citeertitel: str = ""
     werkgebied: str = ""
 
 
@@ -295,12 +299,38 @@ class BeslissingInvoer(BaseModel):
     wijziging: Wijziging | None = None
 
 
+class StatusInvoer(BaseModel):
+    """Afronden of heropenen. `gepromoveerd` staat er bewust niet bij: die toestand hoort bij het
+    graaf-schrijfpad (fase 4) en is niet iets wat de jurist zelf zet."""
+
+    status: DocumentStatus
+
+    @model_validator(mode="after")
+    def _alleen_review_toestanden(self):
+        if self.status not in (DocumentStatus.in_review, DocumentStatus.geaccordeerd):
+            raise ValueError("Alleen in_review of geaccordeerd kunnen hier gezet worden.")
+        return self
+
+
 class DocumentSamenvatting(BaseModel):
+    """Eén regel in het annotatie-overzicht.
+
+    Draagt bewust meer dan naam + aantal: het overzicht is werkvoorraad, dus het moet zonder een
+    tweede call kunnen tonen wat er nog te beoordelen is, waar aandacht op staat en hoe de
+    JAS-verdeling eruitziet (de kleurstrip). De telling komt uit dezelfde `tel_elementen` als de
+    export.
+    """
+
     slug: str
     bwbId: str
     artikel: str
     lid: str = ""
+    citeertitel: str = ""        # weergavenaam, met terugval op werkgebied/bwbId
     werkgebied: str = ""
     status: DocumentStatus
     aantal_elementen: int
+    te_beoordelen: int = 0
+    per_aandacht: dict[str, int] = {}
+    per_klasse: dict[str, int] = {}
+    laatste_model: str = ""      # leeg = geen agent-ronde geregistreerd (of alleen eigen werk)
     updated: datetime | None = None

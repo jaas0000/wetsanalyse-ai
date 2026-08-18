@@ -15,6 +15,7 @@ PUT    /v1/annotatie/documenten/{slug}/elementen                 — uitkomst va
 POST   /v1/annotatie/documenten/{slug}/elementen                 — eigen markering toevoegen (jurist)
 DELETE /v1/annotatie/documenten/{slug}/elementen/{id}            — eigen markering verwijderen
 POST   /v1/annotatie/documenten/{slug}/elementen/{id}/beslissing — human-decision
+POST   /v1/annotatie/documenten/{slug}/status                    — afronden / heropenen
 GET    /v1/annotatie/documenten/{slug}/audit                     — append-only tijdlijn
 POST   /v1/annotatie/documenten/{slug}/export?formaat=…          — export (pdf|csv|json)
 """
@@ -28,11 +29,15 @@ from pydantic import BaseModel
 from ..annotatie_contracts import (
     AgentRun,
     AnnotatieDocument, AnnotatieElement, AuditRecord, Beslissing, BeslissingInvoer, BeslissingType,
+    DocumentStatus,
     CriticSuggestie, DocumentCreate, DocumentSamenvatting, ElementInvoer, ElementenInvoer,
     Lifecycle,
     MensElementInvoer,
+    StatusInvoer,
 )
-from ..annotatie_export import FORMATEN, LidTekst, bestandsnaam, bouw_export, serialiseer
+from ..annotatie_export import (
+    FORMATEN, LidTekst, bestandsnaam, bouw_export, serialiseer, tel_elementen, weergavenaam,
+)
 from ..annotatie_store import CONFLICT, GEEN_ELEMENT, AnnotatieStore, etag_van
 from ..auth import require_client
 from ..db import utcnow
@@ -116,13 +121,15 @@ async def maak_document(
 ):
     slug = uuid.uuid4().hex[:16]
     doc = AnnotatieDocument(
-        slug=slug, user_id=user_id, client_id=client_id, werkgebied=req.werkgebied,
+        slug=slug, user_id=user_id, client_id=client_id,
+        citeertitel=req.citeertitel, werkgebied=req.werkgebied,
         bwbId=req.bwbId, artikel=req.artikel, lid=req.lid or "",
     )
     await store.maak_document(doc)
     await store.schrijf_audit(
         slug, client_id, user_id, "document-aangemaakt",
-        detail={"bwbId": req.bwbId, "artikel": req.artikel, "lid": req.lid or ""},
+        detail={"bwbId": req.bwbId, "artikel": req.artikel, "lid": req.lid or "",
+                "citeertitel": req.citeertitel},
     )
     return await store.laad_document(slug)
 
@@ -135,13 +142,21 @@ async def lijst_documenten(
     store: AnnotatieStore = Depends(get_annotatie_store),
 ):
     docs = await store.lijst_documenten(user_id, limit, offset)
-    return [
-        DocumentSamenvatting(
-            slug=d.slug, bwbId=d.bwbId, artikel=d.artikel, lid=d.lid, werkgebied=d.werkgebied,
-            status=d.status, aantal_elementen=len(d.elementen), updated=d.updated,
-        )
-        for d in docs
-    ]
+    uit: list[DocumentSamenvatting] = []
+    for d in docs:
+        telling = tel_elementen(d.elementen)
+        # Het laatst gebruikte model: de runs staan op volgorde van uitvoering, dus de laatste met
+        # een modelnaam is de actuele. Leeg blijft leeg — nooit een model aannemen.
+        laatste = next((r.model for r in reversed(d.runs) if r.model), "")
+        uit.append(DocumentSamenvatting(
+            slug=d.slug, bwbId=d.bwbId, artikel=d.artikel, lid=d.lid,
+            citeertitel=weergavenaam(d), werkgebied=d.werkgebied,
+            status=d.status, aantal_elementen=len(d.elementen),
+            te_beoordelen=telling.te_beoordelen,
+            per_aandacht=telling.per_aandacht, per_klasse=telling.per_klasse,
+            laatste_model=laatste, updated=d.updated,
+        ))
+    return uit
 
 
 @router.get("/documenten/{slug}", response_model=AnnotatieDocument)
@@ -455,6 +470,43 @@ async def beslis(
         },
     )
     return resultaat
+
+
+@router.post("/documenten/{slug}/status", response_model=AnnotatieDocument)
+async def zet_status(
+    slug: str,
+    req: StatusInvoer,
+    user_id: str = Depends(actieve_userid),
+    client_id: str = Depends(require_client),
+    store: AnnotatieStore = Depends(get_annotatie_store),
+):
+    """De annotatie afronden of weer heropenen.
+
+    Bewust een expliciete handeling van de jurist en geen afgeleide van "alle elementen beslist":
+    dat laatste is niet hetzelfde als tevreden zijn — er kan nog een ronde van de agent komen, en
+    de "mogelijk ontbrekend"-lijst is dan nog niet gewogen. Heropenen kan altijd; een knop die niet
+    terug kan is een knop die niemand durft te gebruiken.
+    """
+    telling = None
+
+    def muteer(doc: AnnotatieDocument):
+        nonlocal telling
+        telling = tel_elementen(doc.elementen)
+        doc.status = req.status
+        return None
+
+    uitkomst = await store.muteer_document(slug, user_id, muteer)
+    if uitkomst is None:
+        raise HTTPException(status_code=404, detail=f"Onbekend annotatie-document: {slug}")
+
+    doc: AnnotatieDocument = uitkomst  # type: ignore[assignment]
+    actie = "document-afgerond" if req.status is DocumentStatus.geaccordeerd else "document-heropend"
+    await store.schrijf_audit(slug, client_id, user_id, actie, detail={
+        "status": req.status.value,
+        "elementen": telling.totaal if telling else 0,
+        "te_beoordelen": telling.te_beoordelen if telling else 0,
+    })
+    return doc
 
 
 @router.get("/documenten/{slug}/audit", response_model=list[AuditRecord])

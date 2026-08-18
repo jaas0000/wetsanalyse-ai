@@ -33,6 +33,7 @@ def _naar_document(row) -> AnnotatieDocument:
         slug=d["slug"],
         user_id=d["user_id"] or "",   # legacy-rijen (vóór de migratie) hebben NULL → ""
         client_id=d["client_id"],
+        citeertitel=d["citeertitel"] or "",
         werkgebied=d["werkgebied"],
         bwbId=d["bwbId"],
         artikel=d["artikel"],
@@ -53,6 +54,7 @@ class AnnotatieStore:
                 slug=doc.slug,
                 user_id=doc.user_id,
                 client_id=doc.client_id,
+                citeertitel=doc.citeertitel,
                 werkgebied=doc.werkgebied,
                 bwbId=doc.bwbId,
                 artikel=doc.artikel,
@@ -88,8 +90,9 @@ class AnnotatieStore:
         muteer: Callable[[AnnotatieDocument], object | None],
         if_match: str | None = None,
     ) -> AnnotatieDocument | None | object:
-        """Het ENIGE schrijfpad naar `elementen`. Laadt met een row-lock, toetst eigenaarschap en
-        `If-Match`, laat `muteer` de elementenlijst herschikken en schrijft in DEZELFDE transactie weg.
+        """Het ENIGE schrijfpad naar `elementen`, `runs` en `status`. Laadt met een row-lock, toetst
+        eigenaarschap en `If-Match`, laat `muteer` het document herschikken en schrijft in DEZELFDE
+        transactie weg.
 
         Eén pad met één slot, want twee gelijktijdige schrijvers op dezelfde JSON-kolom overschrijven
         elkaar anders volledig (lost update). Er stond hier eerder ook een `vervang_elementen` zónder
@@ -123,6 +126,7 @@ class AnnotatieStore:
                 .values(
                     elementen=[e.model_dump(mode="json") for e in doc.elementen],
                     runs=[r.model_dump(mode="json") for r in doc.runs],
+                    status=doc.status.value,
                     updated=now,
                 )
             )
@@ -146,14 +150,6 @@ class AnnotatieStore:
             return None
 
         return await self.muteer_document(slug, user_id, muteer)
-
-    async def zet_status(self, slug: str, status: str) -> None:
-        async with db.get_engine().begin() as conn:
-            await conn.execute(
-                update(db.annotatie_documenten)
-                .where(db.annotatie_documenten.c.slug == slug)
-                .values(status=status, updated=db.utcnow())
-            )
 
     async def verwijder_document(self, slug: str) -> None:
         async with db.get_engine().begin() as conn:

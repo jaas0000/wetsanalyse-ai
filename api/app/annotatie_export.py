@@ -87,6 +87,7 @@ class ExportTelling(BaseModel):
 
 class ExportDocumentMeta(BaseModel):
     slug: str
+    citeertitel: str = ""
     werkgebied: str = ""
     bwbId: str = ""
     artikel: str = ""
@@ -172,6 +173,32 @@ def _model_van(el: AnnotatieElement) -> str:
     return MODEL_ONBEKEND
 
 
+def tel_elementen(elementen: list[AnnotatieElement]) -> ExportTelling:
+    """De stand van zaken van één document: hoeveel beoordeeld, hoeveel aandacht, welke klassen.
+
+    Eén waarheid over "hoeveel is er nog te beoordelen": zowel de export als de overzichtslijst
+    (`GET /v1/annotatie/documenten`) rekenen hiermee. Twee tellingen naast elkaar spreken elkaar
+    vroeg of laat tegen, en juist die telling stuurt de werkvoorraad van de jurist.
+    """
+    telling = ExportTelling(totaal=len(elementen))
+    for el in elementen:
+        lifecycle = el.lifecycle.value if el.lifecycle else ""
+        aandacht = el.aandacht.value if el.aandacht else ""
+        telling.per_klasse[el.klasse] = telling.per_klasse.get(el.klasse, 0) + 1
+        sleutel = STATUS_LABEL.get(lifecycle, lifecycle or "onbekend")
+        telling.per_status[sleutel] = telling.per_status.get(sleutel, 0) + 1
+        telling.per_aandacht[aandacht or "geen"] = telling.per_aandacht.get(aandacht or "geen", 0) + 1
+        if el.herkomst == "mens":
+            telling.van_jurist += 1
+        else:
+            telling.van_agent += 1
+        if el.beslissingen:
+            telling.beslist += 1
+        else:
+            telling.te_beoordelen += 1
+    return telling
+
+
 def bouw_export(
     doc: AnnotatieDocument,
     audit: list[AuditRecord],
@@ -179,7 +206,7 @@ def bouw_export(
     formaat: str = "json",
 ) -> ExportDocument:
     elementen: list[ExportElement] = []
-    telling = ExportTelling(totaal=len(doc.elementen))
+    telling = tel_elementen(doc.elementen)
 
     for i, el in enumerate(sorteer_elementen(doc.elementen), start=1):
         bg, rand = JAS_KLASSE_KLEUREN.get(el.klasse, NEUTRALE_KLEUR)
@@ -201,25 +228,13 @@ def bouw_export(
             model=_model_van(el),
         ))
 
-        telling.per_klasse[el.klasse] = telling.per_klasse.get(el.klasse, 0) + 1
-        sleutel = STATUS_LABEL.get(lifecycle, lifecycle or "onbekend")
-        telling.per_status[sleutel] = telling.per_status.get(sleutel, 0) + 1
-        telling.per_aandacht[aandacht or "geen"] = telling.per_aandacht.get(aandacht or "geen", 0) + 1
-        if el.herkomst == "mens":
-            telling.van_jurist += 1
-        else:
-            telling.van_agent += 1
-        if el.beslissingen:
-            telling.beslist += 1
-        else:
-            telling.te_beoordelen += 1
-
     modellen = list(dict.fromkeys(r.model for r in doc.runs if r.model))
 
     return ExportDocument(
         export=ExportMeta(formaat=formaat, gegenereerd_op=datetime.now(timezone.utc)),
         document=ExportDocumentMeta(
-            slug=doc.slug, werkgebied=doc.werkgebied, bwbId=doc.bwbId, artikel=doc.artikel,
+            slug=doc.slug, citeertitel=weergavenaam(doc), werkgebied=doc.werkgebied,
+            bwbId=doc.bwbId, artikel=doc.artikel,
             lid=doc.lid, status=doc.status.value, eigenaar=doc.user_id, client_id=doc.client_id,
             created=doc.created, updated=doc.updated, runs=list(doc.runs), modellen=modellen,
         ),
@@ -228,6 +243,16 @@ def bouw_export(
         elementen=elementen,
         audit=list(audit),
     )
+
+
+def weergavenaam(doc: AnnotatieDocument) -> str:
+    """De naam waaronder een annotatie in beeld komt.
+
+    Terugval op `werkgebied`: vóór het aparte `citeertitel`-veld zette de werkplek de wetnaam daarin
+    (`werkgebied: doel.citeertitel`). Oude documenten zijn zo leesbaar zonder datamigratie — en
+    zonder te gokken wat er in dat veld stond.
+    """
+    return doc.citeertitel or doc.werkgebied or doc.bwbId
 
 
 def bestandsnaam(doc: AnnotatieDocument, formaat: str) -> str:
@@ -369,7 +394,7 @@ def naar_pdf(e: ExportDocument) -> bytes:
             return str(waarde or "")
 
     d, t = e.document, e.telling
-    bron = f"{d.bwbId} art. {d.artikel}" + (f" lid {d.lid}" if d.lid else "")
+    bron = f"{d.citeertitel or d.bwbId} art. {d.artikel}" + (f" lid {d.lid}" if d.lid else "")
     verhaal: list = []
 
     # 1. Titelblok
