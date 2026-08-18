@@ -22,6 +22,7 @@ import type {
   AgentContext,
   AgentDoel,
   AgentKandidaat,
+  AgentRun,
   Anker,
   AnnotatieDocument,
   AuditRecord,
@@ -281,13 +282,15 @@ export async function zetElementen(
   elementen: VoorstelElement[],
   ronde = 0,
   suggesties: { element_id: string; aandacht: string; motivatie: string }[] = [],
+  run?: AgentRun | null,
 ): Promise<AnnotatieDocument> {
   // De server MERGET dit met wat er al staat (op id, anders op tekst); `ronde` komt in de audit
-  // zodat achteraf te zien is welke agent-ronde welk element opleverde.
+  // zodat achteraf te zien is welke agent-ronde welk element opleverde. `run` legt vast MET WELK
+  // MODEL die ronde de voorstellen maakte — ontbreekt hij, dan blijft het bestaande spoor staan.
   const res = await fetch(`/api/annotatie/documenten/${pathSegment(slug)}/elementen`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ elementen, ronde, suggesties }),
+    body: JSON.stringify({ elementen, ronde, suggesties, ...(run ? { run: { ...run, ronde } } : {}) }),
   });
   return json<AnnotatieDocument>(res);
 }
@@ -388,6 +391,8 @@ export async function annoteerAgentStream(
     onSources?: (bronnen: Bron[]) => void;
     onDoel?: (doel: AgentDoel) => void;
     onElement?: (el: VoorstelElement) => void;
+    /** De herkomst van deze beurt (model/agentversie); komt vóór de elementen. */
+    onRun?: (run: AgentRun) => void;
     onOntbrekend?: (items: OntbrekendItem[]) => void;
     /** Kanttekening van de Critic bij een markering die de JURIST maakte. Nooit een wijziging. */
     onSuggestie?: (s: { element_id: string; aandacht: string; motivatie: string }) => void;
@@ -438,6 +443,7 @@ export async function annoteerAgentStream(
               content?: string;
               doel?: AgentDoel;
               element?: VoorstelElement;
+              run?: AgentRun;
               items?: OntbrekendItem[];
               sources?: Bron[];
               suggestie?: { element_id: string; aandacht: string; motivatie: string };
@@ -451,6 +457,7 @@ export async function annoteerAgentStream(
         else if (ev.type === "sources" && ev.sources) handlers.onSources?.(ev.sources);
         else if (ev.type === "doel" && ev.doel) handlers.onDoel?.(ev.doel);
         else if (ev.type === "element" && ev.element) handlers.onElement?.(ev.element);
+        else if (ev.type === "run" && ev.run) handlers.onRun?.(ev.run);
         else if (ev.type === "ontbrekend") handlers.onOntbrekend?.(ev.items ?? []);
         else if (ev.type === "suggestie" && ev.suggestie) handlers.onSuggestie?.(ev.suggestie);
         else if (ev.type === "kandidaten") handlers.onKandidaten?.(ev.kandidaten ?? []);
@@ -470,6 +477,48 @@ export async function haalArtikelGraaf(bwbId: string, artikel: string, lid?: str
   }`;
   const res = await fetch(`/api/annotatie/artikel?${q}`, { cache: "no-store" });
   return json<GraafArtikel>(res);
+}
+
+/** Exportformaten van een annotatiedocument. */
+export type ExportFormaat = "pdf" | "csv" | "json";
+
+/** Download het annotatiedocument als bestand — ook als de review nog loopt.
+ *
+ *  De leden gaan mee zodat het rapport de letterlijke wettekst naast de tabel kan zetten
+ *  (brongetrouwheid); ontbreken ze, dan laat de api dat blok weg in plaats van iets te
+ *  reconstrueren. De bestandsnaam komt uit `Content-Disposition` — de server bepaalt hem, zodat
+ *  hij overal gelijk is.
+ */
+export async function exporteerDocument(
+  slug: string,
+  formaat: ExportFormaat,
+  leden: { lid: string; tekst: string }[] = [],
+): Promise<void> {
+  const res = await fetch(`/api/annotatie/documenten/${pathSegment(slug)}/export?formaat=${formaat}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ leden }),
+  });
+  if (!res.ok) throw await parseError(res);
+
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  try {
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = bestandsnaamUit(res.headers.get("content-disposition")) ?? `annotatie-${slug}.${formaat}`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  } finally {
+    // Niet meteen intrekken: Safari breekt de download dan af. Eén tick is genoeg.
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+}
+
+function bestandsnaamUit(header: string | null): string | undefined {
+  const m = header?.match(/filename="([^"]+)"/);
+  return m?.[1];
 }
 
 // --- Gebruikersfeedback -------------------------------------------------------

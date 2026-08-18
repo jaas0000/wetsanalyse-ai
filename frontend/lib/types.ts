@@ -161,6 +161,20 @@ export interface CriticSuggestie {
   tijd: string;
 }
 
+/** De herkomst van één agent-ronde: wélk model de voorstellen maakte.
+ *  Komt als `run`-SSE-event uit graph-qa en gaat mee in de PUT naar de api, die het op het
+ *  document én op elk element vastlegt. Zonder dit is achteraf niet te zeggen waar een markering
+ *  vandaan komt — precies wat de export en de latere graaf-promotie nodig hebben. */
+export interface AgentRun {
+  ronde: number;
+  model: string;
+  provider: string;
+  agent_versie: string;
+  critic_rondes: number;
+  stop_reden: string;
+  tijd: string;
+}
+
 /** Waar een fragment stond toen het werd gemaakt: exacte offsets + quote-met-context als vangnet. */
 export interface Anker {
   lid: string;
@@ -191,6 +205,8 @@ export interface AnnotatieElement {
   anker?: Anker | null;
   diff: Record<string, { voor: unknown; na: unknown }>;
   beslissingen: Beslissing[];
+  /** null = markering van de jurist, of een agent-ronde van vóór de registratie. */
+  geproduceerd_door?: AgentRun | null;
 }
 
 export interface AnnotatieDocument {
@@ -203,6 +219,8 @@ export interface AnnotatieDocument {
   lid: string;
   status: DocumentStatus;
   elementen: AnnotatieElement[];
+  /** Het productiespoor: elke agent-ronde die aan dit document werkte. */
+  runs: AgentRun[];
   created?: string | null;
   updated?: string | null;
 }

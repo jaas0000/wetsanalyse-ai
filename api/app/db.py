@@ -169,6 +169,9 @@ annotatie_documenten = Table(
     Column("lid", String(32), nullable=False, default=""),
     Column("status", String(24), nullable=False, default="in_review"),
     Column("elementen", _JSON, nullable=False, default=list),
+    # Het productiespoor: per agent-ronde welk model/agentversie de voorstellen maakte. Additief
+    # toegevoegd, dus `reconcile_schema` zet hem op bestaande tabellen bij (geen migratie).
+    Column("runs", _JSON, nullable=False, default=list),
     Column("created", _DT, nullable=False),
     Column("updated", _DT, nullable=False),
     Index("ix_annotatie_docs_user_updated", "user_id", "updated"),

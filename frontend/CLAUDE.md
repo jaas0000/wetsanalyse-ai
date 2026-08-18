@@ -312,6 +312,34 @@ toelichting → `interpretatie`, meerdere velden → `anders`). Vragen wat je zo
 - **Geen lifecycle-jargon in beeld**: de kaart toont "voorstel van Lex" / "door jou
   aangepast" / "door jou gemarkeerd" + tijd. Het volledige spoor staat in het auditlog.
 
+### De annotatie exporteren
+
+Een knop *Exporteren* in de kop van het artefact (`components/workbench/ExportKnop.tsx`) biedt
+**PDF / CSV / JSON**. Drie dingen om te kennen:
+
+- **Ook halverwege.** Geen statusdrempel: een concept exporteren is een normale handeling, en het
+  bestand zegt zelf hoeveel er nog te beoordelen is. Een drempel zou de jurist dwingen te doen
+  alsof hij klaar is.
+- **De wettekst reist mee.** De api heeft hem niet (de graaf is de bron), dus de knop stuurt
+  `info.leden_teksten` mee in de body. Zonder leden laat het rapport dat blok weg — nooit een
+  gereconstrueerde tekst naast een letterlijk citaat.
+- **De bestandsnaam komt van de server** (`Content-Disposition`), zodat hij overal gelijk is. De
+  BFF-route moet die header dus doorgeven (`app/api/_lib/proxy.ts` → `PASS_THROUGH_HEADERS`) en de
+  queryparam `formaat` expliciet doorsturen; een proxyroute die dat laat vallen faalt stil op het
+  default-formaat. Downloaden zelf gaat via `exporteerDocument` in `lib/api.ts` (Blob →
+  `createObjectURL` → `<a download>`) — het enige downloadpatroon in deze app.
+
+Wat de export draagt (en waarom het er is): naast de tabel het **volledige spoor** per markering
+en **met welk model** de agent het voorstel maakte (`AgentRun`, zie hieronder). Zonder dat laatste
+is een export achteraf niet te verantwoorden.
+
+### Herkomst van een agent-ronde
+
+graph-qa stuurt per annotatiebeurt één `run`-SSE-event vóór de elementen; `WerkplekClient` houdt
+het vast en geeft het mee aan `zetElementen`, die het als `run` in de PUT zet. De api hangt het aan
+het document (`runs[]`) én aan elk element (`geproduceerd_door`). Stuur je het niet mee, dan blijft
+het bestaande spoor staan — nooit overschrijven met "onbekend".
+
 ### Zelf annoteren (tekstselectie)
 
 De jurist kan in `DocumentPaneel` tekst selecteren en die zelf markeren. Zes dingen om te kennen:

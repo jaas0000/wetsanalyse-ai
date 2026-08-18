@@ -16,19 +16,23 @@ POST   /v1/annotatie/documenten/{slug}/elementen                 — eigen marke
 DELETE /v1/annotatie/documenten/{slug}/elementen/{id}            — eigen markering verwijderen
 POST   /v1/annotatie/documenten/{slug}/elementen/{id}/beslissing — human-decision
 GET    /v1/annotatie/documenten/{slug}/audit                     — append-only tijdlijn
+POST   /v1/annotatie/documenten/{slug}/export?formaat=…          — export (pdf|csv|json)
 """
 from __future__ import annotations
 
 import uuid
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response, status
+from pydantic import BaseModel
 
 from ..annotatie_contracts import (
+    AgentRun,
     AnnotatieDocument, AnnotatieElement, AuditRecord, Beslissing, BeslissingInvoer, BeslissingType,
     CriticSuggestie, DocumentCreate, DocumentSamenvatting, ElementInvoer, ElementenInvoer,
     Lifecycle,
     MensElementInvoer,
 )
+from ..annotatie_export import FORMATEN, LidTekst, bestandsnaam, bouw_export, serialiseer
 from ..annotatie_store import CONFLICT, GEEN_ELEMENT, AnnotatieStore, etag_van
 from ..auth import require_client
 from ..db import utcnow
@@ -59,9 +63,12 @@ def _is_bevroren(el: AnnotatieElement) -> bool:
     return el.herkomst == "mens" or bool(el.beslissingen)
 
 
-def _uit_invoer(e: ElementInvoer, element_id: str) -> AnnotatieElement:
+def _uit_invoer(e: ElementInvoer, element_id: str, run: AgentRun | None) -> AnnotatieElement:
     """Nieuw agent-element uit een voorstel. Heeft de Critic een aandacht-niveau gezet, dan is het al
-    door de Critic gezien → lifecycle `critic_checked`, anders `voorgesteld`."""
+    door de Critic gezien → lifecycle `critic_checked`, anders `voorgesteld`.
+
+    `run` legt vast wélk model dit voorstel maakte; ontbreekt hij (client van vóór de registratie),
+    dan blijft het veld leeg in plaats van dat er een model wordt aangenomen."""
     return AnnotatieElement(
         id=element_id, klasse=e.klasse, tekst=e.tekst, lid=e.lid,
         toelichting=e.toelichting, vindplaats=e.vindplaats,
@@ -69,6 +76,7 @@ def _uit_invoer(e: ElementInvoer, element_id: str) -> AnnotatieElement:
         lifecycle=Lifecycle.critic_checked if e.aandacht is not None else Lifecycle.voorgesteld,
         alternatieven=e.alternatieven, aandacht=e.aandacht, critic=e.critic,
         critic_rondes=list(e.critic_rondes), anker=e.anker,
+        geproduceerd_door=run,
     )
 
 
@@ -201,7 +209,7 @@ async def zet_elementen(
                 el = next((k for k in kandidaten if k.id not in gezien), None)
 
             if el is None:
-                nieuw = _uit_invoer(e, e.id or uuid.uuid4().hex[:12])
+                nieuw = _uit_invoer(e, e.id or uuid.uuid4().hex[:12], req.run)
                 doc.elementen.append(nieuw)
                 op_id[nieuw.id] = nieuw
                 gezien.add(nieuw.id)
@@ -234,6 +242,10 @@ async def zet_elementen(
                 el.anker = e.anker
             if diff:
                 el.gewijzigd_door = "agent"
+                # De herziening komt van DEZE run: de herkomst schuift mee, anders wijst hij naar
+                # een model dat deze inhoud niet heeft geproduceerd.
+                if req.run is not None:
+                    el.geproduceerd_door = req.run
                 el.lifecycle = Lifecycle.critic_checked if el.aandacht is not None else Lifecycle.voorgesteld
                 regels.append(("element-herzien", el.id, {"ronde": req.ronde, "diff": diff}))
             elif critic_bij:
@@ -253,6 +265,9 @@ async def zet_elementen(
                 "ronde": req.ronde, "aandacht": s.aandacht.value if s.aandacht else None,
                 "motivatie": s.motivatie,
             }))
+
+        if req.run is not None:
+            doc.runs.append(req.run)
 
         if req.trek_ontbrekende_in:
             behouden = []
@@ -279,6 +294,13 @@ async def zet_elementen(
             "ronde": req.ronde, "aangeboden": len(req.elementen), "verworpen": verworpen,
             "nieuw": telling["element-voorgesteld"], "herzien": telling["element-herzien"],
             "ingetrokken": telling["element-ingetrokken"], "suggesties": telling["critic-suggestie"],
+            # De onwijzigbare vastlegging van de herkomst: het document draagt de huidige staat,
+            # het auditlog draagt wat er wanneer met welk model gebeurde.
+            "model": req.run.model if req.run else "",
+            "provider": req.run.provider if req.run else "",
+            "agent_versie": req.run.agent_versie if req.run else "",
+            "critic_rondes": req.run.critic_rondes if req.run else 0,
+            "stop_reden": req.run.stop_reden if req.run else "",
         }),
         *regels,
     ])
@@ -447,3 +469,49 @@ async def haal_audit(
     schrijft loopt dit bij een lange review in de honderden."""
     await _document_or_404(store, slug, user_id)
     return await store.lees_audit(slug, limit, offset)
+
+
+class ExportInvoer(BaseModel):
+    """Optionele bijlage bij een export: de letterlijke wettekst per lid.
+
+    De api heeft die tekst niet — de graaf is de bron en de werkplek haalt hem al op via
+    graph-qa (`GET /v1/artikel`). Meesturen mag, verzinnen niet: zonder leden blijft het
+    wettekst-blok uit het rapport in plaats van dat er iets wordt gereconstrueerd.
+    """
+
+    leden: list[LidTekst] = []
+
+
+@router.post("/documenten/{slug}/export")
+async def exporteer_document(
+    slug: str,
+    req: ExportInvoer | None = None,
+    formaat: str = Query("pdf", pattern="^(pdf|csv|json)$"),
+    user_id: str = Depends(actieve_userid),
+    store: AnnotatieStore = Depends(get_annotatie_store),
+):
+    """Het hele document als bestand: de markeringen als tabel plus het volledige spoor.
+
+    Werkt in elke fase — een document dat nog in review is exporteert gewoon, met de telling
+    "te beoordelen" in de kop, zodat een concept nooit als eindproduct kan worden gelezen.
+    """
+    doc = await _document_or_404(store, slug, user_id)
+
+    # Het hele auditlog, niet de eerste pagina: een export die de tijdlijn halverwege afkapt is
+    # erger dan geen tijdlijn, want de afkapping is in het bestand niet te zien.
+    audit = []
+    while True:
+        blok = await store.lees_audit(slug, limit=500, offset=len(audit))
+        audit.extend(blok)
+        if len(blok) < 500:
+            break
+
+    export = bouw_export(doc, audit, (req.leden if req else []), formaat=formaat)
+    inhoud = serialiseer(export, formaat)
+    media_type = FORMATEN[formaat][0]
+    naam = bestandsnaam(doc, formaat)
+    return Response(
+        content=inhoud,
+        media_type=media_type,
+        headers={"Content-Disposition": f'attachment; filename="{naam}"'},
+    )

@@ -9,7 +9,7 @@ zelfstandige, Dockeriseerbare dienst die je via HTTP (Postman/Swagger) bevraagt 
 De API bedient zeven dingen:
 
 1. **Het JAS-annotatiedomein van de werkplek** (`/v1/annotatie/*`): documenten/elementen/beslissingen
-   + append-only auditlog. De agent stelt voor, de mens beslist; de API bewaart de review-state.
+   + append-only auditlog + **export** (pdf/csv/json). De agent stelt voor, de mens beslist; de API bewaart de review-state.
    **Per-gebruiker gescopet** via de vertrouwde `X-User-Id`-header (`actieve_userid`, net als de
    gesprekken; 404 op andermans document). De bearer-`client_id` blijft als herkomst in de audit.
 2. **De chatgeschiedenis van de werkplek** (`/v1/gesprekken/*`): gesprekken + geordende berichten
@@ -68,7 +68,8 @@ De API bedient zeven dingen:
   conform een schema). `throttle.py` — proces-globale **concurrency-rem** (semafoor) op gelijktijdige
   LLM-calls (`WETSANALYSE_LLM_MAX_CONCURRENCY`); ingesteld in de lifespan. De enige LLM-call in deze
   API is nu de admin-**verbindingstest** (`POST /v1/admin/profiles/{name}/test`).
-- `validation.py` — `GELDIGE_JAS_KLASSEN` (canonieke bron uit de skill-`references`) + de
+- `validation.py` — `GELDIGE_JAS_KLASSEN`, `JAS_KLASSEN_VOLGORDE`, `JAS_KLASSE_KLEUREN` en
+  `jas_sorteersleutel` (canonieke bron uit de skill-`scripts`) + de
   brongetrouwheid-/schema-helpers. Het annotatiedomein valideert de klasse van een voorgesteld element
   hiertegen.
 - `ratelimit.py` — in-process per-client rate limit (dependency) + `QuotaExceeded`.
@@ -80,6 +81,23 @@ De API bedient zeven dingen:
   Levenscyclus: document aanmaken → `PUT elementen` (de uitkomst van één agent-ronde) → per element
   een human-decision (approve/edit/reject/comment; edit/reject vereisen `review_reason`; edit berekent
   een `diff`) → `GET audit`. **Geen graaf-mutatie** vanuit dit domein.
+
+  **Herkomst: met welk model is geannoteerd.** graph-qa stuurt per beurt een `run`-event
+  (model/provider/agent_versie/critic_rondes/stop_reden); de werkplek geeft dat mee in
+  `PUT elementen` en de api legt het vast op het document (`runs[]`, eigen JSON-kolom), op elk
+  agent-element dat die ronde maakte of herzag (`geproduceerd_door`) én in het auditdetail. Een
+  ronde **zonder** run wist niets — een oudere client mag het spoor niet uitgummen. Documenten van
+  vóór deze registratie tonen in de export expliciet "onbekend (vóór registratie)".
+
+  **Exporteren** (`annotatie_export.py`): `POST /documenten/{slug}/export?formaat=pdf|csv|json`
+  bouwt één canonieke `ExportDocument` (document + telling + elementen mét volledig spoor + het
+  hele auditlog) en serialiseert die drie keer. Werkt in elke fase; een document dat nog in review
+  is draagt de telling "te beoordelen" in de kop. De PDF (reportlab) is de JAS-tabel uit
+  `docs/wetsanalyse/wa-table.png`: de klassecel draagt de labelkleur uit
+  `validation.JAS_KLASSE_KLEUREN` (canoniek uit de skill; `test_jas_kleuren_drift.py` bewaakt dat
+  `frontend/lib/jas.ts` dezelfde waarden draagt). De **wettekst zit niet in deze api** — de
+  werkplek stuurt de leden mee in de body; ontbreken ze, dan blijft dat blok weg in plaats van dat
+  er iets gereconstrueerd wordt.
 
   **`PUT elementen` is een MERGE, geen vervanging.** De agent kan meerdere rondes draaien
   (annoteerder ⇄ Critic) en de jurist werkt in hetzelfde document; vervangen wiste eerder alle

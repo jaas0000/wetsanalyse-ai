@@ -5,7 +5,9 @@
 import { adminAuthHeader, apiBaseUrl, authHeader } from "@/lib/config";
 import { logger } from "@/lib/logger";
 
-const PASS_THROUGH_HEADERS = ["retry-after", "location", "content-type"];
+// `content-disposition` hoort erbij zodra een endpoint een bestand teruggeeft (de export):
+// zonder die header opent de browser de download als een naamloze blob.
+const PASS_THROUGH_HEADERS = ["retry-after", "location", "content-type", "content-disposition"];
 
 /** Hoe lang de BFF op de upstream wacht.
  *

@@ -35,4 +35,12 @@ def _load_skill_module(naam: str):
 
 
 _validate = _load_skill_module("validate_analyse")
-GELDIGE_JAS_KLASSEN: set[str] = _validate.GELDIGE_JAS_KLASSEN  # canonieke bron (drift-fix)
+
+# Alles hieronder komt uit dezelfde canonieke bron (drift-fix). Naast de validatie-set heeft de
+# export de weergave-volgorde en de labelkleuren van de JAS-tabel nodig; die horen dus ook hier
+# vandaan te komen en niet uit een tweede lijstje in de exportmodule.
+GELDIGE_JAS_KLASSEN: set[str] = _validate.GELDIGE_JAS_KLASSEN
+JAS_KLASSEN_VOLGORDE: tuple[str, ...] = _validate.JAS_KLASSEN_VOLGORDE
+JAS_KLASSE_KLEUREN: dict[str, tuple[str, str]] = _validate.JAS_KLASSE_KLEUREN
+JAS_TEKSTKLEUR: str = _validate.JAS_TEKSTKLEUR
+jas_sorteersleutel = _validate.jas_sorteersleutel

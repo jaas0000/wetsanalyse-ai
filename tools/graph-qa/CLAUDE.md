@@ -152,6 +152,12 @@ kost de lus dus niets.
   één env-var, geen deploy-rollback. Er is een test die dat bewaakt.
 - **`emit_node` is de enige plek die annotatie-events uitstuurt.** Zou de Critic dat doen, dan zag de
   werkplek elke tussenversie van de lus voorbijkomen.
+- **Elke beurt meldt zijn herkomst.** `emit_node` stuurt vóór de elementen één `run`-event
+  (`model`/`provider`/`agent_versie`/`critic_rondes`/`stop_reden`); de werkplek legt dat bij de
+  api vast op het document én per element. Zonder dat is achteraf niet vast te stellen mét welk
+  model een markering is gemaakt — precies wat een export moet dragen en wat de latere
+  graaf-promotie als provenance nodig heeft. `agent_versie` komt uit `AGENT_VERSION` en valt
+  terug op de pakketversie; onbekend blijft leeg (liever geen versie dan een verzonnen versie).
 - **Faalgedrag: nooit minder dan we al hadden.** Critic faalt → direct emitten met de voorstellen
   ongemoeid (ook hun eerdere oordeel). Herziening faalt of levert niets gegronds → vorige voorstellen
   behouden. De merge is een union; alleen een expliciete `verwijder`-instructie laat iets verdwijnen.
@@ -236,7 +242,7 @@ Drie dingen die je verder moet kennen voordat je hieraan werkt:
   bouwer in `graph/queries.py`. `raw_sparql` blijft de afgeschermde ontsnapping.
 - **DI, geen globale clients.** Afhankelijkheden achter een poort + adapter, zodat ze faken te zijn.
 - **SSE-event-contract.** De event-types (`status`/`reason`/`token`/`sources`/`grounding`/`done`/`error`,
-  plus `doel`/`element`/`ontbrekend`/`suggestie`/`kandidaten` van de annotatie-worker — alles over `POST /v1/chat`) zijn het
+  plus `doel`/`run`/`element`/`ontbrekend`/`suggestie`/`kandidaten` van de annotatie-worker — alles over `POST /v1/chat`) zijn het
   contract met de consumenten (de werkplek); wijzig ze
   bewust en gelijktijdig. **`reason` = het denkproces** (tool-narratie, live gestreamd); **`token` = alléén
   het eindantwoord** — hou die twee gescheiden zodat de werkplek ze los kan tonen. De annotatie-keten is

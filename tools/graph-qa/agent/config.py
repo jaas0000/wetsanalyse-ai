@@ -16,6 +16,17 @@ from pathlib import Path
 from pydantic import BaseModel
 
 
+def _pakketversie() -> str:
+    """De versie van deze agent, voor de herkomst bij een annotatie. Onbekend → lege string:
+    liever geen versie dan een verzonnen versie."""
+    try:
+        from importlib.metadata import version
+
+        return version("graph-qa")
+    except Exception:
+        return ""
+
+
 def _read_secret(env: Mapping[str, str], name: str) -> str | None:
     """Lees een secret: eerst `<NAME>_FILE` (host-bestand, Docker-conventie), anders `<NAME>`."""
     path = env.get(name + "_FILE")
@@ -39,6 +50,11 @@ class Settings(BaseModel):
     azure_foundry_api_key: str | None = None
     azure_foundry_base_url: str | None = None
     llm_model: str = "claude-sonnet-4-6"
+    # Herkomst die met elke annotatie meereist: welk model/welke agentversie het voorstel maakte.
+    # `llm_provider` is beschrijvend (de adapter praat via Azure AI Foundry met de Anthropic-SDK);
+    # `agent_versie` komt uit de image-tag/env en valt terug op de pakketversie.
+    llm_provider: str = "anthropic_via_azure_foundry"
+    agent_versie: str = ""
 
     # Agent-loop
     max_turns: int = 20
@@ -100,6 +116,8 @@ class Settings(BaseModel):
             "azure_foundry_api_key": _read_secret(e, "AZURE_FOUNDRY_API_KEY"),
             "azure_foundry_base_url": e.get("AZURE_FOUNDRY_BASE_URL"),
             "llm_model": e.get("LLM_MODEL"),
+            "llm_provider": e.get("LLM_PROVIDER"),
+            "agent_versie": e.get("AGENT_VERSION") or _pakketversie(),
             "max_turns": e.get("MAX_TURNS"),
             "max_history_chars": e.get("MAX_HISTORY_CHARS"),
             "enable_decomposition": e.get("ENABLE_DECOMPOSITION"),

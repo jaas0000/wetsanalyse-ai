@@ -24,6 +24,7 @@ import type {
   AnnotatieElement,
   AgentDoel,
   AgentKandidaat,
+  AgentRun,
   AnnotatieDocument,
   BeslissingInvoer,
   Bron,
@@ -294,6 +295,9 @@ export function WerkplekClient({ initialGesprekId, onGesprekAangemaakt, onGewijz
     const ontbrekend: OntbrekendItem[] = [];
     const suggesties: { element_id: string; aandacht: string; motivatie: string }[] = [];
     let kandidaten: AgentKandidaat[] = [];
+    // De herkomst van deze beurt (welk model), zodat de api kan vastleggen waar de voorstellen
+    // vandaan komen. Blijft null bij een agent die het `run`-event nog niet stuurt.
+    let run: AgentRun | null = null;
     let tekst = "";
     let denk = "";
     let bronnen: Bron[] = [];
@@ -325,6 +329,7 @@ export function WerkplekClient({ initialGesprekId, onGesprekAangemaakt, onGewijz
           },
           onDoel: (d) => (doelRef.d = d),
           onElement: (e) => (els = mergeVoorstellen(els, e)),
+          onRun: (r) => (run = r),
           onOntbrekend: (xs) => ontbrekend.push(...xs),
           onSuggestie: (s) => suggesties.push(s),
           onKandidaten: (k) => (kandidaten = k),
@@ -369,7 +374,7 @@ export function WerkplekClient({ initialGesprekId, onGesprekAangemaakt, onGewijz
           lid: doel.lid || null,
           werkgebied: doel.citeertitel || "",
         });
-        const bijgewerkt = await zetElementen(document.slug, els, 0, suggesties);
+        const bijgewerkt = await zetElementen(document.slug, els, 0, suggesties, run);
         setDocs((m) => ({ ...m, [bijgewerkt.slug]: bijgewerkt }));
         setInfos((m) => ({ ...m, [bijgewerkt.slug]: graaf }));
         setItems((xs) =>

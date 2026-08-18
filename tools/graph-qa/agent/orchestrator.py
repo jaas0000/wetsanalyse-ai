@@ -20,6 +20,7 @@ from __future__ import annotations
 import logging
 import operator
 import re
+from datetime import datetime, timezone
 from typing import Annotated, Any, TypedDict
 
 from langgraph.config import get_stream_writer
@@ -38,6 +39,7 @@ from .annotatie_prompt import (
 from .config import Settings
 from .graph.results import parse_select
 from .grounding import check_grounding, curate_sources
+from .models import AgentRun
 from .ports import GraphPort, LLMPort
 from .prompts import SYSTEM_PROMPT
 from .provenance import collect_sources
@@ -959,9 +961,10 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
         return "critic" if state.get("herziening_wijzigde") else "emit"
 
     def emit_node(state: State) -> dict[str, Any]:
-        """De enige plek die annotatie-events uitstuurt: `element` per voorstel, één `ontbrekend`, en
-        de samenvattings-`token`. Apart gehouden van de Critic zodat de herzieningslus zoveel rondes
-        kan draaien als nodig zonder dat de werkplek tussenversies te zien krijgt."""
+        """De enige plek die annotatie-events uitstuurt: één `run`, `element` per voorstel, één
+        `ontbrekend`, en de samenvattings-`token`. Apart gehouden van de Critic zodat de
+        herzieningslus zoveel rondes kan draaien als nodig zonder dat de werkplek tussenversies
+        te zien krijgt."""
         writer = get_stream_writer()
         voorstellen = list(state.get("voorstellen") or [])
         if not voorstellen:
@@ -969,6 +972,18 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
         doel = _bepaal_doel(state)
         aanduiding = doel.get("artikel") or doel.get("nummer") or ""
         ontbrekend = state.get("critic_ontbrekend") or []
+
+        # Vóór de elementen: met welk model deze voorstellen zijn gemaakt. Zonder dit is achteraf
+        # niet meer vast te stellen wat een markering produceerde — de werkplek legt het vast bij
+        # de api en de export draagt het als herkomst.
+        writer({"type": "run", "run": AgentRun(
+            model=model,
+            provider=settings.llm_provider,
+            agent_versie=settings.agent_versie,
+            critic_rondes=int(state.get("critic_ronde") or 0),
+            stop_reden=str(state.get("stop_reden") or ""),
+            tijd=datetime.now(timezone.utc),
+        ).model_dump(mode="json")})
 
         met_aandacht = 0
         met_twijfel = 0

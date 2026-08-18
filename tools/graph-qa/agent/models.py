@@ -3,6 +3,7 @@ Pydantic-modellen voor request/response van de graph-qa API.
 """
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel
@@ -108,6 +109,22 @@ class CriticRonde(BaseModel):
     actie: str = "behoud"              # behoud | vervang | verwijder
     voorstel_klasse: str = ""
     voorstel_tekst: str = ""
+
+
+class AgentRun(BaseModel):
+    """De herkomst van één annotatiebeurt: wélk model de voorstellen maakte.
+
+    Reist als `run`-event mee naar de werkplek, die het bij de api vastlegt. Zonder deze gegevens
+    is achteraf niet te zeggen waar een markering vandaan komt — precies wat een export moet dragen
+    en wat de latere promotie naar de graaf als provenance nodig heeft.
+    """
+
+    model: str = ""
+    provider: str = ""
+    agent_versie: str = ""
+    critic_rondes: int = 0
+    stop_reden: str = ""
+    tijd: datetime | None = None
 
 
 class AnnotatieVoorstel(BaseModel):

@@ -58,6 +58,24 @@ class Aandacht(str, Enum):
 
 # --- domein ------------------------------------------------------------------
 
+class AgentRun(BaseModel):
+    """Wie/wat een agent-ronde produceerde — de provenance van een voorstel.
+
+    Zonder dit is achteraf niet vast te stellen mét welk model een markering tot stand kwam, en
+    dat is precies wat een export moet dragen en wat de latere graaf-promotie als herkomst nodig
+    heeft. Het hangt op twee plekken: op het document (het volledige spoor van alle rondes) en op
+    het element zelf, want tussen twee beurten kan het geconfigureerde model wisselen.
+    """
+
+    ronde: int = 0
+    model: str = ""              # bv. "claude-sonnet-4-6"
+    provider: str = ""
+    agent_versie: str = ""
+    critic_rondes: int = 0       # aantal herzieningen in deze beurt
+    stop_reden: str = ""         # waaróm de annotatielus eindigde
+    tijd: datetime = Field(default_factory=utcnow)
+
+
 class Alternatief(BaseModel):
     """Kandidaat-klasse bij twijfel (disambiguatie)."""
 
@@ -142,6 +160,7 @@ class AnnotatieElement(BaseModel):
     critic_rondes: list[CriticRonde] = []
     critic_suggestie: CriticSuggestie | None = None   # alleen bij herkomst == "mens"
     anker: Anker | None = None
+    geproduceerd_door: AgentRun | None = None   # None = agent-ronde van vóór de registratie, of mens
     diff: dict = {}            # bij een edit: {veld: {"voor": ..., "na": ...}}
     beslissingen: list[Beslissing] = []
 
@@ -172,6 +191,7 @@ class AnnotatieDocument(BaseModel):
     lid: str = ""
     status: DocumentStatus = DocumentStatus.in_review
     elementen: list[AnnotatieElement] = []
+    runs: list[AgentRun] = []   # het productiespoor: elke agent-ronde die aan dit document werkte
     created: datetime | None = None
     updated: datetime | None = None
 
@@ -232,6 +252,10 @@ class ElementenInvoer(BaseModel):
     # mogen niet als voorstel terugkomen. Ze landen in `critic_suggestie` — advies, geen wijziging.
     suggesties: list[SuggestieInvoer] = []
     ronde: int = 0
+    # De productiegegevens van deze ronde (model/provider/agentversie), zoals graph-qa ze in het
+    # `run`-event meestuurt. Ontbreekt hij (oudere client), dan blijft het spoor leeg in plaats van
+    # dat er iets wordt aangenomen.
+    run: AgentRun | None = None
     # Agent-elementen die in deze ronde niet meer voorkomen: intrekken (default) of laten staan.
     # Elementen van de jurist en elementen met een beslissing worden nooit ingetrokken.
     trek_ontbrekende_in: bool = True

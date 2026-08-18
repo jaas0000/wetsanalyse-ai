@@ -13,7 +13,7 @@ from typing import Callable
 from sqlalchemy import delete, insert, select, update
 
 from . import db
-from .annotatie_contracts import AnnotatieDocument, AnnotatieElement, AuditRecord
+from .annotatie_contracts import AgentRun, AnnotatieDocument, AnnotatieElement, AuditRecord
 
 # Sentinel: het document bestaat (en is van de client) maar het gevraagde element niet.
 GEEN_ELEMENT = object()
@@ -39,6 +39,7 @@ def _naar_document(row) -> AnnotatieDocument:
         lid=d["lid"],
         status=d["status"],
         elementen=[AnnotatieElement.model_validate(e) for e in (d["elementen"] or [])],
+        runs=[AgentRun.model_validate(r) for r in (d["runs"] or [])],
         created=db.aware(d["created"]),
         updated=db.aware(d["updated"]),
     )
@@ -58,6 +59,7 @@ class AnnotatieStore:
                 lid=doc.lid or "",
                 status=doc.status.value,
                 elementen=[e.model_dump(mode="json") for e in doc.elementen],
+                runs=[r.model_dump(mode="json") for r in doc.runs],
                 created=now,
                 updated=now,
             ))
@@ -118,7 +120,11 @@ class AnnotatieStore:
             await conn.execute(
                 update(db.annotatie_documenten)
                 .where(db.annotatie_documenten.c.slug == slug)
-                .values(elementen=[e.model_dump(mode="json") for e in doc.elementen], updated=now)
+                .values(
+                    elementen=[e.model_dump(mode="json") for e in doc.elementen],
+                    runs=[r.model_dump(mode="json") for r in doc.runs],
+                    updated=now,
+                )
             )
         doc.updated = now
         return doc

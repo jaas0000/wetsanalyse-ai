@@ -42,6 +42,13 @@ herschrijft.
 | `jas:toelichting` | literal | — | Motivatie van de classificatie. |
 | `jas:twijfel` | literal | — | Expliciete twijfel/aanname bij de markering. |
 
+> **Herkomst is inmiddels beschikbaar.** Het annotatiedomein legt sinds de export-slag per element
+> vast met welk model het voorstel is gemaakt (`geproduceerd_door`: model/provider/agent_versie/
+> critic_rondes) en per document het volledige `runs[]`-spoor. Bij het bouwen van dit schrijfpad
+> (Fase 4) hoort die provenance mee te gaan — de tabel hierboven kent er nog geen predicaten voor.
+> De JSON-export (`POST /v1/annotatie/documenten/{slug}/export?formaat=json`) is de superset waaruit
+> die mapping te maken is.
+
 ## Voorbeeld
 
 ```turtle

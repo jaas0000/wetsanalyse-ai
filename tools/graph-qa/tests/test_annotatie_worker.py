@@ -241,3 +241,36 @@ def test_verworpen_fragment_breekt_de_annotatie_niet():
     ))
     els = [e["element"] for e in events if e["type"] == "element"]
     assert [el["klasse"] for el in els] == ["Rechtssubject"]
+
+
+def test_run_event_draagt_de_herkomst_van_de_beurt():
+    """Precies één `run`-event, vóór de elementen, met het model dat ze maakte.
+
+    Zonder deze herkomst kan de werkplek niet vastleggen waarmee geannoteerd is, en is achteraf
+    niet meer te zeggen waar een markering vandaan komt.
+    """
+    llm = FakeLLM([
+        response([text_block("WORKERS: annotatie\nPLAN: annoteer art 9 lid 1")], "end_turn"),
+        response([tool_block("t1", "get_lid", {"bwb_id": "BWBR0004770", "artikel": "9", "lid": "1"})], "tool_use"),
+        response([text_block('{"bwbId":"BWBR0004770","artikel":"9","lid":"1","nummer":"","citeertitel":"IW 1990"}')], "end_turn"),
+        response([text_block(ELEMENTEN_JSON)], "end_turn"),
+        response([text_block(CRITIC_JSON)], "end_turn"),
+    ])
+    events = _run(answer_stream(
+        "annoteer artikel 9 lid 1 van de Invorderingswet 1990",
+        settings=make_settings(enable_decomposition=True, critic_max_rondes=0,
+                               llm_model="claude-sonnet-4-6", agent_versie="9.9.9"),
+        llm=llm, graph=FakeGraph(result=LID_TSV),
+    ))
+
+    runs = [e for e in events if e["type"] == "run"]
+    assert len(runs) == 1
+    run = runs[0]["run"]
+    assert run["model"] == "claude-sonnet-4-6"
+    assert run["provider"] == "anthropic_via_azure_foundry"
+    assert run["agent_versie"] == "9.9.9"
+    assert run["tijd"]
+
+    soorten = [e["type"] for e in events]
+    assert soorten.index("run") < soorten.index("element")
+

@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Dialog, type DialogVariant } from "@/components/ui/Dialog";
 import { Melding } from "@/components/ui/Melding";
 import { DocumentPaneel } from "@/components/workbench/DocumentPaneel";
+import { ExportKnop } from "@/components/workbench/ExportKnop";
 import { OntbrekendLijst } from "@/components/workbench/OntbrekendLijst";
 import { ReviewQueue, type OpenRij } from "@/components/workbench/ReviewQueue";
 import { SelectiePopover, type SelectieDoel } from "@/components/workbench/SelectiePopover";
@@ -256,6 +257,8 @@ export function ArtefactPaneel({
             <span className={`inline-flex shrink-0 items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${DOCUMENT_STATUS_STYLE[doc.status]}`}>
               {DOCUMENT_STATUS_LABEL[doc.status]}
             </span>
+            {/* De wettekst gaat mee naar de export: de api heeft hem niet (de graaf is de bron). */}
+            <ExportKnop slug={doc.slug} leden={info.leden_teksten} onFout={setFout} />
             <button
               type="button"
               onClick={onSluit}

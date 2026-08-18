@@ -54,6 +54,31 @@ def jas_sorteersleutel(klasse: str) -> int:
     except ValueError:
         return len(JAS_KLASSEN_VOLGORDE)
 
+# De labelkleuren per JAS-klasse uit de officiële JAS-tabel (docs/wetsanalyse/wa-table.png),
+# per pixel gesampled: (achtergrond, rand). De rand is dezelfde kleur ~22% donkerder; de tekst is
+# altijd #1A1A1A (≥ 5,4:1 op elke tint). Samengevoegde klassen nemen de hoofdkleur uit de tabel
+# (Variabele / Parameter / Delegatiebevoegdheid).
+#
+# Dit is de CANONIEKE bron: de api leest hem in voor de PDF-export (api/app/validation.py) en
+# frontend/lib/jas.ts draagt dezelfde waarden als Tailwind-klassen, bewaakt door een drift-test.
+JAS_KLASSE_KLEUREN: dict[str, tuple[str, str]] = {
+    "Rechtssubject": ("#d8eaf7", "#a8b6c0"),
+    "Rechtsobject": ("#b2c3e3", "#8a98b1"),
+    "Rechtsbetrekking": ("#90a2d0", "#707ea2"),
+    "Rechtsfeit": ("#bad8f1", "#91a8bb"),
+    "Voorwaarde": ("#b7d8cd", "#8ea89f"),
+    "Afleidingsregel": ("#d47479", "#a55a5e"),
+    "Variabele en variabelewaarde": ("#f5dc5e", "#bfab49"),
+    "Parameter en parameterwaarde": ("#e6b8bb", "#b38f91"),
+    "Operator": ("#d7e8e2", "#a7b4b0"),
+    "Tijdsaanduiding": ("#cbb8d6", "#9e8fa6"),
+    "Plaatsaanduiding": ("#e6d3e5", "#b3a4b2"),
+    "Delegatiebevoegdheid en delegatie-invulling": ("#b0b1b2", "#898a8a"),
+    "Brondefinitie": ("#edefef", "#b8baba"),
+}
+
+JAS_TEKSTKLEUR = "#1A1A1A"
+
 GELDIGE_VERWIJZING_FUNCTIES = {
     "definitie", "schakel", "delegatie", "intra-artikel", "informatief",
 }
