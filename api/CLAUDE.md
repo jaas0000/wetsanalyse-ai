@@ -16,7 +16,11 @@ De API bedient zeven dingen:
    (`gesprek_contracts.py`/`gesprek_store.py`/`routers/gesprekken.py`). Net als het annotatie-domein
    **per-gebruiker gescopet** via de vertrouwde `X-User-Id`-header (`actieve_userid`, hergebruikt uit
    de auth-router; 404 op andermans gesprek). Een bericht kan naar een annotatie-document verwijzen
-   (`annotatie_slug`); de review-state zelf blijft in het annotatie-domein.
+   (`annotatie_slug`); de review-state zelf blijft in het annotatie-domein. Die verwijzing heeft
+   **geen foreign key**, dus draagt het bericht er zijn eigen leesbare label bij (`annotatie_titel`):
+   wordt het document later verwijderd, dan blijft het gesprek leesbaar in plaats van naar een
+   naamloze slug te wijzen. `DELETE` van een annotatie-document raakt de berichten bewust niet — het
+   gesprek is een verslag van wat er gebeurde.
 3. **Login + gebruikersbeheer** (`/v1/auth/*` + `/v1/admin/users`): de API is de identiteitsbron van
    de webapp (userid + wachtwoord, rollen, optionele TOTP-2FA).
 4. **LLM-modelprofielbeheer** (`/v1/admin/profiles`).

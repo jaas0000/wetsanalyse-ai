@@ -212,7 +212,7 @@ gesprekken = Table(
 )
 
 # De berichten binnen een gesprek. `inhoud` (JSON) draagt de heterogene payload van één beurt:
-# {tekst, denk?, bronnen?, annotatie_slug?, ontbrekend?}. De tijdlijn = ORDER BY id.
+# {tekst, denk?, bronnen?, annotatie_slug?, annotatie_titel?, ontbrekend?}. De tijdlijn = ORDER BY id.
 gesprek_berichten = Table(
     "gesprek_berichten",
     metadata,

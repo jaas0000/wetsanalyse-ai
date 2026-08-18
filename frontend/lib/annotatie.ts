@@ -1,3 +1,5 @@
+import { isApiError } from "./api";
+import { naamVan, vindplaatsLabel } from "./annotatieOverzicht";
 import { jasVolgorde } from "./jas";
 import type { LidRegel } from "./selectie";
 import type {
@@ -290,4 +292,33 @@ export function eigenMarkeringenVoorContext(
 export function vraagContextLabel(el: AnnotatieElement, doc?: AnnotatieDocument): string {
   const plek = doc ? ` (art. ${doc.artikel}${el.lid ? ` lid ${el.lid}` : ""})` : "";
   return `${el.klasse} — “${el.tekst}”${plek}`;
+}
+
+// --- een annotatie die er niet meer is ---------------------------------------------------------
+
+/** Het leesbare label van een annotatie: "Invorderingswet 1990 — art. 9 lid 1".
+ *
+ *  Eén samenstelling voor de kop van de annotatiepagina én voor het label dat met de chatbeurt wordt
+ *  meebewaard (`annotatie_titel`). Dat meebewaren is de kern: een bericht verwijst met een kale slug
+ *  naar een document zonder foreign key, dus zodra dat document verwijderd is valt er niets meer op
+ *  te halen — en dan moet de kaart in de thread zichzelf nog kunnen benoemen.
+ */
+export function annotatieTitel(doc: {
+  citeertitel?: string;
+  werkgebied?: string;
+  bwbId: string;
+  artikel: string;
+  lid: string;
+}): string {
+  return `${naamVan(doc)} — ${vindplaatsLabel(doc)}`;
+}
+
+/** Is deze fout "bestaat niet (meer)" in plaats van "het ging even mis"?
+ *
+ *  De api geeft 404 zowel bij een verwijderd document als bij dat van iemand anders (bewust: dat lekt
+ *  het bestaan niet). Beide betekenen voor de UI hetzelfde: opnieuw proberen kan per definitie niet
+ *  lukken, dus toon een toestand en geen foutmelding met een retry-knop.
+ */
+export function isVerwijderd(e: unknown): boolean {
+  return isApiError(e) && e.status === 404;
 }

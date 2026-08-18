@@ -12,7 +12,7 @@ import {
   beslis, haalArtikelGraaf, haalDocument, isApiError, verwijderElement, voegElementToe,
   zetDocumentStatus,
 } from "@/lib/api";
-import { naamVan, vindplaatsLabel } from "@/lib/annotatieOverzicht";
+import { annotatieTitel, isVerwijderd } from "@/lib/annotatie";
 import type {
   AnnotatieDocument, BeslissingInvoer, GraafArtikel,
 } from "@/lib/types";
@@ -28,23 +28,22 @@ export function AnnotatieDetailClient({ slug }: { slug: string }) {
   const [doc, setDoc] = useState<AnnotatieDocument | null>(null);
   const [info, setInfo] = useState<GraafArtikel | null>(null);
   const [actiefId, setActiefId] = useState<string | undefined>();
+  // Twee soorten "niet geladen": een storing (retry heeft zin) en een verwijderd document (retry kan
+  // per definitie niet slagen). Die tweede is een toestand, geen fout.
   const [fout, setFout] = useState<string | null>(null);
+  const [weg, setWeg] = useState(false);
   const [melding, setMelding] = useState("");
 
   const laad = useCallback(async () => {
     setFout(null);
+    setWeg(false);
     try {
       const document = await haalDocument(slug);
       setDoc(document);
       setInfo(await haalArtikelGraaf(document.bwbId, document.artikel, document.lid));
     } catch (e) {
-      setFout(
-        isApiError(e)
-          ? e.status === 404
-            ? "Deze annotatie bestaat niet (meer)."
-            : `${e.detail} (${e.status})`
-          : (e as Error).message,
-      );
+      if (isVerwijderd(e)) setWeg(true);
+      else setFout(isApiError(e) ? `${e.detail} (${e.status})` : (e as Error).message);
     }
   }, [slug]);
 
@@ -84,7 +83,7 @@ export function AnnotatieDetailClient({ slug }: { slug: string }) {
     setMelding(nieuweStatus === "geaccordeerd" ? "Annotatie afgerond." : "Annotatie heropend.");
   }
 
-  const titel = doc ? `${naamVan(doc)} — ${vindplaatsLabel(doc)}` : "Annotatie";
+  const titel = doc ? annotatieTitel(doc) : "Annotatie";
 
   return (
     <div className="flex h-screen h-[100dvh] flex-col overflow-hidden bg-surface">
@@ -122,7 +121,16 @@ export function AnnotatieDetailClient({ slug }: { slug: string }) {
             {melding}
           </p>
 
-          {fout && !doc ? (
+          {weg && !doc ? (
+            <div className="p-5">
+              <Melding type="uitleg" titel="Deze annotatie is verwijderd">
+                Er valt hier niets meer te openen. Gesprekken waarin hij voorkwam blijven staan.{" "}
+                <Link href="/annotaties" className="focus-ring rounded font-medium underline underline-offset-2">
+                  Alle annotaties
+                </Link>
+              </Melding>
+            </div>
+          ) : fout && !doc ? (
             <div className="p-5">
               <Melding type="fout" titel="Niet geladen">
                 {fout}{" "}

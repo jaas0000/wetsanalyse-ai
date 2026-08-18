@@ -3,8 +3,8 @@ Contracten voor het gesprekken-domein (chat-werkruimte).
 
 De persistente **chatgeschiedenis** van de werkplek: per gebruiker een lijst gesprekken, elk met een
 geordende reeks berichten. Bewust **los** van het annotatie-domein: een bericht kan naar een
-annotatie-document verwijzen (`annotatie_slug`), maar de review-state zelf blijft in het
-annotatie-domein. De berichten dragen de heterogene payload van één chat-beurt (tekst + optioneel
+annotatie-document verwijzen (`annotatie_slug` + het leesbare `annotatie_titel`), maar de
+review-state zelf blijft in het annotatie-domein. De berichten dragen de heterogene payload van één chat-beurt (tekst + optioneel
 denkproces/bronnen, of een annotatie-verwijzing).
 """
 from __future__ import annotations
@@ -22,7 +22,12 @@ class Rol(str, Enum):
 
 class Bericht(BaseModel):
     """Eén beurt in het gesprek. Assistent-berichten dragen optioneel `denk`/`bronnen`, of een
-    verwijzing naar een annotatie-document (`annotatie_slug` + de Critic-`ontbrekend`-suggesties)."""
+    verwijzing naar een annotatie-document (`annotatie_slug` + de Critic-`ontbrekend`-suggesties).
+
+    `annotatie_titel` is het leesbare label van dat document op het moment van de beurt ("Wet IB 2001
+    — art. 3.1 lid 2"). Het bericht beschrijft zichzelf dus: wordt het document later verwijderd, dan
+    blijft het gesprek leesbaar in plaats van terug te vallen op een naamloze verwijzing. Oudere
+    berichten hebben het veld niet en leveren "" — dat is geen fout, maar een lege terugval."""
 
     id: int | None = None
     rol: Rol
@@ -30,6 +35,7 @@ class Bericht(BaseModel):
     denk: str = ""
     bronnen: list[dict] = []
     annotatie_slug: str = ""
+    annotatie_titel: str = ""
     ontbrekend: list[dict] = []
     created: datetime | None = None
 
@@ -61,6 +67,7 @@ class BerichtInvoer(BaseModel):
     denk: str = ""
     bronnen: list[dict] = []
     annotatie_slug: str = ""
+    annotatie_titel: str = ""
     ontbrekend: list[dict] = []
 
 

@@ -16,6 +16,8 @@ import {
   kandidaatPrompt,
   kandidatenAlsTekst,
   mergeVoorstellen,
+  annotatieTitel,
+  isVerwijderd,
 } from "./annotatie";
 import type { AnnotatieDocument, AnnotatieElement, GraafArtikel, VoorstelElement } from "./types";
 
@@ -441,5 +443,46 @@ describe("eigenMarkeringenVoorContext", () => {
   it("begrenst de lijst", () => {
     const veel = Array.from({ length: 40 }, (_, i) => el({ id: `m${i}`, herkomst: "mens" }));
     expect(eigenMarkeringenVoorContext(doc(veel))).toHaveLength(20);
+  });
+});
+
+describe("annotatieTitel", () => {
+  const basis = { bwbId: "BWBR0004770", artikel: "9", lid: "" };
+
+  it("zet naam en vindplaats samen tot één label", () => {
+    expect(annotatieTitel({ ...basis, citeertitel: "Invorderingswet 1990" })).toBe(
+      "Invorderingswet 1990 — art. 9",
+    );
+  });
+
+  it("neemt het lid mee als het document op één lid is afgebakend", () => {
+    expect(annotatieTitel({ ...basis, citeertitel: "Invorderingswet 1990", lid: "2" })).toBe(
+      "Invorderingswet 1990 — art. 9 lid 2",
+    );
+  });
+
+  it("valt terug op werkgebied en dan op het bwbId, net als de server", () => {
+    expect(annotatieTitel({ ...basis, werkgebied: "Uitstel van betaling" })).toBe(
+      "Uitstel van betaling — art. 9",
+    );
+    expect(annotatieTitel(basis)).toBe("BWBR0004770 — art. 9");
+  });
+});
+
+describe("isVerwijderd", () => {
+  it("herkent de 404 als 'bestaat niet (meer)'", () => {
+    // De api geeft 404 zowel bij een verwijderd document als bij dat van iemand anders; voor de UI
+    // is dat hetzelfde: opnieuw proberen kan niet slagen.
+    expect(isVerwijderd({ status: 404, detail: "Onbekend annotatie-document: doc-x" })).toBe(true);
+  });
+
+  it("laat storingen storingen blijven (die mogen wél een retry houden)", () => {
+    expect(isVerwijderd({ status: 502, detail: "Upstream onbereikbaar" })).toBe(false);
+    expect(isVerwijderd({ status: 504, detail: "Wachttijd verstreken" })).toBe(false);
+  });
+
+  it("is geen ApiError → geen verwijderd", () => {
+    expect(isVerwijderd(new Error("netwerk weg"))).toBe(false);
+    expect(isVerwijderd(undefined)).toBe(false);
   });
 });

@@ -292,8 +292,21 @@ de kaart een vraag klaar in het chatveld:
 mislukte beslissing landt in de `Melding` ván het artefact — `WerkplekClient.beslissing` gooit hem
 door en `ArtefactPaneel.beslis`/`wis` vangen hem — niet meer als chatbericht in de thread.
 
+**Een verwijderde annotatie is een toestand, geen fout.** Een bericht verwijst met een kale
+`annotatie_slug` naar een document — er is géén foreign key, dus verwijderen via `/annotaties` laat
+die verwijzing dangling achter. `isVerwijderd` (`lib/annotatie.ts`) scheidt de 404 van een echte
+storing: 404 → de chip wordt een **tombstone** (grijs, doorgestreepte titel, "Deze annotatie is
+verwijderd", link naar `/annotaties`) en een neutrale `Melding type="uitleg"` **zonder** *Opnieuw
+proberen*; al het andere houdt de rode melding mét retry. Dat de kaart zichzelf nog kan benoemen komt
+doordat het bericht zijn eigen label draagt: **`annotatie_titel`** in het berichtcontract, gevuld met
+`annotatieTitel(doc)` op het moment van de beurt. Berichten van vóór dat veld vallen terug op
+"Annotatie". Bewust géén cascade server-side: het gesprek is een verslag van wat er gebeurde en dat
+herschrijf je niet — en het zou bestaande dangling rijen toch niet oplossen. Zelfde afhandeling op
+`/annotaties/[slug]`.
+
 **De annotatie blijft bereikbaar** via een balk boven de chat (`art. 36 · 10 elementen · 3 te
-beoordelen · Openen`) zodra het paneel dicht is; de chip in de thread scrolt immers weg.
+beoordelen · Openen`) zodra het paneel dicht is; de chip in de thread scrolt immers weg. Verwijderde
+documenten slaat die balk over.
 
 **"Mogelijk ontbrekend" is werkvoorraad, geen mededeling** (`components/workbench/OntbrekendLijst.tsx`).
 Staat er een letterlijk fragment bij dat in de tekst voorkomt → *Toevoegen als \<klasse\>*, één klik,

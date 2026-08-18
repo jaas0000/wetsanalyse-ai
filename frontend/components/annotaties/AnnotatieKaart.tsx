@@ -85,10 +85,12 @@ export function AnnotatieKaart({
           Openen
         </Link>
         {/* Verwijderen kan hier omdat dit overzicht de wezen zichtbaar maakt: annotaties waarvan het
-            gesprek allang weg is. Twee klikken, zoals overal in deze app. */}
+            gesprek allang weg is. Twee klikken, zoals overal in deze app. Andersom laten we het
+            gesprek juist met rust: dat blijft staan met een kaart die zegt dat de annotatie weg is. */}
         <BevestigKnop
           bevestigTekst="Verwijderen?"
           onBevestig={() => onVerwijder(doc.slug)}
+          titel="Het gesprek waarin deze annotatie is gemaakt blijft staan; de kaart daarin meldt dan dat hij verwijderd is."
           ariaLabel={`Annotatie ${naamVan(doc)} ${vindplaatsLabel(doc)} verwijderen`}
           className="focus-ring inline-flex min-h-[24px] items-center rounded-full border border-line px-2.5 py-0.5 text-[11px] font-medium text-muted transition-colors hover:bg-surface hover:text-ink coarse:min-h-[44px]"
           bevestigClassName="border-fout/40 bg-fout/10 text-fout"

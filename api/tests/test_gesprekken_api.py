@@ -82,12 +82,29 @@ async def test_annotatie_bericht_verwijzing(client):
     gid = await _maak(client)
     r = await client.post(f"{BASIS}/{gid}/berichten", json={
         "rol": "assistant", "tekst": "Ik heb art. 9 geannoteerd.",
-        "annotatie_slug": "doc-abc", "ontbrekend": [{"klasse": "Voorwaarde"}],
+        "annotatie_slug": "doc-abc", "annotatie_titel": "Invorderingswet 1990 — art. 9 lid 1",
+        "ontbrekend": [{"klasse": "Voorwaarde"}],
     }, headers=A)
     assert r.status_code == 201
+    # Het bericht draagt het label zelf, zodat het gesprek leesbaar blijft als het document later
+    # verwijderd wordt (er is geen foreign key die dat afdwingt).
+    assert r.json()["annotatie_titel"] == "Invorderingswet 1990 — art. 9 lid 1"
     doc = (await client.get(f"{BASIS}/{gid}", headers=A)).json()
     assert doc["berichten"][0]["annotatie_slug"] == "doc-abc"
+    assert doc["berichten"][0]["annotatie_titel"] == "Invorderingswet 1990 — art. 9 lid 1"
     assert doc["berichten"][0]["ontbrekend"][0]["klasse"] == "Voorwaarde"
+
+
+async def test_annotatie_titel_is_optioneel(client):
+    """Berichten van vóór dit veld hebben de sleutel niet in hun JSON-inhoud; die leveren "" op."""
+    gid = await _maak(client)
+    r = await client.post(f"{BASIS}/{gid}/berichten", json={
+        "rol": "assistant", "tekst": "x", "annotatie_slug": "doc-oud",
+    }, headers=A)
+    assert r.status_code == 201
+    assert r.json()["annotatie_titel"] == ""
+    doc = (await client.get(f"{BASIS}/{gid}", headers=A)).json()
+    assert doc["berichten"][0]["annotatie_titel"] == ""
 
 
 async def test_user_scoping_404(client):

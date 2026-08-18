@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { ArtefactPaneel } from "@/components/werkplek/ArtefactPaneel";
@@ -34,8 +35,8 @@ import type {
   VoorstelElement,
 } from "@/lib/types";
 import {
-  BESLIST_LIFECYCLES, eigenMarkeringenVoorContext, kandidaatLabel, kandidaatPrompt,
-  kandidatenAlsTekst, mergeVoorstellen, vraagContextLabel, vraagContextVan,
+  annotatieTitel, BESLIST_LIFECYCLES, eigenMarkeringenVoorContext, isVerwijderd, kandidaatLabel,
+  kandidaatPrompt, kandidatenAlsTekst, mergeVoorstellen, vraagContextLabel, vraagContextVan,
 } from "@/lib/annotatie";
 import { useBreedScherm } from "@/lib/useBreedScherm";
 import { jasStyle } from "@/lib/jas";
@@ -47,7 +48,9 @@ type Item =
   // `denk` = de tijdlijn van het samenspel (supervisor → ophaal → annoteerder ⇄ Critic). Die werd
   // eerder weggegooid zodra de beurt een annotatie bleek; juist bij een annotatie wil je achteraf
   // kunnen zien hoe hij tot stand kwam.
-  | { id: string; type: "annotatie"; slug: string; ontbrekend?: OntbrekendItem[]; denk?: string }
+  // `titel` komt uit het bericht zelf (`annotatie_titel`), niet uit het document: er is geen foreign
+  // key, dus na het verwijderen van het document is dit het enige dat de kaart nog kan benoemen.
+  | { id: string; type: "annotatie"; slug: string; titel?: string; ontbrekend?: OntbrekendItem[]; denk?: string }
   // De vraag noemde een onderwerp: de agent vond bepalingen, de jurist kiest er één.
   | { id: string; type: "kandidaten"; tekst: string; kandidaten: AgentKandidaat[] };
 
@@ -100,6 +103,10 @@ export function WerkplekClient({
   const [items, setItems] = useState<Item[]>([]);
   const [docs, setDocs] = useState<Record<string, AnnotatieDocument>>({});
   const [infos, setInfos] = useState<Record<string, GraafArtikel>>({});
+  // Slugs waarvan de api 404 gaf: het document bestaat niet meer. Dat is een tóéstand, geen fout —
+  // opnieuw proberen kan per definitie niet lukken. Apart van `docs` omdat "nog niet geladen" en
+  // "bestaat niet meer" twee verschillende dingen zijn.
+  const [verwijderd, setVerwijderd] = useState<Record<string, true>>({});
   const [invoer, setInvoer] = useState("");
   // Niet-blokkerende melding als het opslaan van een beurt faalt (de chat loopt door).
   const [bewaarFout, setBewaarFout] = useState<string | null>(null);
@@ -118,6 +125,10 @@ export function WerkplekClient({
   // leverde een mislukte graaf-call een klik op waar lettérlijk niets van gebeurde.
   const [artefactLaadt, setArtefactLaadt] = useState<string | null>(null);
   const [artefactFout, setArtefactFout] = useState<{ slug: string; melding: string } | null>(null);
+  // Zojuist geprobeerd te openen, maar het document bestaat niet meer. Los van `artefactFout`, want
+  // dit is geen storing: geen rode balk en geen retry. Nodig naast de tombstone-kaart omdat een
+  // deep-link (`/workbench?annotatie=…`) helemaal geen kaart in de thread hoeft te hebben.
+  const [artefactWeg, setArtefactWeg] = useState<string | null>(null);
   const lijstRef = useRef<HTMLDivElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
   // Synchrone guard tegen dubbel-verzenden (twee Enters in dezelfde tick): de `bezig`-state komt te laat
@@ -155,7 +166,7 @@ export function WerkplekClient({
               ? { id: uid(), type: "user" as const, tekst: b.tekst }
               : b.annotatie_slug
                 ? { id: uid(), type: "annotatie" as const, slug: b.annotatie_slug,
-                    ontbrekend: b.ontbrekend, denk: b.denk }
+                    titel: b.annotatie_titel || undefined, ontbrekend: b.ontbrekend, denk: b.denk }
                 : { id: uid(), type: "antwoord" as const, tekst: b.tekst, denk: b.denk, bronnen: b.bronnen },
           ),
         );
@@ -166,6 +177,9 @@ export function WerkplekClient({
     return () => {
       afgebroken = true;
     };
+    // `laadDoc` bewust niet als dependency: deze hydratatie hoort één keer per mount te draaien (zie
+    // de toelichting hierboven), en de functie wordt elke render opnieuw gemaakt.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hydratieId]);
 
   useEffect(() => {
@@ -201,13 +215,24 @@ export function WerkplekClient({
     setItems((xs) => xs.map((x) => (x.id === id ? ({ ...x, ...patch } as Item) : x)));
   }
 
-  async function laadDoc(slug: string): Promise<AnnotatieDocument | null> {
+  /** Haalt het document op en cachet het. Gooit door — de aanroeper bepaalt wat een fout betekent. */
+  async function haalEnCache(slug: string): Promise<AnnotatieDocument> {
+    const document = await haalDocument(slug);
+    setDocs((m) => ({ ...m, [slug]: document }));
+    return document;
+  }
+
+  /** Achtergrond-variant voor de hydratatie: faalt stil, maar onthoudt wél een 404.
+   *
+   *  Zonder dat onderscheid is "verwijderd" niet van "de api ligt plat" te scheiden, en krijgt de
+   *  jurist een *Opnieuw proberen* dat per definitie nooit kan slagen. Zo staat de kaart al als
+   *  tombstone in beeld vóórdat er iemand op klikt.
+   */
+  async function laadDoc(slug: string): Promise<void> {
     try {
-      const document = await haalDocument(slug);
-      setDocs((m) => ({ ...m, [slug]: document }));
-      return document;
-    } catch {
-      return null;
+      await haalEnCache(slug);
+    } catch (e) {
+      if (isVerwijderd(e)) setVerwijderd((m) => ({ ...m, [slug]: true }));
     }
   }
 
@@ -223,10 +248,15 @@ export function WerkplekClient({
 
   async function openArtefact(slug: string) {
     setArtefactFout(null);
+    // Al bekend als verwijderd: niet nog een keer proberen — er valt niets op te halen.
+    if (verwijderd[slug]) {
+      setArtefactWeg(slug);
+      return;
+    }
+    setArtefactWeg(null);
     setArtefactLaadt(slug);
     try {
-      const doc = docs[slug] ?? (await laadDoc(slug));
-      if (!doc) throw new Error("Het annotatiedocument is niet op te halen.");
+      const doc = docs[slug] ?? (await haalEnCache(slug));
       if (!infos[slug]) {
         const graaf = await haalArtikelGraaf(doc.bwbId, doc.artikel, doc.lid);
         setInfos((m) => ({ ...m, [slug]: graaf }));
@@ -234,8 +264,13 @@ export function WerkplekClient({
       setArtefactSlug(slug);
     } catch (e) {
       // Zichtbaar falen: de wettekst komt uit de graaf en die kan plat liggen. Een lege klik laat de
-      // jurist denken dat de knop stuk is.
-      setArtefactFout({ slug, melding: foutTekst(e) });
+      // jurist denken dat de knop stuk is. Een verwijderd document is géén falen — dat pad is hier
+      // al afgevangen.
+      // Een verwijderd document is géén falen: dat wordt een tombstone-kaart, geen foutbalk.
+      if (isVerwijderd(e)) {
+        setVerwijderd((m) => ({ ...m, [slug]: true }));
+        setArtefactWeg(slug);
+      } else setArtefactFout({ slug, melding: foutTekst(e) });
     } finally {
       setArtefactLaadt(null);
     }
@@ -397,12 +432,16 @@ export function WerkplekClient({
         setItems((xs) =>
           xs.map((x) =>
             x.id === antId
-              ? { id: antId, type: "annotatie", slug: bijgewerkt.slug, ontbrekend, denk }
+              ? { id: antId, type: "annotatie", slug: bijgewerkt.slug, titel: annotatieTitel(bijgewerkt), ontbrekend, denk }
               : x,
           ),
         );
         setArtefactSlug(bijgewerkt.slug); // schuif het artefact meteen in
-        void persisteer(gid, "assistant", { annotatie_slug: bijgewerkt.slug, ontbrekend, denk });
+        // Het label gaat mee de api in: het bericht moet zichzelf kunnen benoemen als het document
+        // later verdwijnt (er is geen foreign key die daarvoor zorgt).
+        void persisteer(gid, "assistant", {
+          annotatie_slug: bijgewerkt.slug, annotatie_titel: annotatieTitel(bijgewerkt), ontbrekend, denk,
+        });
       } else {
         if (!tekst.trim()) updateItem(antId, { tekst: "(geen antwoord)" });
         void persisteer(gid, "assistant", { tekst: tekst.trim() || "(geen antwoord)", denk, bronnen });
@@ -488,8 +527,13 @@ export function WerkplekClient({
     }
   }
 
-  // De laatste annotatie in dit gesprek: die hoort altijd één klik weg te zijn.
-  const laatsteAnnotatie = [...items].reverse().find((x) => x.type === "annotatie")?.slug;
+  // De laatste annotatie in dit gesprek: die hoort altijd één klik weg te zijn. Verwijderde
+  // documenten slaan we over — anders verdwijnt de balk terwijl er verderop in het gesprek nog een
+  // annotatie staat die wél bestaat.
+  const laatsteAnnotatie = [...items]
+    .reverse()
+    .find((x): x is Extract<Item, { type: "annotatie" }> => x.type === "annotatie" && !verwijderd[x.slug])
+    ?.slug;
 
   const artefact = artefactSlug && docs[artefactSlug] && infos[artefactSlug] && (
     <ArtefactPaneel
@@ -558,6 +602,19 @@ export function WerkplekClient({
             >
               Opnieuw proberen
             </button>
+          </Melding>
+        </div>
+      )}
+
+      {/* Verwijderd is een toestand, geen storing: een neutrale mededeling zónder "Opnieuw proberen",
+          want die knop kan hier per definitie niet slagen. */}
+      {artefactWeg && (
+        <div className="shrink-0 px-4 pt-2">
+          <Melding type="uitleg" compact>
+            Deze annotatie is verwijderd. Het gesprek blijft staan.{" "}
+            <Link href="/annotaties" className="focus-ring rounded font-medium underline underline-offset-2">
+              Alle annotaties
+            </Link>
           </Melding>
         </div>
       )}
@@ -650,7 +707,9 @@ export function WerkplekClient({
                 {item.denk && <DenkProces tekst={item.denk} actief={false} label="Zo is dit tot stand gekomen" />}
                 <AnnotatieChip
                   doc={docs[item.slug]}
+                  titel={item.titel}
                   aantal={docs[item.slug]?.elementen.length}
+                  verwijderd={!!verwijderd[item.slug]}
                   onOpen={() => void openArtefact(item.slug)}
                 />
               </div>
@@ -755,14 +814,49 @@ const VOORBEELDEN = [
 /** Compacte kaart in de chatstroom die naar het annotatie-artefact leidt (opent het slide-in paneel). */
 function AnnotatieChip({
   doc,
+  titel,
   aantal,
+  verwijderd = false,
   onOpen,
 }: {
   doc?: AnnotatieDocument;
+  /** Het label uit het bericht zelf (`annotatie_titel`); de terugval als `doc` er niet (meer) is. */
+  titel?: string;
   aantal?: number;
+  verwijderd?: boolean;
   onOpen: () => void;
 }) {
-  const titel = doc ? `${doc.werkgebied || doc.bwbId} — art. ${doc.artikel}${doc.lid ? ` lid ${doc.lid}` : ""}` : "Annotatie";
+  const label = doc
+    ? `${doc.werkgebied || doc.bwbId} — art. ${doc.artikel}${doc.lid ? ` lid ${doc.lid}` : ""}`
+    : titel || "Annotatie";
+
+  // Een verwijderde annotatie is geen kapotte knop maar een grafsteen: het gesprek blijft leesbaar
+  // (daarom de bewaarde titel), maar er valt niets meer te openen — dus ook geen knop die dat
+  // suggereert. Wat er nog wél te doen valt is doorlopen naar het overzicht.
+  if (verwijderd) {
+    return (
+      <div className="flex w-full items-center gap-3 rounded-kaart border border-dashed border-line bg-surface px-4 py-3 text-left">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-line/40 text-faint" aria-hidden>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+          </svg>
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-sm font-medium text-muted line-through decoration-faint">
+            {label}
+          </span>
+          <span className="block text-xs text-muted">Deze annotatie is verwijderd</span>
+        </span>
+        <Link
+          href="/annotaties"
+          className="focus-ring inline-flex min-h-[24px] shrink-0 items-center rounded-full border border-line px-2.5 py-0.5 text-[11px] font-medium text-lint transition-colors hover:bg-surface-2 coarse:min-h-[44px]"
+        >
+          Alle annotaties
+        </Link>
+      </div>
+    );
+  }
+
   return (
     <button
       type="button"
@@ -776,7 +870,7 @@ function AnnotatieChip({
         </svg>
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-sm font-medium text-ink">{titel}</span>
+        <span className="block truncate text-sm font-medium text-ink">{label}</span>
         <span className="block text-xs text-muted">
           JAS-annotatie{typeof aantal === "number" ? ` · ${aantal} elementen` : ""} · review openen
         </span>

@@ -368,7 +368,12 @@ export interface OntbrekendItem {
 export type Rol = "user" | "assistant";
 
 /** Eén beurt in een gesprek. Assistent-berichten dragen optioneel denkproces/bronnen, of een
- *  verwijzing naar een annotatie-document (`annotatie_slug` + de Critic-`ontbrekend`-suggesties). */
+ *  verwijzing naar een annotatie-document (`annotatie_slug` + de Critic-`ontbrekend`-suggesties).
+ *
+ *  `annotatie_titel` is het leesbare label van dat document op het moment van de beurt. Het bericht
+ *  beschrijft zichzelf dus: wordt het document later verwijderd, dan blijft er in de thread een
+ *  leesbare kaart staan in plaats van een naamloze verwijzing. Berichten van vóór dit veld leveren
+ *  `""` — dat is een lege terugval, geen fout. */
 export interface Bericht {
   id?: number;
   rol: Rol;
@@ -376,6 +381,7 @@ export interface Bericht {
   denk: string;
   bronnen: Bron[];
   annotatie_slug: string;
+  annotatie_titel: string;
   ontbrekend: OntbrekendItem[];
   created?: string;
 }
@@ -405,6 +411,7 @@ export interface BerichtInvoer {
   denk?: string;
   bronnen?: Bron[];
   annotatie_slug?: string;
+  annotatie_titel?: string;
   ontbrekend?: OntbrekendItem[];
 }
 
