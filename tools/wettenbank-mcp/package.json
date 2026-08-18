@@ -23,8 +23,8 @@
     "@opentelemetry/instrumentation-undici": "^0.31.0",
     "@opentelemetry/sdk-metrics": "^2.10.0",
     "@opentelemetry/sdk-node": "^0.221.0",
-    "@xmldom/xmldom": "^0.9.10",
-    "jose": "^6.2.7",
+    "@xmldom/xmldom": "^0.9.11",
+    "jose": "^6.2.9",
     "zod": "^4.4.3"
   },
   "overrides": {
@@ -36,8 +36,8 @@
     "qs": "^6.15.2"
   },
   "devDependencies": {
-    "@types/node": "^26.1.2",
-    "tsx": "^4.23.1",
+    "@types/node": "^26.2.0",
+    "tsx": "^4.23.12",
     "typescript": "^7.0.2",
     "vitest": "^4.1.10"
   }
