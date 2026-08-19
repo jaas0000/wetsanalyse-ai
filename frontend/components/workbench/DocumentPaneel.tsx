@@ -171,12 +171,19 @@ export function DocumentPaneel({
           )}
         </div>
       )}
-      {/* Leeskolom: ~66 tekens per regel. Bij de volle paneelbreedte loopt een regel tegen de 90 en
-          moet het oog te ver terug om de volgende regel te vinden. */}
+      {/* Volle breedte, op verzoek van de jurist (19 aug 2026). Hier stond een leeskolom van ~66
+          tekens — de klassieke leesmaat — maar op de losse annotatiepagina begrenst niets anders de
+          breedte, en dan plakt een smalle kolom tegen de linkerrand van een breed scherm alsof er
+          harde regelafbrekingen in de wettekst zitten. De afweging is bekend en bewust gemaakt:
+          lange regels lezen minder prettig, maar er past meer tekst tegelijk in beeld. Verander dit
+          dus niet "terug" zonder het te vragen.
+
+          `whitespace-pre-wrap` blijft nodig: de leden worden met `\n\n` aaneengeregen (`bronVan`),
+          en de ankers rekenen met exact die brontekst. */}
       <p
         ref={tekstRef}
         onMouseUp={verwerkSelectie}
-        className="max-w-[66ch] whitespace-pre-wrap text-[0.95rem] leading-7 text-ink"
+        className="whitespace-pre-wrap text-[0.95rem] leading-7 text-ink"
       >
         {segmenten.map((s, i) =>
           s.klasse ? (
