@@ -9,6 +9,7 @@ import {
   volgendeElement,
   vraagContextLabel,
   vraagContextVan,
+  vraagSuggesties,
   overlaptSelectie,
   doelVanKandidaat,
   kandidaatLabel,
@@ -552,5 +553,36 @@ describe("isVerwijderd", () => {
   it("is geen ApiError → geen verwijderd", () => {
     expect(isVerwijderd(new Error("netwerk weg"))).toBe(false);
     expect(isVerwijderd(undefined)).toBe(false);
+  });
+});
+
+describe("vraagSuggesties", () => {
+  it("noemt de klasse van het element in de eerste vraag", () => {
+    const [eerste] = vraagSuggesties(el("a", { klasse: "Tijdsaanduiding" }));
+    expect(eerste).toBe("Waarom is dit een Tijdsaanduiding?");
+  });
+
+  it("vraagt bij twijfel naar het alternatief", () => {
+    // Daar zit het verschil per element: "waarom geen Voorwaarde?" is scherper dan welke vaste
+    // formulering ook, en de agent heeft dat alternatief zelf voorgesteld.
+    const met = vraagSuggesties(el("a", {
+      klasse: "Tijdsaanduiding",
+      alternatieven: [{ klasse: "Voorwaarde", motivatie: "kan ook een conditie zijn" }],
+    }));
+    expect(met[2]).toBe("Waarom geen Voorwaarde?");
+  });
+
+  it("valt zonder alternatieven terug op de samenhang", () => {
+    const zonder = vraagSuggesties(el("a", { klasse: "Tijdsaanduiding", alternatieven: [] }));
+    expect(zonder[2]).toBe("Hoe verhoudt dit zich tot de rest van het artikel?");
+  });
+
+  it("levert er altijd precies drie, en geen dubbele", () => {
+    const vragen = vraagSuggesties(el("a", {
+      klasse: "Voorwaarde",
+      alternatieven: [{ klasse: "Tijdsaanduiding", motivatie: "" }],
+    }));
+    expect(vragen).toHaveLength(3);
+    expect(new Set(vragen).size).toBe(3);
   });
 });

@@ -314,6 +314,12 @@ de kaart een vraag klaar in het chatveld:
 - `WerkplekClient` houdt `vraagOver` (slug + element). Zolang dat staat toont een **chip** boven het
   invoerveld waar de vraag over gaat, en gaat de beurt met `modus: "advies"` + `vraagContextVan(...)`.
   De chip verdwijnt na het versturen — anders wordt je vólgende vraag ongemerkt ook een adviesvraag.
+- **Drie vragen staan er alvast boven** (`vraagSuggesties` in `lib/annotatie.ts`): *waarom deze
+  klasse*, *klopt de afbakening*, en — als de agent een alternatief voorstelde — *waarom die andere
+  klasse dan niet*. Die derde past zich aan, want dáár zit het verschil per element. Eén klik stuurt
+  de vraag meteen; ze verdwijnen zolang er een beurt loopt, want een tweede vraag zou toch worden
+  afgewezen (er loopt al een run op dit gesprek). Een leeg veld met "Wat wil je weten over deze
+  markering?" is een open vraag op het moment dat je juist snel wilt beoordelen.
 - Het antwoord is een gewone beurt en krijgt daarmee **bronnen, grounding en de kopieerknop**, die het
   draadje in de kaart geen van alle had.
 - De chip is UI-state en reist niet mee naar de api; het bewaarde bericht krijgt daarom een

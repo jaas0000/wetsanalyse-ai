@@ -40,7 +40,8 @@ import type {
 } from "@/lib/types";
 import {
   annotatieTitel, BESLIST_LIFECYCLES, eigenMarkeringenVoorContext, isVerwijderd, kandidaatLabel,
-  doelVanKandidaat, kandidaatPrompt, kandidatenAlsTekst, mergeVoorstellen, vraagContextLabel, vraagContextVan,
+  doelVanKandidaat, kandidaatPrompt, kandidatenAlsTekst, mergeVoorstellen, vraagContextLabel,
+  vraagContextVan, vraagSuggesties,
 } from "@/lib/annotatie";
 import {
   leesLopendeRuns, naEenGebrokenStream, onthoudRun, schrijfLopendeRuns, standVanVorigeRun,
@@ -1000,6 +1001,24 @@ export function WerkplekClient({
         <div className="mx-auto max-w-3xl px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2">
           {/* Waar de volgende vraag over gaat. Zichtbaar zolang hij geldt, want anders stel je
               ongemerkt een adviesvraag over een element dat je allang niet meer voor je hebt. */}
+          {/* De vragen die bij een markering hoe dan ook gesteld worden, als één klik. Een leeg veld
+              met "Wat wil je weten over deze markering?" is een open vraag op het moment dat je juist
+              snel wilt beoordelen. Ze verdwijnen zodra er een beurt loopt: een tweede vraag zou de
+              eerste toch afgewezen krijgen (er loopt al een run op dit gesprek). */}
+          {vraagOver && !bezig && (
+            <div className="mb-1.5 flex flex-wrap gap-1.5">
+              {vraagSuggesties(vraagOver.el).map((vraag) => (
+                <button
+                  key={vraag}
+                  type="button"
+                  onClick={() => void verstuur(vraag)}
+                  className="focus-ring inline-flex min-h-[24px] items-center rounded-full border border-line bg-paper px-2.5 py-1 text-xs text-muted transition hover:border-lint hover:text-ink coarse:min-h-[44px]"
+                >
+                  {vraag}
+                </button>
+              ))}
+            </div>
+          )}
           {vraagOver && (
             <div className="mb-1.5 flex items-center gap-1.5">
               <span className="inline-flex min-w-0 items-center gap-1.5 rounded-full border border-lint/30 bg-lint/5 px-2.5 py-1 text-xs text-lint">

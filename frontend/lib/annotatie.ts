@@ -334,6 +334,28 @@ export function vraagContextLabel(el: AnnotatieElement, doc?: AnnotatieDocument)
   return `${el.klasse} — “${el.tekst}”${plek}`;
 }
 
+/** Drie vragen die bij het beoordelen van een markering het vaakst gesteld worden.
+ *
+ *  Een leeg invoerveld met "Wat wil je weten over deze markering?" is een open vraag op het moment
+ *  dat je juist snel wilt beoordelen. Deze drie zijn de vragen die een jurist bij een JAS-markering
+ *  hoe dan ook stelt: klopt de klasse, klopt de afbakening, en — als er twijfel is — waarom die
+ *  andere klasse dan niet.
+ *
+ *  De derde past zich aan, want daar zit het verschil per element. Bij een gedisambigueerd voorstel
+ *  is "waarom geen Voorwaarde?" een scherpere vraag dan welke vaste formulering ook; zonder
+ *  alternatieven is de samenhang met de rest van het artikel het eerstvolgende dat je wilt weten.
+ */
+export function vraagSuggesties(el: AnnotatieElement): string[] {
+  const anders = el.alternatieven[0]?.klasse;
+  return [
+    `Waarom is dit een ${el.klasse}?`,
+    "Klopt de afbakening van dit fragment?",
+    anders
+      ? `Waarom geen ${anders}?`
+      : "Hoe verhoudt dit zich tot de rest van het artikel?",
+  ];
+}
+
 // --- een annotatie die er niet meer is ---------------------------------------------------------
 
 /** Het leesbare label van een annotatie: "Invorderingswet 1990 — art. 9 lid 1".
