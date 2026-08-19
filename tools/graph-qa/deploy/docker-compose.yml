@@ -19,6 +19,10 @@
 #   SECRETS_DIR=/opt/secrets/graph-qa; sudo mkdir -p "$SECRETS_DIR"
 #   echo -n "<graphdb-token>"  | sudo tee "$SECRETS_DIR/graphdb_token" >/dev/null
 #   echo -n "<azure-key>"      | sudo tee "$SECRETS_DIR/azure_foundry_api_key" >/dev/null
+#   echo -n "<qa-token>"       | sudo tee "$SECRETS_DIR/qa_api_token" >/dev/null
+#   echo -n "<api-token>"      | sudo tee "$SECRETS_DIR/wetsanalyse_api_token" >/dev/null
+# Die laatste is het token waarmee graph-qa naar de wetsanalyse-api schrijft; hij hoort als eigen
+# client-id in WETSANALYSE_API_TOKENS van de api-stack te staan (`graph-qa:<token>`).
 #   sudo chmod 755 "$SECRETS_DIR"; sudo chmod 644 "$SECRETS_DIR"/*
 # (non-root uid 10001 leest via de "other"-bit → chmod 644.)
 
@@ -54,6 +58,13 @@ services:
       # terug op "geen slot" → endpoints open), én de waarde MOET gelijk zijn aan de GRAPH_QA_TOKEN
       # van de frontend-stack, anders krijgt de werkplek 401. (/health blijft open.)
       QA_API_TOKEN_FILE: /run/secrets/qa_api_token
+      # Hier legt graph-qa de uitkomst van een beurt vast (chatbericht + annotatiedocument), zodat een
+      # antwoord niet meer afhangt van een browser die blijft kijken. Ontbreekt het host-bestand
+      # wetsanalyse_api_token, dan blijft de werkplek wegschrijven — en dan kost een gesloten tabblad
+      # nog steeds het werk. Let op: mét dit token WEIGERT graph-qa te starten als qa_api_token leeg
+      # is (require_api), want dan zou een open endpoint namens elke gebruiker kunnen schrijven.
+      WETSANALYSE_API_URL: ${WETSANALYSE_API_URL:-http://api:3000}
+      WETSANALYSE_API_TOKEN_FILE: /run/secrets/wetsanalyse_api_token
       # --- observability (leeg = alleen JSON-logs) ---
       LOG_LEVEL: ${LOG_LEVEL:-info}
       LOG_FORMAT: ${LOG_FORMAT:-json}

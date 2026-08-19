@@ -410,6 +410,10 @@ export function WerkplekClient({
     let tekst = "";
     let denk = "";
     let bronnen: Bron[] = [];
+    // Heeft de agent de beurt zelf vastgelegd? Dan schrijft de werkplek niets meer weg — anders
+    // stond alles er twee keer. Blijft dit leeg, dan doet de client het zoals vroeger; zo werkt een
+    // graph-qa zonder api-koppeling gewoon door.
+    let opgeslagen: { annotatie_slug: string; run_id: string } | null = null;
     try {
       await volgRun(
         id,
@@ -442,10 +446,18 @@ export function WerkplekClient({
             tekst += tekst ? "\n\n…\n\n" : "…\n\n";
             updateItem(antId, { tekst });
           },
+          onOpgeslagen: (uitkomst) => (opgeslagen = uitkomst),
         },
         vanaf,
         beheerser.signal,
       );
+
+      // De agent heeft het vastgelegd. Nu alleen nog tonen wat er staat — de api is de bron.
+      if (opgeslagen) {
+        await toonVastgelegdeBeurt(opgeslagen, { antId, ontbrekend, denk });
+        onGewijzigd();
+        return;
+      }
 
       if (kandidaten.length) {
         setItems((xs) =>
@@ -512,6 +524,42 @@ export function WerkplekClient({
       setStopt(false);
       setBezig(false);
       bezigRef.current = false;
+    }
+  }
+
+  /** De agent heeft de beurt al weggeschreven; haal op wat er staat en toon het.
+   *
+   *  Bewust ophalen in plaats van de inhoud in het SSE-contract te proppen: dan blijft de api de ene
+   *  bron van waarheid en groeit het eventcontract niet mee met het datamodel.
+   */
+  async function toonVastgelegdeBeurt(
+    uitkomst: { annotatie_slug: string },
+    { antId, ontbrekend, denk }: { antId: string; ontbrekend: OntbrekendItem[]; denk: string },
+  ) {
+    if (!uitkomst.annotatie_slug) return; // een gewoon antwoord staat al in beeld
+    const doc = await laadDocEnGeef(uitkomst.annotatie_slug);
+    if (!doc) return;
+    if (!infos[doc.slug]) {
+      const graaf = await haalArtikelGraaf(doc.bwbId, doc.artikel, doc.lid);
+      setInfos((m) => ({ ...m, [doc.slug]: graaf }));
+    }
+    setItems((xs) =>
+      xs.map((x) =>
+        x.id === antId
+          ? { id: antId, type: "annotatie", slug: doc.slug, titel: annotatieTitel(doc), ontbrekend, denk }
+          : x,
+      ),
+    );
+    setArtefactSlug(doc.slug);
+  }
+
+  /** Als `laadDoc`, maar geeft het document terug — `laadDoc` is de stille achtergrondvariant. */
+  async function laadDocEnGeef(slug: string): Promise<AnnotatieDocument | null> {
+    try {
+      return await haalEnCache(slug);
+    } catch (e) {
+      if (isVerwijderd(e)) setVerwijderd((m) => ({ ...m, [slug]: true }));
+      return null;
     }
   }
 

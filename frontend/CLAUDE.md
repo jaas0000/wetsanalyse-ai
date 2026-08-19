@@ -297,6 +297,14 @@ beurt als **run** bij graph-qa (`POST /api/annotatie/run` → `startRun`) en kij
   dus de run eindigt pas op de eerstvolgende grens; de knop blijft daarom in de `stopt`-stand staan.
 - **`run_id` reist mee naar de api** bij het bewaren van de assistent-beurt. Kijken er twee tabbladen
   mee, dan landt de uitkomst tóch één keer (de api dedupliceert erop).
+- **Schrijft de agent zelf weg, dan doet de werkplek dat niet.** graph-qa stuurt vlak vóór het einde
+  een `opgeslagen`-event met de `annotatie_slug`; de client haalt het document dán bij de api op
+  (`toonVastgelegdeBeurt`) in plaats van het zelf aan te maken. Blijft dat event uit — een graph-qa
+  zonder api-koppeling — dan schrijft de client weg zoals vroeger. Eén codepad, twee werelden.
+
+De BFF-startroute vult `user_id` uit de sessie in de body. Dat is een vertrouwensgrens en geen
+gemak: graph-qa schrijft namens die gebruiker, dus wie hem zelf zou mogen meesturen, schrijft in
+andermans gesprek.
 
 Bij een 409 op `startRun` (er loopt al een beurt op dit gesprek) haakt de client aan bij de bestaande
 run in plaats van te falen: twee gelijktijdige beurten zouden door elkaar in het agent-geheugen

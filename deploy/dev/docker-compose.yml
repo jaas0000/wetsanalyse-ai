@@ -43,7 +43,9 @@ services:
       LLM_API_BASE:              ${LLM_API_BASE:?zet LLM_API_BASE}
       LLM_API_KEY:               ${LLM_API_KEY:?zet LLM_API_KEY}
       LLM_CONFIG_SECRET:         ${LLM_CONFIG_SECRET:?zet LLM_CONFIG_SECRET}
-      WETSANALYSE_API_TOKENS:    frontend:${API_TOKEN:?zet API_TOKEN}
+      # Twee clients: de webapp én graph-qa, die de uitkomst van een beurt zelf vastlegt. Eigen
+      # token per client, zodat het auditspoor laat zien wie er schreef.
+      WETSANALYSE_API_TOKENS:    frontend:${API_TOKEN:?zet API_TOKEN},graph-qa:${GRAPH_QA_API_TOKEN:?zet GRAPH_QA_API_TOKEN}
       WETSANALYSE_ADMIN_TOKENS:  admin:${ADMIN_TOKEN:?zet ADMIN_TOKEN}
       DATABASE_URL:              postgresql+asyncpg://wetsanalyse:${POSTGRES_PASSWORD}@postgres:5432/wetsanalyse
     networks:
@@ -75,6 +77,10 @@ services:
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_ENDPOINT:-http://otel-collector:4318}
       OTEL_SERVICE_NAME:      graph-qa
       QA_API_TOKEN:           ${QA_API_TOKEN:?zet QA_API_TOKEN}
+      # Hier legt graph-qa de uitkomst van een beurt vast. Zonder deze twee blijft de werkplek dat
+      # doen — en dan kost een gesloten tabblad nog steeds het werk.
+      WETSANALYSE_API_URL:    http://api:3000
+      WETSANALYSE_API_TOKEN:  ${GRAPH_QA_API_TOKEN:?zet GRAPH_QA_API_TOKEN}
       SIMILARITY_INDEX:       ${SIMILARITY_INDEX:-bwb_similarity}
       # Uit: dan draait de pure agentische lus (supervisor → agent ⇄ tools → verify → finalize) en
       # bepaalt de agent zelf zijn stappen. Met decompositie ligt er een vast recept overheen

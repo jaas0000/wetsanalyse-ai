@@ -157,6 +157,37 @@ werkvelden. Komt er ooit een tweede replica, dan moet dit naar een gedeelde stor
 > breekt de harnas per request zijn event loop af en sneuvelt de achtergrondtaak — dan meet je de
 > harnas, niet de code.
 
+### De uitkomst vastleggen (`agent/beurt.py`)
+
+Het run-model haalt de beurt uit het tabblad; deze driver haalt ook de **persistentie** eruit. Tot nu
+toe schreef de browser het resultaat weg ná de stream — wie zijn tabblad sloot vóór de agent klaar
+was, verloor het werk, ook al had de agent zijn beurt keurig afgemaakt.
+
+`voer_beurt_uit` zit om `answer_stream` heen, verzamelt dezelfde velden als de werkplek deed
+(`doel`/`element`/`run`/`ontbrekend`/`suggestie`/tekst/denk/bronnen) en schrijft aan het eind via
+`agent/wetsanalyse_api.py`: **document → elementen → chatbericht**. Daarna gaat er één
+`opgeslagen`-event uit. **Buiten de LangGraph-code**, dus `orchestrator.py` blijft ongemoeid.
+
+Vier regels die je niet mag omdraaien:
+
+- **`done` gaat er pas uit ná het wegschrijven.** Anders ziet een client die precies dan herlaadt
+  noch de lopende run, noch het bericht — en dan lijkt de beurt verdampt.
+- **Het document ontstaat pas aan het eind.** `emit_node` is terminaal: vóór dat punt zijn er geen
+  elementen. Een document dat al bij het `doel`-event ontstond, bleef bij elke afgebroken run als
+  leeg skelet in de werkvoorraad van de jurist staan (`GET /documenten` kent geen zichtbaarheid).
+- **`run_id` reist mee met het bericht.** Dat is de idempotentiesleutel; de api weigert een tweede
+  bericht met datzelfde id, zodat twee meekijkende tabbladen niet twee antwoorden opleveren.
+- **Niet kunnen schrijven is een zichtbare fout** (`error`-event), nooit een stil verlies.
+
+Geen api geconfigureerd (`Settings.legt_zelf_vast` is False), dan is de driver een doorgeefluik en
+blijft de werkplek verantwoordelijk — zo werkt lokaal draaien zonder api gewoon door.
+
+> **Vertrouwensgrens.** Het verzoek draagt zelf de `user_id` waarnamens er geschreven wordt, en de
+> api bindt `client_id` niet aan `user_id`. Het api-token van graph-qa is daarmee een schrijfprimitief
+> op elk gebruikersgesprek. Vandaar `Settings.require_api`: kan graph-qa schrijven, dan **weigert hij
+> te starten** zonder eigen `QA_API_TOKEN`. De frontend-BFF vult `user_id` uit de sessie — nooit uit
+> de browser-body.
+
 ### De annotatie-keten
 
 ```

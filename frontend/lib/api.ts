@@ -406,6 +406,9 @@ export type AgentHandlers = {
   /** Er zijn events weggevallen (de eventlog van de run is gecapt). Toon een gat in plaats van te
    *  doen alsof de tekst compleet is. */
   onGat?: (aantal: number) => void;
+  /** De agent heeft de uitkomst zelf vastgelegd (bericht + eventueel annotatiedocument). Komt vlak
+   *  vóór het einde. Blijft hij uit, dan schrijft de werkplek zelf weg, zoals vroeger. */
+  onOpgeslagen?: (uitkomst: { annotatie_slug: string; run_id: string }) => void;
 };
 
 /** Stuur een vrije prompt naar de unified agent (BFF → graph-qa /v1/chat, SSE). De supervisor kiest
@@ -570,6 +573,8 @@ async function verwerkSseStroom(res: Response, handlers: AgentHandlers): Promise
               kandidaten?: AgentKandidaat[];
               seq?: number;
               weggevallen?: number;
+              annotatie_slug?: string;
+              run_id?: string;
             }
           | null;
         if (!ev) continue;
@@ -585,6 +590,8 @@ async function verwerkSseStroom(res: Response, handlers: AgentHandlers): Promise
         else if (ev.type === "ontbrekend") handlers.onOntbrekend?.(ev.items ?? []);
         else if (ev.type === "suggestie" && ev.suggestie) handlers.onSuggestie?.(ev.suggestie);
         else if (ev.type === "kandidaten") handlers.onKandidaten?.(ev.kandidaten ?? []);
+        else if (ev.type === "opgeslagen")
+          handlers.onOpgeslagen?.({ annotatie_slug: ev.annotatie_slug ?? "", run_id: ev.run_id ?? "" });
         else if (ev.type === "error") throw { status: 502, detail: ev.message ?? "Agent mislukt." } as ApiError;
       }
     }

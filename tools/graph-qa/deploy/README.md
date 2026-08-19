@@ -7,7 +7,7 @@ gedeelde netwerk `wetsanalyse_internal`. **Geen host-poort, geen publieke NPM-ho
 
 ## 1. Host-secrets (eenmalig, op de host)
 
-Twee bestanden in `SECRETS_DIR` (default `/opt/secrets/graph-qa`), leesbaar voor de
+Bestanden in `SECRETS_DIR` (default `/opt/secrets/graph-qa`), leesbaar voor de
 non-root container-user (uid 10001) → **chmod 644**:
 
 ```bash
@@ -15,6 +15,13 @@ SECRETS_DIR=/opt/secrets/graph-qa
 sudo mkdir -p "$SECRETS_DIR"
 echo -n "<GRAPHDB_TOKEN>"        | sudo tee "$SECRETS_DIR/graphdb_token"        >/dev/null
 echo -n "<AZURE_FOUNDRY_API_KEY>"| sudo tee "$SECRETS_DIR/azure_foundry_api_key">/dev/null
+# De uitkomst van een beurt zelf vastleggen (chatbericht + annotatiedocument), zodat een antwoord
+# niet meer afhangt van een browser die blijft kijken. Zet dit token óók als eigen client-id in de
+# api-stack: WETSANALYSE_API_TOKENS krijgt er `,graph-qa:<zelfde token>` bij.
+# LET OP: mét dit token weigert graph-qa te starten als `qa_api_token` ontbreekt — een open endpoint
+# dat namens elke gebruiker kan schrijven is geen optie.
+echo -n "<GRAPH_QA_API_TOKEN>"   | sudo tee "$SECRETS_DIR/wetsanalyse_api_token" >/dev/null
+echo -n "<GRAPH_QA_TOKEN>"       | sudo tee "$SECRETS_DIR/qa_api_token"          >/dev/null
 # Optioneel — gedeeld, horizontaal-veilig gespreksgeheugen op de bestaande Postgres-stack (zie §4).
 # psycopg-scheme (`postgresql://`, NIET `+asyncpg`); zelfde credentials als de postgres-stack.
 echo -n "postgresql://wetsanalyse:<POSTGRES_PASSWORD>@postgres:5432/wetsanalyse" \

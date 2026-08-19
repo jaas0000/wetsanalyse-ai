@@ -25,7 +25,11 @@ De API bedient zeven dingen:
    en er kunnen meerdere tabbladen op dezelfde run meekijken. `voeg_bericht_toe` weigert een tweede
    bericht met hetzelfde `run_id` en geeft het bestaande terug (check-then-insert binnen de
    transactie; géén unieke index, want `reconcile_schema` voegt die op bestaande tabellen niet toe —
-   bij een tweede API-replica is dat niet meer genoeg).
+   bij een tweede API-replica is dat niet meer genoeg). De schrijver is meestal **graph-qa**, niet de
+   webapp: die legt de uitkomst van een beurt zelf vast en heeft daarvoor een eigen client-id in
+   `WETSANALYSE_API_TOKENS` (`graph-qa:<token>`) plus de `X-User-Id` van de jurist. Let op wat dat
+   betekent: `client_id` is niet aan `user_id` gebonden, dus dat token kan in elk gebruikersgesprek
+   schrijven — graph-qa blijft daarom intern-only.
 3. **Login + gebruikersbeheer** (`/v1/auth/*` + `/v1/admin/users`): de API is de identiteitsbron van
    de webapp (userid + wachtwoord, rollen, optionele TOTP-2FA).
 4. **LLM-modelprofielbeheer** (`/v1/admin/profiles`).

@@ -18,7 +18,17 @@ export async function POST(req: Request) {
   const userid = await sessionUserId();
   if (!userid) return geenSessie();
 
-  const body = await req.text();
+  // De identiteit komt uit de sessie en wordt hier ingevoegd — nooit uit de browser-body. graph-qa
+  // schrijft namens deze gebruiker naar de api, dus dit is een vertrouwensgrens: wie hem zelf mag
+  // meesturen, schrijft in andermans gesprek.
+  const binnen = await req.text();
+  let body = binnen;
+  try {
+    body = JSON.stringify({ ...(JSON.parse(binnen) as Record<string, unknown>), user_id: userid });
+  } catch {
+    // Geen geldige JSON: laat de agent er zelf een 422 van maken in plaats van hier te raden.
+  }
+
   try {
     // Bewust ZONDER `req.signal`: de browser die deze POST afbreekt mag de run niet meenemen —
     // dat was precies de oude fout. Alleen een eigen timeout op het starten zelf.

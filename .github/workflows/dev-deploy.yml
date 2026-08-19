@@ -133,12 +133,16 @@ jobs:
           # Fernet-key = urlsafe base64 van 32 bytes (HMAC-sha256 = precies 32 bytes).
           fernet() { printf '%s' "$1-dev" | openssl dgst -sha256 -hmac "$SEED" -binary | openssl base64 -A | tr '+/' '-_'; }
           PG=$(hx pg); API_TOK=$(hx api); ADM_TOK=$(hx adm); QA_TOK=$(hx qa); AUTH=$(hx auth); FERNET=$(fernet fernet)
+          # Eigen api-token voor graph-qa: die legt de uitkomst van een beurt zelf vast, en een eigen
+          # client-id houdt in het auditspoor zichtbaar wie er schreef.
+          GQ_API_TOK=$(hx gqapi)
 
           # env-array voor de Portainer-stack (compose interpoleert ${VAR}); geheimen alleen hier, nooit gelogd.
           ENV_JSON=$(jq -n \
             --arg stack "$STACK" --arg tag "$IMAGE_TAG" --arg pg "$PG" \
             --arg base "$LLM_API_BASE" --arg key "$LLM_API_KEY" --arg fernet "$FERNET" \
             --arg apitok "$API_TOK" --arg admtok "$ADM_TOK" --arg gtok "$GRAPHDB_TOKEN" --arg qatok "$QA_TOK" \
+            --arg gqapitok "$GQ_API_TOK" \
             --arg auth "$AUTH" --arg authurl "https://$HOSTNAME_" --arg port "$HOST_PORT" \
             --arg mcp "${GRAPHDB_MCP_URL:-http://mcp-auth-proxy:8004/mcp}" \
             --arg sim "${SIMILARITY_INDEX:-bwb_similarity}" --arg model "${LLM_MODEL:-claude-sonnet-4-6}" \
@@ -146,7 +150,8 @@ jobs:
               {name:"STACK",value:$stack},{name:"IMAGE_TAG",value:$tag},{name:"POSTGRES_PASSWORD",value:$pg},
               {name:"LLM_API_BASE",value:$base},{name:"LLM_API_KEY",value:$key},{name:"LLM_CONFIG_SECRET",value:$fernet},
               {name:"API_TOKEN",value:$apitok},{name:"ADMIN_TOKEN",value:$admtok},{name:"GRAPHDB_TOKEN",value:$gtok},
-              {name:"QA_API_TOKEN",value:$qatok},{name:"AUTH_SECRET",value:$auth},{name:"AUTH_URL",value:$authurl},
+              {name:"QA_API_TOKEN",value:$qatok},{name:"GRAPH_QA_API_TOKEN",value:$gqapitok},
+              {name:"AUTH_SECRET",value:$auth},{name:"AUTH_URL",value:$authurl},
               {name:"HOST_PORT",value:$port},{name:"GRAPHDB_MCP_URL",value:$mcp},
               {name:"SIMILARITY_INDEX",value:$sim},{name:"LLM_MODEL",value:$model}
             ]')

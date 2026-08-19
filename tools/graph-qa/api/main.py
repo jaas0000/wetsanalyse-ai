@@ -46,6 +46,7 @@ load_dotenv()  # laad .env als die naast de server staat
 
 from agent import observability  # noqa: E402
 from agent.agent import answer_stream, delete_conversation  # noqa: E402
+from agent.beurt import voer_beurt_uit  # noqa: E402
 from agent.agent_common import run_sync  # noqa: E402
 from agent.config import Settings  # noqa: E402
 from agent.models import ArtikelResult, ChatRequest, RunStart  # noqa: E402
@@ -68,6 +69,9 @@ async def _lifespan(_app: FastAPI):
     # (uvicorn stopt → container ongezond/herstart-loop, i.p.v. stil kapot). De per-request
     # require_graph() blijft als tweede net bestaan.
     settings.require_graph()
+    # Mag graph-qa naar de api schrijven, dan mag zijn eigen endpoint niet open staan: het verzoek
+    # draagt zelf de user_id waarnamens er geschreven wordt.
+    settings.require_api()
     yield
     # App-shutdown: OTel-buffers flushen zodat de laatste spans/metrics niet verloren gaan.
     observability.shutdown()
@@ -224,14 +228,23 @@ async def artikel(
 
 
 def _stroom_voor(request: ChatRequest):
-    """De eventstroom van één run. `run` komt binnen zodat een latere fase het stopverzoek kan
-    lezen; vandaag consumeert dit exact hetzelfde `answer_stream` als `POST /v1/chat`."""
-    async def maak(_run: Run) -> AsyncIterator[dict]:
-        async for event in answer_stream(
-            request.question, request.conversation_id,
-            modus=request.modus, context=request.context,
-        ):
-            yield event
+    """De eventstroom van één run, met de beurt-driver eromheen.
+
+    Die driver doet wat de werkplek vroeger ná de stream deed: verzamelen wat er binnenkomt en de
+    uitkomst vastleggen (document, elementen, chatbericht). Daarmee hangt een beurt niet meer af van
+    een browser die blijft kijken. Is er geen api geconfigureerd, dan is hij een doorgeefluik en
+    blijft de werkplek verantwoordelijk — het oude gedrag."""
+    def maak(run: Run) -> AsyncIterator[dict]:
+        return voer_beurt_uit(
+            answer_stream(
+                request.question, request.conversation_id,
+                modus=request.modus, context=request.context,
+            ),
+            settings=settings,
+            run=run,
+            gesprek_id=request.conversation_id or "",
+            user_id=request.user_id,
+        )
     return maak
 
 

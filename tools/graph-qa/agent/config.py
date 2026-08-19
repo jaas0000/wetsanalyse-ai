@@ -62,6 +62,11 @@ class Settings(BaseModel):
     # sessie). Char-budget; 0 = uit. Ruim genoeg dat de huidige vraag + tool-resultaten altijd passen.
     max_history_chars: int = 40000
 
+    # De wetsanalyse-API: waar de uitkomst van een beurt wordt vastgelegd. Leeg = niet vastleggen
+    # (dan schrijft de werkplek het weg, zoals vroeger) — zo blijft lokaal draaien zonder api mogelijk.
+    wetsanalyse_api_url: str = ""
+    wetsanalyse_api_token: str | None = None
+
     # API-laag
     qa_api_token: str | None = None
     cors_origins: list[str] = ["*"]
@@ -124,6 +129,8 @@ class Settings(BaseModel):
             "max_subquestions": e.get("MAX_SUBQUESTIONS"),
             "sub_max_turns": e.get("SUB_MAX_TURNS"),
             "critic_max_rondes": e.get("CRITIC_MAX_RONDES"),
+            "wetsanalyse_api_url": e.get("WETSANALYSE_API_URL"),
+            "wetsanalyse_api_token": _read_secret(e, "WETSANALYSE_API_TOKEN"),
             "qa_api_token": _read_secret(e, "QA_API_TOKEN"),
             "cors_origins": cors or None,
             "rate_limit": e.get("QA_RATE_LIMIT"),
@@ -139,6 +146,26 @@ class Settings(BaseModel):
         # None én lege string weglaten zodat de veld-defaults van kracht blijven (een gezet-maar-leeg
         # MAX_TURNS="" e.d. zou anders bij pydantic-coercie de import laten crashen i.p.v. de default te nemen)
         return cls(**{k: v for k, v in raw.items() if v is not None and v != ""})
+
+    @property
+    def legt_zelf_vast(self) -> bool:
+        """Schrijft graph-qa de uitkomst van een beurt zelf weg?
+
+        Zo ja, dan is een beurt niet meer afhankelijk van een browser die blijft kijken. Zo nee, dan
+        blijft de werkplek dat doen — en dan is een gesloten tabblad nog steeds werkverlies."""
+        return bool(self.wetsanalyse_api_url and self.wetsanalyse_api_token)
+
+    def require_api(self) -> None:
+        """Kan graph-qa schrijven, dan MOET zijn eigen endpoint een token hebben.
+
+        Zonder `QA_API_TOKEN` staat `/v1/runs` open (zie `_check_auth`), en dan is een open endpoint
+        met een schrijfpad naar andermans gesprekken een gat: het verzoek draagt zelf de `user_id`
+        waarnamens er geschreven wordt. Fail-fast bij boot in plaats van dat stil laten bestaan."""
+        if self.legt_zelf_vast and not self.qa_api_token:
+            raise ValueError(
+                "graph-qa mag naar de wetsanalyse-API schrijven (WETSANALYSE_API_URL/_TOKEN), "
+                "maar zijn eigen endpoint is open. Zet QA_API_TOKEN."
+            )
 
     def require_llm(self) -> None:
         if not self.azure_foundry_api_key or not self.azure_foundry_base_url:
