@@ -95,9 +95,12 @@ export function GesprekSidebar({
               type="button"
               onClick={onSluit}
               aria-label="Menu sluiten"
-              className="rounded-lg p-2 text-muted transition-colors hover:text-ink lg:hidden"
+              className="focus-ring rounded-kaart p-2 text-muted transition-colors hover:bg-surface hover:text-ink lg:hidden"
             >
-              ✕
+              {/* Hetzelfde kruisje als de dialogen; een tekst-✕ weegt anders en lijnt anders uit. */}
+              <svg viewBox="0 0 20 20" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
+                <path d="M5 5l10 10M15 5L5 15" strokeLinecap="round" />
+              </svg>
             </button>
           )}
         </div>

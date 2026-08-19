@@ -104,6 +104,15 @@ a {
   box-shadow: 0 0 0 2px rgb(var(--paper));
 }
 
+/* Scroll-chaining afvangen. Bereikt een paneel zijn einde, dan geeft de browser de scroll door aan
+   het document eronder: op mobiel levert dat rubber-banding (iOS) of pull-to-refresh (Android) op,
+   en dan schuiven de testomgeving-strook en de topbar alsnog weg terwijl de app-schil eronder juist
+   niet hoort te bewegen. `contain` houdt de scroll binnen het paneel waar hij begon. */
+.overflow-y-auto,
+.overflow-auto {
+  overscroll-behavior: contain;
+}
+
 /* Dunne, smaakvolle scrollbar. */
 ::-webkit-scrollbar {
   width: 10px;

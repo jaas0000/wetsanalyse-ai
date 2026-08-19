@@ -50,7 +50,13 @@ export default async function RootLayout({
   const session = await auth();
   return (
     <html lang="nl" className={`${sans.variable} ${mono.variable}`}>
-      <body className="min-h-screen">
+      {/* `min-h-[100dvh]` en niet alleen `min-h-screen`: `100vh` is op mobiel de viewport ZONDER
+          adresbalk, dus zolang die balk in beeld staat is de body hoger dan wat je ziet en kan het
+          document zelf scrollen. Dan schuiven de testomgeving-strook en de topbar mee weg terwijl de
+          app-schil eronder juist niet-scrollend bedoeld is. `100dvh` volgt de zichtbare hoogte, dus
+          er blijft niets over om te scrollen. `min-h-screen` blijft ervóór staan als terugval voor
+          browsers zonder dvh. */}
+      <body className="min-h-screen min-h-[100dvh]">
         <Providers session={session}>
           {children}
           {modal}

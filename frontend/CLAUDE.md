@@ -187,6 +187,13 @@ altijd meer. De inhoud handelt het nu zelf af (selectie → bedieningsrij → ge
 `onSluiten`), en `ArtefactPaneel` geeft `Dialog` daarom een **no-op** `onEscape` mee. Zou die er ook
 op reageren, dan sprong Escape in één klap door alle lagen heen.
 
+**Het kruisje staat altijd rechtsboven.** De kop van `ArtefactInhoud` is twee vaste regels: titel +
+sluitknop, daaronder de acties (status, exporteren, afronden) rechts uitgelijnd. In één wrappende rij
+verhuisde het kruisje mee met de knoppen zodra de ruimte krap werd, en dan stond het op een telefoon
+ineens tussen *Exporteren* en *Afronden*. Sluiten is de uitweg en die zoek je op één plek — dezelfde
+plek als in `InstellingenDialog`, `DisclaimerDialog`, `FeedbackDialoog` en de gesprekkendrawer, met
+hetzelfde icoon (viewBox 20, `strokeWidth` 1.6). De prijs is een regel hoogte op een breed scherm.
+
 **Afronden** zit als knop in de kop van `ArtefactInhoud` (dus in beide schillen) en zet de
 documentstatus via `zetDocumentStatus`. Expliciet, want "alle elementen beslist" is niet hetzelfde
 als klaar zijn; heropenen kan altijd.
@@ -199,6 +206,15 @@ fout-/laadpagina's — gebruikt **`components/auth/AuthFrame.tsx`**: een gecentr
 (`SiteHeader`, `SiteNav`, `SiteFooter`, `AppMain`, `lib/appShell.ts`) is **weg**; die navigatiebalk
 wees naar plekken die inmiddels in de sidebar zitten. Bewust geen namaak-werkplek achter het
 inlogscherm: een lege, vervaagde app leest als "hij laadt", niet als "log eerst in".
+
+**De app-schil scrollt niet mee — ook niet op mobiel.** De body is `min-h-[100dvh]` en niet alleen
+`min-h-screen`: `100vh` is op mobiel de viewport *zonder* adresbalk, dus zolang die balk in beeld
+staat is de body hoger dan wat je ziet en kan het document zelf scrollen — waarna de
+testomgeving-strook en de mobiele topbar wegschuiven terwijl de schil eronder juist vaststaat.
+`100dvh` volgt de zichtbare hoogte; `min-h-screen` blijft ervóór staan als terugval. Daarnaast staat
+`overscroll-behavior: contain` op elke scroller (`globals.css`): bereikt een paneel zijn einde, dan
+gaf de browser de scroll door aan het document eronder, en dan bewogen die stroken alsnog
+(rubber-banding op iOS, pull-to-refresh op Android).
 
 `app/global-error.tsx` blijft een uitzondering met inline stijl en hardcoded huisstijlkleuren — die
 boundary vervangt de hele document-boom en kan de app-CSS niet veronderstellen.

@@ -61,7 +61,24 @@ export function FeedbackDialoog({ onSluit }: { onSluit: () => void }) {
 
   return (
     <Dialog label="Feedback geven" onSluit={onSluit}>
-      <div className="flex flex-col gap-4 overflow-y-auto p-6">
+      {/* Dezelfde kop als het instellingenvenster en de voorwaarden: titel links, kruisje rechts.
+          Hier ontbrak dat kruisje — sluiten kon alleen via Escape, de achtergrond of de knop onderin,
+          en op een telefoon (waar de dialoog het scherm vult) is die rechterbovenhoek nu juist waar
+          iedereen als eerste kijkt. */}
+      <div className="flex shrink-0 items-center justify-between gap-3 border-b border-line px-5 py-3.5 pt-[max(0.875rem,env(safe-area-inset-top))]">
+        <h2 className="font-display text-base font-semibold text-lint">Feedback geven</h2>
+        <button
+          type="button"
+          onClick={onSluit}
+          aria-label="Feedback sluiten"
+          className="focus-ring -mr-1 rounded-kaart p-1.5 text-muted transition-colors hover:bg-surface hover:text-ink"
+        >
+          <svg viewBox="0 0 20 20" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
+            <path d="M5 5l10 10M15 5L5 15" strokeLinecap="round" />
+          </svg>
+        </button>
+      </div>
+      <div className="flex min-h-0 flex-col gap-4 overflow-y-auto p-6">
         {verzonden ? (
           <div className="flex flex-col items-center gap-3 py-6 text-center">
             <p className="text-base font-semibold text-lint">Bedankt voor je feedback</p>
@@ -74,8 +91,6 @@ export function FeedbackDialoog({ onSluit }: { onSluit: () => void }) {
           </div>
         ) : (
           <>
-            <h2 className="text-base font-semibold text-lint">Feedback geven</h2>
-
             <fieldset>
               <legend className="mb-2 text-sm font-medium text-ink">Categorie</legend>
               <div className="grid grid-cols-2 gap-2">
