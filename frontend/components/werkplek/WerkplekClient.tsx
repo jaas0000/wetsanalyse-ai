@@ -332,7 +332,8 @@ export function WerkplekClient({
     const context = vraagOver;
     setVraagOver(null);
     const contextLabel = context ? vraagContextLabel(context.el, docs[context.slug]) : "";
-    // Op een smal scherm ligt het artefact óver de chat: stap opzij zodat je het antwoord ziet komen.
+    // Vangnet: het paneel gaat al dicht zodra je "Vraag Lex" aanklikt, maar je kunt het intussen
+    // opnieuw hebben geopend. Dan wint het antwoord — dat wil je zien binnenkomen.
     if (context && !breed) setArtefactSlug(undefined);
 
     // Toon de user-bubbel + antwoord-placeholder OPTIMISTISCH, vóór het (bij een nieuw gesprek) awaiten
@@ -773,6 +774,12 @@ export function WerkplekClient({
       onStatus={(nieuweStatus) => status(artefactSlug, nieuweStatus)}
       onVraag={(el) => {
         setVraagOver({ slug: artefactSlug, el });
+        // Op een smal scherm ligt het artefact óver de chat, dus stap hier al opzij — niet pas bij
+        // het versturen. Anders lijkt "Vraag Lex" niets te doen: de chip met de markering en het
+        // invoerveld staan achter het paneel, en je typt in een veld dat je niet ziet.
+        if (!breed) setArtefactSlug(undefined);
+        // Focus in dezelfde gebeurtenis als de klik: iOS opent het toetsenbord alleen binnen een
+        // gebruikersgebaar.
         taRef.current?.focus();
       }}
       onSluit={() => setArtefactSlug(undefined)}

@@ -287,8 +287,12 @@ de kaart een vraag klaar in het chatveld:
   draadje in de kaart geen van alle had.
 - De chip is UI-state en reist niet mee naar de api; het bewaarde bericht krijgt daarom een
   contextregel (`Bij <klasse> — "<fragment>" (art. 36): <vraag>`), zoals `kandidatenAlsTekst`.
-- Op een **smal scherm** sluit het artefact bij het versturen: daar ligt het over de chat heen en zou
-  je het antwoord niet zien binnenkomen.
+- Op een **smal scherm** sluit het artefact al bij de klik op *Vraag Lex*, niet pas bij het
+  versturen. Daar ligt het paneel over de chat, dus anders lijkt de knop niets te doen: de chip met
+  de markering en het invoerveld staan erachter, en je typt in een veld dat je niet ziet. Het
+  versturen sluit het nog een keer, als vangnet voor wie het paneel intussen opnieuw opende — dan
+  wint het antwoord, dat je wilt zien binnenkomen. De focus op de textarea blijft in dezelfde
+  gebeurtenis als de klik staan: iOS opent het toetsenbord alleen binnen een gebruikersgebaar.
 
 **De beurt is van de server, niet van dit tabblad.** Een lopend antwoord hing aan de SSE-verbinding
 van het venster: van gesprek wisselen, naar `/annotaties` lopen of herladen brak hem af. Nu draait de
