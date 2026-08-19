@@ -60,7 +60,9 @@ export function FeedbackDialoog({ onSluit }: { onSluit: () => void }) {
   }
 
   return (
-    <Dialog label="Feedback geven" onSluit={onSluit}>
+    // `compact`: een formulier met drie velden hoort niet in een venster van 42rem met een halve
+    // pagina wit onder de verzendknop.
+    <Dialog label="Feedback geven" variant="compact" onSluit={onSluit}>
       {/* Dezelfde kop als het instellingenvenster en de voorwaarden: titel links, kruisje rechts.
           Hier ontbrak dat kruisje — sluiten kon alleen via Escape, de achtergrond of de knop onderin,
           en op een telefoon (waar de dialoog het scherm vult) is die rechterbovenhoek nu juist waar

@@ -219,6 +219,13 @@ gaf de browser de scroll door aan het document eronder, en dan bewogen die strok
 `app/global-error.tsx` blijft een uitzondering met inline stijl en hardcoded huisstijlkleuren — die
 boundary vervangt de hele document-boom en kan de app-CSS niet veronderstellen.
 
+**Een venster is zo hoog als zijn inhoud, tenzij die wisselt.** `Dialog` kent daarvoor twee
+gecentreerde vormen: `center` houdt een vaste hoogte aan (42rem) en is bedoeld voor het
+instellingenvenster, dat anders bij elke tabwissel van formaat zou springen; `compact` groeit mee met
+de inhoud tot een plafond en is bedoeld voor een formulier of een lap tekst. De feedbackdialoog stond
+op `center` en had daardoor een halve pagina wit onder de verzendknop — op mobiel claimde hij zelfs
+94% van het scherm voor drie velden. Feedback en voorwaarden gebruiken nu `compact`.
+
 **De disclaimer heeft twee schillen, één tekst.** De edge-gate (`auth.config.ts` → `vereistAkkoord`)
 stuurt je zonder akkoord naar `/disclaimer`: dat is de **blokkerende** volle pagina in `AuthFrame`.
 Klik je de teststrook aan vanuit de werkplek, dan onderschept `app/@modal/(.)disclaimer/page.tsx` dat

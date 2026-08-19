@@ -19,7 +19,9 @@ export function DisclaimerDialog({ alGeaccepteerd }: { alGeaccepteerd: boolean }
   const sluit = () => router.back();
 
   return (
-    <Dialog label="Voorwaarden testomgeving" variant="center" onSluit={sluit}>
+    // Ook hier volgt de hoogte de inhoud: de voorwaarden zijn een half scherm tekst, geen venster
+    // van 42rem.
+    <Dialog label="Voorwaarden testomgeving" variant="compact" onSluit={sluit}>
       <div className="flex shrink-0 items-center justify-between gap-3 border-b border-line px-5 py-3.5 pt-[max(0.875rem,env(safe-area-inset-top))]">
         <h2 className="font-display text-base font-semibold text-lint">Voordat je begint</h2>
         <button

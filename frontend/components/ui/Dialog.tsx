@@ -14,12 +14,23 @@ export type DialogVariant =
   /** Eigen kolom naast de inhoud (artefact op een breed scherm). NIET modaal. */
   | "kolom"
   /** Van links inschuivend paneel over de volle hoogte (de gesprekkenlijst op een smal scherm). */
-  | "drawer";
+  | "drawer"
+  /** Gecentreerd venster dat zo hoog is als zijn inhoud (feedback, voorwaarden). */
+  | "compact";
 
 const PANEEL_CLASS: Record<DialogVariant, string> = {
+  // Vaste hoogte, en dat is hier een kenmerk: het instellingenvenster wisselt van tab en zou anders
+  // bij elke wissel van formaat springen. Voor een korte, vaste inhoud is `compact` de juiste keuze —
+  // die 42rem stond onder het feedbackformulier als een halve pagina wit.
   center:
     "absolute inset-x-0 bottom-0 top-[6%] flex flex-col rounded-t-vorm bg-paper shadow-kaart outline-none animate-rise " +
     "sm:inset-0 sm:m-auto sm:h-[min(42rem,85vh)] sm:w-[min(56rem,92vw)] sm:rounded-vorm",
+  // Hoogte volgt de inhoud, met een plafond zodat lange tekst binnen het scherm blijft (de body
+  // scrollt dan). Op een telefoon een bottom-sheet die meegroeit in plaats van 94% van het scherm
+  // te claimen voor een formulier met drie velden.
+  compact:
+    "absolute inset-x-0 bottom-0 max-h-[85dvh] flex flex-col rounded-t-vorm bg-paper shadow-kaart outline-none animate-rise " +
+    "sm:inset-0 sm:bottom-auto sm:m-auto sm:h-auto sm:max-h-[85vh] sm:w-[min(34rem,92vw)] sm:rounded-vorm",
   side:
     "absolute inset-x-0 bottom-0 top-[8%] flex flex-col rounded-t-vorm bg-paper shadow-kaart outline-none animate-rise " +
     "sm:inset-y-0 sm:right-0 sm:left-auto sm:top-0 sm:w-[min(46rem,92vw)] sm:rounded-none sm:rounded-l-vorm",
@@ -47,16 +58,23 @@ interface Props {
   children: ReactNode;
 }
 
-/** Venster in drie vormen: gecentreerd (`center`), inschuivend (`side`) of als eigen kolom naast de
- *  inhoud (`kolom`).
+/** Venster in vijf vormen: gecentreerd met vaste hoogte (`center`), gecentreerd op inhoudshoogte
+ *  (`compact`), inschuivend van rechts (`side`), als eigen kolom naast de inhoud (`kolom`) of van
+ *  links over de volle hoogte (`drawer`).
  *
- *  Eén implementatie voor alle drie zodat er niet meerdere focus-traps naast elkaar leven die uit de
- *  pas kunnen lopen. De vormgeving komt uit de tokens (`bg-paper`, `shadow-kaart`, `rounded-vorm`);
- *  mobiel is het bij `center`/`side` een sheet met safe-area-respect.
+ *  Eén implementatie voor alle vormen zodat er niet meerdere focus-traps naast elkaar leven die uit
+ *  de pas kunnen lopen. De vormgeving komt uit de tokens (`bg-paper`, `shadow-kaart`, `rounded-vorm`);
+ *  mobiel is het bij `center`/`compact`/`side` een sheet met safe-area-respect.
+ *
+ *  **Kies tussen `center` en `compact` op de inhoud, niet op smaak.** `center` houdt een vaste
+ *  hoogte aan en is bedoeld voor inhoud die wisselt (het instellingenvenster met zijn tabs, dat
+ *  anders bij elke tabwissel van formaat springt). `compact` groeit met zijn inhoud tot een plafond
+ *  en is bedoeld voor een formulier of een lap tekst — zet daar `center` op en er staat een halve
+ *  pagina wit onder de knoppen.
  *
  *  **`kolom` is bewust niet modaal**: geen backdrop, geen `aria-modal`, en géén focus-trap. Het
  *  paneel staat dan náást de chat, en die moet juist bereikbaar blijven — een trap zou je erin
- *  opsluiten. Escape sluit wél, dat is in alle drie de vormen dezelfde uitweg. */
+ *  opsluiten. Escape sluit wél, dat is in alle vormen dezelfde uitweg. */
 export function Dialog({ label, variant = "center", wrapperClassName = "", onSluit, onEscape, children }: Props) {
   const paneelRef = useRef<HTMLDivElement>(null);
   const modaal = variant !== "kolom";
