@@ -11,7 +11,7 @@ import logging
 import re
 import uuid
 from collections.abc import Iterator
-from typing import Any
+from typing import Any, NamedTuple
 
 from .jas_klassen import GELDIGE_JAS_KLASSEN
 from .models import (
@@ -59,12 +59,22 @@ def sleutel_van(tekst: str, lid: str) -> tuple[str, str]:
     return (_normaliseer(tekst).lower(), (lid or "").strip())
 
 
+class PatchTelling(NamedTuple):
+    """Wat de patcher deed: hoeveel uitgevoerd, en hoeveel als twijfel doorgegeven."""
+
+    toegepast: int
+    alternatief: int
+
+    def __bool__(self) -> bool:
+        return bool(self.toegepast or self.alternatief)
+
+
 def pas_critic_toe(
     voorstellen: list[dict[str, Any]],
     feedback: list[dict[str, Any]],
     corpus: str,
-) -> tuple[list[dict[str, Any]], int]:
-    """Voer de correcties van de Critic uit. Geeft (nieuwe voorstellen, aantal toegepast) terug.
+) -> tuple[list[dict[str, Any]], PatchTelling]:
+    """Voer de correcties van de Critic uit. Geeft (nieuwe voorstellen, telling) terug.
 
     De Critic leverde altijd al een uitvoerbare instructie — `actie` met `voorstel_klasse` en/of
     `voorstel_tekst`. Die ging vervolgens naar een tweede LLM (de herziener) die hem moest lezen,
@@ -74,6 +84,13 @@ def pas_critic_toe(
 
     Wat hier NIET gebeurt, gebeurt nog steeds door het model: een bijna-goed citaat repareren en een
     gemeld ontbrekend element toevoegen. Dat vraagt de brontekst lezen, geen instructie uitvoeren.
+
+    **Het aandacht-niveau bepaalt hoe hard een `vervang` landt.** Bij ROOD is de Critic er zeker van
+    dat er iets mis is en wordt de correctie uitgevoerd. Bij GEEL twijfelt hij, en dan wordt een
+    voorgestelde klasse een **alternatief** op het element: de werkplek toont die als aanklikbare chip
+    ("Twijfel — klik om te wisselen"), zodat de jurist hem met één klik overneemt en het als zijn eigen
+    beslissing in het auditspoor landt. Zo hoeft de Critic zijn voorkeur niet in te slikken en wordt
+    er ook niets op een vermoeden veranderd.
 
     Drie grenzen, en ze zijn geen van drieën nieuw:
     - **Een markering van de jurist blijft ongemoeid.** Een oordeel daarover is een suggestie; dat
@@ -87,6 +104,7 @@ def pas_critic_toe(
     op_id = {str(f.get("id", "")): f for f in feedback if f.get("id")}
     uit: list[dict[str, Any]] = []
     toegepast = 0
+    alternatief = 0
 
     for v in voorstellen:
         f = op_id.get(str(v.get("id", "")))
@@ -95,20 +113,36 @@ def pas_critic_toe(
             uit.append(v)
             continue
 
-        if actie == "verwijder" and str(f.get("aandacht", "")) == "rood":
+        rood = str(f.get("aandacht", "")) == "rood"
+        klasse = str(f.get("voorstel_klasse", "")).strip()
+
+        if actie == "verwijder" and rood:
             toegepast += 1
             _markeer_toegepast(v)
             continue
 
         nieuw = dict(v)
+
+        # Twijfel (geel) met een voorkeur: niet uitvoeren, wél doorgeven. De werkplek maakt er een
+        # aanklikbare chip van, dus de jurist neemt hem over met één klik — en dan staat het als
+        # zíjn beslissing in het spoor, niet als een stille wijziging op een vermoeden.
+        if actie == "vervang" and not rood and klasse in GELDIGE_JAS_KLASSEN and klasse != nieuw.get("klasse"):
+            alts = list(nieuw.get("alternatieven") or [])
+            if not any(str(a.get("klasse")) == klasse for a in alts):
+                alts.append({"klasse": klasse, "motivatie": str(f.get("motivatie", "")).strip()})
+                nieuw["alternatieven"] = alts
+                alternatief += 1
+            uit.append(nieuw)
+            continue
+
         gewijzigd = False
-        klasse = str(f.get("voorstel_klasse", "")).strip()
-        if actie == "vervang" and klasse in GELDIGE_JAS_KLASSEN and klasse != nieuw.get("klasse"):
+        if actie == "vervang" and rood and klasse in GELDIGE_JAS_KLASSEN and klasse != nieuw.get("klasse"):
             nieuw["klasse"] = klasse
             gewijzigd = True
         tekst = str(f.get("voorstel_tekst", "")).strip()
         if (
             actie == "vervang"
+            and rood
             and tekst
             and tekst != nieuw.get("tekst")
             and komt_letterlijk_voor(corpus, tekst)
@@ -126,7 +160,7 @@ def pas_critic_toe(
             nieuw["critic"] = ""
         uit.append(nieuw)
 
-    return uit, toegepast
+    return uit, PatchTelling(toegepast=toegepast, alternatief=alternatief)
 
 
 def _markeer_toegepast(voorstel: dict[str, Any]) -> None:

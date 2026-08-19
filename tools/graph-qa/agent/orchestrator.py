@@ -1076,15 +1076,24 @@ def build_graph(
         geen LLM-call, geen graafverkeer.
         """
         writer = get_stream_writer()
-        voorstellen, toegepast = pas_critic_toe(
+        voorstellen, telling = pas_critic_toe(
             list(state.get("voorstellen") or []),
             list(state.get("critic_feedback") or []),
             _corpus(state),
         )
-        if toegepast:
-            _stap(writer, "Correctie",
-                  f"{toegepast} {'aanwijzing' if toegepast == 1 else 'aanwijzingen'} van de Critic toegepast")
-        return {"voorstellen": voorstellen, "patch_toegepast": toegepast}
+        if telling:
+            delen = []
+            if telling.toegepast:
+                delen.append(f"{telling.toegepast} "
+                             + ("aanwijzing" if telling.toegepast == 1 else "aanwijzingen") + " toegepast")
+            if telling.alternatief:
+                delen.append(f"{telling.alternatief} "
+                             + ("twijfel" if telling.alternatief == 1 else "twijfels")
+                             + " als alternatief doorgegeven")
+            _stap(writer, "Correctie", ", ".join(delen))
+        # Alleen een echte wijziging vraagt om een nieuw oordeel. Een alternatief laat het element
+        # ongemoeid — daar geldt het oordeel van de eerste pas gewoon nog.
+        return {"voorstellen": voorstellen, "patch_toegepast": telling.toegepast}
 
     def route_na_patch(state: State) -> str:
         """Wat er ná het patchen nog over is.

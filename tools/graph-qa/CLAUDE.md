@@ -250,11 +250,20 @@ vijfentwintig commits vóór deze wijziging repareerden die lus; er stonden vier
 (`herziening_wijzigde`, `geweigerde_feedback`, `gemeld_ontbrekend`, de rondecap). De eerste twee zijn
 weg: ze bestonden alleen om een cyclus te laten stoppen die er niet meer is.
 
-- **Wat de patcher doet** (`pas_critic_toe`): klasse vervangen, fragment vervangen — *alleen* als het
-  letterlijk in het corpus staat, dezelfde eis als bij een vers voorstel — en verwijderen bij een rood
-  oordeel. Nooit op een markering van de jurist: dat oordeel is een suggestie. Elke toepassing zet
-  `toegepast: true` op de laatste `critic_rondes`-regel, want "de Critic vroeg erom" is iets anders
-  dan "het is ook gebeurd".
+- **Wat de patcher doet** (`pas_critic_toe`) hangt af van het aandacht-niveau, en dat is de kern:
+  - **rood + vervang** → uitvoeren. Klasse vervangen, fragment vervangen (*alleen* als het letterlijk
+    in het corpus staat, dezelfde eis als bij een vers voorstel), of verwijderen. Het element krijgt
+    dan een lege `aandacht` en `critic₂` velt er een nieuw oordeel over.
+  - **geel + vervang** → de voorgestelde klasse wordt een **alternatief** op het element. De werkplek
+    toont die als aanklikbare chip ("Twijfel — klik om te wisselen"), dus de jurist neemt hem met één
+    klik over en het landt als zíjn beslissing in het auditspoor. Niets veranderd, dus ook geen
+    herbeoordeling.
+
+  Zonder die tweedeling koos de Critic in de praktijk bijna altijd "geel · behoud" — twee live runs
+  lang deed de patcher niets — en bleef de jurist met precies dezelfde vraag zitten als waarmee hij
+  begon. Nooit op een markering van de jurist: dat oordeel is een suggestie. Elke *uitgevoerde*
+  correctie zet `toegepast: true` op de laatste `critic_rondes`-regel, want "de Critic vroeg erom" is
+  iets anders dan "het is ook gebeurd".
 - **Wat de herziener nog doet**: een bijna-goed citaat repareren (`verworpen_fragmenten`) en een
   gemeld ontbrekend element toevoegen. Dat vraagt de brontekst lezen, geen instructie uitvoeren.
   `_open_werk` is precies die twee; correctie-instructies staan er niet meer bij.

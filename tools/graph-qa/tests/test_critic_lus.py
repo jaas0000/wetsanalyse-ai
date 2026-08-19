@@ -79,13 +79,13 @@ _EL = {"id": "el-a", "klasse": "Rechtsfeit", "tekst": "De ontvanger", "lid": "1"
 
 # --- de patcher als pure functie ------------------------------------------------------------------
 
-def test_vervang_klasse_wordt_toegepast():
+def test_vervang_klasse_wordt_toegepast_bij_rood():
     uit, n = pas_critic_toe(
         [{"id": "a", "klasse": "Rechtsfeit", "tekst": "De ontvanger"}],
         [{"id": "a", "aandacht": "rood", "actie": "vervang", "voorstel_klasse": "Rechtssubject"}],
         CORPUS,
     )
-    assert n == 1
+    assert n.toegepast == 1
     assert uit[0]["klasse"] == "Rechtssubject"
     # Het oordeel ging over de vórige versie; de eindbeoordeling velt een nieuw oordeel.
     assert uit[0]["aandacht"] == "" and uit[0]["critic"] == ""
@@ -93,20 +93,20 @@ def test_vervang_klasse_wordt_toegepast():
 
 def test_vervang_tekst_alleen_als_die_letterlijk_in_de_bron_staat():
     """Een Critic die parafraseert corrigeert niets — dan zou code een verzinsel vastleggen."""
-    instructie = {"id": "a", "aandacht": "rood", "actie": "vervang"}
+    instructie = {"id": "a", "aandacht": "rood", "actie": "vervang"}  # rood: wordt uitgevoerd
     goed, n_goed = pas_critic_toe(
         [{"id": "a", "klasse": "Voorwaarde", "tekst": "de schuldenaar"}],
         [{**instructie, "voorstel_tekst": "indien de schuldenaar daarom verzoekt"}],
         CORPUS,
     )
-    assert (n_goed, goed[0]["tekst"]) == (1, "indien de schuldenaar daarom verzoekt")
+    assert (n_goed.toegepast, goed[0]["tekst"]) == (1, "indien de schuldenaar daarom verzoekt")
 
     mis, n_mis = pas_critic_toe(
         [{"id": "a", "klasse": "Voorwaarde", "tekst": "de schuldenaar"}],
         [{**instructie, "voorstel_tekst": "als de schuldenaar erom vraagt"}],
         CORPUS,
     )
-    assert (n_mis, mis[0]["tekst"]) == (0, "de schuldenaar")
+    assert (n_mis.toegepast, mis[0]["tekst"]) == (0, "de schuldenaar")
 
 
 @pytest.mark.parametrize("aandacht, blijft", [("rood", False), ("geel", True), ("groen", True)])
@@ -128,7 +128,50 @@ def test_een_markering_van_de_jurist_blijft_ongemoeid():
         [{"id": "a", "aandacht": "rood", "actie": "vervang", "voorstel_klasse": "Rechtssubject"}],
         CORPUS,
     )
-    assert n == 0 and uit[0]["klasse"] == "Rechtsfeit"
+    assert n.toegepast == 0 and n.alternatief == 0 and uit[0]["klasse"] == "Rechtsfeit"
+
+
+def test_geel_met_een_voorkeur_wordt_een_alternatief():
+    """De Critic hoeft zijn voorkeur niet in te slikken, en er verandert niets op een vermoeden.
+
+    De werkplek toont alternatieven als aanklikbare chip ("Twijfel — klik om te wisselen"), dus de
+    jurist neemt hem met één klik over — en dan staat het als zíjn beslissing in het auditspoor.
+    """
+    uit, n = pas_critic_toe(
+        # `aandacht`/`critic` staan er al op: critic_node zet ze vóór de patcher draait.
+        [{"id": "a", "klasse": "Tijdsaanduiding", "tekst": "zes weken", "alternatieven": [],
+          "aandacht": "geel", "critic": "kan ook een conditie zijn"}],
+        [{"id": "a", "aandacht": "geel", "actie": "vervang", "voorstel_klasse": "Voorwaarde",
+          "motivatie": "kan ook een conditie zijn"}],
+        CORPUS,
+    )
+    assert (n.toegepast, n.alternatief) == (0, 1)
+    assert uit[0]["klasse"] == "Tijdsaanduiding", "niets veranderd"
+    assert uit[0]["alternatieven"] == [{"klasse": "Voorwaarde", "motivatie": "kan ook een conditie zijn"}]
+    assert uit[0]["aandacht"] == "geel", "het oordeel blijft staan: er is niets herbeoordeeld"
+
+
+def test_een_alternatief_dat_er_al_staat_komt_er_niet_twee_keer_bij():
+    uit, n = pas_critic_toe(
+        [{"id": "a", "klasse": "Tijdsaanduiding", "tekst": "zes weken",
+          "alternatieven": [{"klasse": "Voorwaarde", "motivatie": "eerder al gezien"}]}],
+        [{"id": "a", "aandacht": "geel", "actie": "vervang", "voorstel_klasse": "Voorwaarde"}],
+        CORPUS,
+    )
+    assert n.alternatief == 0
+    assert len(uit[0]["alternatieven"]) == 1
+
+
+def test_geel_verandert_nooit_het_fragment():
+    """Een fragmentwijziging kent geen 'alternatief'-vorm, dus bij twijfel gebeurt er niets."""
+    uit, n = pas_critic_toe(
+        [{"id": "a", "klasse": "Voorwaarde", "tekst": "de schuldenaar"}],
+        [{"id": "a", "aandacht": "geel", "actie": "vervang",
+          "voorstel_tekst": "indien de schuldenaar daarom verzoekt"}],
+        CORPUS,
+    )
+    assert (n.toegepast, n.alternatief) == (0, 0)
+    assert uit[0]["tekst"] == "de schuldenaar"
 
 
 def test_toepassen_staat_in_het_spoor():
@@ -147,7 +190,7 @@ def test_behoud_laat_alles_staan():
         [{"id": "a", "aandacht": "geel", "actie": "behoud", "motivatie": "grensgeval"}],
         CORPUS,
     )
-    assert n == 0 and uit[0]["aandacht"] == "geel", "geel is een aandachtspunt, geen opdracht"
+    assert n.toegepast == 0 and uit[0]["aandacht"] == "geel", "behoud verandert niets"
 
 
 # --- de keten van begin tot eind ------------------------------------------------------------------
@@ -173,6 +216,28 @@ def test_de_correctie_gebeurt_zonder_herziening():
     assert elementen[0]["klasse"] == "Rechtssubject"
     assert elementen[0]["aandacht"] == "groen"
     assert any("Correctie" in r for r in _statusregels(events))
+
+
+def test_twijfel_belandt_als_alternatief_bij_de_jurist_zonder_extra_call():
+    """Geel met een voorkeur verandert niets, dus er valt ook niets te herbeoordelen.
+
+    Dit is de veelvoorkomende uitkomst: de Critic ziet een plausibel alternatief maar weet het niet
+    zeker. Vroeger slikte hij die voorkeur in ("geel · behoud") en bleef de jurist met dezelfde vraag
+    zitten; nu staat de klasse als aanklikbare chip op de kaart.
+    """
+    llm = FakeLLM([
+        *_aanloop(),
+        _annoteer([{**_EL, "klasse": "Tijdsaanduiding", "tekst": "De ontvanger"}]),
+        _critic([{"id": "el-a", "aandacht": "geel", "motivatie": "kan ook een subject zijn",
+                  "actie": "vervang", "voorstel_klasse": "Rechtssubject"}]),
+    ])
+    elementen, events = _annoteer_uitkomst(llm)
+
+    assert llm.index == SCHOON, "een alternatief is geen wijziging, dus geen eindbeoordeling"
+    assert elementen[0]["klasse"] == "Tijdsaanduiding"
+    assert [a["klasse"] for a in elementen[0]["alternatieven"]] == ["Rechtssubject"]
+    assert elementen[0]["aandacht"] == "geel"
+    assert any("alternatief" in r for r in _statusregels(events))
 
 
 def test_een_schone_annotatie_kost_geen_extra_call():

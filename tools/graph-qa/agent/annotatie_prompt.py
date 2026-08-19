@@ -69,18 +69,29 @@ AANDACHT-NIVEAU per element — géén verzonnen zekerheidscijfer, maar een oord
 - "geel": twijfel of een aandachtspunt — jurist moet even kijken (bv. plausibel alternatief, grensgeval).
 - "rood": waarschijnlijk fout — verkeerde klasse of niet-onderbouwd fragment.
 
+HET NIVEAU ZEGT HOE ZEKER JE BENT; DE ACTIE ZEGT WAT ERMEE MOET. Dat zijn twee verschillende dingen en
+je vult ze allebei in. Denk je aan een betere klasse, noem die dan — óók bij "geel". Een oordeel als
+"het zou ook een Voorwaarde kunnen zijn" zonder `voorstel_klasse` laat de jurist met precies dezelfde
+vraag zitten als waarmee hij begon.
+
 ONTBREKEND: benoem JAS-klassen die waarschijnlijk óók in de tekst voorkomen maar niet zijn gemarkeerd.
 - Geef ALTIJD het `tekst`-veld met het LETTERLIJKE fragment uit de artikeltekst dat gemarkeerd zou moeten worden — woord voor woord, zonder aanhalingstekens eromheen. Zonder fragment kan niemand er iets mee: de annotator kan het niet toevoegen (elk element moet letterlijk te vinden zijn) en de jurist moet het zelf gaan zoeken.
 - Lukt dat echt niet omdat het element alleen impliciet aanwezig is (bv. een subject dat de tekst niet noemt), laat `tekst` dan leeg en begin de `reden` met "impliciet:". Zeg dus dát je het niet kunt aanwijzen in plaats van het te omschrijven alsof het er staat.
 - Verzin niets buiten de aangeleverde tekst.
 
-ACTIE per element — niet alleen wát er mis is, maar wat ermee moet gebeuren. LET OP: een "vervang"
-wordt DIRECT UITGEVOERD; er komt geen tweede beoordelaar tussen die hem nog kan afzwakken. Stel dus
-alleen een vervanging voor als je er zeker van bent, en gebruik "behoud" met een motivatie als je
-alleen twijfel wilt melden:
-- "behoud": laat het element zoals het is (ook bij "geel": een aandachtspunt voor de jurist, geen correctie).
-- "vervang": er is een betere klasse en/of een beter begrensd fragment. Geef die dan ook op in `voorstel_klasse` en/of `voorstel_tekst`; een `voorstel_tekst` MOET letterlijk in de artikeltekst staan.
+ACTIE per element — niet alleen wát er mis is, maar wat ermee moet gebeuren:
+- "behoud": je hebt geen betere klasse of afbakening in gedachten. Gebruik dit als je alleen iets wilt
+  signaleren waar de jurist zelf over moet oordelen — niet als verlegenheidskeuze omdat je twijfelt.
+- "vervang": er is een betere klasse en/of een beter begrensd fragment. Geef die dan ook op in
+  `voorstel_klasse` en/of `voorstel_tekst`; een `voorstel_tekst` MOET letterlijk in de artikeltekst staan.
 - "verwijder": dit hoort helemaal geen JAS-element te zijn. Alleen bij "rood".
+
+WAT ER MET JE VOORSTEL GEBEURT — dat hangt af van het niveau, dus kies dat zorgvuldig:
+- "rood" + "vervang" → de correctie wordt DIRECT UITGEVOERD. Er komt geen tweede beoordelaar meer
+  tussen. Kies rood alleen als je er zeker van bent dat het huidige voorstel fout is.
+- "geel" + "vervang" → je voorkeur wordt NIET uitgevoerd, maar als alternatief aan de jurist getoond;
+  die neemt hem met één klik over. Dit is de plek voor "ik denk dat het beter Voorwaarde kan zijn,
+  maar oordeel zelf" — en dus geen reden om je voorstel voor je te houden.
 
 UITVOER — geef UITSLUITEND geldige JSON terug, zonder omliggende tekst of code-fences, in deze vorm:
 {{"oordelen": [
