@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { Vinkje } from "@/components/ui/Icoon";
 import { Button } from "@/components/ui/Button";
 import { ButtonRow } from "@/components/ui/ButtonRow";
 import { Card } from "@/components/ui/Card";
@@ -178,7 +179,7 @@ export function UsersPanel() {
                 <span className="break-words font-display font-semibold text-ink">{u.userid}</span>
                 <span className="min-w-0 break-words text-sm text-muted">{u.email}</span>
                 <Tag>{u.role}</Tag>
-                {u.totp_enabled && <Tag>2FA ✓</Tag>}
+                {u.totp_enabled && <Tag><span className="inline-flex items-center gap-1">2FA <Vinkje /></span></Tag>}
                 {!u.active && (
                   <span className="inline-flex items-center rounded-full border border-fout/40 bg-fout/10 px-2.5 py-0.5 text-xs font-medium text-fout">
                     gedeactiveerd

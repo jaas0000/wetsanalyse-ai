@@ -47,6 +47,7 @@ import {
   leesLopendeRuns, onthoudRun, schrijfLopendeRuns, standVanVorigeRun, vergeetRun,
 } from "@/lib/lopendeRun";
 import { useBreedScherm } from "@/lib/useBreedScherm";
+import { ChevronOmlaag, Cirkel, Waarschuwing } from "@/components/ui/Icoon";
 import { jasStyle } from "@/lib/jas";
 import { bronHref } from "@/lib/url";
 
@@ -359,7 +360,7 @@ export function WerkplekClient({
         setGesprekId(gid);
         onGesprekAangemaakt(gid);
       } catch (e) {
-        updateItem(antId, { tekst: `⚠️ ${foutTekst(e)}` });
+        updateItem(antId, { tekst: `**Er ging iets mis.** ${foutTekst(e)}` });
         setBezig(false);
         bezigRef.current = false;
         return;
@@ -405,7 +406,7 @@ export function WerkplekClient({
         await volgBeurt({ runId: lopend, gid, antId: hervatId, vanaf: 0 });
         return;
       }
-      updateItem(antId, { tekst: `⚠️ ${foutTekst(e)}` });
+      updateItem(antId, { tekst: `**Er ging iets mis.** ${foutTekst(e)}` });
       setBezig(false);
       bezigRef.current = false;
       return;
@@ -575,7 +576,7 @@ export function WerkplekClient({
       // Losgekoppeld is géén fout en géén einde: de run draait door bij de agent en wordt opgepakt
       // zodra dit venster terugkomt. Niets bewaren dus — het definitieve antwoord komt later.
       if (isAfgebroken(e)) return;
-      updateItem(antId, { tekst: `⚠️ ${foutTekst(e)}` });
+      updateItem(antId, { tekst: `**Er ging iets mis.** ${foutTekst(e)}` });
     } finally {
       afbrekenRef.current = null;
       setRunId(null);
@@ -1282,9 +1283,8 @@ function DenkProces({
       >
         {actief && <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-accent-soft" aria-hidden />}
         <span>{actief ? "Denkt na…" : label}</span>
-        <span className={`transition-transform ${open ? "rotate-90" : ""}`} aria-hidden>
-          ▸
-        </span>
+        {/* De chevron wijst naar rechts (ingeklapt) en draait omlaag bij openen. */}
+        <ChevronOmlaag className={`-rotate-90 transition-transform ${open ? "rotate-0" : ""}`} />
       </button>
       {open && (
         <div className="mt-1.5 whitespace-pre-wrap rounded-kaart border border-line bg-surface px-3 py-2 text-xs leading-relaxed text-muted [overflow-wrap:anywhere]">
@@ -1318,7 +1318,7 @@ function Brongetrouwheid({ grounding }: { grounding: AgentGrounding }) {
           : "border-aandacht-geel-rand bg-aandacht-geel-bg text-aandacht-geel-tekst"
       }`}
     >
-      <span aria-hidden>{onbepaald ? "○" : "⚠"}</span>
+      <span className="mt-0.5">{onbepaald ? <Cirkel /> : <Waarschuwing />}</span>
       <span className="min-w-0">
         {onbepaald ? (
           "Dit antwoord noemt geen vindplaats of letterlijk citaat, dus er valt niets te controleren tegen de graaf."
@@ -1353,9 +1353,8 @@ function Bronnen({ bronnen }: { bronnen: Bron[] }) {
         aria-expanded={open}
       >
         <span className="font-medium">Bronnen ({bronnen.length})</span>
-        <span className={`transition-transform ${open ? "rotate-90" : ""}`} aria-hidden>
-          ▸
-        </span>
+        {/* De chevron wijst naar rechts (ingeklapt) en draait omlaag bij openen. */}
+        <ChevronOmlaag className={`-rotate-90 transition-transform ${open ? "rotate-0" : ""}`} />
       </button>
       {open && (
         <div className="mt-1.5 break-words rounded-kaart border border-line bg-surface px-3 py-2 text-xs text-muted [overflow-wrap:anywhere]">

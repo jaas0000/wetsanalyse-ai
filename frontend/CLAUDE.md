@@ -412,6 +412,32 @@ omdat dit lijstje de **restpost van de Critic** is, zegt structureel wegklikken 
 van de Critic: dat signaal hoort niet in een sessie-variabele te verdwijnen. Zolang `ontbrekend` bij
 het chatbericht hoort en niet bij het annotatiedocument, is niets vastleggen eerlijker dan doen alsof.
 
+### Symbolen zijn iconen, geen tekens
+
+`components/ui/Icoon.tsx` levert de kleine iconen (chevron, waarschuwing, vinkje, ruit, cirkel) als
+inline SVG op `1em` met `currentColor`. Gebruik die, en zet geen los teken in de UI: het font laadt
+alleen de **latin-subset** van Fira Sans (`app/fonts.ts`), dus `▾ ◇ ▸ ⚠ ✓ ← ○` vallen terug op
+`system-ui` — San Francisco op iOS, Roboto op Android, Segoe op Windows. Andere breedte, ander
+gewicht, andere optische grootte, en dus een kaart die op een telefoon net wat anders oogt dan op
+desktop. Emoji hebben dat probleem in het kwadraat: die worden door het besturingssysteem getekend,
+in kleuren die niets met de huisstijl te maken hebben. `·` (U+00B7) mag wél: dat zit in de subset.
+
+Eén uitzondering, en die is principieel: tekst die als **inhoud** wordt opgeslagen (de foutmelding
+die als chatbericht de geschiedenis in gaat, `WerkplekClient`) kan geen component dragen. Daar staat
+geen icoon maar een woord.
+
+**De aandacht-as tekent zichzelf.** Het rood/geel/groene rondje op een reviewkaart is een `<span>`
+van 8px met `bg-aandacht-*-tekst` en een ring in `-rand` (`ReviewQueue.tsx`, de `AANDACHT`-map), niet
+een emoji. Vaste maat, huisstijlkleuren, overal hetzelfde. Hij draagt `role="img"` met een label:
+zonder die rol negeert een deel van de schermlezers het `aria-label` op een kale span, en dan is het
+een stil element.
+
+**Kleur betekent iets, of hij hoort er niet.** De reviewkaart gebruikt kleur voor het aandacht-rondje,
+de JAS-badges en de accentrand — dingen die een oordeel dragen. De knoppen volgen de app: primair is
+lintblauw (`bg-accent`, zoals `Button variant="primary"`), tweede keuze is een outline. *Akkoord* was
+volvlak groen en *Naast me neerleggen* volvlak hemelblauw; dat zijn statuskleuren, en die schreeuwen
+naast de gedempte tinten van een kaart.
+
 ### Toegankelijkheid (WCAG 2.2 AA, NLDS-niveau)
 
 - Markeringen in de tekst zijn **`<button>`**, geen `<mark onClick>`: anders zijn ze niet focusbaar

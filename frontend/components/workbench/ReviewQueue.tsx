@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { isBeslist, redenVoorWijziging, type ReviewFilter } from "@/lib/annotatie";
+import { ChevronOmlaag, Ruit, Vinkje, Waarschuwing } from "@/components/ui/Icoon";
 import { JAS_KLASSEN, jasStyle } from "@/lib/jas";
 import type { AnnotatieElement, BeslissingInvoer, ReviewReason, Wijziging } from "@/lib/types";
 
@@ -15,16 +16,24 @@ const REDENEN: { waarde: ReviewReason; label: string }[] = [
   { waarde: "anders", label: "anders" },
 ];
 
-// Aandacht-niveau (🟢🟡🔴) is de dragende visuele as: het kleurt de linker-accentrand + een zachte
-// tint. Alle kleuren via de aandacht-design-tokens (geen rauwe Tailwind-kleuren buiten de huisstijl).
-const AANDACHT: Record<string, { emoji: string; label: string; rand: string; tint: string }> = {
-  groen: { emoji: "🟢", label: "groen — geen bezwaar", rand: "border-l-aandacht-groen-rand", tint: "bg-aandacht-groen-bg/40" },
-  geel: { emoji: "🟡", label: "geel — even kijken", rand: "border-l-aandacht-geel-rand", tint: "bg-aandacht-geel-bg/40" },
-  rood: { emoji: "🔴", label: "rood — waarschijnlijk fout", rand: "border-l-aandacht-rood-rand", tint: "bg-aandacht-rood-bg/40" },
+// Het aandacht-niveau is de dragende visuele as: het kleurt de linker-accentrand, een zachte tint en
+// het rondje op de kaart. Alle kleuren via de aandacht-design-tokens, geen rauwe Tailwind-kleuren
+// buiten de huisstijl — en `stip` is dáárom een klassenstring en geen emoji meer: die werd door het
+// besturingssysteem getekend (glanzend op iOS, vlak op Android) in kleuren die niets te maken hebben
+// met de tokens die de app er zelf voor heeft. De ring geeft contrast op de zachte tint, die immers
+// in dezelfde kleurfamilie staat.
+const AANDACHT: Record<string, { stip: string; label: string; rand: string; tint: string }> = {
+  groen: { stip: "bg-aandacht-groen-tekst ring-aandacht-groen-rand", label: "groen — geen bezwaar", rand: "border-l-aandacht-groen-rand", tint: "bg-aandacht-groen-bg/40" },
+  geel: { stip: "bg-aandacht-geel-tekst ring-aandacht-geel-rand", label: "geel — even kijken", rand: "border-l-aandacht-geel-rand", tint: "bg-aandacht-geel-bg/40" },
+  rood: { stip: "bg-aandacht-rood-tekst ring-aandacht-rood-rand", label: "rood — waarschijnlijk fout", rand: "border-l-aandacht-rood-rand", tint: "bg-aandacht-rood-bg/40" },
 };
 
-const KNOP_SUCCES = "bg-succes text-paper hover:brightness-110";
-const KNOP_INFO = "bg-info text-paper hover:brightness-110";
+// De hoofdactie is lintblauw, net als elke andere primaire knop in de app (`ui/Button.tsx`), en de
+// tweede keuze een outline. Dit was volvlak groen en volvlak hemelblauw: statuskleuren, die naast de
+// gedempte tinten van een reviewkaart schreeuwen. Zo draagt de kaart alleen nog kleur waar die
+// betekenis heeft — het aandacht-rondje, de JAS-badges en de rand.
+const KNOP_PRIMAIR = "bg-accent text-paper hover:bg-accent-soft";
+const KNOP_TWEEDE = "border border-lint bg-paper text-lint hover:bg-surface";
 // Klikdoelen halen minimaal 24x24 CSS-px (WCAG 2.2 AA, 2.5.8) en groeien op aanraakschermen naar
 // 44px — het AAA-niveau (2.5.5) dat NL Design System voor overheidsdiensten aanhoudt.
 const KNOP_BASIS =
@@ -243,17 +252,23 @@ function DecisionCard({
         {/* `min-w-0`: een brede klassenaam ("Variabele en variabelewaarde") rekte deze kant anders
             op en perste Akkoord en het kruisje tegen de kaartrand. */}
         <span className="flex min-w-0 flex-wrap items-center gap-1.5">
-          {el.aandacht && (
-            <span title={el.critic || aandacht?.label} aria-label={aandacht?.label}>
-              {aandacht?.emoji}
-            </span>
+          {el.aandacht && aandacht && (
+            // `role="img"`: een aria-label op een kale span wordt door een deel van de schermlezers
+            // genegeerd, en dan is dit een stil element. De vaste 8px (in plaats van een
+            // tekengrootte) is wat het rondje op elk toestel even groot maakt.
+            <span
+              role="img"
+              aria-label={aandacht.label}
+              title={el.critic || aandacht.label}
+              className={`inline-block h-2 w-2 shrink-0 rounded-full ring-1 ring-inset ${aandacht.stip}`}
+            />
           )}
           {/* Twijfel is geen bezwaar: de annoteerder zag twee plausibele klassen. Eerder werd zoiets
               automatisch geel, waardoor een écht aandachtspunt niet meer opviel tussen de
               disambiguaties. Neutraal merkje dus, geen kleur uit de aandacht-as. */}
           {!el.aandacht && el.alternatieven.length > 0 && (
-            <span title="Twijfel tussen klassen — zie de alternatieven" aria-label="twijfel"
-                  className="text-xs text-muted">◇</span>
+            <span role="img" title="Twijfel tussen klassen — zie de alternatieven" aria-label="twijfel"
+                  className="text-xs text-muted"><Ruit /></span>
           )}
           {/* De klasse ís de knop: klikken opent het palet, klikken op een klasse is de wijziging. */}
           <button
@@ -266,7 +281,7 @@ function DecisionCard({
             title="Andere klasse kiezen"
             className={`focus-ring inline-flex min-h-[24px] max-w-full items-center whitespace-normal rounded px-2 py-0.5 text-left text-xs font-semibold transition hover:ring-1 hover:ring-lint coarse:min-h-[44px] disabled:opacity-50 ${jasStyle(el.klasse)}`}
           >
-            {el.klasse} ▾
+            {el.klasse} <ChevronOmlaag className="ml-0.5 opacity-70" />
           </button>
           {el.lid && <span className="text-[0.65rem] text-muted">lid {el.lid}</span>}
         </span>
@@ -286,7 +301,7 @@ function DecisionCard({
                   setBezig(false);
                 }
               }}
-              className={`${KNOP_BASIS} ${KNOP_SUCCES}`}
+              className={`${KNOP_BASIS} ${KNOP_PRIMAIR}`}
             >
               Akkoord
             </button>
@@ -373,7 +388,7 @@ function DecisionCard({
           weergave. Dan lijkt hij weg terwijl hij er nog is — zeg het gewoon. */}
       {zwevend && (
         <p className="mt-1.5 flex items-center gap-1 text-xs text-aandacht-geel-tekst">
-          <span aria-hidden>⚠</span> Niet terug te vinden in de tekst — pas het fragment aan of
+          <Waarschuwing /> Niet terug te vinden in de tekst — pas het fragment aan of
           verwerp de markering.
         </p>
       )}
@@ -435,7 +450,7 @@ function DecisionCard({
               <button
                 disabled={bezig}
                 onClick={() => void wijzig({ klasse: el.critic_suggestie!.voorstel_klasse })}
-                className={`${KNOP_BASIS} ${KNOP_SUCCES}`}
+                className={`${KNOP_BASIS} ${KNOP_PRIMAIR}`}
               >
                 Overnemen
               </button>
@@ -445,7 +460,7 @@ function DecisionCard({
               onClick={() =>
                 void verstuur({ type: "comment", comment: "Kanttekening van Lex afgewezen." })
               }
-              className={`${KNOP_BASIS} ${KNOP_INFO}`}
+              className={`${KNOP_BASIS} ${KNOP_TWEEDE}`}
             >
               Naast me neerleggen
             </button>
@@ -581,13 +596,15 @@ export function ReviewQueue({
           </span>
           {afgerond ? (
             <span className="inline-flex items-center gap-1 rounded-full bg-aandacht-groen-bg px-2 py-0.5 text-[0.65rem] font-semibold text-aandacht-groen-tekst">
-              ✓ Review afgerond
+              <Vinkje /> Review afgerond
             </span>
           ) : (
             <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[0.65rem] text-muted">
               {teReviewen > 0 && <span>{teReviewen} te gaan</span>}
               {zwevend > 0 && (
-                <span className="text-aandacht-geel-tekst">⚠ {zwevend} niet in de tekst</span>
+                <span className="inline-flex items-center gap-1 text-aandacht-geel-tekst">
+                  <Waarschuwing /> {zwevend} niet in de tekst
+                </span>
               )}
             </span>
           )}

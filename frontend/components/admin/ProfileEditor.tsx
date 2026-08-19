@@ -103,7 +103,7 @@ export function ProfileEditor({ profile, onDone, onCancel }: Props) {
           </Field>
           <Field
             label="API-key"
-            hint={profile?.api_key_set ? "ingesteld ✓ — leeg = ongewijzigd" : "write-only"}
+            hint={profile?.api_key_set ? "ingesteld — leeg laten = ongewijzigd" : "write-only"}
           >
             <Input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder={profile?.api_key_set ? "••••••••" : "sk-…"} autoComplete="new-password" />
           </Field>

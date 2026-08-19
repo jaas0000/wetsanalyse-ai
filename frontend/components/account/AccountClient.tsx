@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import QRCode from "qrcode";
+import { Vinkje } from "@/components/ui/Icoon";
 import { Button } from "@/components/ui/Button";
 import { SettingGroup, SettingList, SettingRow } from "@/components/ui/SettingRow";
 import { Field, Input } from "@/components/ui/Field";
@@ -116,7 +117,7 @@ export function AccountClient() {
               label="Tweestapsverificatie"
               omschrijving={account.totp_enabled ? "Ingeschakeld." : "Uitgeschakeld."}
             >
-              {account.totp_enabled ? <Tag>2FA ✓</Tag> : <Tag>2FA uit</Tag>}
+              {account.totp_enabled ? <Tag><span className="inline-flex items-center gap-1">2FA <Vinkje /></span></Tag> : <Tag>2FA uit</Tag>}
             </SettingRow>
           </SettingList>
 

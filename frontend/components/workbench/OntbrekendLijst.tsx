@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { Vinkje } from "@/components/ui/Icoon";
 import { jasStyle } from "@/lib/jas";
 import { lidUitOffset, maakAnker, vindPositie, type LidRegel } from "@/lib/selectie";
 import type { AnnotatieElement, OntbrekendItem } from "@/lib/types";
@@ -104,7 +105,9 @@ export function OntbrekendLijst({
               {(klaar || toevoegbaar) && (
                 <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                   {klaar ? (
-                    <span className="text-xs text-succes">✓ inmiddels gemarkeerd</span>
+                    <span className="inline-flex items-center gap-1 text-xs text-succes">
+                      <Vinkje /> inmiddels gemarkeerd
+                    </span>
                   ) : (
                     <button
                       type="button"

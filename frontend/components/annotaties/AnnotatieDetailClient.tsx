@@ -7,6 +7,7 @@ import { useCallback, useEffect, useState } from "react";
 import { AppSidebar } from "@/components/werkplek/AppSidebar";
 import { MobieleTopbar } from "@/components/werkplek/MobieleTopbar";
 import { ArtefactInhoud } from "@/components/werkplek/ArtefactInhoud";
+import { ChevronOmlaag } from "@/components/ui/Icoon";
 import { Melding } from "@/components/ui/Melding";
 import { Skeleton } from "@/components/ui/Skeleton";
 import {
@@ -108,9 +109,9 @@ export function AnnotatieDetailClient({ slug }: { slug: string }) {
             <div className="min-w-0 flex-1 basis-56">
               <Link
                 href="/annotaties"
-                className="focus-ring rounded text-xs text-muted transition-colors hover:text-ink"
+                className="focus-ring inline-flex items-center gap-1 rounded text-xs text-muted transition-colors hover:text-ink"
               >
-                ← Alle annotaties
+                <ChevronOmlaag className="rotate-90" /> Alle annotaties
               </Link>
               <p className="truncate text-sm font-medium text-lint">{titel}</p>
             </div>

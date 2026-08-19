@@ -1,5 +1,6 @@
 "use client";
 
+import { Vinkje } from "@/components/ui/Icoon";
 import { BevestigKnop } from "@/components/ui/BevestigKnop";
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/Button";
@@ -105,7 +106,7 @@ export function ProfielenPanel() {
                     )}
                     <Tag>{p.provider}</Tag>
                     <Tag>{p.model || "geen model"}</Tag>
-                    {p.api_key_set && <Tag>key ✓</Tag>}
+                    {p.api_key_set && <Tag><span className="inline-flex items-center gap-1">key <Vinkje /></span></Tag>}
                   </div>
 
                   {test && test !== "bezig" && (
