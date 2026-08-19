@@ -145,13 +145,19 @@ Vier dingen om niet te breken:
 - **Cappen is klassebewust.** Alleen `token`/`reason`/`status` mogen sneuvelen (`VLUCHTIGE_TYPES`);
   `element`, `doel`, `run`, `ontbrekend`, `done` en `error` blijven staan, en er gaat een
   `gat`-event voorop zodat de client "…" toont in plaats van een verminkt antwoord.
-- **Stoppen is een vlag, geen `task.cancel()`.** De MCP-verbinding wordt in een `finally` gesloten;
-  die onder een draaiende executor-thread wegtrekken breekt hem. De run eindigt op de eerstvolgende
-  grens die de driver leest.
+- **Stoppen is een vlag, geen `task.cancel()`.** Elke node is gewikkeld in `stopbaar()`
+  (`orchestrator.py`, bij `add(...)`): staat de vlag om, dan gooit hij `BeurtGestopt` en betreedt de
+  graaf geen nieuwe node meer. `answer_stream` vangt dat op als een gewone afloop — géén
+  `error`-event. Bewust geen taak-annulering: de nodes zijn synchroon en de MCP-verbinding wordt in
+  een `finally` gesloten; die onder een draaiende executor-thread wegtrekken breekt hem. De prijs is
+  dat stoppen tijd kost, want de lopende stap maakt zichzelf af — en omdat `emit_node` terminaal is,
+  levert stoppen dáárvóór écht nul voorstellen op. Het bericht zegt dat dan ook zo.
 
 Het register is **in-proces** (één uvicorn-proces zonder `--workers`). Een herstart wist het: dat is
 bewust — hervatten-vanaf-checkpoint vraagt async nodes, en `agent/agent.py` reset bij elke beurt de
-werkvelden. Komt er ooit een tweede replica, dan moet dit naar een gedeelde store.
+werkvelden. Komt er ooit een tweede replica, dan moet dit naar een gedeelde store. De werkplek maakt
+dat zichtbaar in plaats van te blijven hangen: hij onthoudt lokaal welk run-id er liep en meldt na
+een herstart dat de beurt is afgebroken (`frontend/lib/lopendeRun.ts`).
 
 > **Testen:** gebruik `with TestClient(app)` (zie `tests/test_run_endpoints.py`). Zonder de `with`
 > breekt de harnas per request zijn event loop af en sneuvelt de achtergrondtaak — dan meet je de

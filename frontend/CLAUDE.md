@@ -293,8 +293,15 @@ beurt als **run** bij graph-qa (`POST /api/annotatie/run` → `startRun`) en kij
 - **Bij binnenkomst haken we weer aan** (`hervatBeurt` na de hydratatie): loopt er nog een beurt, dan
   komt hij vanaf `seq 0` terug in beeld. Alleen bij status `loopt` — een afgeronde beurt staat al in
   de gehydrateerde geschiedenis, en twee keer tonen is erger dan missen.
-- **Stoppen is een verzoek** (`stopRun`), geen dichtvallende socket. De agent-nodes zijn synchroon,
-  dus de run eindigt pas op de eerstvolgende grens; de knop blijft daarom in de `stopt`-stand staan.
+- **Stoppen is een verzoek** (`stopRun`), geen dichtvallende socket. De agent stopt op een
+  nodegrens, dus dat kan tientallen seconden duren; de knop blijft daarom in de `stopt`-stand staan.
+  Stoppen vóór de voorstellen levert er écht nul op — het bericht zegt dat, in plaats van een half
+  resultaat te suggereren.
+- **Na een herstart van de agent is het run-register leeg.** `lib/lopendeRun.ts` onthoudt per gesprek
+  welk run-id er liep; bij binnenkomst zonder lopende run bepaalt `standVanVorigeRun` of de beurt
+  gewoon is afgerond (het bericht met dat `run_id` staat in de geschiedenis) of écht verdwenen is.
+  Alleen in dat tweede geval komt er een melding. Zonder die controle zou elke normale afloop als
+  "afgebroken" gemeld worden.
 - **`run_id` reist mee naar de api** bij het bewaren van de assistent-beurt. Kijken er twee tabbladen
   mee, dan landt de uitkomst tóch één keer (de api dedupliceert erop).
 - **Schrijft de agent zelf weg, dan doet de werkplek dat niet.** graph-qa stuurt vlak vóór het einde

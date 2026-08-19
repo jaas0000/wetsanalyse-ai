@@ -42,6 +42,9 @@ import {
   annotatieTitel, BESLIST_LIFECYCLES, eigenMarkeringenVoorContext, isVerwijderd, kandidaatLabel,
   kandidaatPrompt, kandidatenAlsTekst, mergeVoorstellen, vraagContextLabel, vraagContextVan,
 } from "@/lib/annotatie";
+import {
+  leesLopendeRuns, onthoudRun, schrijfLopendeRuns, standVanVorigeRun, vergeetRun,
+} from "@/lib/lopendeRun";
 import { useBreedScherm } from "@/lib/useBreedScherm";
 import { jasStyle } from "@/lib/jas";
 import { bronHref } from "@/lib/url";
@@ -140,6 +143,9 @@ export function WerkplekClient({
   // dit is geen storing: geen rode balk en geen retry. Nodig naast de tombstone-kaart omdat een
   // deep-link (`/workbench?annotatie=…`) helemaal geen kaart in de thread hoeft te hebben.
   const [artefactWeg, setArtefactWeg] = useState<string | null>(null);
+  // De vorige beurt van dit gesprek is nooit afgekomen: het run-register van de agent is leeg (een
+  // herstart of deploy). Beter dit zeggen dan een gesprek dat halverwege ophoudt zonder uitleg.
+  const [runVerdwenen, setRunVerdwenen] = useState(false);
   const lijstRef = useRef<HTMLDivElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
   // Synchrone guard tegen dubbel-verzenden (twee Enters in dezelfde tick): de `bezig`-state komt te laat
@@ -187,8 +193,10 @@ export function WerkplekClient({
         );
         // Documenten van annotatie-berichten alvast laden voor de chip-labels.
         for (const b of g.berichten) if (b.annotatie_slug) void laadDoc(b.annotatie_slug);
-        // Liep hier nog een beurt terwijl je ergens anders keek? Pak hem weer op.
-        void hervatBeurt(hydratieId);
+        // Liep hier nog een beurt terwijl je ergens anders keek? Pak hem weer op. De run-ids uit de
+        // geschiedenis gaan mee: daarmee is "afgerond terwijl je weg was" te onderscheiden van
+        // "weg door een herstart".
+        void hervatBeurt(hydratieId, g.berichten.map((b) => b.run_id).filter(Boolean));
       })
       .catch(() => {});
     return () => {
@@ -378,6 +386,9 @@ export function WerkplekClient({
       return;
     }
 
+    // Onthoud dát er een beurt liep. Komt de agent tussentijds opnieuw op, dan is dit het enige
+    // spoor waarmee de werkplek kan zeggen wat er gebeurd is.
+    schrijfLopendeRuns(onthoudRun(leesLopendeRuns(), gid, gestart.run_id));
     await volgBeurt({ runId: gestart.run_id, gid, antId });
   }
 
@@ -451,6 +462,9 @@ export function WerkplekClient({
         vanaf,
         beheerser.signal,
       );
+      // De stroom liep tot het einde: deze beurt is afgerond en het spoor mag weg. Bij loskoppelen
+      // komen we hier niet (dat gooit een AbortError), en dan blijft het spoor terecht staan.
+      vergeetLopendeRun(gid);
 
       // De agent heeft het vastgelegd. Nu alleen nog tonen wat er staat — de api is de bron.
       if (opgeslagen) {
@@ -527,6 +541,11 @@ export function WerkplekClient({
     }
   }
 
+  /** De beurt is afgerond (of afgebroken); het spoor mag weg. */
+  function vergeetLopendeRun(gid: string) {
+    schrijfLopendeRuns(vergeetRun(leesLopendeRuns(), gid));
+  }
+
   /** De agent heeft de beurt al weggeschreven; haal op wat er staat en toon het.
    *
    *  Bewust ophalen in plaats van de inhoud in het SSE-contract te proppen: dan blijft de api de ene
@@ -570,14 +589,21 @@ export function WerkplekClient({
    *  af). Alleen bij een lópende run: een beurt die klaar is staat al in de gehydrateerde
    *  geschiedenis, en die twee keer tonen is erger dan hem missen.
    */
-  async function hervatBeurt(gid: string) {
+  async function hervatBeurt(gid: string, berichtRunIds: string[]) {
     if (bezigRef.current) return;
     const lopend = await haalActieveRun(gid);
-    if (!lopend || lopend.status !== "loopt") return;
+    if (lopend && lopend.status === "loopt") {
+      const antId = uid();
+      setItems((xs) => [...xs, { id: antId, type: "antwoord", tekst: "" }]);
+      await volgBeurt({ runId: lopend.run_id, gid, antId, vanaf: 0 });
+      return;
+    }
 
-    const antId = uid();
-    setItems((xs) => [...xs, { id: antId, type: "antwoord", tekst: "" }]);
-    await volgBeurt({ runId: lopend.run_id, gid, antId, vanaf: 0 });
+    // Geen lopende run. Stond er wél een open? Dan is het register leeg — een herstart of deploy —
+    // tenzij de beurt gewoon is afgerond en zijn bericht heeft achtergelaten.
+    const stand = standVanVorigeRun(leesLopendeRuns()[gid], berichtRunIds);
+    if (stand === "verdwenen") setRunVerdwenen(true);
+    if (stand !== "geen") vergeetLopendeRun(gid);
   }
 
   /** Stop de lopende beurt. Een verzoek aan de agent, geen dichtvallende verbinding.
@@ -731,6 +757,24 @@ export function WerkplekClient({
               className="focus-ring rounded font-medium underline underline-offset-2"
             >
               Opnieuw proberen
+            </button>
+          </Melding>
+        </div>
+      )}
+
+      {/* Een herstart van de agent wist het run-register. Zeg dat, in plaats van een gesprek dat
+          halverwege ophoudt zonder uitleg. */}
+      {runVerdwenen && (
+        <div className="shrink-0 px-4 pt-2">
+          <Melding type="waarschuwing" compact>
+            De vorige vraag is afgebroken doordat de agent opnieuw is opgestart. Stel hem gerust nog
+            een keer.{" "}
+            <button
+              type="button"
+              onClick={() => setRunVerdwenen(false)}
+              className="focus-ring rounded font-medium underline underline-offset-2"
+            >
+              Sluiten
             </button>
           </Melding>
         </div>

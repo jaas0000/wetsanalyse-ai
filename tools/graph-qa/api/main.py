@@ -239,6 +239,10 @@ def _stroom_voor(request: ChatRequest):
             answer_stream(
                 request.question, request.conversation_id,
                 modus=request.modus, context=request.context,
+                # Stoppen loopt via deze vlag: de graaf betreedt dan geen nieuwe node meer. Bewust
+                # geen taak-annulering — de nodes zijn synchroon en de MCP-verbinding wordt in een
+                # `finally` gesloten.
+                stop_check=lambda: run.stop_gevraagd,
             ),
             settings=settings,
             run=run,

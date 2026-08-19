@@ -17,16 +17,18 @@ zodat de blocking LLM-/MCP-calls de event-loop niet blokkeren.
 """
 from __future__ import annotations
 
+import functools
 import logging
 import operator
 import re
+from collections.abc import Callable
 from datetime import datetime, timezone
 from typing import Annotated, Any, TypedDict
 
 from langgraph.config import get_stream_writer
 from langgraph.graph import END, START, StateGraph
 
-from .agent_common import truncate
+from .agent_common import BeurtGestopt, truncate
 from .annotatie import _verwerk, _verwerk_critic, komt_letterlijk_voor, sleutel_van
 from .annotatie_prompt import (
     annotatie_systeemprompt,
@@ -391,7 +393,12 @@ class State(TypedDict, total=False):
     context: dict[str, Any]
 
 
-def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGraph:
+def build_graph(
+    settings: Settings,
+    llm: LLMPort,
+    graph: GraphPort,
+    stop_check: Callable[[], bool] | None = None,
+) -> StateGraph:
     """Bouw de (ongecompileerde) toestandsgraaf; de wrapper compileert 'm met een checkpointer."""
     model = settings.llm_model
 
@@ -1296,24 +1303,42 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
         return {"corrected": True, "answer": ""}
 
     g = StateGraph(State)
-    g.add_node("verify", verify_node)
-    g.add_node("finalize", finalize_node)
+
+    def stopbaar(fn):
+        """Elke node begint met de vraag of er nog gewerkt moet worden.
+
+        Zo stopt een beurt op een **nodegrens** in plaats van halverwege een LLM-call: de state die
+        al gecommit is blijft consistent, en de MCP-verbinding wordt netjes afgesloten. De prijs is
+        dat stoppen tijd kost — de lopende stap maakt zichzelf af."""
+        @functools.wraps(fn)
+        def bewaakt(state: State) -> dict[str, Any]:
+            if stop_check is not None and stop_check():
+                raise BeurtGestopt()
+            return fn(state)
+        return bewaakt
+
+    def add(naam: str, fn) -> None:
+        """Registreer een node, altijd met de stopbewaking eromheen."""
+        g.add_node(naam, stopbaar(fn))
+
+    add("verify", verify_node)
+    add("finalize", finalize_node)
 
     if settings.enable_decomposition:
         # Supervisor → (annotatie: agent⇄tools→annoteer_finalize | antwoord: decompose→solve→…→
         # finalize) → advance → (volgende worker | einde).
-        g.add_node("supervisor", supervisor_node)
-        g.add_node("decompose", decompose_node)
-        g.add_node("solve", solve_node)
-        g.add_node("synthesize", synthesize_node)
-        g.add_node("resynth", resynth_node)
-        g.add_node("agent", agent_node)
-        g.add_node("tools", tools_node)
-        g.add_node("annoteer", annoteer_node)
-        g.add_node("critic", critic_node)
-        g.add_node("herzie", herzie_node)
-        g.add_node("emit", emit_node)
-        g.add_node("advance", advance_node)
+        add("supervisor", supervisor_node)
+        add("decompose", decompose_node)
+        add("solve", solve_node)
+        add("synthesize", synthesize_node)
+        add("resynth", resynth_node)
+        add("agent", agent_node)
+        add("tools", tools_node)
+        add("annoteer", annoteer_node)
+        add("critic", critic_node)
+        add("herzie", herzie_node)
+        add("emit", emit_node)
+        add("advance", advance_node)
         entrymap = {"agent": "agent", "decompose": "decompose"}
         g.add_edge(START, "supervisor")
         g.add_conditional_edges("supervisor", _entry_node, entrymap)
@@ -1338,18 +1363,18 @@ def build_graph(settings: Settings, llm: LLMPort, graph: GraphPort) -> StateGrap
         return g
 
     # Één-loop-stroom.
-    g.add_node("agent", agent_node)
-    g.add_node("tools", tools_node)
-    g.add_node("correct", correct_node)
+    add("agent", agent_node)
+    add("tools", tools_node)
+    add("correct", correct_node)
 
     if settings.enable_planning:
         # Supervisor → agent⇄tools → (verify→finalize | annoteer_finalize) → advance → (volgende | einde).
-        g.add_node("supervisor", supervisor_node)
-        g.add_node("annoteer", annoteer_node)
-        g.add_node("critic", critic_node)
-        g.add_node("herzie", herzie_node)
-        g.add_node("emit", emit_node)
-        g.add_node("advance", advance_node)
+        add("supervisor", supervisor_node)
+        add("annoteer", annoteer_node)
+        add("critic", critic_node)
+        add("herzie", herzie_node)
+        add("emit", emit_node)
+        add("advance", advance_node)
         g.add_edge(START, "supervisor")
         g.add_conditional_edges("supervisor", _entry_node, {"agent": "agent"})
         g.add_conditional_edges(

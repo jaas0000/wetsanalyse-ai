@@ -109,3 +109,29 @@ def _run_events(coro_fn):
     import asyncio
 
     return asyncio.run(coro_fn())
+
+
+def test_stoppen_haalt_de_graaf_van_een_nodegrens():
+    """Coöperatief stoppen: de vlag gaat om, de graaf betreedt geen nieuwe node meer.
+
+    Bewust geen taak-annulering. De nodes zijn synchroon en de MCP-verbinding wordt in een `finally`
+    gesloten — die onder een draaiende executor-thread wegtrekken breekt hem. Wat je hier ziet is de
+    prijs én de winst: er komt geen extra LLM-call meer, de graaf sluit netjes af (`graph.closed`),
+    en de stroom eindigt met een gewone `done` in plaats van een fout.
+    """
+    settings, graph, llm = _make()
+    events = _run(answer_stream("vraag", settings=settings, llm=llm, graph=graph,
+                                stop_check=lambda: True))
+
+    assert [e["type"] for e in events] == ["done"]  # geen enkele node is uitgevoerd
+    assert graph.closed is True
+    assert llm.calls == []  # er is geen model aangeroepen, dus ook niets betaald
+
+
+def test_zonder_stopverzoek_verandert_er_niets():
+    """De bewaking mag de gewone lus niet raken."""
+    settings, graph, llm = _make()
+    events = _run(answer_stream("vraag", settings=settings, llm=llm, graph=graph,
+                                stop_check=lambda: False))
+    assert "done" in [e["type"] for e in events]
+    assert llm.calls

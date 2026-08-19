@@ -109,24 +109,23 @@ async def voer_beurt_uit(
     is dit puur een doorgeefluik en blijft de werkplek verantwoordelijk — precies het oude gedrag.
     """
     schrijver = BeurtSchrijver()
-    afgebroken = False
     async for event in stroom:
-        # Stoppen is gevraagd: geen nieuwe events meer doorgeven en afronden met wat er ligt. De
-        # agent zelf draait nog even door in zijn executor-thread (de nodes zijn synchroon); dat is
-        # onveranderd, en het is de reden dat "stoppen" tijd mag kosten.
-        if run.stop_gevraagd:
-            afgebroken = True
-            break
         if event.get("type") == "done":
             # Vasthouden: `done` is voor de client het teken dat de beurt vastligt.
             break
         schrijver.verwerk(event)
         yield event
 
+    # Is er om stoppen gevraagd, dan is de graaf er zelf op een nodegrens uitgestapt (`stop_check` →
+    # `BeurtGestopt`). We breken hier dus NIET af: dan zouden we de generator halverwege dichtgooien
+    # en het lopende werk alsnog weggooien — precies wat we wilden afschaffen. De prijs is dat
+    # stoppen tijd kost; dat hoort de UI te tonen.
+    gestopt = bool(run.stop_gevraagd)
+
     mag_vastleggen = settings.legt_zelf_vast and bool(gesprek_id) and bool(user_id)
     if mag_vastleggen:
         async for na in _leg_vast(schrijver, settings=settings, run=run,
-                                  gesprek_id=gesprek_id, afgebroken=afgebroken, user_id=user_id):
+                                  gesprek_id=gesprek_id, gestopt=gestopt, user_id=user_id):
             yield na
     yield {"type": "done"}
 
@@ -137,7 +136,7 @@ async def _leg_vast(
     settings: Settings,
     run,
     gesprek_id: str,
-    afgebroken: bool,
+    gestopt: bool,
     user_id: str,
 ) -> AsyncIterator[dict[str, Any]]:
     """Schrijf document, elementen en het chatbericht weg; meld de uitkomst aan de client."""
@@ -168,9 +167,11 @@ async def _leg_vast(
             }
         else:
             tekst = schrijver.tekst.strip()
-            if afgebroken:
-                # Weggooien wat de agent al schreef is niet wat "stoppen" betekent.
-                tekst = f"{tekst}\n\n_(afgebroken)_" if tekst else "_(afgebroken)_"
+            if gestopt:
+                # Weggooien wat de agent al schreef is niet wat "stoppen" betekent. Maar beloof ook
+                # geen half resultaat dat er niet is: `emit_node` is terminaal, dus stoppen vóór dat
+                # punt levert écht nul voorstellen op — dan is dat wat er staat.
+                tekst = f"{tekst}\n\n_(gestopt)_" if tekst else "_Gestopt — er waren nog geen voorstellen._"
             bericht |= {
                 "tekst": tekst or "(geen antwoord)",
                 "denk": schrijver.denk,

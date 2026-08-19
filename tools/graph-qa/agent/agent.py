@@ -15,12 +15,12 @@ from __future__ import annotations
 
 import logging
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
-from .agent_common import run_sync
+from .agent_common import BeurtGestopt, run_sync
 from .config import Settings
 from .observability import get_tracer
 from .ports import GraphPort, LLMPort
@@ -87,6 +87,7 @@ async def answer_stream(
     settings: Settings | None = None,
     llm: LLMPort | None = None,
     graph: GraphPort | None = None,
+    stop_check: Callable[[], bool] | None = None,
 ) -> AsyncIterator[dict[str, Any]]:
     """
     Async generator die SSE-events yield:
@@ -119,7 +120,7 @@ async def answer_stream(
 
     from .orchestrator import build_graph
 
-    builder = build_graph(settings, llm, graph)
+    builder = build_graph(settings, llm, graph, stop_check=stop_check)
     thread_id = conversation_id or uuid.uuid4().hex
     config = {
         "configurable": {"thread_id": thread_id},
@@ -176,6 +177,16 @@ async def answer_stream(
                 yield {"type": "conversation_id", "conversation_id": conversation_id}
             yield {"type": "done"}
 
+    except BeurtGestopt:
+        # Geen fout: de jurist vroeg om te stoppen en de graaf is op een nodegrens uitgestapt. Wat er
+        # tot hier geëmit is, is gewoon geldig; de aanroeper legt het vast.
+        logger.info(
+            "beurt gestopt op verzoek",
+            extra={"categorie": "functioneel", "chat_session_id": conversation_id or ""},
+        )
+        if conversation_id:
+            yield {"type": "conversation_id", "conversation_id": conversation_id}
+        yield {"type": "done"}
     except Exception:
         # Gesaniteerde melding naar de client, volledige fout alleen in het log — zoals de api dat
         # bij de modelprovider-test doet. De ruwe exception van een LLM- of MCP-fout bevat

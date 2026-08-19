@@ -98,6 +98,39 @@ def test_geen_actieve_run_geeft_null(client):
     assert client.get("/v1/conversations/leeg/run").json() is None
 
 
+def test_stoppen_laat_de_run_netjes_eindigen(client, monkeypatch):
+    """Stoppen loopt via een vlag die de stroom zelf leest — geen `task.cancel()`.
+
+    Dat is het verschil met vroeger: de verbinding dichtgooien liet het werk doorlopen én gooide het
+    resultaat weg. Nu stopt de beurt op een grens en blijft staan wat er al was."""
+    gezien: list[bool] = []
+
+    def stroom_die_kijkt(_request):
+        async def maak(run):
+            import asyncio
+
+            for i in range(20):
+                gezien.append(run.stop_gevraagd)
+                if run.stop_gevraagd:
+                    return
+                await asyncio.sleep(0.05)
+                yield {"type": "token", "content": f"deel{i} "}
+        return maak
+
+    monkeypatch.setattr(main, "_stroom_voor", stroom_die_kijkt)
+    run_id = client.post("/v1/runs", json={"question": "v", "conversation_id": "g1"}).json()["run_id"]
+    time.sleep(0.15)
+    assert client.post(f"/v1/runs/{run_id}/cancel").status_code == 202
+
+    time.sleep(0.3)
+    stand = client.get("/v1/conversations/g1/run").json()
+    assert stand["status"] == "gestopt"
+    # Er is écht gestopt: de stroom zag de vlag en hield ermee op, ruim vóór de twintigste ronde.
+    assert any(gezien) and len(gezien) < 20
+    # En wat er al binnen was, staat er nog.
+    assert stand["volgende_seq"] > 0
+
+
 def test_stoppen_is_een_verzoek(client):
     run_id = client.post("/v1/runs", json={"question": "v", "conversation_id": "g1"}).json()["run_id"]
     antwoord = client.post(f"/v1/runs/{run_id}/cancel")

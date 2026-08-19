@@ -178,8 +178,21 @@ async def test_stoppen_bewaart_wat_er_al_stond(api):
         run=_run(stop=True),
     )
     _, bericht = api.berichten[0]
-    assert bericht["tekst"].endswith("_(afgebroken)_")
+    assert bericht["tekst"] == "Half afgemaakt.\n\n_(gestopt)_"
     assert uit[-1]["type"] == "done"
+
+
+@asyncio_test
+async def test_stoppen_vóór_de_voorstellen_belooft_niets(api):
+    """`emit_node` is terminaal: stoppen daarvóór levert écht nul voorstellen op. Dan is "er waren
+    nog geen voorstellen" het eerlijke antwoord, niet een leeg bericht of een half document."""
+    await _draai(
+        [{"type": "status", "message": "Ophalen"}, {"type": "done"}],
+        run=_run(stop=True),
+    )
+    _, bericht = api.berichten[0]
+    assert bericht["tekst"] == "_Gestopt — er waren nog geen voorstellen._"
+    assert api.documenten == []
 
 
 @asyncio_test
