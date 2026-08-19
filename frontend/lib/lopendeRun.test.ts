@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { onthoudRun, standVanVorigeRun, vergeetRun } from "./lopendeRun";
+import { naEenGebrokenStream, onthoudRun, standVanVorigeRun, vergeetRun } from "./lopendeRun";
 
 describe("standVanVorigeRun", () => {
   it("zegt niets als er geen beurt openstond", () => {
@@ -34,5 +34,29 @@ describe("onthoudRun / vergeetRun", () => {
 
   it("vergeten van iets dat er niet staat is geen fout", () => {
     expect(vergeetRun({ g1: "run-1" }, "g9")).toEqual({ g1: "run-1" });
+  });
+});
+
+describe("naEenGebrokenStream", () => {
+  it("negeert een stream die we zelf afbraken", () => {
+    // Unmount of van gesprek wisselen: de run draait door, er valt niets te melden of te herstellen.
+    expect(naEenGebrokenStream(true, 0, 1, true)).toBe("negeren");
+  });
+
+  it("haakt opnieuw aan als de verbinding wegvalt", () => {
+    // Dit is het geval dat bij een deploy optrad: de frontend-container werd vervangen, het tabblad
+    // zag "network error", en de beurt liep ondertussen door en slaagde.
+    expect(naEenGebrokenStream(false, 0, 1, true)).toBe("opnieuw");
+  });
+
+  it("meldt pas als de herkansing op is", () => {
+    // Eén poging, niet meer: is de dienst echt weg, dan is doorproberen een molen die de gebruiker
+    // niets vertelt.
+    expect(naEenGebrokenStream(false, 1, 1, true)).toBe("melden");
+  });
+
+  it("probeert niet opnieuw als het venster weg is", () => {
+    // Zonder venster is er niemand om het antwoord aan te tonen; de run draait gewoon door.
+    expect(naEenGebrokenStream(false, 0, 1, false)).toBe("melden");
   });
 });

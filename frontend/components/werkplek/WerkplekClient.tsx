@@ -43,7 +43,8 @@ import {
   doelVanKandidaat, kandidaatPrompt, kandidatenAlsTekst, mergeVoorstellen, vraagContextLabel, vraagContextVan,
 } from "@/lib/annotatie";
 import {
-  leesLopendeRuns, onthoudRun, schrijfLopendeRuns, standVanVorigeRun, vergeetRun,
+  leesLopendeRuns, naEenGebrokenStream, onthoudRun, schrijfLopendeRuns, standVanVorigeRun,
+  vergeetRun,
 } from "@/lib/lopendeRun";
 import { useBreedScherm } from "@/lib/useBreedScherm";
 import { ChevronOmlaag, Cirkel, Waarschuwing } from "@/components/ui/Icoon";
@@ -90,6 +91,15 @@ function uid(): string {
 function isAfgebroken(e: unknown): boolean {
   return (e as Error)?.name === "AbortError";
 }
+
+/** Eén keer opnieuw aanhaken bij een weggevallen verbinding, en dan pas de fout tonen.
+ *
+ *  Eén poging, niet meer: is de dienst echt onbereikbaar, dan blijft doorproberen een molen die de
+ *  gebruiker niets vertelt. Deze ene vangt het geval waar het om gaat — een herstart of een korte
+ *  onderbreking — af zonder dat een lopende beurt als mislukt in beeld komt.
+ */
+const MAX_HERSTELPOGINGEN = 1;
+const HERSTEL_WACHTTIJD_MS = 1500;
 
 interface Props {
   /** Het te openen gesprek, of `null` voor een vers (nog niet gepersisteerd) gesprek. */
@@ -428,8 +438,8 @@ export function WerkplekClient({
    *  anders lopen de twee paden uit elkaar op precies het moment dat het ertoe doet.
    */
   async function volgBeurt({
-    runId: id, gid, antId, vanaf = 0,
-  }: { runId: string; gid: string; antId: string; vanaf?: number }) {
+    runId: id, gid, antId, vanaf = 0, herstel = 0,
+  }: { runId: string; gid: string; antId: string; vanaf?: number; herstel?: number }) {
     // Het venster is tussen het besluit en dit moment verdwenen: niet alsnog aanhaken. De run zelf
     // loopt gewoon door bij de agent.
     if (!levendRef.current) return;
@@ -456,6 +466,10 @@ export function WerkplekClient({
     // stond alles er twee keer. Blijft dit leeg, dan doet de client het zoals vroeger; zo werkt een
     // graph-qa zonder api-koppeling gewoon door.
     let opgeslagen: { annotatie_slug: string; run_id: string } | null = null;
+    // De verbinding viel weg terwijl de run doorliep. Buiten de `try` gezet omdat het opnieuw
+    // aanhaken ná de `finally` moet gebeuren: die reset `bezig`/`afbrekenRef`, en een nieuwe lus
+    // die daarvóór begint raakt zijn eigen beheerser kwijt.
+    let verbroken = false;
     try {
       await volgRun(
         id,
@@ -556,14 +570,31 @@ export function WerkplekClient({
     } catch (e) {
       // Losgekoppeld is géén fout en géén einde: de run draait door bij de agent en wordt opgepakt
       // zodra dit venster terugkomt. Niets bewaren dus — het definitieve antwoord komt later.
-      if (isAfgebroken(e)) return;
-      updateItem(antId, { tekst: `**Er ging iets mis.** ${foutTekst(e)}` });
+      // Een wegvallende verbinding is óók geen einde: de beurt is van de server. Zie
+      // `naEenGebrokenStream` voor de regel en waarom hij bestaat.
+      const besluit = naEenGebrokenStream(
+        isAfgebroken(e), herstel, MAX_HERSTELPOGINGEN, levendRef.current,
+      );
+      if (besluit === "negeren") return;
+      verbroken = besluit === "opnieuw";
+      updateItem(antId, verbroken
+        ? { tekst: "_De verbinding viel weg. Ik haak opnieuw aan…_" }
+        : { tekst: `**Er ging iets mis.** ${foutTekst(e)}` });
     } finally {
       afbrekenRef.current = null;
       setRunId(null);
       setStopt(false);
       setBezig(false);
       bezigRef.current = false;
+    }
+
+    if (verbroken && levendRef.current) {
+      // Even wachten: valt de verbinding weg doordat de dienst opnieuw opstart, dan is meteen
+      // opnieuw proberen gegarandeerd weer mis. `vanaf: 0` speelt de hele eventlog terug, dus wat
+      // er tijdens de onderbreking gebeurde komt alsnog in beeld — inclusief het `opgeslagen`-event.
+      await new Promise((r) => setTimeout(r, HERSTEL_WACHTTIJD_MS));
+      if (!levendRef.current) return;
+      await volgBeurt({ runId: id, gid, antId, vanaf: 0, herstel: herstel + 1 });
     }
   }
 

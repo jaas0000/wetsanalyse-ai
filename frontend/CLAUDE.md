@@ -356,6 +356,14 @@ beurt als **run** bij graph-qa (`POST /api/annotatie/run` → `startRun`) en kij
   weg uit `lib/api.ts`. Zet ze niet terug: een eigen markering voeg je toe met `voegElementToe`,
   dat is een andere handeling. Een graph-qa **zonder** api-koppeling legt niets meer vast en meldt
   dat nu zelf met een `error`-event (`agent/beurt.py`).
+- **Een weggevallen verbinding is geen mislukte beurt.** Alleen een `AbortError` (wij koppelen zelf
+  los) werd als "geen einde" behandeld; elke andere fout zette meteen "Er ging iets mis" neer. Bij
+  een deploy — de frontend-container wordt vervangen — betekende dat een beurt die als mislukt in
+  beeld kwam terwijl hij doorliep, slaagde en zijn bericht bij de api achterliet. `volgBeurt` haakt
+  nu **één keer** opnieuw aan (`naEenGebrokenStream` in `lib/lopendeRun.ts`, na 1,5 s, met
+  `vanaf: 0` zodat de eventlog wordt teruggespeeld); pas als die herkansing op is, of als het
+  venster weg is, komt er een foutmelding. Eén poging, niet meer: is de dienst echt onbereikbaar,
+  dan is doorproberen een molen die de gebruiker niets vertelt.
 
 De BFF stuurt de identiteit als **`X-User-Id`-header** mee op álle run-routes, en verifieert bij het
 starten eerst bij de api of dit gesprek van jou is — `conversation_id` is ook de thread_id van het

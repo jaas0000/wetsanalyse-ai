@@ -45,6 +45,28 @@ export function standVanVorigeRun(
   return berichtRunIds.includes(bewaardRunId) ? "afgerond" : "verdwenen";
 }
 
+/** Wat doe je als de eventstroom van een lopende beurt met een fout eindigt?
+ *
+ *  - `"negeren"` — wíj koppelden zelf los (unmount, van gesprek wisselen). De run draait door.
+ *  - `"opnieuw"` — de verbinding viel weg. Ook dan draait de run door: hij leeft bij de agent, niet
+ *    in dit tabblad. Opnieuw aanhaken vanaf `seq 0` speelt de eventlog terug, dus je mist niets.
+ *  - `"melden"` — er is geen herkansing meer over, of het venster is weg. Nu pas een foutmelding.
+ *
+ *  Waarom dit een eigen regel is: de werkplek toonde bij elke andere fout dan een `AbortError`
+ *  meteen "Er ging iets mis". Bij een deploy — de frontend-container wordt vervangen — betekende dat
+ *  een beurt die als mislukt in beeld kwam terwijl hij op dat moment gewoon doorliep en even later
+ *  slaagde, mét een opgeslagen bericht bij de api. De client hoorde daar niet over te oordelen.
+ */
+export function naEenGebrokenStream(
+  zelfAfgebroken: boolean,
+  pogingenGedaan: number,
+  maxPogingen: number,
+  vensterLeeft: boolean,
+): "negeren" | "opnieuw" | "melden" {
+  if (zelfAfgebroken) return "negeren";
+  return pogingenGedaan < maxPogingen && vensterLeeft ? "opnieuw" : "melden";
+}
+
 // --- browser-opslag (dun laagje om de pure functies heen) -----------------------------------
 
 export function leesLopendeRuns(): LopendeRuns {
