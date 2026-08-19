@@ -152,3 +152,47 @@ def test_kort_aangehaald_begrip_wordt_niet_gecontroleerd():
     report = check_grounding('Het begrip "de belastingschuldige" komt hier terug.', WETTEKST)
     assert report.niet_letterlijk == []
     assert report.niveau == "onbepaald"
+
+
+# --- wat de tijdlijn erover zegt ------------------------------------------------------------------
+
+def test_rapport_telt_hoeveel_citaten_zijn_nagelopen():
+    """Zonder dat getal is niet te melden wát er is gecontroleerd."""
+    answer = 'Er staat: "De ontvanger verleent uitstel van betaling" en "dat is de regel hier".'
+    report = check_grounding(answer, _trace("De ontvanger verleent uitstel van betaling."))
+    assert report.citaten == 2
+    assert report.niet_letterlijk == ["dat is de regel hier"]
+
+
+def test_melding_noemt_de_citaten_als_er_geen_vindplaats_is():
+    """Het geval dat op dev misging: artikelen in gewone taal, dus nul vindplaatsen — maar wél twee
+    citaten die allebei klopten. De tijdlijn meldde toen "0 verwijzingen onderbouwd", wat leest als
+    een mislukte controle terwijl er juist iets gecontroleerd én goed bevonden was."""
+    from agent.orchestrator import _grounding_melding
+
+    answer = (
+        'Volgens artikel 2 lid 1 onderdeel m geldt: "De ontvanger verleent uitstel van betaling" '
+        'en verderop "indien de schuldenaar daarom verzoekt".'
+    )
+    bron = "De ontvanger verleent uitstel van betaling indien de schuldenaar daarom verzoekt."
+    report = check_grounding(answer, _trace(bron))
+
+    assert report.cited == [] and report.niveau == "gegrond"
+    assert _grounding_melding(report) == "brongetrouwheid: 2 citaten gecontroleerd"
+
+
+def test_melding_zwijgt_niet_als_er_niets_te_controleren_viel():
+    from agent.orchestrator import _grounding_melding
+
+    report = check_grounding("Dat staat niet in de kennisgraaf.", _trace("iets anders"))
+    assert report.niveau == "onbepaald"
+    assert "niets te controleren" in _grounding_melding(report)
+
+
+def test_melding_noemt_beide_soorten_als_ze_er_allebei_zijn():
+    from agent.orchestrator import _grounding_melding
+
+    answer = f'Zie {IW} (BWBR0004770): "De ontvanger verleent uitstel van betaling".'
+    bron = f"<{IW}> bwb:tekst 'De ontvanger verleent uitstel van betaling.' ."
+    melding = _grounding_melding(check_grounding(answer, _trace(bron)))
+    assert "verwijzing" in melding and "1 citaat" in melding and "gecontroleerd" in melding

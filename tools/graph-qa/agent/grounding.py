@@ -42,6 +42,11 @@ class GroundingReport:
     unsupported: list[str] = field(default_factory=list)
     # Tekst die het antwoord als citaat presenteert maar die niet letterlijk in de trace staat.
     niet_letterlijk: list[str] = field(default_factory=list)
+    # Hoeveel passages er als citaat zijn nagelopen — geslaagd én mislukt. Zonder dit getal is niet te
+    # melden wát er is gecontroleerd: een antwoord dat artikelen in gewone taal noemt ("artikel 2 lid
+    # 1 onderdeel m") heeft nul vindplaatsen, en dan las de tijdlijn "0 verwijzingen onderbouwd" —
+    # terwijl er twee citaten wél waren getoetst en klopten.
+    citaten: int = 0
     # "gegrond" | "onbepaald" | "ongegrond" — fijner dan de bool, die voor het bestaande
     # event-contract blijft bestaan.
     niveau: str = "gegrond"
@@ -77,14 +82,15 @@ def check_grounding(answer_text: str, source_trace: list[tuple[str, str]]) -> Gr
     # letterlijk. Een citaat dat een aanhalingsteken bevat slaan we over — de trace draagt de
     # tool-resultaten rauw (JSON-string-wrapped TSV), dus daar zijn quotes ge-escaped en zou een
     # terecht citaat als afwijking uit de bus komen.
+    citaten = _citaten(answer_text)
     niet_letterlijk = [
-        c for c in _citaten(answer_text)
+        c for c in citaten
         if "\\" not in c and not komt_letterlijk_voor(trace_text, c)
     ]
 
     if unsupported:
         niveau = "ongegrond"
-    elif not cited and not _citaten(answer_text):
+    elif not cited and not citaten:
         # Niets te controleren. Dat is geen bewijs van juistheid — zeg dat dan ook.
         niveau = "onbepaald"
     elif niet_letterlijk:
@@ -93,6 +99,7 @@ def check_grounding(answer_text: str, source_trace: list[tuple[str, str]]) -> Gr
         niveau = "gegrond"
 
     return GroundingReport(
+        citaten=len(citaten),
         # `grounded` blijft de vraag "is er iets aangetroffen dat níét klopt": het bestaande
         # event-contract en de eval hangen eraan. Het onderscheid tussen "gecontroleerd en goed" en
         # "er viel niets te controleren" zit in `niveau`.
