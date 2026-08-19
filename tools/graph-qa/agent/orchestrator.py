@@ -1076,7 +1076,7 @@ def build_graph(
         geen LLM-call, geen graafverkeer.
         """
         writer = get_stream_writer()
-        voorstellen, telling = pas_critic_toe(
+        voorstellen, telling, rest = pas_critic_toe(
             list(state.get("voorstellen") or []),
             list(state.get("critic_feedback") or []),
             _corpus(state),
@@ -1093,7 +1093,16 @@ def build_graph(
             _stap(writer, "Correctie", ", ".join(delen))
         # Alleen een echte wijziging vraagt om een nieuw oordeel. Een alternatief laat het element
         # ongemoeid — daar geldt het oordeel van de eerste pas gewoon nog.
-        return {"voorstellen": voorstellen, "patch_toegepast": telling.toegepast}
+        #
+        # `critic_feedback` wordt teruggebracht tot wat de patcher NIET heeft afgehandeld. Anders
+        # krijgt de herziener dezelfde instructies opnieuw voorgelegd: de correcties die hier net
+        # zijn uitgevoerd (dubbel werk) én de gele voorkeuren die hier bewust niet zijn uitgevoerd —
+        # en dan voert een taalmodel alsnog uit wat juist aan de jurist zou worden voorgelegd.
+        return {
+            "voorstellen": voorstellen,
+            "patch_toegepast": telling.toegepast,
+            "critic_feedback": rest,
+        }
 
     def route_na_patch(state: State) -> str:
         """Wat er ná het patchen nog over is.

@@ -267,6 +267,14 @@ weg: ze bestonden alleen om een cyclus te laten stoppen die er niet meer is.
 - **Wat de herziener nog doet**: een bijna-goed citaat repareren (`verworpen_fragmenten`) en een
   gemeld ontbrekend element toevoegen. Dat vraagt de brontekst lezen, geen instructie uitvoeren.
   `_open_werk` is precies die twee; correctie-instructies staan er niet meer bij.
+
+  **De patcher snoeit `critic_feedback` tot wat hij níét afhandelde.** Anders krijgt de herziener
+  dezelfde instructies opnieuw voorgelegd: de correcties die net zijn uitgevoerd (dubbel werk) én de
+  gele voorkeuren die bewust níét zijn uitgevoerd — en dan voert een taalmodel alsnog uit wat juist
+  aan de jurist zou worden voorgelegd. Dat ging live mis en stond zichtbaar in de tijdlijn:
+  "2 aanwijzingen toegepast" gevolgd door "4 aangepast". Wat overblijft is alleen een rood oordeel
+  waar niets uitvoerbaars in zat (een voorgesteld fragment dat niet letterlijk in de bron staat) —
+  precies het geval waarin het model wél iets kan: de bron lezen en het bedoelde fragment opzoeken.
 - **`critic₂` is het sluitstuk, geen ingang.** Hij draait alleen als er iets veranderd is, zodat het
   oordeel op de kaart gaat over de versie die de jurist vóór zich krijgt. Vraagt hij dán opnieuw om
   een correctie, dan gaat die naar de jurist — niet naar nóg een ronde. `critic_ronde` telt daarom

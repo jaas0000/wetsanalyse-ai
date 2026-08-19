@@ -80,7 +80,7 @@ _EL = {"id": "el-a", "klasse": "Rechtsfeit", "tekst": "De ontvanger", "lid": "1"
 # --- de patcher als pure functie ------------------------------------------------------------------
 
 def test_vervang_klasse_wordt_toegepast_bij_rood():
-    uit, n = pas_critic_toe(
+    uit, n, _rest = pas_critic_toe(
         [{"id": "a", "klasse": "Rechtsfeit", "tekst": "De ontvanger"}],
         [{"id": "a", "aandacht": "rood", "actie": "vervang", "voorstel_klasse": "Rechtssubject"}],
         CORPUS,
@@ -94,14 +94,14 @@ def test_vervang_klasse_wordt_toegepast_bij_rood():
 def test_vervang_tekst_alleen_als_die_letterlijk_in_de_bron_staat():
     """Een Critic die parafraseert corrigeert niets — dan zou code een verzinsel vastleggen."""
     instructie = {"id": "a", "aandacht": "rood", "actie": "vervang"}  # rood: wordt uitgevoerd
-    goed, n_goed = pas_critic_toe(
+    goed, n_goed, _rest = pas_critic_toe(
         [{"id": "a", "klasse": "Voorwaarde", "tekst": "de schuldenaar"}],
         [{**instructie, "voorstel_tekst": "indien de schuldenaar daarom verzoekt"}],
         CORPUS,
     )
     assert (n_goed.toegepast, goed[0]["tekst"]) == (1, "indien de schuldenaar daarom verzoekt")
 
-    mis, n_mis = pas_critic_toe(
+    mis, n_mis, _rest = pas_critic_toe(
         [{"id": "a", "klasse": "Voorwaarde", "tekst": "de schuldenaar"}],
         [{**instructie, "voorstel_tekst": "als de schuldenaar erom vraagt"}],
         CORPUS,
@@ -112,7 +112,7 @@ def test_vervang_tekst_alleen_als_die_letterlijk_in_de_bron_staat():
 @pytest.mark.parametrize("aandacht, blijft", [("rood", False), ("geel", True), ("groen", True)])
 def test_verwijderen_alleen_bij_rood(aandacht, blijft):
     """De enige onomkeerbare handeling in de patcher — die vraagt het zwaarste oordeel."""
-    uit, _ = pas_critic_toe(
+    uit, _, _rest = pas_critic_toe(
         [{"id": "a", "klasse": "Rechtsfeit", "tekst": "De ontvanger"}],
         [{"id": "a", "aandacht": aandacht, "actie": "verwijder"}],
         CORPUS,
@@ -123,7 +123,7 @@ def test_verwijderen_alleen_bij_rood(aandacht, blijft):
 def test_een_markering_van_de_jurist_blijft_ongemoeid():
     """Een oordeel over eigen werk is een suggestie. Dat staat zo in de api en hoort hier niet
     alsnog stilletjes te worden doorgevoerd."""
-    uit, n = pas_critic_toe(
+    uit, n, _rest = pas_critic_toe(
         [{"id": "a", "klasse": "Rechtsfeit", "tekst": "De ontvanger", "van_jurist": True}],
         [{"id": "a", "aandacht": "rood", "actie": "vervang", "voorstel_klasse": "Rechtssubject"}],
         CORPUS,
@@ -137,7 +137,7 @@ def test_geel_met_een_voorkeur_wordt_een_alternatief():
     De werkplek toont alternatieven als aanklikbare chip ("Twijfel — klik om te wisselen"), dus de
     jurist neemt hem met één klik over — en dan staat het als zíjn beslissing in het auditspoor.
     """
-    uit, n = pas_critic_toe(
+    uit, n, _rest = pas_critic_toe(
         # `aandacht`/`critic` staan er al op: critic_node zet ze vóór de patcher draait.
         [{"id": "a", "klasse": "Tijdsaanduiding", "tekst": "zes weken", "alternatieven": [],
           "aandacht": "geel", "critic": "kan ook een conditie zijn"}],
@@ -152,7 +152,7 @@ def test_geel_met_een_voorkeur_wordt_een_alternatief():
 
 
 def test_een_alternatief_dat_er_al_staat_komt_er_niet_twee_keer_bij():
-    uit, n = pas_critic_toe(
+    uit, n, _rest = pas_critic_toe(
         [{"id": "a", "klasse": "Tijdsaanduiding", "tekst": "zes weken",
           "alternatieven": [{"klasse": "Voorwaarde", "motivatie": "eerder al gezien"}]}],
         [{"id": "a", "aandacht": "geel", "actie": "vervang", "voorstel_klasse": "Voorwaarde"}],
@@ -164,7 +164,7 @@ def test_een_alternatief_dat_er_al_staat_komt_er_niet_twee_keer_bij():
 
 def test_geel_verandert_nooit_het_fragment():
     """Een fragmentwijziging kent geen 'alternatief'-vorm, dus bij twijfel gebeurt er niets."""
-    uit, n = pas_critic_toe(
+    uit, n, _rest = pas_critic_toe(
         [{"id": "a", "klasse": "Voorwaarde", "tekst": "de schuldenaar"}],
         [{"id": "a", "aandacht": "geel", "actie": "vervang",
           "voorstel_tekst": "indien de schuldenaar daarom verzoekt"}],
@@ -174,9 +174,36 @@ def test_geel_verandert_nooit_het_fragment():
     assert uit[0]["tekst"] == "de schuldenaar"
 
 
+def test_afgehandelde_instructies_gaan_niet_door_naar_de_herziener():
+    """Wat de patcher afhandelde, mag de herziener niet nóg eens uitvoeren.
+
+    Dit ging live mis: de herziener kreeg de volledige feedback opnieuw, dus hij herhaalde de
+    uitgevoerde correcties én voerde alsnog de gele voorkeuren uit die juist aan de jurist zouden
+    worden voorgelegd. In de tijdlijn zag je dat als "2 aanwijzingen toegepast" gevolgd door
+    "4 aangepast".
+    """
+    _uit, _n, rest = pas_critic_toe(
+        [
+            {"id": "a", "klasse": "Rechtsfeit", "tekst": "De ontvanger"},
+            {"id": "b", "klasse": "Tijdsaanduiding", "tekst": "zes weken"},
+            {"id": "c", "klasse": "Voorwaarde", "tekst": "de schuldenaar"},
+        ],
+        [
+            {"id": "a", "aandacht": "rood", "actie": "vervang", "voorstel_klasse": "Rechtssubject"},
+            {"id": "b", "aandacht": "geel", "actie": "vervang", "voorstel_klasse": "Voorwaarde"},
+            {"id": "c", "aandacht": "rood", "actie": "vervang",
+             "voorstel_tekst": "een fragment dat hier niet staat"},
+        ],
+        CORPUS,
+    )
+    # a is uitgevoerd, b is een alternatief geworden — allebei afgehandeld. Alleen c blijft over:
+    # daar kan het model de brontekst lezen en het bedoelde fragment opzoeken.
+    assert [f["id"] for f in rest] == ["c"]
+
+
 def test_toepassen_staat_in_het_spoor():
     """"De Critic vroeg erom" is iets anders dan "het is ook gebeurd"."""
-    uit, _ = pas_critic_toe(
+    uit, _, _rest = pas_critic_toe(
         [{"id": "a", "klasse": "Rechtsfeit", "tekst": "De ontvanger", "critic_rondes": [{"ronde": 1}]}],
         [{"id": "a", "aandacht": "rood", "actie": "vervang", "voorstel_klasse": "Rechtssubject"}],
         CORPUS,
@@ -185,7 +212,7 @@ def test_toepassen_staat_in_het_spoor():
 
 
 def test_behoud_laat_alles_staan():
-    uit, n = pas_critic_toe(
+    uit, n, _rest = pas_critic_toe(
         [{"id": "a", "klasse": "Rechtsfeit", "tekst": "De ontvanger", "aandacht": "geel"}],
         [{"id": "a", "aandacht": "geel", "actie": "behoud", "motivatie": "grensgeval"}],
         CORPUS,

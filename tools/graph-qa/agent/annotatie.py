@@ -73,8 +73,14 @@ def pas_critic_toe(
     voorstellen: list[dict[str, Any]],
     feedback: list[dict[str, Any]],
     corpus: str,
-) -> tuple[list[dict[str, Any]], PatchTelling]:
-    """Voer de correcties van de Critic uit. Geeft (nieuwe voorstellen, telling) terug.
+) -> tuple[list[dict[str, Any]], PatchTelling, list[dict[str, Any]]]:
+    """Voer de correcties van de Critic uit.
+
+    Geeft terug: (nieuwe voorstellen, telling, **onafgehandelde instructies**). Dat laatste is wat de
+    herziener nog te doen heeft. Zonder die scheiding kreeg hij de volledige feedback opnieuw — ook
+    de correcties die hier net waren uitgevoerd, en ook de gele voorkeuren die hier bewust NIET zijn
+    uitgevoerd. Dan voert een taalmodel alsnog uit wat we juist aan de jurist wilden voorleggen, en
+    dat was op dev meteen zichtbaar: "2 aanwijzingen toegepast" gevolgd door "4 aangepast".
 
     De Critic leverde altijd al een uitvoerbare instructie — `actie` met `voorstel_klasse` en/of
     `voorstel_tekst`. Die ging vervolgens naar een tweede LLM (de herziener) die hem moest lezen,
@@ -103,6 +109,7 @@ def pas_critic_toe(
     """
     op_id = {str(f.get("id", "")): f for f in feedback if f.get("id")}
     uit: list[dict[str, Any]] = []
+    rest: list[dict[str, Any]] = []
     toegepast = 0
     alternatief = 0
 
@@ -158,9 +165,14 @@ def pas_critic_toe(
             # Critic-pas over het gecorrigeerde resultaat (zie `route_na_patch`).
             nieuw["aandacht"] = ""
             nieuw["critic"] = ""
+        else:
+            # Rood, maar niets uitvoerbaars: het voorgestelde fragment staat niet letterlijk in de
+            # bron, of de klasse was al zo. Dít is wat de herziener nog kan oplossen — hij mag de
+            # brontekst lezen en het bedoelde fragment opzoeken.
+            rest.append(f)
         uit.append(nieuw)
 
-    return uit, PatchTelling(toegepast=toegepast, alternatief=alternatief)
+    return uit, PatchTelling(toegepast=toegepast, alternatief=alternatief), rest
 
 
 def _markeer_toegepast(voorstel: dict[str, Any]) -> None:
