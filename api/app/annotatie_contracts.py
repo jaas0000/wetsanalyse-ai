@@ -39,6 +39,7 @@ class BeslissingType(str, Enum):
     edit = "edit"
     reject = "reject"
     comment = "comment"
+    heropen = "heropen"
 
 
 class ReviewReason(str, Enum):
@@ -54,6 +55,17 @@ class Aandacht(str, Enum):
     groen = "groen"
     geel = "geel"
     rood = "rood"
+
+
+#: Lifecycles waarin het element een eindoordeel van de jurist draagt en dus op slot gaat: wijzigen
+#: kan pas na een expliciete `heropen`-beslissing. `edited` hoort er bewust NIET bij — een klasse
+#: wijzigen en er daarna een toelichting bij typen moet één doorlopende handeling blijven. Geldt
+#: alleen voor agent-elementen: een eigen markering is `human_approved` bij het aanmaken en is
+#: daarmee gemaakt, niet beoordeeld.
+VERGRENDELDE_LIFECYCLES: frozenset[Lifecycle] = frozenset({
+    Lifecycle.human_approved,
+    Lifecycle.rejected,
+})
 
 
 # --- domein ------------------------------------------------------------------

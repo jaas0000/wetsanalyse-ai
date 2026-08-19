@@ -154,6 +154,42 @@ export function isBeslist(el: AnnotatieElement): boolean {
   return BESLIST_LIFECYCLES.includes(el.lifecycle);
 }
 
+/** Staat dit ontbrekend-item inmiddels als markering in het document?
+ *
+ *  Matcht op klasse + genormaliseerd fragment. **Verworpen elementen tellen niet mee**: die heb je
+ *  net weggestuurd, dus "inmiddels gemarkeerd" is dan precies het omgekeerde van wat er gebeurde —
+ *  en het item bleef onaanklikbaar staan terwijl je hem juist opnieuw wilde kunnen toevoegen.
+ *  Dezelfde regel als in `DocumentPaneel`, dat verworpen markeringen ook niet meer oplicht. */
+export function alGemarkeerd(elementen: AnnotatieElement[], klasse: string, fragment: string): boolean {
+  const sleutel = (k: string, t: string) => `${k}|${t.split(/\s+/).join(" ").toLowerCase()}`;
+  const tekst = fragment.trim();
+  if (!tekst) return false;
+  return elementen.some(
+    (e) => e.lifecycle !== "rejected" && sleutel(e.klasse, e.tekst) === sleutel(klasse, tekst),
+  );
+}
+
+/** Lifecycles waarin het element een eindoordeel draagt en dus op slot zit — wijzigen kan pas na een
+ *  expliciete heropening (`type: "heropen"`). Bewust NIET hetzelfde begrip als `isBeslist`, dat de
+ *  filters en de telling stuurt: `edited` telt wel als beslist maar blijft bewerkbaar, want een
+ *  klasse wijzigen en er daarna een toelichting bij typen is één doorlopende handeling. */
+export const VERGRENDELDE_LIFECYCLES = ["human_approved", "rejected"];
+
+export function isVergrendeld(el: AnnotatieElement): boolean {
+  // Je eigen markering staat meteen op `human_approved` — je hoeft hem niet nog eens goed te keuren.
+  // Dat is "gemaakt", niet "beoordeeld": vergrendelen zou hem bij het aanmaken al op slot zetten,
+  // inclusief de wisknop. Wat je zelf maakte wis je (met een bevestiging); het slot beschermt een
+  // review-oordeel over een voorstel van Lex.
+  if (el.herkomst === "mens") return false;
+  return VERGRENDELDE_LIFECYCLES.includes(el.lifecycle);
+}
+
+/** Een afgerond document is in zijn geheel bevroren — ook voor een nieuwe agent-ronde. De api
+ *  weigert elke mutatie met een 409; de UI laat het slot zien in plaats van die fout af te wachten. */
+export function isDocumentVergrendeld(doc: { status: DocumentStatus }): boolean {
+  return doc.status === "geaccordeerd";
+}
+
 /** Hoort dit element bij de gekozen filterstand? */
 export function pastInFilter(el: AnnotatieElement, filter: ReviewFilter): boolean {
   if (filter === "te_beoordelen") return !isBeslist(el);

@@ -2,7 +2,9 @@
 De wetsanalyse-workbench-resource (gemount onder /v1/annotatie).
 
 Vers annotatie-domein: documenten per bron, per element een human-decision (approve/edit/reject/
-comment) en een append-only audit trail. **Per-gebruiker gescopet** via de vertrouwde `X-User-Id`
+comment/heropen) en een append-only audit trail. Een beoordeeld element (`human_approved`/`rejected`)
+en een afgerond document (`geaccordeerd`) zijn op slot: wijzigen kan pas na een expliciete
+heropening, en die staat zelf in het spoor. **Per-gebruiker gescopet** via de vertrouwde `X-User-Id`
 (`huidige_userid`, zoals de gesprekken) — 404 (niet 403) bij andermans document, zodat het bestaan niet
 lekt; de bearer-`client_id` blijft als herkomst in de audit. JAS-klassen worden gevalideerd tegen
 `validation.GELDIGE_JAS_KLASSEN`.
@@ -14,7 +16,7 @@ DELETE /v1/annotatie/documenten/{slug}                           — verwijder e
 PUT    /v1/annotatie/documenten/{slug}/elementen                 — uitkomst van een agent-ronde (merge)
 POST   /v1/annotatie/documenten/{slug}/elementen                 — eigen markering toevoegen (jurist)
 DELETE /v1/annotatie/documenten/{slug}/elementen/{id}            — eigen markering verwijderen
-POST   /v1/annotatie/documenten/{slug}/elementen/{id}/beslissing — human-decision
+POST   /v1/annotatie/documenten/{slug}/elementen/{id}/beslissing — human-decision (incl. heropen)
 POST   /v1/annotatie/documenten/{slug}/status                    — afronden / heropenen
 GET    /v1/annotatie/documenten/{slug}/audit                     — append-only tijdlijn
 POST   /v1/annotatie/documenten/{slug}/export?formaat=…          — export (pdf|csv|json)
@@ -27,6 +29,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response, 
 from pydantic import BaseModel
 
 from ..annotatie_contracts import (
+    VERGRENDELDE_LIFECYCLES,
     AgentRun,
     AnnotatieDocument, AnnotatieElement, AuditRecord, Beslissing, BeslissingInvoer, BeslissingType,
     DocumentStatus,
@@ -49,6 +52,21 @@ router = APIRouter(prefix="/annotatie", tags=["annotatie"])
 
 # Velden die een agent-ronde inhoudelijk mag bijwerken op een niet-bevroren element.
 _INHOUD_VELDEN = ("klasse", "tekst", "lid", "toelichting", "vindplaats")
+
+
+#: Sentinel: het document (of het element) staat op slot. Komt als 409 terug bij de client.
+AFGEROND = object()
+VERGRENDELD = object()
+NIET_VERGRENDELD = object()
+
+
+def _afgerond(doc: AnnotatieDocument) -> bool:
+    """Een afgerond document is bevroren — voor de jurist én voor een nieuwe agent-ronde.
+
+    Zonder deze grens betekende `geaccordeerd` niets: er kon daarna nog van alles bij, af en overheen.
+    Heropenen is één klik (`POST .../status`), dus dit is een drempel en geen doodlopende weg.
+    """
+    return doc.status is DocumentStatus.geaccordeerd
 
 
 def _sleutel(tekst: str, lid: str) -> tuple[str, str]:
@@ -204,6 +222,8 @@ async def zet_elementen(
 
     def merge(doc: AnnotatieDocument):
         nonlocal verworpen
+        if _afgerond(doc):
+            return AFGEROND
         op_id = {el.id: el for el in doc.elementen}
         # Terugvalindex: alleen agent-elementen, want een mens-element mag nooit stilzwijgend door
         # een agent-voorstel worden overgenomen enkel omdat de tekst toevallig gelijk is.
@@ -300,6 +320,8 @@ async def zet_elementen(
         raise HTTPException(status_code=404, detail=f"Onbekend annotatie-document: {slug}")
     if uitkomst is CONFLICT:
         raise HTTPException(status_code=412, detail="Het document is inmiddels gewijzigd.")
+    if uitkomst is AFGEROND:
+        raise HTTPException(status_code=409, detail="Deze annotatie is afgerond. Heropen hem om te wijzigen.")
 
     doc: AnnotatieDocument = uitkomst  # type: ignore[assignment]
     telling = {a: sum(1 for r in regels if r[0] == a) for a in
@@ -346,6 +368,8 @@ async def voeg_element_toe(
     element_id = uuid.uuid4().hex[:12]
 
     def voeg_toe(doc: AnnotatieDocument):
+        if _afgerond(doc):
+            return AFGEROND
         doc.elementen.append(AnnotatieElement(
             id=element_id, klasse=req.klasse, tekst=req.tekst, lid=req.lid,
             toelichting=req.toelichting, vindplaats=req.vindplaats, anker=req.anker,
@@ -356,6 +380,8 @@ async def voeg_element_toe(
     uitkomst = await store.muteer_document(slug, user_id, voeg_toe)
     if uitkomst is None:
         raise HTTPException(status_code=404, detail=f"Onbekend annotatie-document: {slug}")
+    if uitkomst is AFGEROND:
+        raise HTTPException(status_code=409, detail="Deze annotatie is afgerond. Heropen hem om te wijzigen.")
     await store.schrijf_audit(
         slug, client_id, user_id, "element-toegevoegd", element_id=element_id,
         detail={"klasse": req.klasse, "tekst": req.tekst, "lid": req.lid},
@@ -376,6 +402,8 @@ async def verwijder_element(
     verwijderd: dict = {}
 
     def verwijder(doc: AnnotatieDocument):
+        if _afgerond(doc):
+            return AFGEROND
         el = next((x for x in doc.elementen if x.id == element_id), None)
         if el is None:
             return GEEN_ELEMENT
@@ -388,6 +416,8 @@ async def verwijder_element(
     uitkomst = await store.muteer_document(slug, user_id, verwijder)
     if uitkomst is None or uitkomst is GEEN_ELEMENT:
         raise HTTPException(status_code=404, detail="Onbekend element.")
+    if uitkomst is AFGEROND:
+        raise HTTPException(status_code=409, detail="Deze annotatie is afgerond. Heropen hem om te wijzigen.")
     if uitkomst is CONFLICT:
         raise HTTPException(
             status_code=409,
@@ -421,8 +451,26 @@ async def beslis(
     diff_holder: dict = {}
     anker_verplaatst: dict = {}
 
-    def toepassen(el: AnnotatieElement) -> None:
-        """Muteert het element in-place binnen de atomaire store-transactie (row-lock)."""
+    def toepassen(doc: AnnotatieDocument, el: AnnotatieElement):
+        """Muteert het element in-place binnen de atomaire store-transactie (row-lock).
+
+        De poortwachter staat hier en niet vóór de transactie: `lifecycle` en `status` mogen tussen
+        het lezen en het schrijven niet verschoven zijn, anders glipt er alsnog een wijziging langs
+        een akkoord heen.
+        """
+        if _afgerond(doc):
+            return AFGEROND
+        # Een EIGEN markering staat meteen op `human_approved` — je hoeft je eigen markering niet
+        # nog eens goed te keuren. Dat is "gemaakt", niet "beoordeeld": vergrendelen zou hem bij het
+        # aanmaken al op slot zetten. Het slot beschermt een review-oordeel over een agent-voorstel.
+        vergrendeld = el.herkomst != "mens" and el.lifecycle in VERGRENDELDE_LIFECYCLES
+        # Een opmerking plaatsen wijzigt de annotatie niet en mag dus ook op een vergrendeld element:
+        # juist bij iets dat vaststaat wil je een kanttekening kunnen achterlaten.
+        if vergrendeld and req.type not in (BeslissingType.heropen, BeslissingType.comment):
+            return VERGRENDELD
+        if req.type == BeslissingType.heropen and not vergrendeld:
+            return NIET_VERGRENDELD
+
         diff: dict = {}
         if req.type == BeslissingType.edit:
             for veld in ("klasse", "tekst", "toelichting", "lid"):
@@ -448,18 +496,37 @@ async def beslis(
             el.lifecycle = Lifecycle.human_approved
         elif req.type == BeslissingType.reject:
             el.lifecycle = Lifecycle.rejected
+        elif req.type == BeslissingType.heropen:
+            # Terug naar de stand van vóór het oordeel. Wél `critic_checked` als de Critic er al
+            # naar keek — anders zou heropenen dat oordeel uit beeld poetsen en lijkt het element
+            # ongezien. `diff` blijft staan: dat is het spoor van de laatste edit, geen huidige stand.
+            el.lifecycle = Lifecycle.critic_checked if el.critic else Lifecycle.voorgesteld
+            el.gewijzigd_door = "mens"
         # comment → geen lifecycle-wijziging
         el.beslissingen.append(Beslissing(
             type=req.type, actor=user_id, tijd=utcnow(),
             review_reason=req.review_reason, comment=req.comment, wijziging=diff,
         ))
         diff_holder.update(diff)
+        return None
 
     resultaat = await store.beslis_op_element(slug, user_id, element_id, toepassen)
     if resultaat is None:
         raise HTTPException(status_code=404, detail=f"Onbekend annotatie-document: {slug}")
     if resultaat is GEEN_ELEMENT:
         raise HTTPException(status_code=404, detail=f"Onbekend element: {element_id}")
+    if resultaat is AFGEROND:
+        raise HTTPException(status_code=409, detail="Deze annotatie is afgerond. Heropen hem om te wijzigen.")
+    if resultaat is VERGRENDELD:
+        raise HTTPException(
+            status_code=409,
+            detail="Dit element is al beoordeeld. Heropen het om het te wijzigen.",
+        )
+    if resultaat is NIET_VERGRENDELD:
+        raise HTTPException(
+            status_code=409,
+            detail="Dit element staat niet op slot en hoeft dus niet heropend te worden.",
+        )
 
     await store.schrijf_audit(
         slug, client_id, user_id, f"beslissing-{req.type.value}", element_id=element_id,
@@ -486,6 +553,9 @@ async def zet_status(
     dat laatste is niet hetzelfde als tevreden zijn — er kan nog een ronde van de agent komen, en
     de "mogelijk ontbrekend"-lijst is dan nog niet gewogen. Heropenen kan altijd; een knop die niet
     terug kan is een knop die niemand durft te gebruiken.
+
+    Afgerond is óók bevroren: zolang de status `geaccordeerd` is weigeren alle andere schrijfpaden
+    met een 409 (`_afgerond`). Dit endpoint is dus de enige uitweg — en de enige ingang.
     """
     telling = None
 

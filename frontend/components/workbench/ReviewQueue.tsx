@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
-import { isBeslist, redenVoorWijziging, type ReviewFilter } from "@/lib/annotatie";
+import { isBeslist, isVergrendeld, redenVoorWijziging, type ReviewFilter } from "@/lib/annotatie";
 import { ChevronOmlaag, Ruit, Vinkje, Waarschuwing } from "@/components/ui/Icoon";
 import { JAS_KLASSEN, jasStyle } from "@/lib/jas";
 import type { AnnotatieElement, BeslissingInvoer, ReviewReason, Wijziging } from "@/lib/types";
@@ -160,6 +160,7 @@ function DecisionCard({
   onOpen,
   onAkkoord,
   onVraag,
+  docVergrendeld,
 }: {
   el: AnnotatieElement;
   actief: boolean;
@@ -178,6 +179,9 @@ function DecisionCard({
   onAkkoord: () => Promise<void>;
   /** Zet een vraag over dít element klaar in het centrale chatvenster. Weglaten verbergt de knop. */
   onVraag?: () => void;
+  /** De hele annotatie is afgerond: dan ligt ook het opmerkingveld stil, want de api weigert élke
+   *  mutatie tot het document heropend wordt. */
+  docVergrendeld?: boolean;
 }) {
   const [notitie, setNotitie] = useState(false);
   const palet = open === "klasse";
@@ -186,6 +190,11 @@ function DecisionCard({
   const kaartRef = useRef<HTMLDivElement>(null);
 
   const beslist = isBeslist(el);
+  // Twee sloten met een verschillend bereik: een eindoordeel op dít element bevriest de inhoud maar
+  // laat een kanttekening toe; een afgerond document bevriest alles. `slot` is wat de bediening
+  // uitschakelt, `elVergrendeld` is wat de Heropenen-knop tevoorschijn haalt.
+  const elVergrendeld = isVergrendeld(el);
+  const slot = elVergrendeld || !!docVergrendeld;
   const aandacht = el.aandacht ? AANDACHT[el.aandacht] : null;
   const eigen = el.herkomst === "mens";
   // Alleen de kaart waaraan je werkt toont zijn details. Alles altijd tonen kostte drie kaarten per
@@ -270,24 +279,34 @@ function DecisionCard({
             <span role="img" title="Twijfel tussen klassen — zie de alternatieven" aria-label="twijfel"
                   className="text-xs text-muted"><Ruit /></span>
           )}
-          {/* De klasse ís de knop: klikken opent het palet, klikken op een klasse is de wijziging. */}
-          <button
-            type="button"
-            disabled={bezig}
-            onClick={(e) => {
-              e.stopPropagation();
-              openRij(palet ? "geen" : "klasse");
-            }}
-            title="Andere klasse kiezen"
-            className={`focus-ring inline-flex min-h-[24px] max-w-full items-center whitespace-normal rounded px-2 py-0.5 text-left text-xs font-semibold transition hover:ring-1 hover:ring-lint coarse:min-h-[44px] disabled:opacity-50 ${jasStyle(el.klasse)}`}
-          >
-            {el.klasse} <ChevronOmlaag className="ml-0.5 opacity-70" />
-          </button>
+          {/* De klasse ís de knop: klikken opent het palet, klikken op een klasse is de wijziging.
+              Op slot is het geen knop meer maar een badge — géén `disabled` knop, want die leest als
+              "tijdelijk kapot" terwijl er niets kapot is; er is alleen eerst iets anders nodig. */}
+          {slot ? (
+            <span
+              className={`inline-flex min-h-[24px] max-w-full items-center whitespace-normal rounded px-2 py-0.5 text-left text-xs font-semibold ${jasStyle(el.klasse)}`}
+            >
+              {el.klasse}
+            </span>
+          ) : (
+            <button
+              type="button"
+              disabled={bezig}
+              onClick={(e) => {
+                e.stopPropagation();
+                openRij(palet ? "geen" : "klasse");
+              }}
+              title="Andere klasse kiezen"
+              className={`focus-ring inline-flex min-h-[24px] max-w-full items-center whitespace-normal rounded px-2 py-0.5 text-left text-xs font-semibold transition hover:ring-1 hover:ring-lint coarse:min-h-[44px] disabled:opacity-50 ${jasStyle(el.klasse)}`}
+            >
+              {el.klasse} <ChevronOmlaag className="ml-0.5 opacity-70" />
+            </button>
+          )}
           {el.lid && <span className="text-[0.65rem] text-muted">lid {el.lid}</span>}
         </span>
 
         <span className="flex shrink-0 items-center gap-1" onClick={(e) => e.stopPropagation()}>
-          {!beslist && (
+          {!slot && (
             <button
               type="button"
               disabled={bezig}
@@ -306,7 +325,21 @@ function DecisionCard({
               Akkoord
             </button>
           )}
-          {(!beslist || eigen) && (
+          {/* De weg terug. Zonder deze knop is een akkoord een doodlopende weg: de bediening ligt
+              stil en er is niets dat hem weer aanzet. Tweede keuze qua vorm — heropenen is een
+              correctie, geen hoofdactie. */}
+          {elVergrendeld && !docVergrendeld && (
+            <button
+              type="button"
+              disabled={bezig}
+              onClick={() => void verstuur({ type: "heropen" })}
+              title="Terugzetten in de review, zodat je hem weer kunt wijzigen"
+              className={`${KNOP_BASIS} ${KNOP_TWEEDE}`}
+            >
+              Heropenen
+            </button>
+          )}
+          {!slot && (!beslist || eigen) && (
             <button
               type="button"
               disabled={bezig}
@@ -323,7 +356,7 @@ function DecisionCard({
         </span>
       </div>
 
-      {palet && (
+      {palet && !slot && (
         <div className="mt-2 flex flex-wrap gap-1" onClick={(e) => e.stopPropagation()}>
           {JAS_KLASSEN.filter((k) => k !== el.klasse).map((k) => (
             <button
@@ -342,7 +375,7 @@ function DecisionCard({
       {/* Wissen (eigen markering) of verwerpen (agent-voorstel): hetzelfde gebaar, twee uitkomsten.
           Wissen is onomkeerbaar — vandaar de tweede klik in plaats van een dialoog. Bij verwerpen is
           de reden echte informatie die alleen de mens heeft; die is niet af te leiden. */}
-      {wegHalen && (
+      {wegHalen && !slot && (
         <div className="mt-2 flex flex-wrap items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
           {eigen ? (
             <button
@@ -395,11 +428,15 @@ function DecisionCard({
 
       {uitgeklapt && (
         <div className="mt-1.5 text-xs text-muted" onClick={(e) => e.stopPropagation()}>
-          <InlineVeld
-            waarde={el.toelichting}
-            placeholder="Toelichting toevoegen…"
-            onBewaar={(nieuw) => wijzig({ toelichting: nieuw })}
-          />
+          {slot ? (
+            el.toelichting && <p className="px-1 py-0.5">{el.toelichting}</p>
+          ) : (
+            <InlineVeld
+              waarde={el.toelichting}
+              placeholder="Toelichting toevoegen…"
+              onBewaar={(nieuw) => wijzig({ toelichting: nieuw })}
+            />
+          )}
         </div>
       )}
 
@@ -431,7 +468,7 @@ function DecisionCard({
         </p>
       )}
 
-      {uitgeklapt && el.critic_suggestie?.motivatie && el.critic_suggestie.status === "open" && (
+      {uitgeklapt && !slot && el.critic_suggestie?.motivatie && el.critic_suggestie.status === "open" && (
         <div
           className="mt-2 rounded-kaart border border-dashed border-line bg-surface p-2"
           onClick={(e) => e.stopPropagation()}
@@ -468,7 +505,7 @@ function DecisionCard({
         </div>
       )}
 
-      {uitgeklapt && el.alternatieven.length > 0 && (
+      {uitgeklapt && !slot && el.alternatieven.length > 0 && (
         <div className="mt-1.5 flex flex-wrap items-center gap-1 text-xs text-muted" onClick={(e) => e.stopPropagation()}>
           <span>Twijfel — klik om te wisselen:</span>
           {el.alternatieven.map((a) => (
@@ -506,7 +543,7 @@ function DecisionCard({
 
       <div className="mt-2 flex items-center justify-between gap-2 border-t border-line/60 pt-1.5 text-[0.65rem] text-muted">
         <span className="min-w-0 flex-1" onClick={(e) => e.stopPropagation()}>
-          {!uitgeklapt ? null : notitie ? (
+          {!uitgeklapt || docVergrendeld ? null : notitie ? (
             <InlineVeld
               waarde=""
               placeholder="Opmerking bij de review…"
@@ -557,6 +594,7 @@ export function ReviewQueue({
   onBeslissing,
   onVerwijder,
   onVraag,
+  docVergrendeld,
 }: {
   /** Alle elementen — voor de tellingen in de kop. */
   elementen: AnnotatieElement[];
@@ -577,6 +615,8 @@ export function ReviewQueue({
   onVerwijder?: (elementId: string) => Promise<void>;
   /** Zet een vraag over een element klaar in het centrale chatvenster. */
   onVraag?: (el: AnnotatieElement) => void;
+  /** De annotatie is afgerond: de hele lijst staat op slot tot hij heropend wordt. */
+  docVergrendeld?: boolean;
 }) {
   const totaal = elementen.length;
   const beslist = elementen.filter(isBeslist).length;
@@ -637,8 +677,14 @@ export function ReviewQueue({
         </div>
 
         <p className="mt-2 text-[0.65rem] text-faint">
-          Sneltoetsen: <kbd>j</kbd>/<kbd>k</kbd> volgende · <kbd>a</kbd> akkoord · <kbd>x</kbd> verwerpen
-          · <kbd>c</kbd> klasse · <kbd>Esc</kbd> loslaten
+          {docVergrendeld ? (
+            <>Sneltoetsen: <kbd>j</kbd>/<kbd>k</kbd> volgende · <kbd>Esc</kbd> loslaten</>
+          ) : (
+            <>
+              Sneltoetsen: <kbd>j</kbd>/<kbd>k</kbd> volgende · <kbd>a</kbd> akkoord · <kbd>x</kbd> verwerpen
+              · <kbd>c</kbd> klasse · <kbd>Esc</kbd> loslaten
+            </>
+          )}
         </p>
       </div>
 
@@ -661,6 +707,7 @@ export function ReviewQueue({
           onBeslissing={(req) => onBeslissing(el.id, req)}
           onVerwijder={onVerwijder && el.herkomst === "mens" ? () => onVerwijder(el.id) : undefined}
           onVraag={onVraag ? () => onVraag(el) : undefined}
+          docVergrendeld={docVergrendeld}
         />
       ))}
     </div>

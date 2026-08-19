@@ -138,16 +138,21 @@ class AnnotatieStore:
         slug: str,
         user_id: str,
         element_id: str,
-        toepassen: Callable[[AnnotatieElement], None],
+        toepassen: Callable[[AnnotatieDocument, AnnotatieElement], object | None],
     ) -> AnnotatieDocument | None | object:
-        """Pas een human-decision atomair toe op één element. Dunne wrapper om `muteer_document`."""
+        """Pas een human-decision atomair toe op één element. Dunne wrapper om `muteer_document`.
+
+        `toepassen` krijgt het hele document mee — de vraag óf er beslist mag worden hangt niet
+        alleen van het element af maar ook van de documentstatus, en die toets hoort binnen dezelfde
+        row-lock als de mutatie. Geeft het een sentinel terug (bv. `CONFLICT`), dan wordt er niets
+        geschreven en komt die sentinel ongewijzigd terug.
+        """
 
         def muteer(doc: AnnotatieDocument):
             el = next((x for x in doc.elementen if x.id == element_id), None)
             if el is None:
                 return GEEN_ELEMENT
-            toepassen(el)
-            return None
+            return toepassen(doc, el)
 
         return await self.muteer_document(slug, user_id, muteer)
 

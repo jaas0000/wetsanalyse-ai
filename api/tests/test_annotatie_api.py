@@ -157,10 +157,10 @@ async def test_beslis_op_element_atomair_behoudt_andere_besluiten(client):
 
     store = AnnotatieStore()
 
-    def keur_goed(el):
+    def keur_goed(doc, el):
         el.lifecycle = Lifecycle.human_approved
 
-    def verwerp(el):
+    def verwerp(doc, el):
         el.lifecycle = Lifecycle.rejected
 
     assert await store.beslis_op_element(slug, "gebruiker-a", el0, keur_goed) is not None
@@ -497,3 +497,100 @@ async def test_de_audit_meldt_dat_het_anker_verplaatste(client):
     regels = (await client.get(f"{BASIS}/{slug}/audit")).json()
     laatste = next(r for r in reversed(regels) if r["actie"] == "beslissing-edit")
     assert laatste["detail"]["anker_verplaatst"] is True
+
+
+# --- een oordeel vergrendelt: wijzigen kan pas na een expliciete heropening -------------------
+#
+# Hiervóór kon een geaccordeerd element onbeperkt opnieuw beslist worden (approve → edit → reject →
+# approve → …). De frontend verborg alleen de knoppen, maar de klasse-badge en de toelichting
+# schreven stilzwijgend een edit weg — een akkoord betekende dus niets.
+
+async def _beslis(client, slug, el_id, **body):
+    return await client.post(f"{BASIS}/{slug}/elementen/{el_id}/beslissing", json=body)
+
+
+async def _een_element(client, **extra) -> tuple[str, str]:
+    slug = await _maak_doc(client)
+    doc = (await _put(client, slug, [
+        {"klasse": "Voorwaarde", "tekst": "indien betaling uitblijft", **extra},
+    ])).json()
+    return slug, doc["elementen"][0]["id"]
+
+
+@pytest.mark.parametrize("oordeel", ["approve", "reject"])
+async def test_een_beoordeeld_element_is_op_slot(client, oordeel):
+    slug, el = await _een_element(client)
+    assert (await _beslis(client, slug, el, type=oordeel, review_reason="anders")).status_code == 200
+
+    r = await _beslis(client, slug, el, type="edit", review_reason="verkeerde_klasse",
+                      wijziging={"klasse": "Rechtsfeit"})
+    assert r.status_code == 409 and "Heropen" in r.json()["detail"]
+    assert (await _beslis(client, slug, el, type="reject", review_reason="anders")).status_code == 409
+
+    # …en de wijziging landde ook echt niet.
+    doc = (await client.get(f"{BASIS}/{slug}")).json()
+    assert doc["elementen"][0]["klasse"] == "Voorwaarde"
+
+
+async def test_een_opmerking_mag_wel_op_een_vergrendeld_element(client):
+    """Een kanttekening wijzigt de annotatie niet — juist bij iets dat vaststaat wil je die kwijt."""
+    slug, el = await _een_element(client)
+    await _beslis(client, slug, el, type="approve")
+
+    assert (await _beslis(client, slug, el, type="comment", comment="navragen bij de vaktechniek")
+            ).status_code == 200
+    doc = (await client.get(f"{BASIS}/{slug}")).json()
+    assert doc["elementen"][0]["lifecycle"] == "human_approved"
+    assert [b["type"] for b in doc["elementen"][0]["beslissingen"]] == ["approve", "comment"]
+
+
+async def test_heropenen_geeft_het_element_terug_aan_de_review(client):
+    slug, el = await _een_element(client)
+    await _beslis(client, slug, el, type="approve")
+
+    doc = (await _beslis(client, slug, el, type="heropen")).json()
+    assert doc["elementen"][0]["lifecycle"] == "voorgesteld"
+    assert doc["elementen"][0]["gewijzigd_door"] == "mens"
+
+    # Daarna mag er weer gewerkt worden.
+    doc = (await _beslis(client, slug, el, type="edit", review_reason="verkeerde_klasse",
+                         wijziging={"klasse": "Rechtsfeit"})).json()
+    assert doc["elementen"][0]["klasse"] == "Rechtsfeit"
+
+    # En de heropening staat in het spoor — anders is een teruggedraaid akkoord onzichtbaar.
+    assert [b["type"] for b in doc["elementen"][0]["beslissingen"]] == ["approve", "heropen", "edit"]
+    acties = [r["actie"] for r in (await client.get(f"{BASIS}/{slug}/audit")).json()]
+    assert "beslissing-heropen" in acties
+
+
+async def test_heropenen_bewaart_het_critic_oordeel(client):
+    """Terug naar `critic_checked`, niet naar `voorgesteld`: anders poetst heropenen het oordeel van
+    de Critic uit beeld en lijkt het element ongezien."""
+    slug, el = await _een_element(client, critic="twijfel tussen twee klassen", aandacht="geel")
+    await _beslis(client, slug, el, type="approve")
+
+    doc = (await _beslis(client, slug, el, type="heropen")).json()
+    assert doc["elementen"][0]["lifecycle"] == "critic_checked"
+    assert doc["elementen"][0]["critic"] == "twijfel tussen twee klassen"
+
+
+async def test_heropenen_van_iets_dat_niet_op_slot_staat(client):
+    slug, el = await _een_element(client)
+    r = await _beslis(client, slug, el, type="heropen")
+    assert r.status_code == 409 and "niet op slot" in r.json()["detail"]
+
+
+async def test_een_eigen_markering_gaat_niet_op_slot(client):
+    """Je eigen markering is `human_approved` bij het aanmaken — dat is gemaakt, niet beoordeeld.
+    Vergrendelen zou hem meteen op slot zetten, inclusief de wisknop."""
+    slug = await _maak_doc(client)
+    doc = (await client.post(f"{BASIS}/{slug}/elementen", json={
+        "klasse": "Rechtsfeit", "tekst": "zes weken na de dagtekening", "lid": "1",
+    })).json()
+    el = doc["elementen"][0]["id"]
+    assert doc["elementen"][0]["lifecycle"] == "human_approved"
+
+    r = await _beslis(client, slug, el, type="edit", review_reason="verkeerde_klasse",
+                      wijziging={"klasse": "Rechtsbetrekking"})
+    assert r.status_code == 200
+    assert (await client.delete(f"{BASIS}/{slug}/elementen/{el}")).status_code == 204

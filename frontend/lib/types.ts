@@ -120,7 +120,7 @@ export interface ApiError {
 
 export type Lifecycle =
   | "voorgesteld" | "critic_checked" | "human_approved" | "edited" | "rejected" | "published" | "reused";
-export type BeslissingType = "approve" | "edit" | "reject" | "comment";
+export type BeslissingType = "approve" | "edit" | "reject" | "comment" | "heropen";
 export type ReviewReason =
   | "verkeerde_klasse" | "bron_gemist" | "tekst" | "interpretatie" | "onvoldoende_context" | "anders";
 export type Aandacht = "groen" | "geel" | "rood";

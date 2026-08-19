@@ -118,6 +118,26 @@ De API bedient zeven dingen:
   die check is daarom weg. Zonder dit endpoint stond elk document eeuwig op `in_review` en liep de
   werkvoorraad van de jurist nooit leeg.
 
+  **Een oordeel vergrendelt — heropenen is een handeling.** `geaccordeerd` betekende eerder niets:
+  er kon daarna nog van alles bij, af en overheen, en een goedgekeurd element kon onbeperkt opnieuw
+  beslist worden. Nu zijn er twee sloten, allebei 409 met een leesbare reden:
+  - **Element** — in `human_approved`/`rejected` (`VERGRENDELDE_LIFECYCLES`) weigert `beslissing`
+    een `edit`/`reject`/`approve`. Alleen `comment` (een kanttekening wijzigt de annotatie niet) en
+    het nieuwe **`heropen`** komen erlangs. `heropen` zet het element terug op `critic_checked` (als
+    de Critic er al naar keek, anders `voorgesteld`) en landt als eigen regel in `beslissingen` én
+    als `beslissing-heropen` in de audit — een teruggedraaid akkoord hoort zichtbaar te zijn.
+    `edited` vergrendelt bewust **niet**: een klasse wijzigen en er daarna een toelichting bij typen
+    is één doorlopende handeling. Een **eigen markering** ook niet: die is `human_approved` bij het
+    aanmaken, dus gemaakt in plaats van beoordeeld — het slot beschermt een review-oordeel over een
+    voorstel van de agent.
+  - **Document** — bij `status = geaccordeerd` weigeren `PUT elementen` (ook een agent-ronde),
+    `POST elementen`, `DELETE element` en `beslissing` (`_afgerond`). `POST .../status` is de enige
+    uitweg, en dus ook de enige ingang.
+
+  De toets staat binnen de mutatie-callback, dus binnen dezelfde row-lock als de schrijfactie —
+  anders glipt er tussen lezen en schrijven alsnog een wijziging langs een akkoord heen. Daarom
+  krijgt `beslis_op_element`'s `toepassen` het hele document mee en mag het een sentinel teruggeven.
+
   **De lijst draagt de werkvoorraad.** `GET /documenten` levert per document ook `te_beoordelen`,
   `per_aandacht`, `per_klasse` (de JAS-kleurstrip in de UI), `laatste_model` en een `citeertitel`
   met terugval op `werkgebied`/`bwbId` (`annotatie_export.weergavenaam`). De telling komt uit

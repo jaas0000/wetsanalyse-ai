@@ -11,8 +11,8 @@ import { OntbrekendLijst } from "@/components/workbench/OntbrekendLijst";
 import { ReviewQueue, type OpenRij } from "@/components/workbench/ReviewQueue";
 import { SelectiePopover, type SelectieDoel } from "@/components/workbench/SelectiePopover";
 import {
-  DOCUMENT_STATUS_LABEL, DOCUMENT_STATUS_STYLE, bronVan, overlaptSelectie, pastInFilter, regelsVan,
-  sorteerReview, volgendeElement, type ReviewFilter,
+  DOCUMENT_STATUS_LABEL, DOCUMENT_STATUS_STYLE, bronVan, isDocumentVergrendeld, isVergrendeld,
+  overlaptSelectie, pastInFilter, regelsVan, sorteerReview, volgendeElement, type ReviewFilter,
 } from "@/lib/annotatie";
 import { maakAnker, vindPositie } from "@/lib/selectie";
 import type {
@@ -130,6 +130,11 @@ export function ArtefactInhoud({
     else onSluiten?.();
   }, [selectie, open, actiefId, onKies, onSluiten, sluitSelectie]);
 
+  /** Een afgerond document is bevroren. De api weigert elke mutatie met een 409; hier leggen we de
+   *  bediening stil zodat de jurist die fout nooit tegenkomt — een knop die alleen nog een
+   *  foutmelding oplevert is erger dan geen knop. Heropenen staat in de kop en is één klik. */
+  const vergrendeld = isDocumentVergrendeld(doc);
+
   /** Afronden of heropenen. De fout landt in dezelfde melding als de beslissingen — de jurist hoeft
    *  niet op twee plekken te kijken. */
   async function zetStatus(status: "geaccordeerd" | "in_review") {
@@ -180,6 +185,10 @@ export function ArtefactInhoud({
       const actiefEl = doc.elementen.find((el) => el.id === actiefId);
       if (!actiefEl) return;
 
+      // Ook het slot op dít element telt: anders opent `x` een redenen-rij die alleen nog een 409
+      // kan opleveren. De sneltoets doet precies wat de knop doet — of hij doet niets.
+      if (vergrendeld || isVergrendeld(actiefEl)) return;
+
       if (e.key === "a") {
         e.preventDefault();
         void keurGoed(actiefEl.id);
@@ -201,6 +210,7 @@ export function ArtefactInhoud({
   /** Elke beslissing loopt hierlangs, zodat een mislukking bij de kaart landt en niet in de
    *  chatthread. De aanroeper (`WerkplekClient`) gooit de fout bewust dóór. */
   async function beslis(elementId: string, req: BeslissingInvoer) {
+    if (vergrendeld) return;
     setFout(null);
     try {
       await onBeslissing(elementId, req);
@@ -212,6 +222,7 @@ export function ArtefactInhoud({
 
   /** Wissen loopt om dezelfde reden hierlangs: de fout hoort bij de kaart, niet in de chat. */
   async function wis(elementId: string) {
+    if (vergrendeld) return;
     setFout(null);
     try {
       await onWisEigenMarkering?.(elementId);
@@ -224,6 +235,7 @@ export function ArtefactInhoud({
   /** Goedkeuren en doorspringen naar het volgende dat nog aandacht vraagt. Dat doorspringen is de
    *  hele winst van een reviewlijst; blijven staan op iets dat af is kost per element een klik. */
   async function keurGoed(elementId: string) {
+    if (vergrendeld) return;
     const volgend = volgendeElement(getoond, elementId, 1, true);
     await beslis(elementId, { type: "approve" });
     setOpen("geen");
@@ -233,7 +245,7 @@ export function ArtefactInhoud({
   /** Het fragment van de actieve markering vervangen door de selectie. Het anker gaat mee: zonder
    *  dat wijzen de offsets naar het oude fragment en springt de markering na herladen. */
   async function pasFragmentAan() {
-    if (!selectie || !teCorrigeren) return;
+    if (vergrendeld || !selectie || !teCorrigeren) return;
     setFout(null);
     try {
       await beslis(teCorrigeren.id, {
@@ -256,7 +268,7 @@ export function ArtefactInhoud({
   async function markeer(invoer: {
     klasse: string; tekst: string; lid: string; toelichting: string; anker: ReturnType<typeof maakAnker>;
   }): Promise<void> {
-    if (!onEigenMarkering) return;
+    if (vergrendeld || !onEigenMarkering) return;
     setFout(null);
     try {
       // Heeft de bepaling geen genummerde leden, dan valt het lid terug op de afbakening van het
@@ -270,7 +282,7 @@ export function ArtefactInhoud({
 
   /** De selectie in de tekst als markering vastleggen. */
   async function markeerSelectie(klasse: string, toelichting: string) {
-    if (!selectie) return;
+    if (vergrendeld || !selectie) return;
     await markeer({
       klasse,
       tekst: selectie.fragment,
@@ -343,9 +355,9 @@ export function ArtefactInhoud({
               }))}
             actiefId={actiefId}
             onKies={onKies}
-            onSelectie={onEigenMarkering ? setSelectie : undefined}
+            onSelectie={onEigenMarkering && !vergrendeld ? setSelectie : undefined}
           />
-          {onEigenMarkering && (
+          {onEigenMarkering && !vergrendeld && (
             <p className="mt-2 text-xs text-faint">
               Tip: selecteer een stuk tekst om het zelf te markeren — of klik eerst een markering aan
               en selecteer opnieuw om die in te korten of uit te breiden.
@@ -356,6 +368,17 @@ export function ArtefactInhoud({
           {fout && (
             <div className="py-2">
               <Melding type="fout" compact>{fout}</Melding>
+            </div>
+          )}
+
+          {/* Zonder deze regel lijkt een afgeronde annotatie kapot: de knoppen zijn weg en er staat
+              niets over waarom. Neutraal van toon — afgerond zijn is de bedoeling, geen fout. */}
+          {vergrendeld && (
+            <div className="py-2">
+              <Melding type="uitleg" compact>
+                Deze annotatie is afgerond en staat daarom op slot. Kies <em>Heropenen</em> hierboven
+                om hem weer te kunnen wijzigen.
+              </Melding>
             </div>
           )}
 
@@ -373,8 +396,9 @@ export function ArtefactInhoud({
               onAkkoord={keurGoed}
               onKies={onKies}
               onBeslissing={beslis}
-              onVerwijder={onWisEigenMarkering ? wis : undefined}
+              onVerwijder={onWisEigenMarkering && !vergrendeld ? wis : undefined}
               onVraag={onVraag}
+              docVergrendeld={vergrendeld}
             />
           ) : (
             <p className="text-sm text-muted">Geen elementen.</p>
@@ -385,7 +409,7 @@ export function ArtefactInhoud({
               bron={bron}
               regels={regels}
               elementen={doc.elementen}
-              onToevoegen={onEigenMarkering ? markeer : undefined}
+              onToevoegen={onEigenMarkering && !vergrendeld ? markeer : undefined}
             />
           )}
           </div>
@@ -406,8 +430,9 @@ export function ArtefactInhoud({
 
 
 /** Afronden is een expliciete handeling van de jurist: "alle elementen beslist" is niet hetzelfde
- *  als tevreden zijn. Heropenen kan altijd — een knop die niet terug kan durft niemand te
- *  gebruiken. Bij een gepromoveerd document (in de graaf) is er niets meer te wisselen. */
+ *  als tevreden zijn. Afronden zet de hele annotatie op slot, dus dit is óók de enige weg terug —
+ *  heropenen kan altijd, want een knop die niet terug kan durft niemand te gebruiken. Bij een
+ *  gepromoveerd document (in de graaf) is er niets meer te wisselen. */
 function StatusKnop({
   status, bezig, onZet,
 }: {

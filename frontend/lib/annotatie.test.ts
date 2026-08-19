@@ -18,6 +18,10 @@ import {
   mergeVoorstellen,
   annotatieTitel,
   isVerwijderd,
+  isBeslist,
+  isVergrendeld,
+  isDocumentVergrendeld,
+  alGemarkeerd,
 } from "./annotatie";
 import type { AnnotatieDocument, AnnotatieElement, GraafArtikel, VoorstelElement } from "./types";
 
@@ -268,6 +272,66 @@ describe("pastInFilter", () => {
 
   it("laat bij 'alles' alles door", () => {
     expect(pastInFilter(el("b", { lifecycle: "rejected" }), "alles")).toBe(true);
+  });
+});
+
+describe("isVergrendeld", () => {
+  // Een eindoordeel zet het element op slot; wijzigen kan pas na een expliciete heropening. Bewust
+  // een ander begrip dan `isBeslist`, dat de filters en de telling stuurt.
+  it("vergrendelt een goedgekeurd en een verworpen element", () => {
+    expect(isVergrendeld(el("a", { lifecycle: "human_approved" }))).toBe(true);
+    expect(isVergrendeld(el("b", { lifecycle: "rejected" }))).toBe(true);
+  });
+
+  it("laat een aangepast element bewerkbaar", () => {
+    // Klasse wijzigen en er daarna een toelichting bij typen is één doorlopende handeling; een slot
+    // na de eerste wijziging zou daar een heropening tussen wringen.
+    const bewerkt = el("c", { lifecycle: "edited" });
+    expect(isBeslist(bewerkt)).toBe(true);
+    expect(isVergrendeld(bewerkt)).toBe(false);
+  });
+
+  it("laat een onbeoordeeld element met rust", () => {
+    expect(isVergrendeld(el("d"))).toBe(false);
+    expect(isVergrendeld(el("e", { lifecycle: "critic_checked" }))).toBe(false);
+  });
+
+  it("vergrendelt een eigen markering niet", () => {
+    // Die staat bij het aanmaken al op `human_approved`: gemaakt, niet beoordeeld. Op slot zetten
+    // zou je eigen verse markering meteen onbewerkbaar maken, wisknop en al.
+    expect(isVergrendeld(el("eigen", { lifecycle: "human_approved", herkomst: "mens" }))).toBe(false);
+  });
+});
+
+describe("alGemarkeerd", () => {
+  const items = [
+    el("a", { klasse: "Rechtsfeit", tekst: "zes weken na de dagtekening" }),
+  ];
+
+  it("herkent een fragment dat er al ligt, ongeacht spaties en kapitalen", () => {
+    expect(alGemarkeerd(items, "Rechtsfeit", "  Zes   weken na de dagtekening ")).toBe(true);
+  });
+
+  it("telt een verworpen markering NIET mee", () => {
+    // Je hebt hem net weggestuurd; "inmiddels gemarkeerd" is dan het omgekeerde van wat er gebeurde,
+    // en het ontbrekend-item bleef onaanklikbaar staan terwijl je hem opnieuw wilde toevoegen.
+    const verworpen = [el("a", {
+      klasse: "Rechtsfeit", tekst: "zes weken na de dagtekening", lifecycle: "rejected",
+    })];
+    expect(alGemarkeerd(verworpen, "Rechtsfeit", "zes weken na de dagtekening")).toBe(false);
+  });
+
+  it("kijkt naar klasse én fragment, en negeert een leeg fragment", () => {
+    expect(alGemarkeerd(items, "Rechtssubject", "zes weken na de dagtekening")).toBe(false);
+    expect(alGemarkeerd(items, "Rechtsfeit", "   ")).toBe(false);
+  });
+});
+
+describe("isDocumentVergrendeld", () => {
+  it("bevriest alleen een afgerond document", () => {
+    expect(isDocumentVergrendeld({ status: "geaccordeerd" })).toBe(true);
+    expect(isDocumentVergrendeld({ status: "in_review" })).toBe(false);
+    expect(isDocumentVergrendeld({ status: "gepromoveerd" })).toBe(false);
   });
 });
 

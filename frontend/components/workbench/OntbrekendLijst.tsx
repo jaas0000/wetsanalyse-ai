@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { Vinkje } from "@/components/ui/Icoon";
+import { alGemarkeerd } from "@/lib/annotatie";
 import { jasStyle } from "@/lib/jas";
 import { lidUitOffset, maakAnker, vindPositie, type LidRegel } from "@/lib/selectie";
 import type { AnnotatieElement, OntbrekendItem } from "@/lib/types";
@@ -43,12 +44,7 @@ export function OntbrekendLijst({
 }) {
   const [bezig, setBezig] = useState<number | null>(null);
 
-  const genormaliseerd = (s: string) => s.split(/\s+/).join(" ").toLowerCase();
-  const alGemarkeerd = new Set(elementen.map((e) => `${e.klasse}|${genormaliseerd(e.tekst)}`));
-  const isKlaar = (item: OntbrekendItem) => {
-    const fragment = (item.tekst ?? "").trim();
-    return !!fragment && alGemarkeerd.has(`${item.klasse}|${genormaliseerd(fragment)}`);
-  };
+  const isKlaar = (item: OntbrekendItem) => alGemarkeerd(elementen, item.klasse, item.tekst ?? "");
 
   // Alles afgehandeld? Dan hoort hier niets meer te staan. Een blok met alleen vinkjes is ruis.
   const openstaand = items.filter((item) => !isKlaar(item)).length;

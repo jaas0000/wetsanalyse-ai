@@ -196,7 +196,11 @@ hetzelfde icoon (viewBox 20, `strokeWidth` 1.6). De prijs is een regel hoogte op
 
 **Afronden** zit als knop in de kop van `ArtefactInhoud` (dus in beide schillen) en zet de
 documentstatus via `zetDocumentStatus`. Expliciet, want "alle elementen beslist" is niet hetzelfde
-als klaar zijn; heropenen kan altijd.
+als klaar zijn; heropenen kan altijd. Afronden **bevriest de hele annotatie**
+(`isDocumentVergrendeld`): de handlers vallen stil, de selectie-popover en de ontbrekend-knoppen
+verdwijnen, `a`/`x`/`c` doen niets meer en er staat een uitleg-melding boven de lijst. De api
+weigert die mutaties tóch met een 409 — de UI laat het slot zien in plaats van die fout af te
+wachten, want een knop die alleen nog een foutmelding oplevert is erger dan geen knop.
 
 ### Buiten de schil: één kaart
 
@@ -476,8 +480,24 @@ toelichting → `interpretatie`, meerdere velden → `anders`). Vragen wat je zo
   te testen, en in sommige contexten geblokkeerd. Scherp gezet ontwapent de knop vanzelf (4 s, blur
   of Escape): een knop die scherp blijft staan is een val, juist bij die handelingen.
 - **× betekent weghalen**, met twee uitkomsten achter hetzelfde gebaar: een agent-voorstel klapt de
-  redenen-chips uit (één klik = verworpen, terug te draaien met `Akkoord`), een eigen markering
+  redenen-chips uit (één klik = verworpen, terug te draaien met *Heropenen*), een eigen markering
   verandert in "Wissen?" en is na de tweede klik echt weg (`DELETE`).
+- **Een oordeel vergrendelt de kaart.** Bij `human_approved`/`rejected` (`isVergrendeld`, een ánder
+  begrip dan `isBeslist` — dát stuurt de filters en de telling) is de klasse-badge een badge in
+  plaats van een knop, staat de toelichting als platte tekst, en zijn *Akkoord*, het kruisje, de
+  alternatieven en de kanttekening-acties weg. Ervoor in de plaats staat **Heropenen**
+  (`type: "heropen"`), dat het element terugzet in de review. Zonder die knop was een akkoord een
+  doodlopende weg: de bediening lag stil en er was niets dat hem weer aanzette — terwijl de
+  klasse-badge en de toelichting ondertussen stilzwijgend een `edit` wegschreven, dus een akkoord
+  betekende in de praktijk niets. Een **opmerking** mag wél op een vergrendeld element (die wijzigt
+  de annotatie niet); `edited` vergrendelt bewust niet, anders wringt er een heropening tussen het
+  wijzigen van een klasse en het typen van de toelichting; en een **eigen markering** vergrendelt
+  niet, want die is `human_approved` bij het aanmaken — anders staat je verse markering meteen op
+  slot, wisknop en al.
+- **Verworpen markeringen tellen niet als "inmiddels gemarkeerd"** (`alGemarkeerd` in
+  `lib/annotatie.ts`, gebruikt door `OntbrekendLijst`). Verwerp je een markering, dan wil je het
+  ontbrekend-item juist opnieuw kunnen toevoegen; het bleef er met een vinkje bij staan. Zelfde
+  regel als in `DocumentPaneel`, dat verworpen markeringen ook niet meer oplicht.
 - **De reden blijft alleen bij verwerpen een vraag**: die informatie heeft alleen de mens.
 - **Fragment inkorten/uitbreiden**: klik de markering aan en selecteer opnieuw. Raakt de selectie het
   bereik van de actieve markering (`overlaptSelectie` + `vindPositie`, dezelfde functie als de

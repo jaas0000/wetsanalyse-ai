@@ -109,6 +109,35 @@ async def test_afronden_en_heropenen(client):
     assert any(a["actie"] == "document-heropend" for a in (await client.get(f"{BASIS}/{slug}/audit")).json())
 
 
+async def test_een_afgerond_document_is_bevroren(client):
+    """`geaccordeerd` blokkeerde eerder niets: er kon daarna nog van alles bij, af en overheen — ook
+    door een nieuwe agent-ronde. Afronden is nu een slot, met heropenen als enige uitweg."""
+    slug = await _doc_met_elementen(client)
+    await client.post(f"{BASIS}/{slug}/status", json={"status": "geaccordeerd"})
+
+    agentronde = await client.put(f"{BASIS}/{slug}/elementen", json={
+        "ronde": 2, "elementen": [{"id": "m1", "klasse": "Rechtsfeit", "tekst": "de ontvanger"}],
+    })
+    eigen = await client.post(f"{BASIS}/{slug}/elementen", json={
+        "klasse": "Rechtsobject", "tekst": "de aanslag", "lid": "1",
+    })
+    beslissing = await client.post(f"{BASIS}/{slug}/elementen/m2/beslissing", json={"type": "approve"})
+    weg = await client.delete(f"{BASIS}/{slug}/elementen/m1")
+
+    for r in (agentronde, eigen, beslissing, weg):
+        assert r.status_code == 409, r.text
+        assert "afgerond" in r.json()["detail"]
+
+    doc = (await client.get(f"{BASIS}/{slug}")).json()
+    assert [e["id"] for e in doc["elementen"]] == ["m1", "m2", "m3"]
+    assert doc["elementen"][0]["klasse"] == "Rechtssubject"
+
+    # Heropenen maakt alles weer los.
+    await client.post(f"{BASIS}/{slug}/status", json={"status": "in_review"})
+    assert (await client.post(f"{BASIS}/{slug}/elementen/m2/beslissing",
+                              json={"type": "approve"})).status_code == 200
+
+
 async def test_status_van_anderen_en_ongeldige_toestand(client):
     slug = await _doc_met_elementen(client)
     # Promoveren naar de graaf hoort bij het (nog niet bestaande) schrijfpad, niet bij de jurist.
