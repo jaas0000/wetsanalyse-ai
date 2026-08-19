@@ -389,6 +389,17 @@ de werkplek) las je zo diens historie terug. Zet er geen tweede ingang naast: el
 `conversation_id` aanneemt, hoort eerst bij de api te verifiëren van wie dat gesprek is, zoals
 `app/api/annotatie/run/route.ts` doet.
 
+**Een afgekeurd citaat wordt in de tekst zelf aangewezen.** `grounding.niet_letterlijk` ging alleen
+naar het blok ónder het antwoord, en dat blok slaat iedereen op den duur over — terwijl je in de
+tekst naar een passage kijkt die er betrouwbaar uitziet omdát er aanhalingstekens omheen staan.
+`Markdown` neemt daarom `nietLetterlijk` aan en wikkelt elke treffer in een `<mark>` (aandacht-geel
+uit de huisstijl, plus een stippellijn en een `sr-only`-toelichting, zodat het signaal niet alleen
+aan kleur hangt). De transformatie is een **rehype-plugin op de hast-boom**, niet op de
+bron-markdown: zo komt er geen teken in de tekst die de jurist zou meekopiëren en blijft de opmaak
+zoals het model hem bedoelde. Matchen gaat letterlijk — wijkt de weergave af van wat de controle
+vergeleek (die normaliseert witruimte), dan markeren we liever niets dan het verkeerde stuk, en
+noemt het blok eronder de passage alsnog. Logica in `lib/markering.ts`, getest zonder DOM.
+
 **Brongetrouwheid staat onder het antwoord** (`Brongetrouwheid` in `WerkplekClient`). graph-qa stuurt
 per beurt een `grounding`-event; dat kwam altijd al binnen maar werd door niemand uitgelezen, dus een
 niet-onderbouwde verwijzing bleef onzichtbaar. Het blok zwijgt bij `niveau: "gegrond"` — een groen

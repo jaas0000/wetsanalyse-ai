@@ -937,7 +937,13 @@ export function WerkplekClient({
                   <p className="mb-1 text-xs font-medium text-muted">Lex</p>
                   {item.denk && <DenkProces tekst={item.denk} actief={bezig && !item.tekst} />}
                   {item.tekst ? (
-                    streamt ? <StreamendeTekst tekst={item.tekst} /> : <Markdown tekst={item.tekst} />
+                    streamt ? (
+                      <StreamendeTekst tekst={item.tekst} />
+                    ) : (
+                      // De afgekeurde citaten worden in de tekst zelf aangewezen; het blok eronder
+                      // blijft staan voor wat níét in de weergave terug te vinden was.
+                      <Markdown tekst={item.tekst} nietLetterlijk={item.grounding?.niet_letterlijk} />
+                    )
                   ) : item.denk ? null : (
                     <Punten />
                   )}

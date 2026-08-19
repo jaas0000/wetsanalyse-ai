@@ -3,6 +3,7 @@
 import { memo } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { markeerPassages } from "@/lib/markering";
 
 /** Rendert een agent-antwoord als (GitHub-flavored) Markdown. Geen rauwe HTML (geen rehype-raw), dus
  *  veilig; links laten we alleen door voor http(s) en openen extern.
@@ -25,11 +26,20 @@ export function StreamendeTekst({ tekst }: { tekst: string }) {
   return <div className={`whitespace-pre-wrap ${TEKST_CLASS}`}>{tekst}</div>;
 }
 
-export const Markdown = memo(function Markdown({ tekst }: { tekst: string }) {
+export const Markdown = memo(function Markdown({
+  tekst,
+  nietLetterlijk,
+}: {
+  tekst: string;
+  /** Passages die de brongetrouwheidscontrole afkeurde (`grounding.niet_letterlijk`). */
+  nietLetterlijk?: readonly string[];
+}) {
+  const teMarkeren = nietLetterlijk?.length ? nietLetterlijk : null;
   return (
     <div className={`space-y-3 ${TEKST_CLASS}`}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
+        rehypePlugins={teMarkeren ? [markeerPassages(teMarkeren)] : []}
         components={{
           p: ({ children }) => <p className="leading-relaxed">{children}</p>,
           a: ({ href, children }) => {
@@ -48,6 +58,19 @@ export const Markdown = memo(function Markdown({ tekst }: { tekst: string }) {
           h2: ({ children }) => <p className="text-sm font-semibold text-lint">{children}</p>,
           h3: ({ children }) => <p className="font-semibold">{children}</p>,
           strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+          // Alleen gezet door `markeerPassages`: een citaat dat de controle afkeurde. Geel is hier
+          // de aandacht-tint uit de huisstijl — dezelfde betekenis als op een reviewkaart: kijk hier
+          // even naar. De stippellijn draagt het signaal óók zonder kleur, en de sr-only tekst zegt
+          // het voor wie het niet ziet; kleur alleen zou het voor een deel van de lezers wegvallen.
+          mark: ({ children, title }) => (
+            <mark
+              title={typeof title === "string" ? title : undefined}
+              className="rounded-sm bg-aandacht-geel-bg px-0.5 text-aandacht-geel-tekst underline decoration-aandacht-geel-rand decoration-dotted underline-offset-2"
+            >
+              {children}
+              <span className="sr-only"> (staat niet letterlijk in de opgehaalde tekst)</span>
+            </mark>
+          ),
           code: ({ children }) => <code className="rounded bg-surface px-1 py-0.5 font-mono text-xs">{children}</code>,
           pre: ({ children }) => (
             <pre className="overflow-x-auto rounded border border-line bg-surface p-2 font-mono text-xs">{children}</pre>
