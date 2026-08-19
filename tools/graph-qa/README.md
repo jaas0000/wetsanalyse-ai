@@ -132,6 +132,7 @@ uv run --extra dev pytest -q                    # tests
 | `CORS_ORIGINS` | Kommagescheiden origins; `*` = open (alleen dev). |
 | `CHECKPOINT_DB_PATH` | Pad voor de durable checkpointer; leeg = in-memory (geen continuïteit over herstarts). |
 | `MAX_TURNS` | Max. reason↔retrieve-beurten per vraag. |
+| `GROUNDING_CORRECT` | Eén corrigerende ronde bij een ongegrond antwoord (verzonnen vindplaats of een citaat dat niet letterlijk is). **Default aan**; `false` maakt de controle weer alleen een melding onder het antwoord. Kost alleen een extra call als er werkelijk iets mis is. |
 | `ENABLE_DECOMPOSITION` | `1` = multi-hop decompositie aan (default uit). |
 | `MAX_SUBQUESTIONS` | Cap op het aantal deelvragen (default 5). |
 | `SUB_MAX_TURNS` | Max. reason↔retrieve-beurten per deelvraag (default 8). |

@@ -37,7 +37,9 @@ def test_volledige_stroom_plan_tools_verify_finalize():
 
 
 def test_bronnen_uit_tooltrace_grounding_verdict():
-    settings = make_settings(enable_planning=False)
+    # Correctie uit: deze test gaat over het OORDEEL van de controle, niet over wat er daarna
+    # gebeurt. Met correctie aan zou het verdict dat we hier meten al zijn weggewerkt.
+    settings = make_settings(enable_planning=False, grounding_correct=False)
     graph = FakeGraph(result=f"<{ART_IRI}> bwb:tekst 'x' .")
     llm = FakeLLM([
         response([tool_block("t1", "get_artikel", {"bwb_id": "BWBR0004770", "artikel": "9"})], "tool_use"),
@@ -240,3 +242,52 @@ def test_deelvraag_beurtlimiet_dwingt_antwoord_af():
     assert "Volgens" in tokens, "de laatste beurt moet een echt antwoord opleveren"
     assert "geen antwoord formuleren" not in tokens, "het finalize-vangnet mag niet nodig zijn"
     assert any(e["type"] == "status" and "beurtlimiet bereikt" in e.get("message", "") for e in events)
+
+
+def test_correctie_op_een_citaat_dat_niet_letterlijk_is():
+    """De correctieronde moet zeggen wat er écht mis is.
+
+    Hij keek alleen naar `unsupported` (verzonnen vindplaatsen). Een antwoord dat daarop schoon is
+    maar wél passages tussen aanhalingstekens zet die niet in de bron staan — op dev zeven keer in
+    één antwoord — kreeg dan een volledige extra LLM-call met de instructie "je noemde
+    verwijzing(en) `` die niet uit de graaf kwamen": een lege opsomming en een verwijt dat niet
+    klopte. Het model kan daar niets mee, dus de duurste stap in de keten deed niets.
+    """
+    settings = make_settings(enable_planning=False, grounding_correct=True)
+    bron = "De ontvanger verleent uitstel van betaling indien de schuldenaar daarom verzoekt."
+    graph = FakeGraph(result=f"<{ART_IRI}> bwb:tekst '{bron}' .")
+    llm = FakeLLM([
+        response([tool_block("t1", "get_artikel", {"bwb_id": "BWBR0004770", "artikel": "9"})], "tool_use"),
+        # Een "citaat" met een eigen weglating erin: geen verzonnen vindplaats, wel een parafrase
+        # die als letterlijk wordt gepresenteerd.
+        response([text_block(
+            f'Zie {ART_IRI}: "De ontvanger verleent uitstel (...) indien de schuldenaar verzoekt."'
+        )], "end_turn"),
+        response([text_block(f"Zie {ART_IRI}: de ontvanger kan uitstel verlenen.")], "end_turn"),
+    ])
+    events = _run(answer_stream("vraag", settings=settings, llm=llm, graph=graph))
+
+    assert llm.index == 3, "de correctieronde hoort te zijn gedraaid"
+    instructie = llm.calls[-1]["messages"][-1]["content"]
+    assert "niet letterlijk" in instructie
+    assert "De ontvanger verleent uitstel" in instructie, "het model moet weten wélk citaat"
+    assert "verwijzing(en) ," not in instructie and "verwijzing(en) ." not in instructie
+    assert next(e for e in events if e["type"] == "grounding")["grounded"] is True
+
+
+def test_correctie_noemt_beide_soorten_als_beide_mis_zijn():
+    settings = make_settings(enable_planning=False, grounding_correct=True)
+    bron = "De ontvanger verleent uitstel van betaling."
+    graph = FakeGraph(result=f"<{ART_IRI}> bwb:tekst '{bron}' .")
+    llm = FakeLLM([
+        response([tool_block("t1", "get_artikel", {"bwb_id": "BWBR0004770", "artikel": "9"})], "tool_use"),
+        response([text_block(
+            'Zie BWBR9999999: "De ontvanger verleent uitstel aan iedere schuldenaar zonder meer."'
+        )], "end_turn"),
+        response([text_block("Herzien antwoord zonder citaat.")], "end_turn"),
+    ])
+    _run(answer_stream("vraag", settings=settings, llm=llm, graph=graph))
+
+    instructie = llm.calls[-1]["messages"][-1]["content"]
+    assert "BWBR9999999" in instructie
+    assert "niet letterlijk" in instructie

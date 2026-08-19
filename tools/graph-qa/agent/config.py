@@ -119,7 +119,14 @@ class Settings(BaseModel):
     prompt_caching: bool = True
 
     # Grounding
-    grounding_correct: bool = False   # bij niet-onderbouwde citaties één corrigerende her-vraag
+    # Bij een ongegrond antwoord één corrigerende her-vraag (`correct_node`), hoogstens één keer.
+    #
+    # Stond uit, en daarmee was de groundingcontrole een melding onder het antwoord en verder niets:
+    # de jurist las een antwoord waarvan de keten zelf had vastgesteld dat er citaten in stonden die
+    # niet in de bron voorkomen. Voor een platform waarvan brongetrouwheid het bestaansrecht is, is
+    # signaleren te weinig zolang herstellen één call kost — en die call komt er alléén als er
+    # werkelijk iets mis is. `GROUNDING_CORRECT=false` zet hem terug uit.
+    grounding_correct: bool = True
     curate_sources: bool = True       # bronnenlijst beperken tot in het antwoord aangehaalde regelingen
 
     # Observability (gated op otel_endpoint; leeg = alleen JSON-logs)
@@ -152,6 +159,7 @@ class Settings(BaseModel):
             "max_subquestions": e.get("MAX_SUBQUESTIONS"),
             "sub_max_turns": e.get("SUB_MAX_TURNS"),
             "critic_max_rondes": e.get("CRITIC_MAX_RONDES"),
+            "grounding_correct": e.get("GROUNDING_CORRECT"),
             "prompt_caching": e.get("PROMPT_CACHING"),
             "wetsanalyse_api_url": e.get("WETSANALYSE_API_URL"),
             "wetsanalyse_api_token": _read_secret(e, "WETSANALYSE_API_TOKEN"),

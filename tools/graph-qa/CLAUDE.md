@@ -44,8 +44,14 @@ router → agent ⇄ tools → verify → (correct) → finalize
   narratie van opeenvolgende beurten niet aan elkaar plakt.
 - **`tools_node`** — voert elke tool-aanroep uit via `dispatch(name, graph, args, settings)` en voegt
   `(tool_naam, resultaat)` toe aan de `source_trace`.
-- **`verify_node`** — `check_grounding(answer, source_trace)`; bij ongegrond én `grounding_correct`
-  volgt via `correct_node` één corrigerende her-vraag.
+- **`verify_node`** — `check_grounding(answer, source_trace)`; bij ongegrond volgt via `correct_node`
+  één corrigerende her-vraag (`grounding_correct`, env `GROUNDING_CORRECT`, **default aan**; hoogstens
+  één ronde via `state["corrected"]`). De controle keurt **twee** dingen af en `correct_node` moet ze
+  allebei benoemen: `unsupported` (een vindplaats die niet uit de graaf kwam) en `niet_letterlijk`
+  (tekst tussen aanhalingstekens die niet letterlijk in de opgehaalde tekst staat). Alleen het eerste
+  noemen was een bug: een antwoord dat enkel op citaten struikelde kreeg een volle extra LLM-call met
+  een lege opsomming. Bij de citaten gaan de passages zelf mee (afgekapt) — zonder de tekst weet het
+  model niet wélk citaat het moet herstellen.
 - **`finalize_node`** — `collect_sources` (uit de trace) → `curate_sources` (beperken tot aangehaalde
   regelingen) → emit `sources` + `grounding`; werkt `entities_seen` bij (nieuwe IRI's, dedup).
 

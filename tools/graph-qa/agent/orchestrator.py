@@ -1311,17 +1311,46 @@ def build_graph(
         return "finalize"
 
     def correct_node(state: State) -> dict[str, Any]:
+        """Eén herkansing op wat de groundingcontrole afkeurde.
+
+        De controle keurt twee dingen af en die vragen een ándere correctie. Deze node zag alleen
+        `unsupported` (verzonnen vindplaatsen) en zweeg over `niet_letterlijk` (tekst die als citaat
+        is gepresenteerd maar niet letterlijk in de bron staat). Bij een antwoord dat alléén op dat
+        tweede struikelde — precies wat op dev gebeurde, zeven keer in één antwoord — ging er dus een
+        volledige extra LLM-call de deur uit met de instructie "je noemde verwijzing(en) `` die niet
+        uit de graaf kwamen": een lege opsomming en een verwijt dat niet klopte.
+        """
         writer = get_stream_writer()
-        bad = ", ".join(state.get("unsupported", []))
-        _stap(writer, "Correctie", "antwoord bijstellen op de niet-onderbouwde verwijzingen")
+        unsupported = state.get("unsupported") or []
+        niet_letterlijk = state.get("niet_letterlijk") or []
+
+        opdrachten: list[str] = []
+        if unsupported:
+            opdrachten.append(
+                f"Je noemde verwijzing(en) {', '.join(unsupported)} die niet uit de graaf-resultaten "
+                "kwamen. Onderbouw ze met de tools of verwijder ze."
+            )
+        if niet_letterlijk:
+            # Het fragment zelf mee, afgekapt: zonder de tekst weet het model niet wélk citaat het
+            # moet herstellen, en met zeven lange passages loopt de prompt onnodig vol.
+            passages = "; ".join(f'"{c[:120]}…"' if len(c) > 120 else f'"{c}"' for c in niet_letterlijk)
+            opdrachten.append(
+                f"Deze passages staan tussen aanhalingstekens maar niet letterlijk in de opgehaalde "
+                f"tekst: {passages}. Herstel ze woord voor woord zoals ze in de bron staan, of haal "
+                "de aanhalingstekens weg en geef het in je eigen woorden weer. Weglatingen met (...), "
+                "eigen samenvattingen tussen [ ] en vet of cursief binnen een citaat maken het een "
+                "parafrase — die presenteer je niet als citaat."
+            )
+
+        wat = " en ".join(
+            deel for deel in (
+                "niet-onderbouwde verwijzingen" if unsupported else "",
+                "citaten die niet letterlijk zijn" if niet_letterlijk else "",
+            ) if deel
+        )
+        _stap(writer, "Correctie", f"antwoord bijstellen op {wat}")
         return {
-            "messages": [{
-                "role": "user",
-                "content": (
-                    f"Let op: je noemde verwijzing(en) {bad} die niet uit de graaf-resultaten kwamen. "
-                    "Corrigeer je antwoord: onderbouw ze met de tools of verwijder ze."
-                ),
-            }],
+            "messages": [{"role": "user", "content": "Let op: " + " ".join(opdrachten)}],
             "corrected": True,
             "answer": "",
         }
