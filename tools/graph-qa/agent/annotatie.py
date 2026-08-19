@@ -115,12 +115,25 @@ def _parse_elementen(text: str) -> list[dict[str, Any]]:
 
 
 def _verwerk(
-    llm_text: str, corpus: str, bwb_id: str, artikel: str, scope_lid: str | None = None
+    llm_text: str, corpus: str, bwb_id: str, artikel: str, scope_lid: str | None = None,
+    geldige_ids: set[str] | None = None,
 ) -> tuple[list[AnnotatieVoorstel], list[VerworpenFragment]]:
     """Parse de LLM-JSON, valideer klasse + brongetrouwheid, bereken vindplaats.
 
     Is een `scope_lid` gezet (annotatie tot één lid), dan wint dat voor de vindplaats — elke markering
     verwijst dan naar dat lid, ook als het model het lid-veld leeg laat.
+
+    `geldige_ids` begrenst welke id's het model mag hergebruiken, en wordt door de **herziening**
+    meegegeven: daar krijgt het model bestaande voorstellen te zien, en een verwisseld id zou dan
+    element A overschrijven met de inhoud van B — inclusief de beslissingen van de jurist en het
+    auditspoor die eraan hangen. Een id buiten de set wordt genegeerd; het voorstel krijgt een vers
+    id en komt er dus naast te staan in plaats van iets stuk te maken.
+
+    De eerste ronde geeft het bewust niet mee: daar bestaat binnen de beurt nog geen element om te
+    overschrijven, dus een id uit het model is hooguit een raar id.
+
+    Dezelfde strengheid die `_verwerk_critic` al hanteerde: die valideert oordelen ook tegen de
+    aangeboden id's. Dat de twee parsers daarin verschilden was een gat, geen keuze.
 
     Geeft naast de gegronde voorstellen de VERWORPEN fragmenten terug. Die gingen eerder als kale
     teller verloren, terwijl ze de bruikbaarste feedback voor een herzieningsronde zijn: een bijna
@@ -159,8 +172,12 @@ def _verwerk(
             continue
         vindplaats = f"{bwb_id} art. {artikel}" + (f" lid {lid}" if lid else "")
         # Een id uit een eerdere ronde behouden (herziening van een bestaand element); anders een
-        # nieuw id. Zo blijft de koppeling met de Critic én met de api-elementen intact.
+        # nieuw id. Zo blijft de koppeling met de Critic én met de api-elementen intact — maar
+        # alléén voor een id dat het model ook echt is aangeboden.
         bestaand_id = str(e.get("id", "")).strip()
+        if geldige_ids is not None and bestaand_id and bestaand_id not in geldige_ids:
+            logger.info("annotatie: onbekend element-id genegeerd", extra={"element_id": bestaand_id[:40]})
+            bestaand_id = ""
         voorstel = AnnotatieVoorstel(
             id=bestaand_id or uuid.uuid4().hex[:12],
             klasse=klasse,

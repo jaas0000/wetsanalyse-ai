@@ -1,11 +1,15 @@
 """F2: _trim_messages begrenst de historie naar de LLM met behoud van tool_use/tool_result-integriteit."""
 from __future__ import annotations
 
-from agent.orchestrator import _trim_messages
+from agent.orchestrator import _snoei_historie, _trim_messages, _voeg_toe_en_snoei
 
 
 def _u(text: str) -> dict:
     return {"role": "user", "content": text}
+
+
+def _a(text: str) -> dict:
+    return {"role": "assistant", "content": text}
 
 
 def _a_tool(tid: str, naam: str = "get_lid") -> dict:
@@ -84,3 +88,59 @@ def test_venster_zonder_platte_user_wordt_teruguitgebreid():
         assert kept, "nooit leeg"
         assert _geen_orphan(kept), f"geen orphan bij budget {budget}"
         assert kept[0] == CONV_EINDIGT_OP_RESULT[0], "begint bij de platte user-vraag"
+
+
+# --- De opslagrem: wat er in de checkpointer blijft staan ----------------------------------------
+#
+# `max_history_chars` begrenst wat er per beurt naar het model gaat; zonder een tweede rem groeide
+# de BEWAARDE historie onbeperkt door — inclusief elk tool-resultaat van 8000 tekens. Elke
+# checkpoint-write in een lang gesprek werd daar trager en dikker van.
+
+def test_korte_historie_blijft_ongemoeid():
+    msgs = [_u("vraag"), _a("antwoord")]
+    assert _snoei_historie(msgs, 10_000) == msgs
+
+
+def test_snoeien_knipt_op_een_platte_user_beurt():
+    """Een losgeknipt tool_result mist zijn tool_use, en dan weigert Anthropic de hele request —
+    een te grote historie is hinderlijk, een kapotte is fataal."""
+    lang = "x" * 400
+    msgs = [
+        _u("eerste vraag"),
+        {"role": "assistant", "content": [{"type": "tool_use", "id": "t1", "name": "get_lid", "input": {}}]},
+        {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "t1", "content": lang}]},
+        _a(lang),
+        _u("tweede vraag"),
+        {"role": "assistant", "content": [{"type": "tool_use", "id": "t2", "name": "get_lid", "input": {}}]},
+        {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "t2", "content": lang}]},
+        _a("klaar"),
+    ]
+
+    uit = _snoei_historie(msgs, 900)
+
+    assert uit[0]["role"] == "user" and isinstance(uit[0]["content"], str), "begint op een platte user"
+    assert len(uit) < len(msgs), "er is daadwerkelijk gesnoeid"
+    # Elk overgebleven tool_result heeft zijn tool_use nog vóór zich.
+    open_ids = set()
+    for m in uit:
+        inhoud = m.get("content")
+        if isinstance(inhoud, list):
+            for blok in inhoud:
+                if blok.get("type") == "tool_use":
+                    open_ids.add(blok["id"])
+                if blok.get("type") == "tool_result":
+                    assert blok["tool_use_id"] in open_ids, "orphan tool_result overgebleven"
+
+
+def test_zonder_veilige_grens_wordt_er_niet_gesnoeid():
+    """Liever een te grote historie dan een historie die de volgende beurt laat crashen."""
+    msgs = [
+        {"role": "assistant", "content": [{"type": "tool_use", "id": "t1", "name": "x", "input": {}}]},
+        {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "t1", "content": "y" * 5000}]},
+    ]
+    assert _snoei_historie(msgs, 100) == msgs
+
+
+def test_de_reducer_voegt_toe_en_snoeit():
+    msgs = _voeg_toe_en_snoei([_u("a")], [_a("b")])
+    assert [m["role"] for m in msgs] == ["user", "assistant"]

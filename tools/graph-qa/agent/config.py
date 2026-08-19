@@ -175,6 +175,26 @@ class Settings(BaseModel):
                 "maar zijn eigen endpoint is open. Zet QA_API_TOKEN."
             )
 
+    def controleer_historie_grens(self) -> None:
+        """Waarschuw als het promptbudget de opslagrem raakt.
+
+        `max_history_chars` begrenst wat er per beurt naar het model gaat; de reducer in de
+        orkestrator begrenst wat er in de checkpointer blijft staan. Die tweede hoort ruim boven de
+        eerste te liggen — anders snoeit de opslagrem binnen het venster dat de LLM tóch al krijgt,
+        en verlies je context die je net wilde meegeven.
+        """
+        import logging
+
+        from .orchestrator import MAX_HISTORIE_CHARS
+
+        if self.max_history_chars * 2 > MAX_HISTORIE_CHARS:
+            logging.getLogger("graph_qa.config").warning(
+                "MAX_HISTORY_CHARS ligt dicht bij de opslaggrens van de checkpointer; "
+                "verhoog MAX_HISTORIE_CHARS in orchestrator.py of verlaag dit budget",
+                extra={"categorie": "technisch", "max_history_chars": self.max_history_chars,
+                       "max_historie_chars": MAX_HISTORIE_CHARS},
+            )
+
     def require_llm(self) -> None:
         if not self.azure_foundry_api_key or not self.azure_foundry_base_url:
             raise ValueError(

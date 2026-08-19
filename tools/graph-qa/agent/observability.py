@@ -35,6 +35,14 @@ logger = logging.getLogger(__name__)
 
 GEHEIME_VELDEN = {"authorization", "token", "bearer", "secret", "password", "api_key", "apikey", "question"}
 
+# Een stacktrace is diagnostisch goud, maar de exceptie-tékst erin draagt soms inhoud: een MCPError
+# neemt een stukje responsbody mee, een providerfout een fragment van het verzoek. De belofte
+# hierboven is absoluut ("nooit prompt- of chatinhoud"), dus knippen we per regel en op het geheel.
+# Frames blijven daarmee intact — je ziet nog steeds wáár het misging — maar een lange payloadregel
+# wordt afgekapt in plaats van integraal naar Loki te reizen.
+_MAX_TRACE_REGEL = 300
+_MAX_TRACE_REGELS = 40
+
 _NIVEAU = {
     logging.DEBUG: "debug",
     logging.INFO: "info",
@@ -62,6 +70,22 @@ def _trace_context() -> dict[str, str]:
         return {}
 
 
+def _kort_trace(trace: str) -> str:
+    """Kap een stacktrace in op regel- en totaalniveau, met behoud van de frames.
+
+    Bewust géén slimme redactie: die zou moeten raden wat inhoud is en wat niet. Afkappen is
+    voorspelbaar — het type, het bestand en het regelnummer passen altijd, de payload niet.
+    """
+    regels = [r if len(r) <= _MAX_TRACE_REGEL else r[:_MAX_TRACE_REGEL] + " …[ingekort]"
+              for r in (trace or "").splitlines()]
+    if len(regels) > _MAX_TRACE_REGELS:
+        # Begin en eind zijn het informatiefst: waar het vandaan komt en waar het knalde.
+        helft = _MAX_TRACE_REGELS // 2
+        weg = len(regels) - 2 * helft
+        regels = regels[:helft] + [f"  …[{weg} frames ingekort]"] + regels[-helft:]
+    return "\n".join(regels)
+
+
 class JsonFormatter(logging.Formatter):
     """Serialiseer elke LogRecord als één JSON-regel in de gedeelde logvorm."""
 
@@ -84,7 +108,7 @@ class JsonFormatter(logging.Formatter):
                 continue
             regel[k] = v
         if record.exc_info:
-            regel["exception"] = self.formatException(record.exc_info)
+            regel["exception"] = _kort_trace(self.formatException(record.exc_info))
         return json.dumps(regel, ensure_ascii=False, default=str)
 
 

@@ -72,6 +72,7 @@ async def _lifespan(_app: FastAPI):
     # Mag graph-qa naar de api schrijven, dan mag zijn eigen endpoint niet open staan: het verzoek
     # draagt zelf de user_id waarnamens er geschreven wordt.
     settings.require_api()
+    settings.controleer_historie_grens()
     yield
     # App-shutdown: OTel-buffers flushen zodat de laatste spans/metrics niet verloren gaan.
     observability.shutdown()
@@ -262,16 +263,29 @@ async def artikel(
     _auth: None = Depends(_check_auth),
 ) -> ArtikelResult:
     """Artikeltekst uit de graaf voor het workbench-documentpaneel (weergave == annotatie-corpus).
-    Met `lid` beperk je de tekst tot dat ene lid."""
+    Met `lid` beperk je de tekst tot dat ene lid.
+
+    Drie uitkomsten, want ze vragen om verschillende dingen van de gebruiker: **400** als de
+    aanduiding geen bepaling kán zijn (een tikfout), **404** als de graaf hem niet kent (een andere
+    wet, of nog niet geïmporteerd), en 200 met de tekst. Eerder was alles 200 met een lege lijst, en
+    dan staat de jurist naar een leeg paneel te kijken zonder te weten wat er mis is.
+    """
     from agent.adapters.graphdb_graph import make_graph
-    from agent.artikel import haal_artikel_sync
+    from agent.artikel import OngeldigeVindplaats, haal_artikel_sync
 
     graph = make_graph(settings)
     try:
         await run_sync(graph.initialize)
         data = await run_sync(haal_artikel_sync, bwb_id, artikel, graph, lid)
+    except OngeldigeVindplaats as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     finally:
         graph.close()
+    if not data.get("leden_teksten"):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Deze bepaling staat niet in de kennisgraaf.",
+        )
     return ArtikelResult.model_validate(data)
 
 

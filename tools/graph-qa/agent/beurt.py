@@ -146,6 +146,10 @@ async def _leg_vast(
         slug = ""
 
         if schrijver.is_annotatie:
+            # Vanaf hier kan een deel geslaagd zijn: het document en zijn elementen staan er dan al
+            # terwijl het chatbericht nog moet. Wat er wél is bewaard hoort in de foutmelding —
+            # anders leest de jurist "niet opgeslagen", draait hij de beurt van 60-90 seconden
+            # opnieuw, en heeft hij een tweede annotatiedocument.
             doel = schrijver.doel or {}
             slug = await api.maak_document(
                 bwb_id=str(doel.get("bwbId", "")),
@@ -200,13 +204,24 @@ async def _leg_vast(
     except (WetsanalyseApiFout, Exception):
         logger.exception(
             "beurt niet vastgelegd",
-            extra={"categorie": "technisch", "run_id": run.run_id, "chat_session_id": gesprek_id},
+            extra={"categorie": "technisch", "run_id": run.run_id, "chat_session_id": gesprek_id,
+                   "annotatie_slug": slug},
         )
         # Zichtbaar falen: de jurist moet weten dat dit werk niet bewaard is, niet later ontdekken
-        # dat het gesprek een gat heeft.
-        yield {
-            "type": "error",
-            "message": "Het antwoord is gemaakt, maar niet opgeslagen. Probeer de vraag opnieuw.",
-        }
+        # dat het gesprek een gat heeft. Wél eerlijk zijn over wat er al staat: "probeer opnieuw" is
+        # een slecht advies als de annotatie er al is — dat levert een tweede document op.
+        if slug:
+            yield {
+                "type": "error",
+                "message": ("De annotatie is bewaard, alleen het bericht in dit gesprek niet. "
+                            "Je vindt hem terug bij Annotaties; de vraag opnieuw stellen maakt een "
+                            "tweede annotatie."),
+                "annotatie_slug": slug,
+            }
+        else:
+            yield {
+                "type": "error",
+                "message": "Het antwoord is gemaakt, maar niet opgeslagen. Probeer de vraag opnieuw.",
+            }
     finally:
         await api.aclose()

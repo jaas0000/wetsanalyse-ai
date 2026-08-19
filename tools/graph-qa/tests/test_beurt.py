@@ -229,6 +229,30 @@ async def test_schrijffout_wordt_zichtbaar(monkeypatch):
     assert nep.gesloten
 
 
+@asyncio_test
+async def test_half_vastgelegde_annotatie_zegt_wat_er_wel_staat(monkeypatch):
+    """Document en elementen staan er al, alleen het chatbericht niet.
+
+    "Probeer de vraag opnieuw" is dan een slecht advies: dat draait 60-90 seconden annoteren over en
+    levert een tweede document op. De melding hoort te zeggen wat er wél bewaard is.
+    """
+    nep = NepApi(faalt=True)
+    monkeypatch.setattr("agent.beurt.WetsanalyseApi", lambda *_a, **_k: nep)
+
+    uit = await _draai([
+        {"type": "doel", "doel": {"bwbId": "BWBR0004770", "artikel": "9", "lid": "1"}},
+        {"type": "element", "element": {"id": "e1", "klasse": "Rechtssubject", "tekst": "De ontvanger"}},
+        {"type": "done"},
+    ])
+
+    fout = next(e for e in uit if e["type"] == "error")
+    assert "annotatie is bewaard" in fout["message"].lower()
+    assert fout["annotatie_slug"] == "slug-1", "zodat de client er meteen heen kan wijzen"
+    assert "opnieuw" not in fout["message"] or "tweede annotatie" in fout["message"]
+    # Het document en de elementen zijn wél geschreven — dat is precies waarom de melding anders is.
+    assert nep.documenten and nep.element_puts
+
+
 def test_schrijver_houdt_denkproces_en_tekst_gescheiden():
     """Narratie is geen antwoord: `status`/`reason` vormen het denkproces, `token` het antwoord."""
     schrijver = BeurtSchrijver()

@@ -3,7 +3,9 @@ from __future__ import annotations
 
 import json
 
-from agent.artikel import artikel_corpus, haal_artikel_sync
+import pytest
+
+from agent.artikel import OngeldigeVindplaats, artikel_corpus, haal_artikel_sync
 from fakes import FakeGraph
 
 
@@ -80,3 +82,32 @@ def test_niet_bestaand_lid_geeft_leeg_geen_bepaling_fallback():
     # Ter contrast: zónder lid werkt de gewone leden-weergave nog gewoon.
     heel = haal_artikel_sync("BWBR0004770", "9", FakeGraph(results=results))
     assert [ld["lid"] for ld in heel["leden_teksten"]] == ["1", "2", "10"]
+
+
+# --- Drie uitkomsten in plaats van "200 met niets" -----------------------------------------------
+
+def test_ongeldig_bwb_id_is_een_tikfout_geen_lege_graaf():
+    with pytest.raises(OngeldigeVindplaats):
+        haal_artikel_sync("../../etc", "9", FakeGraph(result=""))
+
+
+def test_ongeldige_aanduiding_wordt_herkend():
+    with pytest.raises(OngeldigeVindplaats):
+        haal_artikel_sync("BWBR0004770", "9'; DROP", FakeGraph(result=""))
+
+
+def test_ongeldig_lidnummer_wordt_herkend():
+    with pytest.raises(OngeldigeVindplaats):
+        haal_artikel_sync("BWBR0004770", "9", FakeGraph(result=""), lid="eerste")
+
+
+def test_decimaal_nummer_blijft_geldig():
+    """'9.1' is geen artikelnummer maar wél een bepaling-nummer (Leidraad Invordering) — dat mag de
+    validatie niet als tikfout wegzetten."""
+    haal_artikel_sync("BWBR0024096", "9.1", FakeGraph(result=""))  # geen exception
+
+
+def test_onbekende_bepaling_geeft_geen_exception_maar_lege_leden():
+    """Het endpoint maakt daar een 404 van; de helper zelf blijft een gewone lege uitkomst leveren."""
+    data = haal_artikel_sync("BWBR0004770", "9999", FakeGraph(result=""))
+    assert data["leden_teksten"] == []

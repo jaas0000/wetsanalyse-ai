@@ -163,3 +163,44 @@ def test_zelfde_fragment_in_een_andere_klasse_is_geen_duplicaat():
         {"klasse": "Rechtsobject", "tekst": "De ontvanger", "lid": "1"},
     ]), CORPUS, "BWBR0004770", "9")
     assert len(voorstellen) == 2
+
+
+# --- Een id uit het model is geen vrijbrief -------------------------------------------------------
+
+def test_herziening_negeert_een_id_dat_niet_is_aangeboden():
+    """Een verwisseld of verzonnen id zou anders een ánder element overschrijven — met de
+    beslissingen van de jurist en het auditspoor die eraan hangen."""
+    corpus = "De ontvanger verleent uitstel van betaling."
+    llm = json.dumps({"elementen": [
+        {"klasse": "Rechtssubject", "tekst": "De ontvanger", "lid": "1",
+         "id": "id-van-een-ander-element"},
+    ]})
+
+    voorstellen, _ = _verwerk(llm, corpus, "BWBR0004770", "9", "1", geldige_ids={"id-a", "id-b"})
+
+    assert len(voorstellen) == 1
+    assert voorstellen[0].id not in ("id-van-een-ander-element", "id-a", "id-b")
+    assert len(voorstellen[0].id) == 12, "een vers id, zoals bij een nieuw element"
+
+
+def test_herziening_behoudt_een_id_dat_wel_is_aangeboden():
+    corpus = "De ontvanger verleent uitstel van betaling."
+    llm = json.dumps({"elementen": [
+        {"klasse": "Rechtssubject", "tekst": "De ontvanger", "lid": "1", "id": "id-a"},
+    ]})
+
+    voorstellen, _ = _verwerk(llm, corpus, "BWBR0004770", "9", "1", geldige_ids={"id-a", "id-b"})
+
+    assert voorstellen[0].id == "id-a", "hierop hangen de beslissingen en het auditspoor"
+
+
+def test_zonder_geldige_ids_blijft_het_oude_gedrag():
+    """De eerste ronde geeft de set niet mee: daar is nog geen element om te overschrijven."""
+    corpus = "De ontvanger verleent uitstel van betaling."
+    llm = json.dumps({"elementen": [
+        {"klasse": "Rechtssubject", "tekst": "De ontvanger", "lid": "1", "id": "el-a"},
+    ]})
+
+    voorstellen, _ = _verwerk(llm, corpus, "BWBR0004770", "9", "1")
+
+    assert voorstellen[0].id == "el-a"

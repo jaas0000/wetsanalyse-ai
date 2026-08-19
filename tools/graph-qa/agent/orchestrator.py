@@ -383,6 +383,52 @@ def _trim_messages(messages: list[dict[str, Any]], max_chars: int) -> list[dict[
     return messages[start:]
 
 
+# Bovengrens op wat er in de CHECKPOINTER blijft staan. `max_history_chars` begrenst alleen wat er
+# per beurt naar het model gaat; de opgeslagen historie groeide onbeperkt door, inclusief elk
+# tool-resultaat van 8000 tekens. Bij een lang gesprek betekent dat een steeds tragere en dikkere
+# checkpoint-write bij élke stap van de graaf.
+#
+# Ruim boven het prompt-budget gekozen (een veelvoud), zodat het snoeien nooit het venster raakt dat
+# de LLM tóch al krijgt: dit is een opslagrem, geen tweede contextrem.
+# Vaste grens, want een LangGraph-reducer is een pure functie zonder toegang tot `Settings`. Ruim
+# vier keer het default prompt-budget (`max_history_chars`, 40k). Zet iemand dat budget hoger dan de
+# helft hiervan, dan waarschuwt `Settings.controleer_historie_grens()` bij boot — dan zou de
+# opslagrem binnen het promptvenster gaan knippen, en dat is precies wat hij niet moet doen.
+MAX_HISTORIE_CHARS = 160_000
+
+
+def _snoei_historie(messages: list[dict[str, Any]], max_chars: int) -> list[dict[str, Any]]:
+    """Houd de bewaarde historie onder een bovengrens, en knip alleen op een veilige grens.
+
+    "Veilig" is een plátte user-beurt (`_is_plain_user`): begint de historie met een los
+    tool_result, dan mist dat blok zijn tool_use en weigert Anthropic de hele request. Vinden we geen
+    veilige grens binnen het budget, dan snoeien we níét — een te grote historie is hinderlijk, een
+    kapotte is fataal.
+    """
+    if max_chars <= 0 or not messages:
+        return messages
+    totaal = sum(_msg_lengte(m) for m in messages)
+    if totaal <= max_chars:
+        return messages
+    # Zoek van achter naar voren de eerste platte user-beurt die het geheel binnen budget brengt.
+    opgeteld = 0
+    for i in range(len(messages) - 1, -1, -1):
+        opgeteld += _msg_lengte(messages[i])
+        if opgeteld >= max_chars:
+            for j in range(i, len(messages)):
+                if _is_plain_user(messages[j]):
+                    return messages[j:]
+            return messages
+    return messages
+
+
+def _voeg_toe_en_snoei(
+    bestaand: list[dict[str, Any]], nieuw: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """State-reducer voor `messages`: append (zoals `operator.add`) plus een opslagrem."""
+    return _snoei_historie(list(bestaand) + list(nieuw), MAX_HISTORIE_CHARS)
+
+
 def _schoon_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Strip lege tekstblokken (Anthropic weigert {"type":"text","text":""} — Claude stuurt die soms
     mee náást een tool_use; via het gespreksgeheugen komen ze terug). Berichten waarvan de content
@@ -405,7 +451,11 @@ def _schoon_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 class State(TypedDict, total=False):
     question: str
-    messages: Annotated[list[dict[str, Any]], operator.add]      # episodisch, gepersisteerd
+    # Episodisch geheugen, gepersisteerd door de checkpointer. De reducer voegt toe én snoeit: zonder
+    # dat groeide de bewaarde historie onbeperkt door (inclusief elk tool-resultaat van 8000 tekens),
+    # en werd elke checkpoint-write in een lang gesprek trager en dikker. Snoeien gebeurt alleen op
+    # een platte user-beurt — een losgeknipt tool_result zou de volgende beurt laten crashen.
+    messages: Annotated[list[dict[str, Any]], _voeg_toe_en_snoei]
     entities_seen: Annotated[list[str], operator.add]            # semantisch/entiteit-tier
     specialist: str
     plan: str
@@ -764,7 +814,12 @@ def build_graph(
             messages=[{"role": "user", "content": annotatie_userprompt(doel.get("bwbId", ""), aanduiding, corpus, doel.get("lid", ""))}],
         )
         llm_text = "".join(b.text for b in resp.content if b.type == "text")
-        voorstellen, verworpen = _verwerk(llm_text, corpus, doel.get("bwbId", ""), aanduiding, doel.get("lid", ""))
+        # Bewust zónder `geldige_ids`: in de eerste ronde is er binnen deze beurt nog geen element om
+        # te overschrijven, dus een id uit het model is hooguit een raar id. De strengheid hoort in
+        # de herziening, waar een verwisseld id wél een bestaande markering raakt.
+        voorstellen, verworpen = _verwerk(
+            llm_text, corpus, doel.get("bwbId", ""), aanduiding, doel.get("lid", ""),
+        )
         _stap(writer, "Annoteerder", _annoteer_melding(voorstellen, verworpen))
 
         # Stuur de opgehaalde tekst mee zodat de frontend precies dít toont (één bron, ook voor divisies).
@@ -995,7 +1050,10 @@ def build_graph(
             )
             llm_text = "".join(b.text for b in resp.content if b.type == "text")
             herzien, verworpen = _verwerk(
-                llm_text, corpus, doel.get("bwbId", ""), aanduiding, doel.get("lid", "")
+                llm_text, corpus, doel.get("bwbId", ""), aanduiding, doel.get("lid", ""),
+                # Alleen de id's die de herziener zélf voorgelegd kreeg. Verwisselt het model er
+                # twee, dan zou het anders element A overschrijven met de inhoud van B.
+                geldige_ids={str(v.get("id", "")) for v in voorstellen if v.get("id")},
             )
         except Exception:  # noqa: BLE001 — een mislukte herziening mag de annotatie niet breken
             logger.warning("herziening: mislukt; vorige voorstellen behouden", exc_info=True)
