@@ -1198,6 +1198,17 @@ def build_graph(
             # precies de reden dat de lus nooit convergeerde.
             if vorig:
                 nieuw_dict["critic_rondes"] = list(vorig.get("critic_rondes") or [])
+                # Ook de alternatieven blijven: de patcher zet de twijfel van de Critic daar neer, en
+                # het model levert bij een herziening zijn eigen lijstje op. Namen we alleen dat
+                # laatste over, dan wiste een herziening precies de voorkeur die de jurist met één
+                # klik had kunnen overnemen — op dev verdween "Parameter en parameterwaarde" zo uit
+                # beeld. Samenvoegen op klasse, het bestaande eerst.
+                bestaand = list(vorig.get("alternatieven") or [])
+                gezien_alt = {str(a.get("klasse")) for a in bestaand}
+                nieuw_dict["alternatieven"] = bestaand + [
+                    a for a in (nieuw_dict.get("alternatieven") or [])
+                    if str(a.get("klasse")) not in gezien_alt
+                ]
             # Een herziening levert verse voorstellen zonder oordeel. Is het element inhoudelijk
             # ongewijzigd, dan geldt het vorige oordeel nog gewoon — dat weggooien zou een groen
             # vinkje laten verdwijnen omdat er elders in de tekst iets veranderde. Bij een écht

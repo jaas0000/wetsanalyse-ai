@@ -130,15 +130,21 @@ def pas_critic_toe(
 
         nieuw = dict(v)
 
-        # Twijfel (geel) met een voorkeur: niet uitvoeren, wél doorgeven. De werkplek maakt er een
-        # aanklikbare chip van, dus de jurist neemt hem over met één klik — en dan staat het als
-        # zíjn beslissing in het spoor, niet als een stille wijziging op een vermoeden.
-        if actie == "vervang" and not rood and klasse in GELDIGE_JAS_KLASSEN and klasse != nieuw.get("klasse"):
-            alts = list(nieuw.get("alternatieven") or [])
-            if not any(str(a.get("klasse")) == klasse for a in alts):
-                alts.append({"klasse": klasse, "motivatie": str(f.get("motivatie", "")).strip()})
-                nieuw["alternatieven"] = alts
-                alternatief += 1
+        # GEEL VERANDERT NOOIT IETS. Een voorgestelde klasse wordt een alternatief — de werkplek
+        # maakt er een aanklikbare chip van, dus de jurist neemt hem over met één klik en dan staat
+        # het als zíjn beslissing in het spoor. Een voorgesteld frágment kent die tussenvorm niet en
+        # blijft dus alleen in de motivatie staan; de jurist kan het fragment zelf herselecteren.
+        #
+        # In beide gevallen is de instructie hier AFGEHANDELD en gaat hij niet door naar de
+        # herziener. Deed hij dat wel, dan voerde een taalmodel alsnog uit wat we juist ter
+        # beoordeling wilden voorleggen — op dev kortte hij zo twee fragmenten in op een geel advies.
+        if actie in ("vervang", "verwijder") and not rood:
+            if klasse in GELDIGE_JAS_KLASSEN and klasse != nieuw.get("klasse"):
+                alts = list(nieuw.get("alternatieven") or [])
+                if not any(str(a.get("klasse")) == klasse for a in alts):
+                    alts.append({"klasse": klasse, "motivatie": str(f.get("motivatie", "")).strip()})
+                    nieuw["alternatieven"] = alts
+                    alternatief += 1
             uit.append(nieuw)
             continue
 

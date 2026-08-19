@@ -254,10 +254,18 @@ weg: ze bestonden alleen om een cyclus te laten stoppen die er niet meer is.
   - **rood + vervang** → uitvoeren. Klasse vervangen, fragment vervangen (*alleen* als het letterlijk
     in het corpus staat, dezelfde eis als bij een vers voorstel), of verwijderen. Het element krijgt
     dan een lege `aandacht` en `critic₂` velt er een nieuw oordeel over.
-  - **geel + vervang** → de voorgestelde klasse wordt een **alternatief** op het element. De werkplek
-    toont die als aanklikbare chip ("Twijfel — klik om te wisselen"), dus de jurist neemt hem met één
-    klik over en het landt als zíjn beslissing in het auditspoor. Niets veranderd, dus ook geen
-    herbeoordeling.
+  - **geel verandert nooit iets.** Een voorgestelde klasse wordt een **alternatief** op het element;
+    de werkplek toont die als aanklikbare chip ("Twijfel — klik om te wisselen"), dus de jurist neemt
+    hem met één klik over en het landt als zíjn beslissing in het auditspoor. Een voorgesteld
+    frágment kent die tussenvorm niet en blijft alleen in de motivatie staan. In beide gevallen is de
+    instructie **afgehandeld** en gaat hij niet door naar de herziener — deed hij dat wel, dan voerde
+    een taalmodel alsnog uit wat ter beoordeling zou worden voorgelegd (op dev kortte hij zo twee
+    fragmenten in op een geel advies). Niets veranderd, dus ook geen herbeoordeling.
+
+  **De herziening bewaart de alternatieven.** Zij levert de hele elementenlijst opnieuw op en
+  `_verwerk` bouwt daaruit verse voorstellen; nam de merge alleen dát lijstje over, dan wiste een
+  herziening precies de voorkeur die de patcher er net had neergezet. Samenvoegen op klasse, het
+  bestaande eerst — net als bij `critic_rondes`.
 
   Zonder die tweedeling koos de Critic in de praktijk bijna altijd "geel · behoud" — twee live runs
   lang deed de patcher niets — en bleef de jurist met precies dezelfde vraag zitten als waarmee hij

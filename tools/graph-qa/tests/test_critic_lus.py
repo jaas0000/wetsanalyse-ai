@@ -162,9 +162,14 @@ def test_een_alternatief_dat_er_al_staat_komt_er_niet_twee_keer_bij():
     assert len(uit[0]["alternatieven"]) == 1
 
 
-def test_geel_verandert_nooit_het_fragment():
-    """Een fragmentwijziging kent geen 'alternatief'-vorm, dus bij twijfel gebeurt er niets."""
-    uit, n, _rest = pas_critic_toe(
+def test_geel_verandert_nooit_het_fragment_en_gaat_niet_door():
+    """Een fragmentwijziging kent geen 'alternatief'-vorm, dus bij twijfel gebeurt er niets.
+
+    En de instructie gaat óók niet door naar de herziener: die voerde hem dan alsnog uit. Op dev
+    kortte het model zo twee fragmenten in op een geel advies — een wijziging waar niemand om vroeg
+    en waar geen `toegepast` tegenover staat.
+    """
+    uit, n, rest = pas_critic_toe(
         [{"id": "a", "klasse": "Voorwaarde", "tekst": "de schuldenaar"}],
         [{"id": "a", "aandacht": "geel", "actie": "vervang",
           "voorstel_tekst": "indien de schuldenaar daarom verzoekt"}],
@@ -172,6 +177,33 @@ def test_geel_verandert_nooit_het_fragment():
     )
     assert (n.toegepast, n.alternatief) == (0, 0)
     assert uit[0]["tekst"] == "de schuldenaar"
+    assert rest == [], "geel is afgehandeld; het model hoort er niet nog eens naar te kijken"
+
+
+def test_een_alternatief_overleeft_de_herziening():
+    """De herziener levert de hele lijst opnieuw op; zonder samenvoegen wiste dat de voorkeur van de
+    Critic. Op dev verdween "Parameter en parameterwaarde" zo uit beeld — precies het alternatief dat
+    de jurist met één klik had kunnen overnemen."""
+    llm = FakeLLM([
+        *_aanloop(),
+        _annoteer([{**_EL, "klasse": "Tijdsaanduiding", "tekst": "De ontvanger"}]),
+        _critic(
+            [{"id": "el-a", "aandacht": "geel", "motivatie": "vaste duur", "actie": "vervang",
+              "voorstel_klasse": "Parameter en parameterwaarde"}],
+            # Een gemist element, zodat de herziening draait.
+            ontbrekend=[{"klasse": "Voorwaarde", "reden": "gemist",
+                         "tekst": "indien de schuldenaar daarom verzoekt"}],
+        ),
+        _annoteer([
+            {"id": "el-a", "klasse": "Tijdsaanduiding", "tekst": "De ontvanger", "lid": "1"},
+            {"id": "", "klasse": "Voorwaarde", "tekst": "indien de schuldenaar daarom verzoekt", "lid": "1"},
+        ]),
+        _critic([{"id": "el-a", "aandacht": "geel", "motivatie": "blijft twijfelachtig"}]),
+    ])
+    elementen, _ = _annoteer_uitkomst(llm)
+
+    el = next(e for e in elementen if e["id"] == "el-a")
+    assert [a["klasse"] for a in el["alternatieven"]] == ["Parameter en parameterwaarde"]
 
 
 def test_afgehandelde_instructies_gaan_niet_door_naar_de_herziener():
