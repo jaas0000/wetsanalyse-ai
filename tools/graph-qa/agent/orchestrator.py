@@ -248,10 +248,27 @@ def _doel_uit_toolcalls(messages: list[dict[str, Any]]) -> dict[str, str]:
 
 
 def _bepaal_doel(state: State) -> dict[str, str]:
-    """Combineer: neem de tool-call als bron (gezaghebbend) en vul lege velden aan uit de JSON."""
+    """Combineer: neem de tool-call als bron (gezaghebbend) en vul lege velden aan uit de JSON.
+
+    Gaf de aanroeper zélf een doel mee, dan wint dat van allebei: dan hoefde er niets gezocht te
+    worden en is dit precies de bepaling die de jurist aanwees. De andere twee bronnen blijven als
+    aanvulling staan — zo vult een meegegeven `{bwbId, artikel}` zich alsnog met een `citeertitel`
+    als die uit de trace komt.
+    """
+    opgegeven = state.get("opgegeven_doel") or {}
     uit_tool = _doel_uit_toolcalls(state.get("messages", []))
     uit_json = _doel_uit_json(state.get("answer", ""))
-    return {k: uit_tool.get(k, "") or uit_json.get(k, "") for k in ("bwbId", "artikel", "lid", "nummer", "citeertitel")}
+    return {
+        k: str(opgegeven.get(k, "") or "").strip() or uit_tool.get(k, "") or uit_json.get(k, "")
+        for k in ("bwbId", "artikel", "lid", "nummer", "citeertitel")
+    }
+
+
+def _heeft_opgegeven_doel(state: State) -> bool:
+    """Kunnen we meteen annoteren? Alleen met bwbId én een aanduiding is het doel compleet."""
+    doel = state.get("opgegeven_doel") or {}
+    return bool(str(doel.get("bwbId", "")).strip()
+                and (str(doel.get("artikel", "")).strip() or str(doel.get("nummer", "")).strip()))
 
 
 def _corpus_uit_trace(source_trace: list[tuple[str, str]]) -> str:
@@ -477,6 +494,13 @@ class State(TypedDict, total=False):
     # solve_node zet ze in één keer). De per-deelvraag agent⇄tools-loop draait lokaal in solve_node.
     sub_questions: list[str]
     sub_findings: list[dict[str, str]]
+    # Het doel dat de AANROEPER meegaf ({bwbId, artikel, lid?, citeertitel?}). Weet de werkplek de
+    # bepaling al — een open document, een item uit de werkvoorraad, een gekozen kandidaat — dan
+    # hoeft niemand hem meer te zoeken: de supervisor doet geen LLM-call en de ophaal-agent draait
+    # helemaal niet. Dat scheelt niet alleen calls; het verwijdert de gevaarlijkste faalmodus uit
+    # die route, want een ophaal-agent die de verkeerde bepaling kiest levert werk op dat
+    # brongetrouw én verkeerd is.
+    opgegeven_doel: dict[str, str]
     # De tekst waarop deze annotatiebeurt draait: gericht opgehaald door annoteer_node (zie
     # `_corpus_voor_doel`) en daarna hergebruikt door de Critic en de herziening, zodat alle drie
     # over exact dezelfde bepaling oordelen én er maar één ophaalactie nodig is.
@@ -513,7 +537,12 @@ def build_graph(
     stop_check: Callable[[], bool] | None = None,
 ) -> StateGraph:
     """Bouw de (ongecompileerde) toestandsgraaf; de wrapper compileert 'm met een checkpointer."""
+    # `model` is het sterke model: annoteerder, Critic, herziener en de QA-specialisten. De router
+    # en de ophaal-agent mogen apart worden gezet (`Settings.model_voor`); staat er niets, dan is
+    # het alle drie hetzelfde en draait de keten exact als voorheen.
     model = settings.llm_model
+    model_router = settings.model_voor("router")
+    model_ophaal = settings.model_voor("ophaal")
 
     def _memory_context(state: State) -> str:
         if not settings.enable_memory_context:
@@ -537,6 +566,19 @@ def build_graph(
         """Bepaalt de worker-keten (antwoord/annotatie) voor deze vraag; zet de eerste worker actief."""
         writer = get_stream_writer()
 
+        if _heeft_opgegeven_doel(state):
+            # De aanroeper weet welke bepaling geannoteerd moet worden. Dan is er niets te kiezen en
+            # niets te zoeken: geen supervisor-call, en `_entry_node` slaat de ophaal-agent over.
+            # Wat de router zou beslissen is hier al bekend, en wat de ophaal-agent zou vinden staat
+            # er al — inclusief de zekerheid dat het de bepaling is die de jurist aanwees.
+            doel = state.get("opgegeven_doel") or {}
+            aanduiding = doel.get("artikel") or doel.get("nummer") or ""
+            _stap(writer, "Lex", f"annoteert de aangewezen bepaling (art. {aanduiding})")
+            return {
+                "specialist": "annotatie", "worker_plan": ["annotatie"], "worker_idx": 0,
+                "plan": "annotatie van een aangewezen bepaling", "afwijzen": False,
+            }
+
         if state.get("modus") == "advies":
             # Een adviesvraag bij een bestaande annotatie: geen LLM-keuze, hard naar de
             # duiding-specialist. Dat is een topologische garantie in plaats van een belofte in een
@@ -549,7 +591,7 @@ def build_graph(
             }
 
         resp = llm.create(
-            model=model,
+            model=model_router,
             max_tokens=300,
             system=SUPERVISOR_SYSTEM + _memory_context(state),
             tools=[],
@@ -577,7 +619,9 @@ def build_graph(
         if state.get("afwijzen"):
             return "afwijzen"
         if state.get("specialist") == "annotatie":
-            return "agent"
+            # Doel al bekend → recht naar de annoteerder; de agent⇄tools-lus zou alleen opzoeken
+            # wat de aanroeper al meestuurde. `annoteer_node` haalt het corpus zelf gericht op.
+            return "annoteer" if _heeft_opgegeven_doel(state) else "agent"
         return "decompose" if settings.enable_decomposition else "agent"
 
     def advance_node(state: State) -> dict[str, Any]:
@@ -708,7 +752,10 @@ def build_graph(
         # "denkproces"-stroom (reason), niet het antwoord: die scheiden we van het eindantwoord (token).
         stream_naar_denk = state.get("specialist") != "annotatie"
         with llm.stream(
-            model=model,
+            # Deze node draait twee verschillende rollen: de OPHAAL-agent (annotatieroute — zoeken
+            # en ophalen) en de QA-specialisten (die het antwoord zelf schrijven). Alleen de eerste
+            # heeft een eigen modelknop.
+            model=model_ophaal if spec_naam == "retrieval" else model,
             max_tokens=4096,
             system=[stabiel, variabel],
             tools=anthropic_schemas(only=spec.tools),
@@ -1073,13 +1120,16 @@ def build_graph(
         # Een herziening die een bestaand fragment opnieuw voorstelt ZONDER het id mee te sturen,
         # krijgt een vers id — en dan staat dezelfde markering er twee keer. Dat viel op dev op:
         # "bij zijn in functie treden" tweemaal als Rechtsfeit. Koppel daarom ook op de inhoud.
+        # De sleutel telt de klasse NIET mee: een herclassificatie is precies wat een herziening
+        # hoort te doen, en met de klasse erin werd zo'n herziening een tweede element naast het
+        # origineel — dezelfde span, twee tegenstrijdige klassen op het reviewscherm.
         op_inhoud = {
-            sleutel_van(v.get("klasse", ""), v.get("tekst", ""), v.get("lid", "")): v["id"]
+            sleutel_van(v.get("tekst", ""), v.get("lid", "")): v["id"]
             for v in samengevoegd.values()
         }
         for nieuw_v in herzien:
             nieuw_dict = nieuw_v.model_dump()
-            bestaand_id = op_inhoud.get(sleutel_van(nieuw_v.klasse, nieuw_v.tekst, nieuw_v.lid))
+            bestaand_id = op_inhoud.get(sleutel_van(nieuw_v.tekst, nieuw_v.lid))
             if bestaand_id and bestaand_id != nieuw_v.id:
                 # Het OUDSTE id wint: daar hangen de beslissingen van de jurist en het auditspoor aan.
                 nieuw_dict["id"] = bestaand_id
@@ -1517,7 +1567,8 @@ def build_graph(
         add("emit", emit_node)
         add("advance", advance_node)
         add("afwijzen", afwijs_node)
-        entrymap = {"agent": "agent", "decompose": "decompose", "afwijzen": "afwijzen"}
+        entrymap = {"agent": "agent", "annoteer": "annoteer", "decompose": "decompose",
+                    "afwijzen": "afwijzen"}
         g.add_edge(START, "supervisor")
         g.add_edge("afwijzen", END)
         g.add_conditional_edges("supervisor", _entry_node, entrymap)
@@ -1556,7 +1607,8 @@ def build_graph(
         add("advance", advance_node)
         add("afwijzen", afwijs_node)
         g.add_edge(START, "supervisor")
-        g.add_conditional_edges("supervisor", _entry_node, {"agent": "agent", "afwijzen": "afwijzen"})
+        g.add_conditional_edges("supervisor", _entry_node,
+                                {"agent": "agent", "annoteer": "annoteer", "afwijzen": "afwijzen"})
         g.add_edge("afwijzen", END)
         g.add_conditional_edges(
             "agent", route_after_agent,
@@ -1573,7 +1625,8 @@ def build_graph(
         g.add_conditional_edges("herzie", route_na_herziening, {"critic": "critic", "emit": "emit"})
         g.add_edge("emit", "advance")
         g.add_conditional_edges("advance", route_after_advance,
-                                {"agent": "agent", "afwijzen": "afwijzen", "einde": END})
+                                {"agent": "agent", "annoteer": "annoteer",
+                                 "afwijzen": "afwijzen", "einde": END})
         return g
 
     # Geen classificatie (planning off, decomp off): pure QA-agent, ongewijzigd (geen annotatie-route).

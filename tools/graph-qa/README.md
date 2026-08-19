@@ -125,7 +125,9 @@ uv run --extra dev pytest -q                    # tests
 | `SIMILARITY_INDEX` | Naam van de GraphDB-similarity-index voor `semantic_search`. Leeg → die tool degradeert naar `search_wetgeving`. Zie `docs/embeddings-runbook.md`. |
 | `AZURE_FOUNDRY_API_KEY` *(verplicht)* | Azure-AI-Foundry-key (of `_FILE`). |
 | `AZURE_FOUNDRY_BASE_URL` *(verplicht)* | Foundry-endpoint **met** `/anthropic`-suffix. |
-| `LLM_MODEL` | Modelnaam (default `claude-sonnet-4-6`). |
+| `LLM_MODEL` | Modelnaam (default `claude-sonnet-4-6`). Draagt de annoteerder, de Critic en de QA-specialisten — die hebben bewust géén eigen knop. |
+| `LLM_MODEL_ROUTER` | Model voor de supervisor (kiest de worker; 300 tokens, respons wordt toch hard gesaneerd). Leeg = `LLM_MODEL`. |
+| `LLM_MODEL_OPHAAL` | Model voor de ophaal-agent. Leeg = `LLM_MODEL`. Verlaag pas na meting met `eval/run_eval.py`: kiest hij de verkeerde bepaling, dan is alles daarna brongetrouw én verkeerd. |
 | `QA_API_TOKEN` | API-/chat-secret (of `_FILE`); leeg = open. |
 | `CORS_ORIGINS` | Kommagescheiden origins; `*` = open (alleen dev). |
 | `CHECKPOINT_DB_PATH` | Pad voor de durable checkpointer; leeg = in-memory (geen continuïteit over herstarts). |

@@ -9,9 +9,8 @@ import {
   volgendeElement,
   vraagContextLabel,
   vraagContextVan,
-  gewijzigdeVelden,
   overlaptSelectie,
-  redenVoorWijziging,
+  doelVanKandidaat,
   kandidaatLabel,
   kandidaatPrompt,
   kandidatenAlsTekst,
@@ -76,6 +75,21 @@ describe("mergeVoorstellen", () => {
     expect(na[0].toelichting).toBe("beter");
   });
 
+  it("houdt een herclassificatie op hetzelfde element — de klasse telt niet mee", () => {
+    // Regressie: telde de klasse mee in de sleutel, dan werd een herziening die alleen
+    // herclassificeerde een tweede kaart naast het origineel. Zowel mét id als zonder.
+    const metId = mergeVoorstellen(
+      [],
+      voorstel({ id: "a1", klasse: "Rechtsobject" }),
+    );
+    expect(mergeVoorstellen(metId, voorstel({ id: "a1", klasse: "Voorwaarde" }))).toHaveLength(1);
+
+    const zonderId = mergeVoorstellen([], voorstel({ klasse: "Rechtsobject" }));
+    const na = mergeVoorstellen(zonderId, voorstel({ klasse: "Voorwaarde" }));
+    expect(na).toHaveLength(1);
+    expect(na[0].klasse).toBe("Voorwaarde");
+  });
+
   it("ziet hetzelfde fragment in een ander lid als een apart element", () => {
     const eerst = mergeVoorstellen([], voorstel({ lid: "1" }));
     const na = mergeVoorstellen(eerst, voorstel({ lid: "2" }));
@@ -103,6 +117,24 @@ describe("kandidaten bij een onderwerp-vraag", () => {
     // andere bepaling uitkomen dan die de jurist aanwees.
     expect(kandidaatPrompt(k)).toContain("BWBR0004770");
     expect(kandidaatPrompt(k)).toContain("artikel 36a lid 1");
+  });
+
+  it("levert de keuze ook als gestructureerd doel", () => {
+    // Hiermee slaat de agent de supervisor en de ophaal-agent over — en kan hij niet bij een
+    // andere bepaling uitkomen dan de jurist zojuist aanwees.
+    expect(doelVanKandidaat(k)).toEqual({
+      bwbId: "BWBR0004770",
+      artikel: "36a",
+      lid: "1",
+      citeertitel: "Invorderingswet 1990",
+    });
+  });
+
+  it("laat lege velden weg uit het doel", () => {
+    expect(doelVanKandidaat({ bwbId: "BWBR1", artikel: "36" })).toEqual({
+      bwbId: "BWBR1",
+      artikel: "36",
+    });
   });
 
   it("bewaart de keuze leesbaar voor na een herlaadbeurt", () => {
@@ -133,34 +165,6 @@ const ELEMENT = {
   diff: {},
   beslissingen: [],
 } as unknown as AnnotatieElement;
-
-describe("redenVoorWijziging", () => {
-  it("leidt de reden af uit het veld dat veranderde", () => {
-    expect(redenVoorWijziging(ELEMENT, { tekst: "een belastingaanslag" })).toBe("tekst");
-    expect(redenVoorWijziging(ELEMENT, { klasse: "Rechtssubject" })).toBe("verkeerde_klasse");
-    expect(redenVoorWijziging(ELEMENT, { toelichting: "toch iets anders" })).toBe("interpretatie");
-  });
-
-  it("valt op 'anders' terug als er meer dan één veld wijzigt", () => {
-    expect(redenVoorWijziging(ELEMENT, { tekst: "aanslag", klasse: "Rechtssubject" })).toBe("anders");
-  });
-
-  it("telt een veld dat gelijk blijft niet mee", () => {
-    // Anders zou een klasse-wijziging waarbij de tekst wordt meegestuurd 'anders' opleveren.
-    const w = { tekst: ELEMENT.tekst, klasse: "Rechtssubject" };
-    expect(gewijzigdeVelden(ELEMENT, w)).toEqual(["klasse"]);
-    expect(redenVoorWijziging(ELEMENT, w)).toBe("verkeerde_klasse");
-  });
-
-  it("ziet niets te doen als er niets verandert", () => {
-    expect(gewijzigdeVelden(ELEMENT, { klasse: ELEMENT.klasse, tekst: ELEMENT.tekst })).toEqual([]);
-  });
-
-  it("beschouwt een lege toelichting als een wijziging", () => {
-    // Wissen is ook een keuze; het mag alleen niet ongemerkt gebeuren (daar zit de tweede klik).
-    expect(gewijzigdeVelden(ELEMENT, { toelichting: "" })).toEqual(["toelichting"]);
-  });
-});
 
 describe("overlaptSelectie", () => {
   const bereik = { start: 10, eind: 26 };

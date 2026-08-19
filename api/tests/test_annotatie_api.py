@@ -73,14 +73,19 @@ async def test_document_lifecycle_en_audit(client):
     doc = (await client.post(f"{BASIS}/{slug}/elementen/{el0}/beslissing", json={"type": "approve"})).json()
     assert next(e for e in doc["elementen"] if e["id"] == el0)["lifecycle"] == "human_approved"
 
-    # edit zonder review_reason → 422
-    assert (await client.post(f"{BASIS}/{slug}/elementen/{el1}/beslissing",
-                              json={"type": "edit", "wijziging": {"toelichting": "beter"}})).status_code == 422
-    # edit mét review_reason → edited + diff
+    # edit zonder review_reason → mag, de server leidt de reden af uit de diff.
+    doc = (await client.post(f"{BASIS}/{slug}/elementen/{el1}/beslissing",
+                             json={"type": "edit", "wijziging": {"toelichting": "beter"}})).json()
+    el1_obj = next(e for e in doc["elementen"] if e["id"] == el1)
+    assert el1_obj["beslissingen"][-1]["review_reason"] == "interpretatie"
+
+    # een meegestuurde reden is hooguit een hint: de diff wint, anders staat er een reden in het
+    # auditspoor die de server nooit kan toetsen.
     doc = (await client.post(f"{BASIS}/{slug}/elementen/{el1}/beslissing", json={
-        "type": "edit", "review_reason": "interpretatie", "wijziging": {"toelichting": "duidelijker"},
+        "type": "edit", "review_reason": "bron_gemist", "wijziging": {"toelichting": "duidelijker"},
     })).json()
     el1_obj = next(e for e in doc["elementen"] if e["id"] == el1)
+    assert el1_obj["beslissingen"][-1]["review_reason"] == "interpretatie"
     # `herkomst` blijft "agent" — dat is WIE HET AANMAAKTE. Een edit door de jurist zet
     # `gewijzigd_door`; anders was na één correctie niet meer te zien dat de agent het voorstelde.
     assert el1_obj["lifecycle"] == "edited"
@@ -98,7 +103,8 @@ async def test_document_lifecycle_en_audit(client):
     assert acties[0] == "document-aangemaakt"
     assert acties[1] == "elementen-voorgesteld"
     assert acties[2:4] == ["element-voorgesteld", "element-voorgesteld"]
-    assert acties[4:] == ["beslissing-approve", "beslissing-edit"]
+    # twee edits: één zonder meegestuurde reden en één met een reden die de diff overruled.
+    assert acties[4:] == ["beslissing-approve", "beslissing-edit", "beslissing-edit"]
 
     samenvatting = audit[1]["detail"]
     assert samenvatting["aangeboden"] == 3 and samenvatting["verworpen"] == 1
@@ -594,3 +600,57 @@ async def test_een_eigen_markering_gaat_niet_op_slot(client):
                       wijziging={"klasse": "Rechtsbetrekking"})
     assert r.status_code == 200
     assert (await client.delete(f"{BASIS}/{slug}/elementen/{el}")).status_code == 204
+
+
+# --- de reviewreden komt van de server ------------------------------------------------------------
+
+@pytest.mark.parametrize("wijziging, verwacht", [
+    ({"tekst": "indien betaling uitblijft na aanmaning"}, "tekst"),
+    ({"klasse": "Rechtsfeit"}, "verkeerde_klasse"),
+    ({"toelichting": "scherper"}, "interpretatie"),
+    ({"lid": "2"}, "anders"),                                    # geen vaste reden dekt dit
+    ({"klasse": "Rechtsfeit", "toelichting": "scherper"}, "anders"),  # meer dan één veld
+])
+async def test_reviewreden_volgt_uit_de_diff(client, wijziging, verwacht):
+    """De reden hoort te worden vastgesteld waar het bewijs ligt: bij de diff die de server maakt.
+
+    Stond die afleiding in de browser, dan was de reden in het auditspoor een waarde die de server
+    aannam maar nooit kon toetsen — in een systeem dat om herleidbaarheid draait is dat te zwak.
+    """
+    slug, el = await _een_element(client, lid="1", toelichting="eerste")
+    doc = (await _beslis(client, slug, el, type="edit", wijziging=wijziging)).json()
+    assert doc["elementen"][0]["beslissingen"][-1]["review_reason"] == verwacht
+
+    audit = (await client.get(f"{BASIS}/{slug}/audit")).json()
+    assert audit[-1]["detail"]["review_reason"] == verwacht
+
+
+async def test_een_edit_zonder_echte_wijziging_is_anders(client):
+    """Niets veranderd → lege diff → geen van de vaste redenen past."""
+    slug, el = await _een_element(client, lid="1")
+    doc = (await _beslis(client, slug, el, type="edit",
+                         wijziging={"klasse": "Voorwaarde"})).json()
+    assert doc["elementen"][0]["beslissingen"][-1]["review_reason"] == "anders"
+
+
+async def test_reject_vraagt_de_reden_nog_steeds_aan_de_mens(client):
+    """Waaróm iets verworpen wordt staat in geen enkele diff — dat weet alleen de jurist."""
+    slug, el = await _een_element(client, lid="1")
+    assert (await _beslis(client, slug, el, type="reject")).status_code == 422
+    assert (await _beslis(client, slug, el, type="reject",
+                          review_reason="bron_gemist")).status_code == 200
+
+
+async def test_een_meegestuurd_veld_dat_gelijk_blijft_telt_niet_mee(client):
+    """Klasse wijzigen terwijl de tekst ongewijzigd meekomt → `verkeerde_klasse`, niet `anders`.
+
+    De UI stuurt bij een klasse-wijziging soms het hele element mee. Woog dat mee, dan werd elke
+    klasse-correctie in het auditspoor een vage `anders`. De diff bevat alleen wat écht veranderde,
+    dus dit volgt vanzelf — maar het is de regressie waar de browserversie een eigen test voor had.
+    """
+    slug, el = await _een_element(client, lid="1", toelichting="eerste")
+    doc = (await _beslis(client, slug, el, type="edit", wijziging={
+        "klasse": "Rechtsfeit", "tekst": "indien betaling uitblijft", "lid": "1",
+    })).json()
+    assert doc["elementen"][0]["beslissingen"][-1]["review_reason"] == "verkeerde_klasse"
+    assert set(doc["elementen"][0]["diff"]) == {"klasse"}

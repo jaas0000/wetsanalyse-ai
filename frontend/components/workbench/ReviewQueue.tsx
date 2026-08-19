@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
-import { isBeslist, isVergrendeld, redenVoorWijziging, type ReviewFilter } from "@/lib/annotatie";
+import { isBeslist, isVergrendeld, type ReviewFilter } from "@/lib/annotatie";
 import { ChevronOmlaag, Ruit, Vinkje, Waarschuwing } from "@/components/ui/Icoon";
 import { JAS_KLASSEN, jasStyle } from "@/lib/jas";
 import type { AnnotatieElement, BeslissingInvoer, ReviewReason, Wijziging } from "@/lib/types";
@@ -244,9 +244,15 @@ function DecisionCard({
     onOpen(rij);
   }
 
-  /** Eén wijziging wegschrijven met een afgeleide reden — geen dropdown, geen opslaan-knop. */
+  /** Eén wijziging wegschrijven — geen dropdown, geen opslaan-knop.
+   *
+   *  De `review_reason` gaat niet mee: die leidt de server af uit de diff die hij zelf berekent.
+   *  Hij werd hier vroeger meegestuurd, maar een reden die de server niet kan toetsen hoort niet in
+   *  een auditspoor. Bij verwerpen blijft de reden wél een vraag aan de jurist — die informatie
+   *  staat in geen enkele diff.
+   */
   async function wijzig(w: Wijziging) {
-    await verstuur({ type: "edit", review_reason: redenVoorWijziging(el, w), wijziging: w });
+    await verstuur({ type: "edit", wijziging: w });
   }
 
   return (

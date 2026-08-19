@@ -50,6 +50,20 @@ class Settings(BaseModel):
     azure_foundry_api_key: str | None = None
     azure_foundry_base_url: str | None = None
     llm_model: str = "claude-sonnet-4-6"
+    # Model per ROL. Leeg = `llm_model`, dus zonder deze env-vars draait alles zoals voorheen.
+    #
+    # De rollen in deze keten verschillen sterk in wat ze vragen: de router kiest uit twee workers
+    # en drie specialisten binnen 300 tokens, en zijn antwoord wordt daarna toch hard gesaneerd
+    # (`parse_supervisor`). De ophaal-agent zoekt een bepaling op met getypeerde tools. Dat is ander
+    # werk dan het JAS-oordeel van de annoteerder en de Critic — en dáár mag je niet op besparen:
+    # die twee blijven bewust op `llm_model`, zonder eigen knop, zodat niemand ze per ongeluk
+    # degradeert. Een goedkopere Critic degradeert precies het oordeel waarvoor hij bestaat.
+    #
+    # De ophaal-agent is de gevaarlijkste om te verlagen: kiest hij de verkeerde bepaling, dan is
+    # alles daarna brongetrouw én verkeerd, en dat ziet de jurist niet. Verlaag hem pas na meting
+    # met `eval/run_eval.py`.
+    llm_model_router: str = ""
+    llm_model_ophaal: str = ""
     # Herkomst die met elke annotatie meereist: welk model/welke agentversie het voorstel maakte.
     # `llm_provider` is beschrijvend (de adapter praat via Azure AI Foundry met de Anthropic-SDK);
     # `agent_versie` komt uit de image-tag/env en valt terug op de pakketversie.
@@ -128,6 +142,8 @@ class Settings(BaseModel):
             "azure_foundry_api_key": _read_secret(e, "AZURE_FOUNDRY_API_KEY"),
             "azure_foundry_base_url": e.get("AZURE_FOUNDRY_BASE_URL"),
             "llm_model": e.get("LLM_MODEL"),
+            "llm_model_router": e.get("LLM_MODEL_ROUTER"),
+            "llm_model_ophaal": e.get("LLM_MODEL_OPHAAL"),
             "llm_provider": e.get("LLM_PROVIDER"),
             "agent_versie": e.get("AGENT_VERSION") or _pakketversie(),
             "max_turns": e.get("MAX_TURNS"),
@@ -162,6 +178,18 @@ class Settings(BaseModel):
         Zo ja, dan is een beurt niet meer afhankelijk van een browser die blijft kijken. Zo nee, dan
         blijft de werkplek dat doen — en dan is een gesloten tabblad nog steeds werkverlies."""
         return bool(self.wetsanalyse_api_url and self.wetsanalyse_api_token)
+
+    def model_voor(self, rol: str) -> str:
+        """Welk model draait deze rol? Onbekende of niet-ingestelde rol → `llm_model`.
+
+        Alleen `router` en `ophaal` hebben een eigen knop; de annoteerder, de Critic en de
+        QA-specialisten draaien per definitie op `llm_model`. Dat is geen omissie maar de grens:
+        wie een oordeel velt over wetgeving krijgt het sterkste model, en dat hoort niet met een
+        env-var te verzwakken.
+        """
+        return {"router": self.llm_model_router, "ophaal": self.llm_model_ophaal}.get(
+            rol, ""
+        ) or self.llm_model
 
     def require_api(self) -> None:
         """Kan graph-qa schrijven, dan MOET zijn eigen endpoint een token hebben.

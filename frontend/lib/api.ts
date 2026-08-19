@@ -20,6 +20,7 @@ import type {
   AdminBerichtenPaginaOut,
   AdminBerichtOut,
   AgentContext,
+  AgentDoelInvoer,
   AgentDoel,
   AgentGrounding,
   AgentKandidaat,
@@ -267,15 +268,6 @@ export async function changePassword(current: string, nieuw: string): Promise<vo
 
 // --- Annotatie-workbench -----------------------------------------------------
 
-export async function maakDocument(req: DocumentCreate): Promise<AnnotatieDocument> {
-  const res = await fetch("/api/annotatie/documenten", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(req),
-  });
-  return json<AnnotatieDocument>(res);
-}
-
 export async function lijstDocumenten(limit = 200): Promise<DocumentSamenvatting[]> {
   // Eén ruime greep: bij tientallen documenten is client-side zoeken/filteren genoeg, en de lijst
   // moet in één keer sorteerbaar zijn. De api kan limit/offset als het ooit groeit.
@@ -295,23 +287,11 @@ export async function verwijderDocument(slug: string): Promise<void> {
   if (!res.ok) throw await parseError(res);
 }
 
-export async function zetElementen(
-  slug: string,
-  elementen: VoorstelElement[],
-  ronde = 0,
-  suggesties: { element_id: string; aandacht: string; motivatie: string }[] = [],
-  run?: AgentRun | null,
-): Promise<AnnotatieDocument> {
-  // De server MERGET dit met wat er al staat (op id, anders op tekst); `ronde` komt in de audit
-  // zodat achteraf te zien is welke agent-ronde welk element opleverde. `run` legt vast MET WELK
-  // MODEL die ronde de voorstellen maakte — ontbreekt hij, dan blijft het bestaande spoor staan.
-  const res = await fetch(`/api/annotatie/documenten/${pathSegment(slug)}/elementen`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ elementen, ronde, suggesties, ...(run ? { run: { ...run, ronde } } : {}) }),
-  });
-  return json<AnnotatieDocument>(res);
-}
+// `maakDocument` en `zetElementen` stonden hier: de browser legde de uitkomst van een agent-beurt
+// zelf vast als het `opgeslagen`-event uitbleef. Dat was een tweede implementatie naast
+// `agent/beurt.py`, en welke van de twee liep hing af van één SSE-event. Eén schrijver nu — de
+// agent — dus de browser heeft die twee routes niet meer nodig. Zet ze niet terug: een eigen
+// annotatie voeg je toe met `voegElementToe`, dat is een andere handeling.
 
 /** Voeg een EIGEN markering toe (tekstselectie van de jurist). Aparte route van `zetElementen`:
  *  dat is de uitkomst van een agent-ronde, dit komt er los bij en raakt de rest niet. */
@@ -447,7 +427,7 @@ export type AgentHandlers = {
 export async function startRun(
   prompt: string,
   conversationId?: string,
-  extra?: { modus?: "auto" | "advies"; context?: AgentContext },
+  extra?: { modus?: "auto" | "advies"; context?: AgentContext; doel?: AgentDoelInvoer },
 ): Promise<RunStart> {
   const res = await fetch("/api/annotatie/run", {
     method: "POST",
@@ -457,6 +437,9 @@ export async function startRun(
       conversation_id: conversationId,
       ...(extra?.modus ? { modus: extra.modus } : {}),
       ...(extra?.context ? { context: extra.context } : {}),
+      // Kennen we de bepaling al, dan hoeft niemand hem meer te zoeken: de agent slaat de
+      // supervisor en de ophaal-agent over en annoteert precies deze.
+      ...(extra?.doel ? { doel: extra.doel } : {}),
     }),
   });
   if (res.status === 409) {

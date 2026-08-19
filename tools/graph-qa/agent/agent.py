@@ -128,6 +128,7 @@ async def answer_stream(
     *,
     modus: str = "auto",
     context: Any = None,
+    doel: Any = None,
     settings: Settings | None = None,
     llm: LLMPort | None = None,
     graph: GraphPort | None = None,
@@ -176,6 +177,10 @@ async def answer_stream(
         "messages": [{"role": "user", "content": question}],
         "modus": modus,
         "context": context.model_dump() if hasattr(context, "model_dump") else (context or {}),
+        # Het doel dat de aanroeper meegaf — MOET mee in de reset, net als de annotatievelden
+        # hieronder: bleef het staan, dan annoteert de vólgende vraag in dezelfde thread opnieuw
+        # de vorige bepaling zonder dat iemand daarom vroeg.
+        "opgegeven_doel": doel.model_dump() if hasattr(doel, "model_dump") else (doel or {}),
         "source_trace": [],
         "turns": 0,
         "corrected": False,

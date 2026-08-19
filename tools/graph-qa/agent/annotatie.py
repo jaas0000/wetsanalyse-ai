@@ -43,15 +43,20 @@ def komt_letterlijk_voor(corpus: str, fragment: str) -> bool:
     return bool(norm) and _normaliseer(corpus).find(norm) >= 0
 
 
-def sleutel_van(klasse: str, tekst: str, lid: str) -> tuple[str, str, str]:
-    """Identiteit van een markering los van zijn id: klasse + fragment + lid.
+def sleutel_van(tekst: str, lid: str) -> tuple[str, str]:
+    """Identiteit van een markering los van zijn id: fragment + lid.
 
     Twee elementen met dezelfde sleutel zijn dezelfde markering, ook al dragen ze een ander id. Dat
     gebeurt als een herziening een bestaand fragment opnieuw voorstelt zonder het id mee te sturen —
-    en dan krijgt de jurist twee identieke kaartjes te reviewen. Dezelfde regel als de terugval in
-    de api-merge (`annotatie.py:_sleutel`), zodat beide kanten hetzelfde als duplicaat zien.
+    en dan krijgt de jurist twee identieke kaartjes te reviewen.
+
+    **Bewust ZONDER klasse**, gelijk aan de terugval in de api-merge (`routers/annotatie.py:_sleutel`)
+    en aan `mergeVoorstellen` in de werkplek: een herziening mág juist de klasse veranderen en moet
+    dan hetzelfde element treffen. Stond de klasse er wél in, dan werd een herclassificatie zonder
+    id een tweede element — en zag de jurist dezelfde tekstspan twee keer met tegenstrijdige
+    klassen. Dit is de canonieke regel; wie hem elders nabouwt, bouwt hem hiernaar.
     """
-    return (klasse.strip(), _normaliseer(tekst).lower(), (lid or "").strip())
+    return (_normaliseer(tekst).lower(), (lid or "").strip())
 
 
 def _balanced_objecten(text: str) -> Iterator[str]:
@@ -114,6 +119,17 @@ def _parse_elementen(text: str) -> list[dict[str, Any]]:
     return gered
 
 
+def _voeg_alternatief_toe(voorstel: AnnotatieVoorstel, klasse: str, motivatie: str) -> None:
+    """Neem een tweede lezing van dezelfde span op als alternatief bij het eerste voorstel.
+
+    Doet niets als het dezelfde klasse is (dan is het een echte herhaling) of als de klasse al als
+    alternatief staat — anders groeit de lijst met dubbelen bij elke ronde.
+    """
+    if klasse == voorstel.klasse or any(a.klasse == klasse for a in voorstel.alternatieven):
+        return
+    voorstel.alternatieven.append(AnnotatieAlternatief(klasse=klasse, motivatie=motivatie))
+
+
 def _verwerk(
     llm_text: str, corpus: str, bwb_id: str, artikel: str, scope_lid: str | None = None,
     geldige_ids: set[str] | None = None,
@@ -146,7 +162,7 @@ def _verwerk(
     if not rauw and llm_text.strip():
         logger.warning("annotatie: geen element-objecten uit de respons gehaald")
 
-    gezien: dict[tuple[str, str, str], AnnotatieVoorstel] = {}
+    gezien: dict[tuple[str, str], AnnotatieVoorstel] = {}
     for e in rauw:
         klasse = str(e.get("klasse", "")).strip()
         fragment = str(e.get("tekst", "")).strip()
@@ -167,8 +183,13 @@ def _verwerk(
         ]
         # Twee keer hetzelfde fragment in één ronde: het model herhaalt zich. De eerste telt —
         # die draagt eventueel het id uit een eerdere ronde, en daaraan hangen de beslissingen.
-        sleutel = sleutel_van(klasse, fragment, lid)
-        if sleutel in gezien:
+        # Gaat het om dezelfde span met een ANDERE klasse, dan is dat geen herhaling maar twijfel:
+        # de tweede lezing wordt een alternatief op het eerste voorstel in plaats van een tweede
+        # element. Eén klasse per element, de andere lezing zichtbaar — stil weggooien zou precies
+        # de twijfel verbergen die de jurist moet zien.
+        sleutel = sleutel_van(fragment, lid)
+        if (eerste := gezien.get(sleutel)) is not None:
+            _voeg_alternatief_toe(eerste, klasse, str(e.get("toelichting", "")).strip())
             continue
         vindplaats = f"{bwb_id} art. {artikel}" + (f" lid {lid}" if lid else "")
         # Een id uit een eerdere ronde behouden (herziening van een bestaand element); anders een

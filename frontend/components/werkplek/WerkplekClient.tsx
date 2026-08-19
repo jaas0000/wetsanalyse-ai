@@ -17,12 +17,10 @@ import {
   haalDocument,
   haalGesprek,
   isApiError,
-  maakDocument,
   maakGesprek,
   voegBerichtToe,
   verwijderElement,
   zetDocumentStatus,
-  zetElementen,
   voegElementToe,
 } from "@/lib/api";
 import type {
@@ -30,6 +28,7 @@ import type {
   AnnotatieElement,
   AgentDoel,
   AgentGrounding,
+  AgentDoelInvoer,
   AgentKandidaat,
   AgentRun,
   AnnotatieDocument,
@@ -41,7 +40,7 @@ import type {
 } from "@/lib/types";
 import {
   annotatieTitel, BESLIST_LIFECYCLES, eigenMarkeringenVoorContext, isVerwijderd, kandidaatLabel,
-  kandidaatPrompt, kandidatenAlsTekst, mergeVoorstellen, vraagContextLabel, vraagContextVan,
+  doelVanKandidaat, kandidaatPrompt, kandidatenAlsTekst, mergeVoorstellen, vraagContextLabel, vraagContextVan,
 } from "@/lib/annotatie";
 import {
   leesLopendeRuns, onthoudRun, schrijfLopendeRuns, standVanVorigeRun, vergeetRun,
@@ -322,7 +321,8 @@ export function WerkplekClient({
     }
   }
 
-  async function verstuur(vast?: string) {
+  /** @param doel de bepaling, als die al vaststaat (zie `startRun`). */
+  async function verstuur(vast?: string, doel?: AgentDoelInvoer) {
     const prompt = (vast ?? invoer).trim();
     if (!prompt || bezigRef.current) return;
     bezigRef.current = true;
@@ -380,7 +380,7 @@ export function WerkplekClient({
     // bepaling die nú open staat: de Critic beoordeelt ze tegen de tekst die hij zelf ophaalt, dus
     // markeringen uit een ander artikel kan hij daar per definitie niet in terugvinden.
     const reedsEigen = eigenMarkeringenVoorContext(artefactSlug ? docs[artefactSlug] : undefined);
-    const extra = context
+    const basis = context
       ? {
           modus: "advies" as const,
           context: vraagContextVan(context.slug, docs[context.slug], infos[context.slug], context.el),
@@ -388,6 +388,8 @@ export function WerkplekClient({
       : reedsEigen.length
         ? { context: { bestaande_elementen: reedsEigen } }
         : undefined;
+    // Een adviesvraag draagt nooit een doel: die route annoteert niet.
+    const extra = doel && !context ? { ...basis, doel } : basis;
 
     let gestart;
     try {
@@ -530,41 +532,20 @@ export function WerkplekClient({
       }
 
       const doel = doelRef.d;
-      if (doel && doel.bwbId) {
-        const graaf: GraafArtikel = doel.leden_teksten?.length
-          ? {
-              bwbId: doel.bwbId,
-              artikel: doel.artikel,
-              citeertitel: doel.citeertitel ?? "",
-              opschrift: "",
-              leden_teksten: doel.leden_teksten,
-            }
-          : await haalArtikelGraaf(doel.bwbId, doel.artikel, doel.lid);
-        const document = await maakDocument({
-          bwbId: doel.bwbId,
-          artikel: doel.artikel,
-          lid: doel.lid || null,
-          // De wetnaam hoort in `citeertitel`; `werkgebied` blijft leeg tot de jurist er zelf
-          // een kennisdomein van maakt. Die twee stonden eerder op één veld.
-          citeertitel: doel.citeertitel || "",
-        });
-        const bijgewerkt = await zetElementen(document.slug, els, 0, suggesties, run);
-        setDocs((m) => ({ ...m, [bijgewerkt.slug]: bijgewerkt }));
-        setInfos((m) => ({ ...m, [bijgewerkt.slug]: graaf }));
-        setItems((xs) =>
-          xs.map((x) =>
-            x.id === antId
-              ? { id: antId, type: "annotatie", slug: bijgewerkt.slug, titel: annotatieTitel(bijgewerkt), ontbrekend, denk }
-              : x,
-          ),
-        );
-        setArtefactSlug(bijgewerkt.slug); // schuif het artefact meteen in
-        // Het label gaat mee de api in: het bericht moet zichzelf kunnen benoemen als het document
-        // later verdwijnt (er is geen foreign key die daarvoor zorgt).
-        void persisteer(gid, "assistant", {
-          annotatie_slug: bijgewerkt.slug, annotatie_titel: annotatieTitel(bijgewerkt), ontbrekend, denk,
-          run_id: id,
-        });
+      if (doel && doel.bwbId && els.length) {
+        // De agent had dit moeten vastleggen (`agent/beurt.py`) en deed dat niet: geen
+        // `opgeslagen`-event terwijl er wél markeringen waren. Dat is een storing en die tonen we
+        // als storing.
+        //
+        // De werkplek schreef het hier vroeger zelf weg. Dat was een tweede, volledige
+        // implementatie van dezelfde handeling — mét eigen artikelophaling en eigen titelopbouw —
+        // en welke van de twee liep hing af van de aan/afwezigheid van één SSE-event. Bij een
+        // gedeeltelijk falen leverde dat een tweede document op. Eén schrijver, en die is de agent.
+        const melding =
+          "**Deze beurt is niet vastgelegd.** De markeringen zijn wel voorgesteld, maar niet " +
+          "opgeslagen. Stel de vraag opnieuw; blijft het gebeuren, meld het dan.";
+        updateItem(antId, { tekst: melding, denk });
+        void persisteer(gid, "assistant", { tekst: melding, denk, run_id: id });
       } else {
         if (!tekst.trim()) updateItem(antId, { tekst: "(geen antwoord)" });
         // `run_id` maakt dit bericht idempotent: kijken er twee tabbladen mee, dan landt de
@@ -943,7 +924,7 @@ export function WerkplekClient({
                   <KandidatenKeuze
                     kandidaten={item.kandidaten}
                     bezig={bezig}
-                    onKies={(k) => void verstuur(kandidaatPrompt(k))}
+                    onKies={(k) => void verstuur(kandidaatPrompt(k), doelVanKandidaat(k))}
                   />
                 </div>
               </div>

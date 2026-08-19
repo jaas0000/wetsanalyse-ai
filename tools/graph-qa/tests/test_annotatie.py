@@ -156,13 +156,22 @@ def test_het_eerste_voorkomen_wint_want_dat_draagt_het_id():
     assert [v.id for v in voorstellen] == ["el-oud"]
 
 
-def test_zelfde_fragment_in_een_andere_klasse_is_geen_duplicaat():
-    """Twijfel tussen twee klassen op hetzelfde fragment is een legitieme uitkomst."""
+def test_zelfde_fragment_in_een_andere_klasse_wordt_een_alternatief():
+    """Twijfel tussen twee klassen op hetzelfde fragment is legitiem — maar één markering.
+
+    Dit stond eerder omgekeerd (twee losse voorstellen), doordat de ontdubbelsleutel de klasse
+    meetelde. Die sleutel liep daarmee uit de pas met de api, die bewust op tekst + lid matcht: een
+    herziening die alleen herclassificeerde werd daar een tweede element naast het origineel, en de
+    jurist zag dezelfde span twee keer met tegenstrijdige klassen. Eén klasse per element, de tweede
+    lezing als alternatief — zie `tests/test_ontdubbelsleutel.py` voor de volledige regel.
+    """
     voorstellen, _ = _verwerk(_json([
         {"klasse": "Rechtssubject", "tekst": "De ontvanger", "lid": "1"},
         {"klasse": "Rechtsobject", "tekst": "De ontvanger", "lid": "1"},
     ]), CORPUS, "BWBR0004770", "9")
-    assert len(voorstellen) == 2
+    assert len(voorstellen) == 1
+    assert voorstellen[0].klasse == "Rechtssubject"
+    assert [a.klasse for a in voorstellen[0].alternatieven] == ["Rechtsobject"]
 
 
 # --- Een id uit het model is geen vrijbrief -------------------------------------------------------

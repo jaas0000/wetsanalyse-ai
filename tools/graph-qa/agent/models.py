@@ -39,9 +39,26 @@ class ChatContext(BaseModel):
     bestaande_elementen: list[BestaandElement] = []
 
 
+class AgentDoel(BaseModel):
+    """De bepaling die geannoteerd moet worden, als de aanroeper die al weet.
+
+    De werkplek kent hem vaak: een open document, een item uit de werkvoorraad, of een kandidaat die
+    de jurist zojuist aanklikte. Meesturen scheelt de supervisor-call én de hele ophaal-agent, maar
+    het echte winstpunt is dat de agent dan niet meer kán uitkomen bij een ándere bepaling dan de
+    jurist aanwees. Zonder doel gaat de beurt de gewone weg: supervisor → ophaal-agent.
+    """
+
+    bwbId: str = ""
+    artikel: str = ""
+    lid: str = ""
+    nummer: str = ""          # decimale bepaling (beleidsregel/circulaire), bv. "9.1"
+    citeertitel: str = ""
+
+
 class ChatRequest(BaseModel):
     question: str
     conversation_id: str | None = None  # stuur mee voor gespreksgeheugen
+    doel: AgentDoel | None = None
     # "advies" = een vraag bij een bestaande annotatie. De supervisor kiest dan niet zelf, maar
     # routeert hard naar de antwoord-worker: zo kan een adviesvraag structureel geen annotatie
     # wijzigen (die route emit simpelweg geen doel/element-events).

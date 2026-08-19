@@ -92,8 +92,15 @@ De API bedient zeven dingen:
   `routers/annotatie.py` — `/v1/annotatie/*`, per-gebruiker gescopet (`huidige_userid` + `_document_or_404`;
   `require_client` blijft de bearer-poort + audit-herkomst).
   Levenscyclus: document aanmaken → `PUT elementen` (de uitkomst van één agent-ronde) → per element
-  een human-decision (approve/edit/reject/comment; edit/reject vereisen `review_reason`; edit berekent
-  een `diff`) → `GET audit`. **Geen graaf-mutatie** vanuit dit domein.
+  een human-decision (approve/edit/reject/comment; edit berekent een `diff`) → `GET audit`.
+  **Geen graaf-mutatie** vanuit dit domein.
+
+  **De `review_reason` komt van de server.** Bij een **edit** leidt `_reden_uit_diff` hem af uit de
+  diff die de router toch al berekent (één veld → `tekst`/`verkeerde_klasse`/`interpretatie`; meer
+  velden, alleen `lid`, of niets → `anders`); een meegestuurde waarde is hooguit een hint en wordt
+  overschreven. Die afleiding stond in de browser, en daarmee stond er een reden in het auditspoor
+  die de server aannam maar nooit kon toetsen. Bij een **reject** blijft `review_reason` verplicht
+  (422 zonder): waaróm iets verworpen wordt staat in geen enkele diff — dat weet alleen de jurist.
 
   **Herkomst: met welk model is geannoteerd.** graph-qa stuurt per beurt een `run`-event
   (model/provider/agent_versie/critic_rondes/stop_reden); de werkplek geeft dat mee in

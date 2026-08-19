@@ -36,6 +36,7 @@ from ..annotatie_contracts import (
     CriticSuggestie, DocumentCreate, DocumentSamenvatting, ElementInvoer, ElementenInvoer,
     Lifecycle,
     MensElementInvoer,
+    ReviewReason,
     StatusInvoer,
 )
 from ..annotatie_export import (
@@ -74,6 +75,30 @@ def _sleutel(tekst: str, lid: str) -> tuple[str, str]:
     Bewust ZONDER klasse — een herziening mag juist de klasse veranderen en moet dan hetzelfde
     element treffen, niet een duplicaat maken."""
     return (" ".join(tekst.split()).casefold(), lid or "")
+
+
+#: Welke reden hoort bij een edit van precies dít veld? Meer dan één veld tegelijk → `anders`.
+_REDEN_PER_VELD: dict[str, ReviewReason] = {
+    "tekst": ReviewReason.tekst,
+    "klasse": ReviewReason.verkeerde_klasse,
+    "toelichting": ReviewReason.interpretatie,
+}
+
+
+def _reden_uit_diff(diff: dict) -> ReviewReason:
+    """De `review_reason` bij een edit, afgeleid uit wát er veranderde.
+
+    Die afleiding stond in de browser (`frontend/lib/annotatie.ts:redenVoorWijziging`) terwijl de
+    server dezelfde diff toch al berekent. De reden in het auditspoor was daarmee een waarde die de
+    server aannam maar nooit kon controleren — in een systeem dat om herleidbaarheid draait hoort
+    hij te worden vastgesteld waar het bewijs ligt.
+
+    Alleen `lid` (of niets) valt onder `anders`: geen van de vaste redenen dekt dat.
+    Bij een REJECT blijft de reden een vraag aan de mens — die informatie staat niet in een diff.
+    """
+    if len(diff) != 1:
+        return ReviewReason.anders
+    return _REDEN_PER_VELD.get(next(iter(diff)), ReviewReason.anders)
 
 
 def _is_bevroren(el: AnnotatieElement) -> bool:
@@ -438,8 +463,9 @@ async def beslis(
 ):
     # Pre-validatie die het element niet nodig heeft (faalt vóór de atomaire mutatie).
     if req.type == BeslissingType.edit:
-        if req.review_reason is None:
-            raise HTTPException(status_code=422, detail="review_reason is verplicht bij een edit.")
+        # `review_reason` is hier bewust NIET verplicht: de server leidt hem af uit de diff die hij
+        # zelf berekent (`_reden_uit_diff`). Een meegestuurde waarde geldt hooguit als hint en
+        # wordt overschreven — anders staat er een reden in het auditspoor die niemand kan toetsen.
         if req.wijziging is None:
             raise HTTPException(status_code=422, detail="wijziging is verplicht bij een edit.")
         if req.wijziging.klasse is not None and req.wijziging.klasse not in GELDIGE_JAS_KLASSEN:
@@ -450,6 +476,7 @@ async def beslis(
 
     diff_holder: dict = {}
     anker_verplaatst: dict = {}
+    reden_holder: dict[str, ReviewReason | None] = {"reden": req.review_reason}
 
     def toepassen(doc: AnnotatieDocument, el: AnnotatieElement):
         """Muteert het element in-place binnen de atomaire store-transactie (row-lock).
@@ -492,6 +519,8 @@ async def beslis(
             # er geen mens-element van; anders is later niet meer te zien dat de agent het voorstelde.
             el.gewijzigd_door = "mens"
             el.diff = diff
+            # De reden volgt uit de diff die hier net is berekend, niet uit wat de client meestuurde.
+            reden_holder["reden"] = _reden_uit_diff(diff)
         elif req.type == BeslissingType.approve:
             el.lifecycle = Lifecycle.human_approved
         elif req.type == BeslissingType.reject:
@@ -505,7 +534,7 @@ async def beslis(
         # comment → geen lifecycle-wijziging
         el.beslissingen.append(Beslissing(
             type=req.type, actor=user_id, tijd=utcnow(),
-            review_reason=req.review_reason, comment=req.comment, wijziging=diff,
+            review_reason=reden_holder["reden"], comment=req.comment, wijziging=diff,
         ))
         diff_holder.update(diff)
         return None
@@ -531,7 +560,7 @@ async def beslis(
     await store.schrijf_audit(
         slug, client_id, user_id, f"beslissing-{req.type.value}", element_id=element_id,
         detail={
-            "review_reason": req.review_reason.value if req.review_reason else None,
+            "review_reason": reden_holder["reden"].value if reden_holder["reden"] else None,
             "comment": req.comment, "diff": diff_holder,
             **({"anker_verplaatst": True} if anker_verplaatst.get("ja") else {}),
         },

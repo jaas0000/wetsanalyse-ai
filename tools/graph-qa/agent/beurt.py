@@ -23,6 +23,7 @@ import logging
 from collections.abc import AsyncIterator
 from typing import Any
 
+from .annotatie import sleutel_van
 from .config import Settings
 from .wetsanalyse_api import GesprekVerdwenen, WetsanalyseApi, WetsanalyseApiFout
 
@@ -79,12 +80,26 @@ class BeurtSchrijver:
 
     def _voeg_element_toe(self, element: dict[str, Any]) -> None:
         """Ontdubbeld verzamelen: de annoteerder ⇄ Critic-lus kan hetzelfde element opnieuw sturen,
-        en dan wint de laatste versie. Zelfde regel als `mergeVoorstellen` in de werkplek."""
+        en dan wint de laatste versie.
+
+        Dezelfde regel als `mergeVoorstellen` in de werkplek en als de merge in de api: eerst op
+        `id`, anders op de canonieke inhoudssleutel (`sleutel_van` — genormaliseerde tekst + lid).
+        Dat laatste stond hier eerder als rúwe tekst in één tuple mét het id, waardoor een
+        witruimteverschil een tweede kaart opleverde en een herziening zonder id nooit matchte.
+        """
         if not element:
             return
-        sleutel = (element.get("id") or "", element.get("tekst") or "", element.get("lid") or "")
+
+        def zelfde(bestaand: dict[str, Any]) -> bool:
+            eigen_id, ander_id = element.get("id") or "", bestaand.get("id") or ""
+            if eigen_id and ander_id:
+                return eigen_id == ander_id
+            return sleutel_van(element.get("tekst") or "", element.get("lid") or "") == sleutel_van(
+                bestaand.get("tekst") or "", bestaand.get("lid") or ""
+            )
+
         for i, bestaand in enumerate(self.elementen):
-            if (bestaand.get("id") or "", bestaand.get("tekst") or "", bestaand.get("lid") or "") == sleutel:
+            if zelfde(bestaand):
                 self.elementen[i] = element
                 return
         self.elementen.append(element)
@@ -105,8 +120,11 @@ async def voer_beurt_uit(
     """Draai één beurt: stuur de events door, en leg aan het eind de uitkomst vast.
 
     `run` is het run-object uit het register; we lezen er het stopverzoek en het `run_id` uit.
-    Schrijft graph-qa niet zelf weg (geen api geconfigureerd, of geen gesprek/gebruiker bekend), dan
-    is dit puur een doorgeefluik en blijft de werkplek verantwoordelijk — precies het oude gedrag.
+
+    Kan graph-qa niet zelf wegschrijven (geen api geconfigureerd, of geen gesprek/gebruiker bekend),
+    dan is dit puur een doorgeefluik. Leverde de beurt wél markeringen op, dan **zeggen we dat**:
+    de werkplek nam dat vroeger stilzwijgend over met een eigen schrijfpad, en dat tweede pad is
+    weg. Zwijgen zou nu betekenen dat een annotatie van anderhalve minuut spoorloos verdwijnt.
     """
     schrijver = BeurtSchrijver()
     async for event in stroom:
@@ -127,6 +145,17 @@ async def voer_beurt_uit(
         async for na in _leg_vast(schrijver, settings=settings, run=run,
                                   gesprek_id=gesprek_id, gestopt=gestopt, user_id=user_id):
             yield na
+    elif schrijver.is_annotatie:
+        logger.warning(
+            "beurt: markeringen niet vastgelegd (geen schrijfpad)",
+            extra={"categorie": "functioneel", "run_id": run.run_id,
+                   "elementen": len(schrijver.elementen)},
+        )
+        yield {
+            "type": "error",
+            "message": ("Deze markeringen zijn niet vastgelegd: deze agent heeft geen verbinding "
+                        "met de wetsanalyse-API."),
+        }
     yield {"type": "done"}
 
 

@@ -295,6 +295,21 @@ export interface AgentDoel {
   leden_teksten?: { lid: string; tekst: string }[];
 }
 
+/** De bepaling die geannoteerd moet worden, meegestuurd bij het starten van een run.
+ *
+ *  Weet de werkplek hem al (een gekozen kandidaat, een open document), dan slaat de agent de
+ *  supervisor én de ophaal-agent over. Het echte winstpunt is niet de besparing maar de zekerheid:
+ *  de agent kan dan niet meer bij een ándere bepaling uitkomen dan de jurist aanwees.
+ *  Spiegelt `AgentDoel` in `tools/graph-qa/agent/models.py`.
+ */
+export interface AgentDoelInvoer {
+  bwbId: string;
+  artikel?: string;
+  lid?: string;
+  nummer?: string;
+  citeertitel?: string;
+}
+
 /** Een bepaling die de agent vond bij een ONDERWERP-vraag (uit het `kandidaten`-SSE-event).
  *
  *  De agent kiest er zelf geen: welke bepaling de werkvoorraad in gaat, bepaalt de jurist.

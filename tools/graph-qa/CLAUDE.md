@@ -286,6 +286,19 @@ workerlijst is bovendien een **allowlist** (`antwoord`/`annotatie`) met een cap 
 andere naam werd stilzwijgend een extra antwoord-worker, dus "WORKERS: antwoord, samenvatten"
 beantwoordde dezelfde vraag twee keer.
 
+**Een meegegeven `doel` slaat de halve keten over.** Stuurt de aanroeper `doel`
+(`{bwbId, artikel|nummer, lid?, citeertitel?}`) mee, dan doet de supervisor géén LLM-call en draait de
+ophaal-agent helemaal niet: `_entry_node` gaat recht naar `annoteer`, dat het corpus zelf gericht
+ophaalt. Dat scheelt 3-5 calls, maar de reden is niet de besparing: dit is de enige plek waar de keten
+bij een ándere bepaling kan uitkomen dan de jurist aanwees, en met een doel bestaat die stap niet.
+Een half doel (alleen een `bwbId`) telt niet — dan valt er wél iets te zoeken. Het veld hoort bij de
+beurt en wordt daarom **per beurt gereset** in `answer_stream`, net als de andere annotatievelden.
+
+**Model per rol.** `LLM_MODEL_ROUTER` en `LLM_MODEL_OPHAAL` (leeg = `LLM_MODEL`) zetten de supervisor
+en de ophaal-agent op een eigen model; `Settings.model_voor` doet de terugval. De annoteerder, de
+Critic en de QA-specialisten hebben **geen** eigen knop en draaien altijd op `LLM_MODEL`: wie een
+oordeel velt over wetgeving hoort niet met een env-var te verzwakken.
+
 **Advies bij twijfel** (`modus: "advies"` op `POST /v1/chat`): de supervisor kiest dan niet zelf maar
 routeert hard naar de `duiding`-specialist. Een adviesvraag kan daardoor *topologisch* geen annotatie
 wijzigen — die route emit geen `doel`/`element`-events. Dat is een garantie, geen prompt-belofte. Het
@@ -328,10 +341,16 @@ Drie dingen die je verder moet kennen voordat je hieraan werkt:
   het model een `id` mee, dan blijft dat behouden — zo matcht de api het bij een volgende ronde op
   hetzelfde element en blijven de beslissingen van de jurist staan.
 - **Dezelfde markering komt maar één keer terug.** Een fragment is niet zijn id maar zijn inhoud:
-  `sleutel_van(klasse, tekst, lid)`. `_verwerk` ontdubbelt daarop binnen een ronde en de merge in
-  `herzie_node` doet het over rondes heen — een herziening die een bestaand fragment opnieuw
-  voorstelt zónder id kreeg anders een vers id, en dan stond de markering er twee keer. Het **oudste
-  id wint**, want daaraan hangen de beslissingen van de jurist en het auditspoor.
+  `sleutel_van(tekst, lid)` — genormaliseerde tekst + lid, **zonder klasse**. `_verwerk` ontdubbelt
+  daarop binnen een ronde en de merge in `herzie_node` doet het over rondes heen — een herziening
+  die een bestaand fragment opnieuw voorstelt zónder id kreeg anders een vers id, en dan stond de
+  markering er twee keer. Het **oudste id wint**, want daaraan hangen de beslissingen van de jurist
+  en het auditspoor.
+  De klasse hoort er bewust niet in: een herziening mág juist herclassificeren en moet dan hetzelfde
+  element treffen. Dit is dezelfde regel als de api-merge (`routers/annotatie.py:_sleutel`) en
+  `mergeVoorstellen` in de werkplek — drie implementaties, één regel, bewaakt door
+  `tests/test_ontdubbelsleutel.py`. Stelt het model binnen één ronde dezelfde span met een ándere
+  klasse voor, dan wordt die tweede lezing een **alternatief** op het eerste voorstel.
 - **Verworpen fragmenten gaan niet verloren.** `_verwerk` geeft ze terug met een reden
   (`niet_letterlijk` of `ongeldige_klasse`) in plaats van ze te tellen. Een bijna-goed citaat is met
   die aanwijzing prima te repareren — dat is de goedkoopste kwaliteitswinst in de keten.

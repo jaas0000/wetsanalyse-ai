@@ -4,6 +4,7 @@ import { jasVolgorde } from "./jas";
 import type { LidRegel } from "./selectie";
 import type {
   AgentContext,
+  AgentDoelInvoer,
   AgentKandidaat,
   AnnotatieDocument,
   AnnotatieElement,
@@ -60,6 +61,15 @@ export function bronVan(regels: LidRegel[]): string {
  *  ontdubbelen zou de werkplek dan duplicaten tonen én naar de server sturen. Matcht op `id`, met
  *  dezelfde terugval als de server (genormaliseerde tekst + lid) voor voorstellen zonder id.
  *  De laatste versie wint: die is door de meest recente Critic-ronde gegaan.
+ *
+ *  De **klasse telt niet mee** in de terugval — een herziening mag juist herclassificeren en moet
+ *  dan hetzelfde element treffen. Canonieke regel: `routers/annotatie.py:_sleutel` (api) en
+ *  `agent/annotatie.py:sleutel_van` (graph-qa), met dezelfde tabel in beider tests.
+ *
+ *  Eén bewuste afwijking van de server: staat er al een element mét id en komt hetzelfde fragment
+ *  zónder id binnen, dan houdt de werkplek ze apart terwijl de api ze zou samenvoegen. De agent
+ *  geeft elk voorstel een id, dus dat geval komt in de stroom niet voor; het id leidend houden is
+ *  hier veiliger dan raden.
  */
 export function mergeVoorstellen(
   bestaand: VoorstelElement[],
@@ -81,10 +91,27 @@ export function kandidaatLabel(k: AgentKandidaat): string {
   return k.citeertitel ? `${bepaling} — ${k.citeertitel}` : bepaling;
 }
 
+/** De gekozen kandidaat als **doel**: hiermee hoeft de agent niets meer te zoeken.
+ *
+ *  Dit is de belangrijkste plek voor een meegegeven doel. De jurist wees zojuist één bepaling aan
+ *  uit een lijst; die opnieuw in natuurlijke taal laten opzoeken is niet alleen verspilling, het is
+ *  de enige stap waar de keten alsnog bij een ándere bepaling kan uitkomen.
+ */
+export function doelVanKandidaat(k: AgentKandidaat): AgentDoelInvoer {
+  return {
+    bwbId: k.bwbId,
+    artikel: k.artikel,
+    ...(k.lid ? { lid: k.lid } : {}),
+    ...(k.citeertitel ? { citeertitel: k.citeertitel } : {}),
+  };
+}
+
 /** De opdracht die volgt als de jurist een kandidaat kiest.
  *
- *  Het bwbId gaat mee omdat de ophaal-agent anders opnieuw moet zoeken op de citeertitel — en dan
- *  bij een andere bepaling kan uitkomen dan die de jurist aanwees.
+ *  Blijft naast `doelVanKandidaat` bestaan: dit is de **leesbare** vraag in de thread, en die hoort
+ *  te zeggen wat er gebeurt. Het bwbId gaat er nog steeds in mee — draait er ooit een beurt zonder
+ *  doel (een oudere client, of een agent die het veld negeert), dan is de tekst nog steeds
+ *  eenduidig genoeg om bij de juiste bepaling uit te komen.
  */
 export function kandidaatPrompt(k: AgentKandidaat): string {
   const bepaling = `artikel ${k.artikel}${k.lid ? ` lid ${k.lid}` : ""}`;
@@ -102,34 +129,11 @@ export function kandidatenAlsTekst(melding: string, kandidaten: AgentKandidaat[]
   return [melding.trim(), ...regels].filter(Boolean).join("\n");
 }
 
-/** Welke velden wijzigt deze `Wijziging` werkelijk? Leeg = niets te versturen. */
-export function gewijzigdeVelden(el: AnnotatieElement, w: Wijziging): (keyof Wijziging)[] {
-  return (["klasse", "tekst", "toelichting", "lid"] as const).filter(
-    (veld) => w[veld] != null && w[veld] !== el[veld],
-  );
-}
-
-/** De reden bij een edit, afgeleid uit wát er veranderde.
- *
- *  De jurist vragen wat hij zojuist deed is dubbelop: het staat al in de wijziging. Dit haalt de
- *  `review_reason`-dropdown uit het bewerk-pad. Bij verwerpen blijft de reden wél een vraag — dat is
- *  informatie die alleen de mens heeft.
- */
-export function redenVoorWijziging(el: AnnotatieElement, w: Wijziging): ReviewReason {
-  const velden = gewijzigdeVelden(el, w);
-  if (velden.length > 1) return "anders";
-  switch (velden[0]) {
-    case "tekst":
-      return "tekst";
-    case "klasse":
-      return "verkeerde_klasse";
-    case "toelichting":
-      return "interpretatie";
-    default:
-      // Alleen het lid, of niets: geen van de vaste redenen dekt dat.
-      return "anders";
-  }
-}
+// `gewijzigdeVelden` en `redenVoorWijziging` stonden hier: de browser leidde de `review_reason` af
+// uit wát er veranderde. Die afleiding is naar de api verhuisd (`routers/annotatie.py:
+// _reden_uit_diff`), want daar wordt de diff toch al berekend. De reden in het auditspoor was
+// anders een waarde die de server aannam maar nooit kon toetsen — te zwak voor een systeem dat om
+// herleidbaarheid draait. De ervaring blijft gelijk: de jurist krijgt nog steeds geen dropdown.
 
 /** Raakt een selectie het bereik van de actieve markering?
  *

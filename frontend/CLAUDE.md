@@ -262,8 +262,12 @@ werkplek niet blokkeren, de badge is een hint.
 
 Noemt de vraag een onderwerp in plaats van een bepaling, dan komt er een `kandidaten`-event in plaats
 van `doel`/`element`: de thread toont een keuzelijst (`KandidatenKeuze`), en één klik stuurt
-`kandidaatPrompt(k)` als nieuwe beurt in — mét het bwbId, anders kan de ophaal-agent bij een andere
-bepaling uitkomen dan de jurist aanwees. Er is bewust géén "annoteer ze allemaal": elke annotatie is
+`kandidaatPrompt(k)` als nieuwe beurt in — **mét `doelVanKandidaat(k)` als gestructureerd `doel`**.
+Daarmee slaat de agent de supervisor én de ophaal-agent over (~3-5 LLM-calls minder) en, belangrijker,
+kán hij niet meer bij een andere bepaling uitkomen dan de jurist zojuist aanwees. De prompt blijft
+daarnaast bestaan als leesbare vraag in de thread, mét het bwbId erin voor het geval een beurt tóch
+zonder doel loopt. Zelfde patroon geldt voor elke andere plek waar de werkplek de bepaling al kent:
+geef `doel` mee aan `startRun`. Een **adviesvraag** draagt nooit een doel — die route annoteert niet. Er is bewust géén "annoteer ze allemaal": elke annotatie is
 een eigen document met een eigen review. De kandidaten zitten niet in het berichtcontract van de api;
 wat na een herlaadbeurt overblijft is de opsomming uit `kandidatenAlsTekst`.
 
@@ -342,10 +346,16 @@ beurt als **run** bij graph-qa (`POST /api/annotatie/run` → `startRun`) en kij
   "afgebroken" gemeld worden.
 - **`run_id` reist mee naar de api** bij het bewaren van de assistent-beurt. Kijken er twee tabbladen
   mee, dan landt de uitkomst tóch één keer (de api dedupliceert erop).
-- **Schrijft de agent zelf weg, dan doet de werkplek dat niet.** graph-qa stuurt vlak vóór het einde
-  een `opgeslagen`-event met de `annotatie_slug`; de client haalt het document dán bij de api op
-  (`toonVastgelegdeBeurt`) in plaats van het zelf aan te maken. Blijft dat event uit — een graph-qa
-  zonder api-koppeling — dan schrijft de client weg zoals vroeger. Eén codepad, twee werelden.
+- **De agent schrijft weg, de werkplek nooit.** graph-qa stuurt vlak vóór het einde een
+  `opgeslagen`-event met de `annotatie_slug`; de client haalt het document dán bij de api op
+  (`toonVastgelegdeBeurt`). Blijft dat event uit terwijl er wél markeringen waren, dan is dat een
+  **storing** en toont de werkplek dat als zodanig — er is geen tweede schrijfpad meer.
+  Dat pad bestond wel (`maakDocument` + `zetElementen` vanuit de browser, met eigen artikelophaling
+  en eigen titelopbouw), en welke van de twee liep hing af van de aan/afwezigheid van één SSE-event;
+  bij een gedeeltelijk falen leverde dat een tweede document op. Beide client-helpers zijn daarom
+  weg uit `lib/api.ts`. Zet ze niet terug: een eigen markering voeg je toe met `voegElementToe`,
+  dat is een andere handeling. Een graph-qa **zonder** api-koppeling legt niets meer vast en meldt
+  dat nu zelf met een `error`-event (`agent/beurt.py`).
 
 De BFF stuurt de identiteit als **`X-User-Id`-header** mee op álle run-routes, en verifieert bij het
 starten eerst bij de api of dit gesprek van jou is — `conversation_id` is ook de thread_id van het
@@ -470,9 +480,11 @@ naast de gedempte tinten van een kaart.
 ### Reviewen zonder formulier
 
 De reviewkaart kent geen modi meer (`Aanpassen` → veld → reden → `Opslaan`). Elk veld schrijft
-zichzelf weg en de `review_reason` wordt **afgeleid** uit wát er veranderde
-(`redenVoorWijziging` in `lib/annotatie.ts`: tekst → `tekst`, klasse → `verkeerde_klasse`,
-toelichting → `interpretatie`, meerdere velden → `anders`). Vragen wat je zojuist deed is dubbelop.
+zichzelf weg en de `review_reason` wordt **afgeleid** uit wát er veranderde — vragen wat je zojuist
+deed is dubbelop. Die afleiding staat **server-side** (`api/app/routers/annotatie.py:
+_reden_uit_diff`), niet meer hier: de api berekent de diff toch al, en een reden die hij niet kan
+toetsen hoort niet in een auditspoor. De client stuurt bij een edit dus géén `review_reason` mee.
+Bij **verwerpen** blijft de reden een vraag aan de jurist; die informatie staat in geen diff.
 
 - **Klasse** = de badge zelf; klikken opent het palet, klikken op een klasse ís de wijziging.
 - **Toelichting** is een inline veld (Enter/blur bewaart, Escape annuleert). Een gevulde toelichting
