@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { foutTekst } from "@/lib/api";
+
 import { Melding } from "@/components/ui/Melding";
 import { DocumentPaneel } from "@/components/workbench/DocumentPaneel";
 import { ExportKnop } from "@/components/workbench/ExportKnop";
@@ -137,7 +139,7 @@ export function ArtefactInhoud({
     try {
       await onStatus(status);
     } catch (e) {
-      setFout(e instanceof Error ? e.message : "De status is niet gewijzigd.");
+      setFout(foutTekst(e, "De status is niet gewijzigd."));
     } finally {
       setStatusBezig(false);
     }
@@ -150,10 +152,13 @@ export function ArtefactInhoud({
       const doel = e.target as HTMLElement | null;
       const inVeld =
         !!doel && (doel.tagName === "INPUT" || doel.tagName === "TEXTAREA" || doel.isContentEditable);
-      // Escape eerst, en ook in een invoerveld: dat is de uitweg, precies zoals `Dialog` hem
-      // afhandelde toen die schil er altijd was.
+      // Escape eerst: dat is de uitweg, precies zoals `Dialog` hem afhandelde toen die schil er
+      // altijd was. Wél in de eigen invoervelden van het artefact (een toelichting annuleren), maar
+      // NIET vanuit de chat ernaast: in de kolom-variant staat die naast het artefact, en dan sloot
+      // Escape tijdens het typen van een vraag ineens het paneel waar je in werkte.
       if (e.key === "Escape") {
-        opEscape();
+        if (inVeld && !!doel?.closest("[data-artefact]")) opEscape();
+        else if (!inVeld) opEscape();
         return;
       }
       if (e.metaKey || e.ctrlKey || e.altKey) return;
@@ -200,7 +205,7 @@ export function ArtefactInhoud({
     try {
       await onBeslissing(elementId, req);
     } catch (e) {
-      setFout(e instanceof Error ? e.message : "De wijziging is niet opgeslagen.");
+      setFout(foutTekst(e, "De wijziging is niet opgeslagen."));
       throw e;
     }
   }
@@ -211,7 +216,7 @@ export function ArtefactInhoud({
     try {
       await onWisEigenMarkering?.(elementId);
     } catch (e) {
-      setFout(e instanceof Error ? e.message : "De markering is niet gewist.");
+      setFout(foutTekst(e, "De markering is niet gewist."));
       throw e;
     }
   }
@@ -241,7 +246,7 @@ export function ArtefactInhoud({
       });
       sluitSelectie();
     } catch (e) {
-      setFout(e instanceof Error ? e.message : "Aanpassen is niet gelukt.");
+      setFout(foutTekst(e, "Aanpassen is niet gelukt."));
     }
   }
 
@@ -259,7 +264,7 @@ export function ArtefactInhoud({
       await onEigenMarkering({ ...invoer, lid: invoer.lid || doc.lid || "" });
       sluitSelectie();
     } catch (e) {
-      setFout(e instanceof Error ? e.message : "Markeren is niet gelukt.");
+      setFout(foutTekst(e, "Markeren is niet gelukt."));
     }
   }
 
@@ -276,7 +281,10 @@ export function ArtefactInhoud({
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    // `data-artefact` bakent af wat "binnen het artefact" is. De keydown-handler hangt aan `window`
+    // (het paneel is in de kolom-variant niet modaal), en moet Escape uit de chat ernaast kunnen
+    // onderscheiden van Escape in een eigen invoerveld.
+    <div data-artefact className="flex min-h-0 flex-1 flex-col">
         {/* Kop */}
         <div className="flex shrink-0 items-start justify-between gap-3 border-b border-line px-5 py-3.5 pt-[max(0.875rem,env(safe-area-inset-top))]">
           <div className="min-w-0">

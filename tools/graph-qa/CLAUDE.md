@@ -141,7 +141,11 @@ Vier dingen om niet te breken:
 - **Losraken ≠ annuleren.** De generator in `runs.volg` is alleen een kijker; het werk zit in
   `run.taak`. Sluit een client zijn stream, dan gebeurt er met de run niets.
 - **409 is bescherming, geen nettigheid.** `thread_id == conversation_id`, dus twee gelijktijdige
-  beurten schrijven door elkaar heen in dezelfde checkpointer-thread.
+  beurten schrijven door elkaar heen in dezelfde checkpointer-thread. Die botsingscontrole geldt
+  **over gebruikers heen** — hij beschermt de data, niet de gebruiker.
+- **Een run heeft een eigenaar.** `X-User-Id` (door de BFF uit de sessie gezet) bepaalt wie hem mag
+  volgen en stoppen; andermans run geeft 404, net als andermans document bij de api. Zonder dat was
+  een run een *capability*: wie het id kende las mee. Eén identiteitsbron — de header, niet de body.
 - **Cappen is klassebewust.** Alleen `token`/`reason`/`status` mogen sneuvelen (`VLUCHTIGE_TYPES`);
   `element`, `doel`, `run`, `ontbrekend`, `done` en `error` blijven staan, en er gaat een
   `gat`-event voorop zodat de client "…" toont in plaats van een verminkt antwoord.

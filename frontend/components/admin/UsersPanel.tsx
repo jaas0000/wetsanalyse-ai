@@ -22,6 +22,7 @@ import type { Role, UserOut } from "@/lib/types";
 export function UsersPanel() {
   const [users, setUsers] = useState<UserOut[] | null>(null);
   const [fout, setFout] = useState<string | null>(null);
+  const [bezig, setBezig] = useState(false);
   const [nieuwUserid, setNieuwUserid] = useState("");
   const [nieuwEmail, setNieuwEmail] = useState("");
   const [nieuwRol, setNieuwRol] = useState<Role>("analist");
@@ -50,6 +51,11 @@ export function UsersPanel() {
 
   async function onAanmaken(e: React.FormEvent) {
     e.preventDefault();
+    // Zonder deze guard levert een dubbelklik een tweede aanroep op die op een duplicaat stukloopt,
+    // met een foutmelding náást het net getoonde tijdelijke wachtwoord — verwarrend op precies het
+    // moment dat je dat wachtwoord moet overnemen.
+    if (bezig) return;
+    setBezig(true);
     setFout(null);
     try {
       const res = await createUser(nieuwUserid.trim(), nieuwEmail.trim(), nieuwRol);
@@ -60,6 +66,8 @@ export function UsersPanel() {
       await laad();
     } catch (e) {
       melden(e);
+    } finally {
+      setBezig(false);
     }
   }
 
@@ -153,7 +161,9 @@ export function UsersPanel() {
             <option value="beheerder">beheerder</option>
           </Select>
         </Field>
-        <Button type="submit" size="sm" className="w-full sm:w-auto">Gebruiker toevoegen</Button>
+        <Button type="submit" size="sm" disabled={bezig} className="w-full sm:w-auto">
+          {bezig ? "Toevoegen…" : "Gebruiker toevoegen"}
+        </Button>
       </form>
 
       {users === null ? (

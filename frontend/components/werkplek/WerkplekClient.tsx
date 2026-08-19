@@ -9,6 +9,7 @@ import { Markdown, StreamendeTekst } from "@/components/werkplek/Markdown";
 import {
   annoteerAgentStream,
   beslis,
+  foutTekst,
   haalActieveRun,
   startRun,
   stopRun,
@@ -87,11 +88,6 @@ function isAfgebroken(e: unknown): boolean {
   return (e as Error)?.name === "AbortError";
 }
 
-function foutTekst(e: unknown): string {
-  if (isApiError(e)) return e.detail;
-  return (e as Error)?.message ?? "Er ging iets mis.";
-}
-
 interface Props {
   /** Het te openen gesprek, of `null` voor een vers (nog niet gepersisteerd) gesprek. */
   initialGesprekId: string | null;
@@ -128,8 +124,6 @@ export function WerkplekClient({
   // Waar de volgende vraag over gaat, gezet vanuit een reviewkaart. Zolang dit staat gaat de beurt
   // als adviesvraag (met contextblok) in plaats van als gewone vraag.
   const [vraagOver, setVraagOver] = useState<{ slug: string; el: AnnotatieElement } | null>(null);
-  // Het artefact openen haalt document + wettekst op. Dat mag niet stil gebeuren: zonder deze twee
-  // leverde een mislukte graaf-call een klik op waar lettérlijk niets van gebeurde.
   // De run die nu loopt. Die leeft bij de agent, niet in dit venster: dit id is waarmee we
   // aanhaken en waarmee de stopknop hem beëindigt.
   const [runId, setRunId] = useState<string | null>(null);
@@ -137,6 +131,8 @@ export function WerkplekClient({
   // LLM-call maakt zichzelf af — dat kan tientallen seconden duren en de knop hoort dat te tonen
   // in plaats van te doen alsof het al klaar is.
   const [stopt, setStopt] = useState(false);
+  // Het artefact openen haalt document + wettekst op. Dat mag niet stil gebeuren: zonder deze twee
+  // leverde een mislukte graaf-call een klik op waar lettérlijk niets van gebeurde.
   const [artefactLaadt, setArtefactLaadt] = useState<string | null>(null);
   const [artefactFout, setArtefactFout] = useState<{ slug: string; melding: string } | null>(null);
   // Zojuist geprobeerd te openen, maar het document bestaat niet meer. Los van `artefactFout`, want
@@ -157,6 +153,10 @@ export function WerkplekClient({
   // "Stick-to-bottom": alleen automatisch meescrollen als de gebruiker al onderaan staat, zodat
   // omhoogscrollen tijdens het streamen niet telkens wordt teruggetrokken.
   const stickRef = useRef(true);
+  // Leeft dit venster nog? De unmount-cleanup aborteert `afbrekenRef`, maar een aanhaakactie die ná
+  // die cleanup zijn controller zet, wordt door niets meer opgeruimd — en laat dan een SSE-stroom
+  // open staan voor een scherm dat niemand ziet.
+  const levendRef = useRef(true);
   // Past het artefact naast de chat? Dan wordt het een eigen kolom in plaats van een overlay, en
   // blijft Lex bereikbaar tijdens het reviewen.
   const breed = useBreedScherm();
@@ -168,7 +168,13 @@ export function WerkplekClient({
   // afgebroken": van gesprek wisselen, naar het annotatie-overzicht lopen of herladen doodde het
   // antwoord waar je op wachtte. Stoppen is nu een expliciete handeling (`stop()`), geen bijwerking
   // van navigeren.
-  useEffect(() => () => afbrekenRef.current?.abort(), []);
+  useEffect(() => {
+    levendRef.current = true;
+    return () => {
+      levendRef.current = false;
+      afbrekenRef.current?.abort();
+    };
+  }, []);
 
   // Hydrateer één keer bij mount: bestaande gespreksberichten → thread. Lees de id uit een MOUNT-vaste
   // ref, niet uit de reactieve prop: bij de eerste beurt zet de shell `activeId` (→ prop null→id) zónder
@@ -289,9 +295,8 @@ export function WerkplekClient({
       setArtefactSlug(slug);
     } catch (e) {
       // Zichtbaar falen: de wettekst komt uit de graaf en die kan plat liggen. Een lege klik laat de
-      // jurist denken dat de knop stuk is. Een verwijderd document is géén falen — dat pad is hier
-      // al afgevangen.
-      // Een verwijderd document is géén falen: dat wordt een tombstone-kaart, geen foutbalk.
+      // jurist denken dat de knop stuk is. Een verwijderd document is géén falen — dat wordt een
+      // tombstone-kaart, geen foutbalk.
       if (isVerwijderd(e)) {
         setVerwijderd((m) => ({ ...m, [slug]: true }));
         setArtefactWeg(slug);
@@ -330,9 +335,12 @@ export function WerkplekClient({
     // Toon de user-bubbel + antwoord-placeholder OPTIMISTISCH, vóór het (bij een nieuw gesprek) awaiten
     // van maakGesprek — anders "verdwijnt" het bericht tijdens die round-trip.
     const antId = uid();
+    // Het id van de user-bubbel vasthouden: moet de beurt worden teruggedraaid (er liep er al een),
+    // dan halen we precies déze weg. Filteren op de tekst zou een eerdere, identieke vraag treffen.
+    const vraagId = uid();
     setItems((xs) => [
       ...xs,
-      { id: uid(), type: "user", tekst: prompt, over: contextLabel || undefined },
+      { id: vraagId, type: "user", tekst: prompt, over: contextLabel || undefined },
       { id: antId, type: "antwoord", tekst: "" },
     ]);
     setBezig(true);
@@ -380,6 +388,19 @@ export function WerkplekClient({
     try {
       gestart = await startRun(prompt, gid, extra);
     } catch (e) {
+      // Er liep al een beurt (bijvoorbeeld in een ander tabblad). Deze vraag is dus NIET aangenomen:
+      // zet hem terug in het invoerveld en haal de optimistische bubbels weg, zodat er niets
+      // stilzwijgend verdwijnt. Aanhaken bij de lopende beurt gebeurt hieronder.
+      const lopend = (e as { loopendeRun?: string }).loopendeRun;
+      if (lopend) {
+        setItems((xs) => xs.filter((x) => x.id !== antId && x.id !== vraagId));
+        setInvoer(prompt);
+        setBewaarFout("Er liep al een vraag in dit gesprek; die wordt nu getoond. Je vraag staat weer in het invoerveld.");
+        const hervatId = uid();
+        setItems((xs) => [...xs, { id: hervatId, type: "antwoord", tekst: "" }]);
+        await volgBeurt({ runId: lopend, gid, antId: hervatId, vanaf: 0 });
+        return;
+      }
       updateItem(antId, { tekst: `⚠️ ${foutTekst(e)}` });
       setBezig(false);
       bezigRef.current = false;
@@ -402,6 +423,9 @@ export function WerkplekClient({
   async function volgBeurt({
     runId: id, gid, antId, vanaf = 0,
   }: { runId: string; gid: string; antId: string; vanaf?: number }) {
+    // Het venster is tussen het besluit en dit moment verdwenen: niet alsnog aanhaken. De run zelf
+    // loopt gewoon door bij de agent.
+    if (!levendRef.current) return;
     const beheerser = new AbortController();
     afbrekenRef.current = beheerser;
     setRunId(id);
@@ -453,9 +477,17 @@ export function WerkplekClient({
           onKandidaten: (k) => (kandidaten = k),
           // De eventlog van de run is gecapt: er is narratie weggevallen. Benoem dat, in plaats van
           // een tekst te tonen die compleet lijkt maar het niet is.
+          // Er viel narratie weg doordat de eventlog gecapt is. Zet de markering in het spoor waar
+          // hij hoort: stond er al antwoordtekst, dan is die mogelijk onvolledig; anders raakte het
+          // alleen het denkproces en zou een "…" in het antwoord een gat suggereren dat er niet is.
           onGat: () => {
-            tekst += tekst ? "\n\n…\n\n" : "…\n\n";
-            updateItem(antId, { tekst });
+            if (tekst) {
+              tekst += "\n\n…\n\n";
+              updateItem(antId, { tekst });
+            } else {
+              denk += (denk ? "\n" : "") + "· (een deel van het spoor is niet bewaard)";
+              updateItem(antId, { denk });
+            }
           },
           onOpgeslagen: (uitkomst) => (opgeslagen = uitkomst),
         },
@@ -466,20 +498,27 @@ export function WerkplekClient({
       // komen we hier niet (dat gooit een AbortError), en dan blijft het spoor terecht staan.
       vergeetLopendeRun(gid);
 
-      // De agent heeft het vastgelegd. Nu alleen nog tonen wat er staat — de api is de bron.
-      if (opgeslagen) {
-        await toonVastgelegdeBeurt(opgeslagen, { antId, ontbrekend, denk });
-        onGewijzigd();
-        return;
-      }
-
+      // Kandidaten EERST: dit is een keuzelijst in de thread, geen uitkomst die is vastgelegd.
+      // Stond deze tak onder de `opgeslagen`-check, dan sneed die hem af zodra graph-qa zelf ging
+      // wegschrijven — en verdween de keuzelijst stilzwijgend uit beeld.
       if (kandidaten.length) {
         setItems((xs) =>
           xs.map((x) => (x.id === antId ? { id: antId, type: "kandidaten", tekst, kandidaten } : x)),
         );
         // Alleen de tekst overleeft een herlaadbeurt: de kandidaten zitten niet in het
         // berichtcontract van de api. Beter een leesbare opsomming dan "ik vond 5 bepalingen".
-        void persisteer(gid, "assistant", { tekst: kandidatenAlsTekst(tekst, kandidaten), denk, run_id: id });
+        // Heeft de agent de beurt al vastgelegd, dan schrijft de client niets meer — anders stond
+        // de opsomming er twee keer.
+        if (!opgeslagen) {
+          void persisteer(gid, "assistant", { tekst: kandidatenAlsTekst(tekst, kandidaten), denk, run_id: id });
+        }
+        onGewijzigd();
+        return;
+      }
+
+      // De agent heeft het vastgelegd. Nu alleen nog tonen wat er staat — de api is de bron.
+      if (opgeslagen) {
+        await toonVastgelegdeBeurt(opgeslagen, { antId, ontbrekend, denk });
         onGewijzigd();
         return;
       }
@@ -557,7 +596,19 @@ export function WerkplekClient({
   ) {
     if (!uitkomst.annotatie_slug) return; // een gewoon antwoord staat al in beeld
     const doc = await laadDocEnGeef(uitkomst.annotatie_slug);
-    if (!doc) return;
+    if (!doc) {
+      // De annotatie is wél vastgelegd, alleen niet op te halen. Toon de kaart tóch — met de slug
+      // die we hebben — in plaats van een gewoon antwoord waar de jurist niets mee kan; anders is
+      // het werk onvindbaar terwijl het gewoon in de api staat.
+      setItems((xs) =>
+        xs.map((x) =>
+          x.id === antId
+            ? { id: antId, type: "annotatie", slug: uitkomst.annotatie_slug, ontbrekend, denk }
+            : x,
+        ),
+      );
+      return;
+    }
     if (!infos[doc.slug]) {
       const graaf = await haalArtikelGraaf(doc.bwbId, doc.artikel, doc.lid);
       setInfos((m) => ({ ...m, [doc.slug]: graaf }));
@@ -592,6 +643,13 @@ export function WerkplekClient({
   async function hervatBeurt(gid: string, berichtRunIds: string[]) {
     if (bezigRef.current) return;
     const lopend = await haalActieveRun(gid);
+    // Opnieuw toetsen ná de round-trip: typte de jurist ondertussen een vraag, dan draait die run al
+    // en zouden hier twee lussen naast elkaar komen — met twee placeholders en een `afbrekenRef`
+    // die de eerste kwijtraakt.
+    if (bezigRef.current) return;
+    // Niet kunnen vaststellen is geen "er liep niets": stil laten, anders meld je een afgebroken
+    // beurt die in werkelijkheid gewoon doorloopt.
+    if (lopend === "onbekend") return;
     if (lopend && lopend.status === "loopt") {
       const antId = uid();
       setItems((xs) => [...xs, { id: antId, type: "antwoord", tekst: "" }]);
@@ -722,7 +780,7 @@ export function WerkplekClient({
     <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
       {/* Beknopte statusmelding voor schermlezers (niet de hele thread live maken → geen token-spam). */}
       <p className="sr-only" aria-live="polite">
-        {bezig ? "Bezig met antwoorden…" : melding}
+        {stopt ? "Bezig met stoppen; de agent rondt zijn huidige stap af." : bezig ? "Bezig met antwoorden…" : melding}
       </p>
       {/* De annotatie blijft bereikbaar. De chip in de thread scrolt weg zodra het gesprek doorloopt;
           dan is er geen weg terug naar het werk waar je middenin zat. */}
@@ -951,7 +1009,14 @@ export function WerkplekClient({
               title={stopt ? "De agent rondt zijn huidige stap nog af" : undefined}
               className="focus-ring mb-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent text-paper transition-colors hover:bg-accent-soft disabled:cursor-not-allowed disabled:opacity-40"
             >
-              {bezig ? (
+              {stopt ? (
+                // Stoppen kan tientallen seconden duren (de agent rondt zijn stap af). Een knop die
+                // er hetzelfde uitziet maar niet meer reageert, leest als kapot; deze draait zolang
+                // het wachten duurt.
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="motion-safe:animate-spin" aria-hidden>
+                  <path d="M12 3a9 9 0 1 0 9 9" strokeLinecap="round" />
+                </svg>
+              ) : bezig ? (
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
                   <rect x="5" y="5" width="14" height="14" rx="2" />
                 </svg>
@@ -1131,6 +1196,7 @@ function LexAvatar() {
 /** Kopieert de letterlijke antwoordtekst; toont kort "Gekopieerd". Subtiel, hover-onthullend op desktop. */
 function KopieerKnop({ tekst }: { tekst: string }) {
   const [gekopieerd, setGekopieerd] = useState(false);
+  const [mislukt, setMislukt] = useState(false);
   // De "Gekopieerd"-melding weer weghalen, en de timer opruimen als het bericht ondertussen
   // verdwijnt (bv. bij het wisselen van gesprek).
   useEffect(() => {
@@ -1143,8 +1209,11 @@ function KopieerKnop({ tekst }: { tekst: string }) {
     try {
       await navigator.clipboard.writeText(tekst);
       setGekopieerd(true);
+      setMislukt(false);
     } catch {
-      /* clipboard geweigerd — stil */
+      // Het klembord is niet overal beschikbaar (onbeveiligde origin, geweigerde toestemming). Een
+      // klik waar niets van gebeurt leest als een kapotte knop — zeg dus dat het niet lukte.
+      setMislukt(true);
     }
   }
   return (
@@ -1152,9 +1221,11 @@ function KopieerKnop({ tekst }: { tekst: string }) {
       type="button"
       onClick={kopieer}
       aria-label="Antwoord kopiëren"
-      className="mt-2 inline-flex items-center gap-1.5 rounded px-1.5 py-1 text-xs text-muted transition-opacity hover:text-lint focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-lint lg:opacity-0 lg:group-hover:opacity-100 lg:group-focus-within:opacity-100"
+      className="mt-2 inline-flex items-center gap-1.5 rounded px-1.5 py-1 text-xs text-muted transition-opacity hover:text-lint focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-lint lg:opacity-0 lg:group-hover:opacity-100 lg:group-focus-within:opacity-100 coarse:opacity-100"
     >
-      {gekopieerd ? (
+      {mislukt ? (
+        <span className="text-fout">Kopiëren lukte niet</span>
+      ) : gekopieerd ? (
         <>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
             <path d="M20 6 9 17l-5-5" />

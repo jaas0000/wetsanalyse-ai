@@ -67,6 +67,10 @@ class Run:
 
     run_id: str
     conversation_id: str
+    # Namens wie deze beurt draait. Zonder dit is een run een capability: wie het id kent, leest mee
+    # en kan hem stoppen. De rest van het platform scopet alles per gebruiker (404 op andermans
+    # document); dat hoort hier niet anders te zijn.
+    user_id: str = ""
     # De vraag hoort bij de run, niet bij het tabblad: wie halverwege aanhaakt moet de user-bubbel
     # erboven kunnen tonen in plaats van tokens uit het niets.
     vraag: str = ""
@@ -112,15 +116,29 @@ class RunRegister:
 
     # -- opvragen ------------------------------------------------------------------------------
 
-    def get(self, run_id: str) -> Run | None:
-        self._ruim_op()
-        return self._runs.get(run_id)
+    def get(self, run_id: str, *, user_id: str | None = None) -> Run | None:
+        """De run, of niets als hij niet van deze gebruiker is.
 
-    def actief_voor(self, conversation_id: str) -> Run | None:
+        `user_id=None` slaat de controle over — alleen voor intern gebruik, nooit vanaf een
+        request. Een run van iemand anders levert `None` en dus een 404: precies zoals de api
+        andermans document behandelt, zodat het bestaan niet lekt.
+        """
+        self._ruim_op()
+        run = self._runs.get(run_id)
+        if run is None:
+            return None
+        if user_id is not None and run.user_id != user_id:
+            return None
+        return run
+
+    def actief_voor(self, conversation_id: str, *, user_id: str | None = None) -> Run | None:
         """De lopende run van dit gesprek, of de laatst afgeronde die nog binnen de bewaartermijn
         valt — beide zijn een geldige reden om aan te haken."""
         self._ruim_op()
-        kandidaten = [r for r in self._runs.values() if r.conversation_id == conversation_id]
+        kandidaten = [
+            r for r in self._runs.values()
+            if r.conversation_id == conversation_id and (user_id is None or r.user_id == user_id)
+        ]
         if not kandidaten:
             return None
         # Een lopende run wint altijd van een afgeronde; anders de meest recente.
@@ -135,6 +153,7 @@ class RunRegister:
         conversation_id: str,
         vraag: str,
         maak_stroom: Callable[[Run], AsyncIterator[dict[str, Any]]],
+        user_id: str = "",
     ) -> Run:
         """Registreer een run en zet hem als achtergrondtaak weg.
 
@@ -144,11 +163,14 @@ class RunRegister:
         """
         self._ruim_op()
         if conversation_id:
+            # Bewust ZONDER user-filter: twee beurten op één thread_id schrijven door elkaar in de
+            # checkpointer, ongeacht wie ze start. De bescherming geldt de data, niet de gebruiker.
             bestaand = self.actief_voor(conversation_id)
             if bestaand is not None and bestaand.loopt:
                 raise RunBestaatAl(bestaand.run_id)
 
-        run = Run(run_id=uuid.uuid4().hex, conversation_id=conversation_id, vraag=vraag)
+        run = Run(run_id=uuid.uuid4().hex, conversation_id=conversation_id,
+                  user_id=user_id, vraag=vraag)
         self._runs[run.run_id] = run
         run.taak = asyncio.create_task(self._draai(run, maak_stroom))
         return run

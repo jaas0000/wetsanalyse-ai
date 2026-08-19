@@ -4,9 +4,11 @@
 // wegklikken of herladen doodde het antwoord. Een run is een object van de server; starten,
 // meekijken (`[id]/events`) en stoppen (`[id]/cancel`) zijn losse handelingen.
 
+import { proxy } from "@/app/api/_lib/proxy";
 import { graphQaAuthHeader, graphQaBaseUrl } from "@/lib/config";
 import { logger } from "@/lib/logger";
 import { geenSessie, sessionUserId } from "@/app/api/_lib/session";
+import { pathSegment } from "@/lib/url";
 
 export const dynamic = "force-dynamic";
 
@@ -18,15 +20,28 @@ export async function POST(req: Request) {
   const userid = await sessionUserId();
   if (!userid) return geenSessie();
 
-  // De identiteit komt uit de sessie en wordt hier ingevoegd — nooit uit de browser-body. graph-qa
-  // schrijft namens deze gebruiker naar de api, dus dit is een vertrouwensgrens: wie hem zelf mag
-  // meesturen, schrijft in andermans gesprek.
-  const binnen = await req.text();
-  let body = binnen;
+  // De identiteit gaat als HEADER mee, niet in de body — één mechanisme voor alle run-routes en
+  // hetzelfde als de api hanteert. Ze kwam eerder in de body, en toen liepen de twee bronnen bij de
+  // eerste eigenaarscontrole meteen uit elkaar.
+  const body = await req.text();
+  let gesprekId = "";
   try {
-    body = JSON.stringify({ ...(JSON.parse(binnen) as Record<string, unknown>), user_id: userid });
+    const ontleed = JSON.parse(body) as Record<string, unknown>;
+    gesprekId = typeof ontleed.conversation_id === "string" ? ontleed.conversation_id : "";
   } catch {
     // Geen geldige JSON: laat de agent er zelf een 422 van maken in plaats van hier te raden.
+  }
+
+  // Is dit gesprek wel van jou? `conversation_id` is óók de thread_id van het agent-geheugen, dus
+  // zonder deze controle kan iemand met een vreemd gespreks-id een vraag in andermans geheugen
+  // injecteren en de context daarvan teruglezen. De api is de eigenaarsadministratie; die vragen we.
+  if (gesprekId) {
+    const eigen = await proxy(`/v1/gesprekken/${pathSegment(gesprekId)}`, {
+      headers: { "X-User-Id": userid },
+    });
+    if (!eigen.ok) {
+      return Response.json({ detail: "Onbekend gesprek." }, { status: 404 });
+    }
   }
 
   try {
@@ -34,7 +49,7 @@ export async function POST(req: Request) {
     // dat was precies de oude fout. Alleen een eigen timeout op het starten zelf.
     const upstream = await fetch(`${graphQaBaseUrl()}/v1/runs`, {
       method: "POST",
-      headers: { ...graphQaAuthHeader(), "Content-Type": "application/json" },
+      headers: { ...graphQaAuthHeader(), "X-User-Id": userid, "Content-Type": "application/json" },
       body,
       cache: "no-store",
       signal: AbortSignal.timeout(START_TIMEOUT_MS),
@@ -63,7 +78,13 @@ export async function GET(req: Request) {
   try {
     const upstream = await fetch(
       `${graphQaBaseUrl()}/v1/conversations/${encodeURIComponent(gesprek)}/run`,
-      { headers: { ...graphQaAuthHeader() }, cache: "no-store", signal: AbortSignal.timeout(10_000) },
+      {
+        // Zonder deze header zou een gespreks-id — dat gewoon in de URL van de werkplek staat —
+        // genoeg zijn om andermans lopende vraag en antwoord te lezen.
+        headers: { ...graphQaAuthHeader(), "X-User-Id": userid },
+        cache: "no-store",
+        signal: AbortSignal.timeout(10_000),
+      },
     );
     const text = await upstream.text();
     return new Response(text || null, {

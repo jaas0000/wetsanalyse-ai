@@ -47,10 +47,6 @@ class ChatRequest(BaseModel):
     # wijzigen (die route emit simpelweg geen doel/element-events).
     modus: Literal["auto", "advies"] = "auto"
     context: ChatContext | None = None
-    # Namens wie deze beurt wordt uitgevoerd. Nodig zodra graph-qa de uitkomst zelf vastlegt: de api
-    # scopet gesprekken en annotatiedocumenten per gebruiker. De werkplek vult dit uit de sessie —
-    # nooit uit browser-invoer.
-    user_id: str = ""
 
 
 class RunStart(BaseModel):

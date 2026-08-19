@@ -134,17 +134,23 @@ describe("volgRun — aanhaken bij een lopende beurt", () => {
 describe("startRun — er loopt er al een", () => {
   afterEach(() => vi.restoreAllMocks());
 
-  it("geeft bij 409 de bestaande run terug, zodat de client aanhaakt in plaats van faalt", async () => {
+  it("gooit bij 409, mét het id van de lopende run erbij", async () => {
     // Twee gelijktijdige beurten op één gesprek zouden door elkaar heen in het agent-geheugen
     // schrijven (thread_id == conversation_id) — vandaar dat de server weigert en verwijst.
+    //
+    // Gooien en niet stilzwijgend de bestaande run teruggeven: deze vráág is niet aangenomen. Gaf
+    // `startRun` hier gewoon de lopende run terug, dan verscheen het antwoord op de vórige vraag
+    // onder de nieuwe, en ging de nieuwe stilzwijgend verloren. De aanroeper kan met `loopendeRun`
+    // alsnog aanhaken — maar dan wél wetend dat er iets anders speelt.
     vi.stubGlobal("fetch", vi.fn(async () => new Response(
       JSON.stringify({ detail: { reden: "run_loopt_al", run_id: "run-bestaand" } }),
       { status: 409, headers: { "Content-Type": "application/json" } },
     )));
 
-    const run = await startRun("nog een vraag", "gesprek-1");
-    expect(run.run_id).toBe("run-bestaand");
-    expect(run.status).toBe("loopt");
+    await expect(startRun("nog een vraag", "gesprek-1")).rejects.toMatchObject({
+      status: 409,
+      loopendeRun: "run-bestaand",
+    });
   });
 
   it("laat een echte fout wél een fout zijn", async () => {

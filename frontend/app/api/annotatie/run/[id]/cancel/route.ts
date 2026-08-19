@@ -19,7 +19,13 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   try {
     const upstream = await fetch(
       `${graphQaBaseUrl()}/v1/runs/${encodeURIComponent(id)}/cancel`,
-      { method: "POST", headers: { ...graphQaAuthHeader() }, cache: "no-store", signal: AbortSignal.timeout(10_000) },
+      {
+        method: "POST",
+        // Alleen je eigen beurt stoppen: graph-qa toetst deze header.
+        headers: { ...graphQaAuthHeader(), "X-User-Id": userid },
+        cache: "no-store",
+        signal: AbortSignal.timeout(10_000),
+      },
     );
     const text = await upstream.text();
     return new Response(text || null, {

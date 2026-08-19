@@ -25,7 +25,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   let upstream: Response;
   try {
     upstream = await fetch(url, {
-      headers: { ...graphQaAuthHeader(), Accept: "text/event-stream" },
+      // De identiteit gaat mee: graph-qa geeft 404 op andermans run. Zonder deze header zou het
+      // run-id zelf de enige beveiliging zijn — een capability in plaats van autorisatie.
+      headers: { ...graphQaAuthHeader(), "X-User-Id": userid, Accept: "text/event-stream" },
       cache: "no-store",
     });
   } catch (err) {

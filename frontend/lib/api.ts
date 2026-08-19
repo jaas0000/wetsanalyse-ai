@@ -75,6 +75,18 @@ export function isApiError(e: unknown): e is ApiError {
   return typeof e === "object" && e !== null && "status" in e && "detail" in e;
 }
 
+/** De leesbare reden achter een mislukte aanroep.
+ *
+ *  Let op waaróm dit bestaat: een `ApiError` is een object-literal, géén `Error`-instantie. Een
+ *  handler die `e instanceof Error ? e.message : "<generiek>"` schrijft, valt dus bij *elke*
+ *  api-fout terug op de generieke tekst — en dan wordt "een agent-voorstel verwerp je" (409)
+ *  onzichtbaar achter "de markering is niet gewist". Gebruik deze helper, niet `instanceof`.
+ */
+export function foutTekst(e: unknown, terugval = "Er ging iets mis."): string {
+  if (isApiError(e)) return e.detail;
+  return (e as Error)?.message || terugval;
+}
+
 // --- Admin: LLM-modelprofielen ----------------------------------------------
 
 export async function listProfiles(): Promise<LlmProfileOut[]> {
@@ -465,23 +477,20 @@ export async function startRun(
     }),
   });
   if (res.status === 409) {
-    // Er loopt al een beurt op dit gesprek. Dat is geen fout maar een verwijzing: haak daarop aan.
-    // `parseError` maakt van een objectdetail een JSON-string, dus die lezen we hier terug uit.
+    // Er loopt al een beurt op dit gesprek. Dat is geen storing, maar deze vraag is óók niet
+    // aangenomen — en dat mag de aanroeper niet verwarren met "hij loopt". Gaf `startRun` hier de
+    // bestaande run terug, dan verscheen het antwoord op de vórige vraag onder de nieuwe, en ging
+    // de nieuwe vraag stilzwijgend verloren.
     const fout = await parseError(res);
-    const bestaand = runIdUitDetail(fout.detail);
-    if (bestaand) {
-      return {
-        run_id: bestaand,
-        conversation_id: conversationId ?? "",
-        vraag: prompt,
-        status: "loopt",
-        volgende_seq: 0,
-        weggevallen: 0,
-      };
-    }
-    throw fout;
+    throw { ...fout, loopendeRun: runIdUitDetail(fout.detail) ?? undefined } as RunLooptAlFout;
   }
   return json<RunStart>(res);
+}
+
+/** Een 409 van `startRun`: er loopt al een beurt op dit gesprek. `loopendeRun` wijst hem aan, zodat
+ *  de werkplek kan aanbieden om daarop aan te haken in plaats van de vraag te verliezen. */
+export interface RunLooptAlFout extends ApiError {
+  loopendeRun?: string;
 }
 
 /** Vist het actieve run_id uit een 409-detail. Levert niets op bij een onverwachte vorm — dan is
@@ -520,15 +529,18 @@ export async function stopRun(runId: string): Promise<void> {
 /** Loopt er nog een beurt in dit gesprek? Dit vraagt de werkplek bij binnenkomst, zodat een beurt
  *  die tijdens het wegklikken doorliep weer in beeld komt. Faalt stil: geen run kunnen vinden mag de
  *  werkplek niet blokkeren — dan zie je gewoon de gehydrateerde geschiedenis. */
-export async function haalActieveRun(gesprekId: string): Promise<RunStart | null> {
+export async function haalActieveRun(gesprekId: string): Promise<RunStart | null | "onbekend"> {
+  // Drie uitkomsten, en het verschil telt: `null` betekent "er loopt niets", `"onbekend"` betekent
+  // "ik kon het niet vaststellen". Die twee op één hoop gooien leverde een melding op dat je beurt
+  // was afgebroken zodra het netwerk één keer hikte — terwijl hij gewoon doorliep.
   try {
     const res = await fetch(`/api/annotatie/run?gesprek=${encodeURIComponent(gesprekId)}`, {
       cache: "no-store",
     });
-    if (!res.ok) return null;
+    if (!res.ok) return "onbekend";
     return (await res.json()) as RunStart | null;
   } catch {
-    return null;
+    return "onbekend";
   }
 }
 

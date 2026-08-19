@@ -143,6 +143,15 @@ def _rate_limit(request: Request) -> None:
     bucket.append(now)
 
 
+def _aanroeper(request: Request) -> str:
+    """Namens wie dit verzoek komt (`X-User-Id`, gezet door de BFF uit de sessie).
+
+    Twee lagen, net als bij de api: het bearer-token zegt WELKE dienst er belt, deze header namens
+    WIE. Zonder dit onderscheid is een run een capability — wie het id kent leest mee en kan hem
+    stoppen — terwijl de rest van het platform alles per gebruiker scopet."""
+    return request.headers.get("x-user-id", "")
+
+
 def _check_auth(creds: HTTPAuthorizationCredentials | None = Depends(_bearer)) -> None:
     expected = settings.qa_api_token
     if not expected:
@@ -240,7 +249,7 @@ async def artikel(
 # zodat wegklikken, van gesprek wisselen of herladen een lopend antwoord niet meer doodt.
 
 
-def _stroom_voor(request: ChatRequest):
+def _stroom_voor(request: ChatRequest, gebruiker: str = ""):
     """De eventstroom van één run, met de beurt-driver eromheen.
 
     Die driver doet wat de werkplek vroeger ná de stream deed: verzamelen wat er binnenkomt en de
@@ -260,7 +269,7 @@ def _stroom_voor(request: ChatRequest):
             settings=settings,
             run=run,
             gesprek_id=request.conversation_id or "",
-            user_id=request.user_id,
+            user_id=gebruiker,
         )
     return maak
 
@@ -268,6 +277,7 @@ def _stroom_voor(request: ChatRequest):
 @app.post("/v1/runs", status_code=status.HTTP_201_CREATED)
 async def start_run(
     request: ChatRequest,
+    gebruiker: str = Depends(_aanroeper),
     _rl: None = Depends(_rate_limit),
     _auth: None = Depends(_check_auth),
 ) -> RunStart:
@@ -281,7 +291,8 @@ async def start_run(
         run = runs.start(
             conversation_id=request.conversation_id or "",
             vraag=request.question or "",
-            maak_stroom=_stroom_voor(request),
+            maak_stroom=_stroom_voor(request, gebruiker),
+            user_id=gebruiker,
         )
     except RunBestaatAl as al:
         raise HTTPException(
@@ -301,14 +312,19 @@ async def start_run(
 
 
 @app.get("/v1/runs/{run_id}/events")
-async def run_events(run_id: str, vanaf: int = 0, _auth: None = Depends(_check_auth)) -> EventSourceResponse:
+async def run_events(
+    run_id: str,
+    vanaf: int = 0,
+    gebruiker: str = Depends(_aanroeper),
+    _auth: None = Depends(_check_auth),
+) -> EventSourceResponse:
     """Kijk mee met een run: eerst wat je miste (vanaf `vanaf`), dan live.
 
     Bewust **geen** rate-limit: al het verkeer komt van één container-IP, en opnieuw aanhaken na een
     remount mag nooit op de limiet stuklopen. Losraken van deze stream laat de run ongemoeid — dat
     is het hele punt.
     """
-    run = runs.get(run_id)
+    run = runs.get(run_id, user_id=gebruiker)
     if run is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Onbekende run")
 
@@ -320,12 +336,16 @@ async def run_events(run_id: str, vanaf: int = 0, _auth: None = Depends(_check_a
 
 
 @app.post("/v1/runs/{run_id}/cancel", status_code=status.HTTP_202_ACCEPTED)
-async def stop_run(run_id: str, _auth: None = Depends(_check_auth)) -> RunStart:
+async def stop_run(
+    run_id: str,
+    gebruiker: str = Depends(_aanroeper),
+    _auth: None = Depends(_check_auth),
+) -> RunStart:
     """Vraag een run te stoppen. 202, niet 204: stoppen is een verzoek, geen feit.
 
     De nodes zijn synchroon, dus een lopende LLM-call maakt zichzelf af; de run eindigt op de
     eerstvolgende grens. Wie hier 'gestopt' uit leest, leest een intentie."""
-    run = runs.get(run_id)
+    run = runs.get(run_id, user_id=gebruiker)
     if run is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Onbekende run")
     runs.vraag_stop(run)
@@ -333,12 +353,16 @@ async def stop_run(run_id: str, _auth: None = Depends(_check_auth)) -> RunStart:
 
 
 @app.get("/v1/conversations/{conversation_id}/run")
-async def actieve_run(conversation_id: str, _auth: None = Depends(_check_auth)) -> RunStart | None:
+async def actieve_run(
+    conversation_id: str,
+    gebruiker: str = Depends(_aanroeper),
+    _auth: None = Depends(_check_auth),
+) -> RunStart | None:
     """De run van dit gesprek waar je op kunt aanhaken, of niets.
 
     Dit is wat de werkplek bij binnenkomst vraagt. Ook een net afgeronde run telt mee: kom je terug
     binnen de bewaartermijn, dan hoor je de uitkomst alsnog te zien."""
-    run = runs.actief_voor(conversation_id)
+    run = runs.actief_voor(conversation_id, user_id=gebruiker)
     return RunStart(**run.samenvatting()) if run else None
 
 

@@ -19,7 +19,7 @@ from fastapi.testclient import TestClient
 import api.main as main
 
 
-def _nep_stroom(_request):
+def _nep_stroom(_request, _gebruiker=""):
     """Vervangt de agent: we testen de run-machinerie, niet de LLM."""
     async def maak(_run):
         import asyncio
@@ -87,6 +87,37 @@ def test_tweede_run_op_hetzelfde_gesprek_verwijst_naar_de_lopende(client):
     assert tweede.json()["detail"] == {"reden": "run_loopt_al", "run_id": eerste["run_id"]}
 
 
+A = {"X-User-Id": "jurist-a"}
+B = {"X-User-Id": "jurist-b"}
+
+
+def test_run_van_een_ander_bestaat_niet_voor_je(client):
+    """Een run is geen capability. Wie het id kent mocht meelezen én stoppen; de rest van het
+    platform scopet alles per gebruiker (404 op andermans document) en dit hoort niet anders.
+
+    404 en niet 403 — hetzelfde patroon als de api: het bestaan lekt niet."""
+    van_a = client.post("/v1/runs", json={"question": "v", "conversation_id": "g-a"}, headers=A).json()
+    run_id = van_a["run_id"]
+
+    assert client.get(f"/v1/runs/{run_id}/events?vanaf=0", headers=B).status_code == 404
+    assert client.post(f"/v1/runs/{run_id}/cancel", headers=B).status_code == 404
+    # Ook de opzoekweg: een gespreks-id staat gewoon in de URL van de werkplek.
+    assert client.get("/v1/conversations/g-a/run", headers=B).json() is None
+
+    # De eigenaar zelf komt er wél bij.
+    assert client.get(f"/v1/runs/{run_id}/events?vanaf=0", headers=A).status_code == 200
+    assert client.get("/v1/conversations/g-a/run", headers=A).json()["run_id"] == run_id
+
+
+def test_botsing_op_een_thread_geldt_over_gebruikers_heen(client):
+    """De 409 beschermt de DATA, niet de gebruiker: twee beurten op één thread_id schrijven door
+    elkaar in de checkpointer, ongeacht wie ze start."""
+    eerste = client.post("/v1/runs", json={"question": "v", "conversation_id": "g1"}, headers=A).json()
+    botsing = client.post("/v1/runs", json={"question": "v", "conversation_id": "g1"}, headers=B)
+    assert botsing.status_code == 409
+    assert botsing.json()["detail"]["run_id"] == eerste["run_id"]
+
+
 def test_onbekende_run_is_404(client):
     """Na een herstart is het register leeg. Dan hoort de client dát te horen, in plaats van eeuwig
     te wachten op een run die niet meer bestaat."""
@@ -105,7 +136,7 @@ def test_stoppen_laat_de_run_netjes_eindigen(client, monkeypatch):
     resultaat weg. Nu stopt de beurt op een grens en blijft staan wat er al was."""
     gezien: list[bool] = []
 
-    def stroom_die_kijkt(_request):
+    def stroom_die_kijkt(_request, _gebruiker=""):
         async def maak(run):
             import asyncio
 

@@ -8,9 +8,9 @@ export const dynamic = "force-dynamic";
 
 type Params = { params: Promise<{ id: string }> };
 
-/** Wis óók het agent-geheugen (graph-qa checkpointer-thread) van dit gesprek. Best-effort: een falen mag
- *  de UI-delete niet blokkeren — de API-berichten zijn dan al weg; de checkpointer-thread ruimt anders
- *  later op (of blijft hooguit ongebruikt staan). */
+/** Stop de lopende beurt en wis het agent-geheugen (graph-qa checkpointer-thread) van dit gesprek.
+ *  Best-effort: een falen mag de UI-delete niet blokkeren — de checkpointer-thread ruimt anders later
+ *  op (of blijft hooguit ongebruikt staan). */
 async function wisAgentGeheugen(id: string): Promise<void> {
   try {
     await fetch(`${graphQaBaseUrl()}/v1/conversations/${pathSegment(id)}`, {
@@ -45,11 +45,14 @@ export async function DELETE(_req: Request, { params }: Params) {
   const userid = await sessionUserId();
   if (!userid) return geenSessie();
   const { id } = await params;
-  const res = await proxy(`/v1/gesprekken/${pathSegment(id)}`, {
+  // Eigenaarschap eerst laten vaststellen door de api, zonder al te verwijderen: pas als dit
+  // gesprek van jou is, mag de lopende beurt gestopt worden.
+  const eigen = await proxy(`/v1/gesprekken/${pathSegment(id)}`, { headers: { "X-User-Id": userid } });
+  // Stoppen vóór verwijderen: andersom bleef er een venster waarin de agent doorwerkte en aan het
+  // eind in een gesprek schreef dat al weg was.
+  if (eigen.ok) await wisAgentGeheugen(id);
+  return proxy(`/v1/gesprekken/${pathSegment(id)}`, {
     method: "DELETE",
     headers: { "X-User-Id": userid },
   });
-  // Alleen het agent-geheugen wissen als de API-delete slaagde (2xx) — niet bij 404/andermans gesprek.
-  if (res.ok) await wisAgentGeheugen(id);
-  return res;
 }

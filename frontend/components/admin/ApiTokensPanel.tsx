@@ -17,6 +17,7 @@ export function ApiTokensPanel() {
   const [fout, setFout] = useState<string | null>(null);
   const [label, setLabel] = useState("");
   const [gekopieerd, setGekopieerd] = useState(false);
+  const [bezig, setBezig] = useState(false);
 
   /** Kopiëren mét terugkoppeling. `navigator.clipboard` bestaat niet op een niet-beveiligde origin
    *  en kan geweigerd worden; dat stil laten gebeuren is bij een eenmalig token het slechtste
@@ -55,6 +56,10 @@ export function ApiTokensPanel() {
 
   async function onGenereer(e: React.FormEvent) {
     e.preventDefault();
+    // Twee klikken maakten twee actieve tokens aan, waarvan alleen de tweede waarde in beeld kwam:
+    // de eerste bleef als levend token in de lijst staan zonder dat iemand hem kent.
+    if (bezig) return;
+    setBezig(true);
     setFout(null);
     try {
       const res = await createApiToken(label.trim());
@@ -64,6 +69,8 @@ export function ApiTokensPanel() {
       await laad();
     } catch (e) {
       melden(e);
+    } finally {
+      setBezig(false);
     }
   }
 
@@ -137,8 +144,8 @@ export function ApiTokensPanel() {
             />
           </Field>
         </div>
-        <Button size="sm" type="submit" className="w-full sm:w-auto">
-          Token genereren
+        <Button size="sm" type="submit" disabled={bezig} className="w-full sm:w-auto">
+          {bezig ? "Genereren…" : "Token genereren"}
         </Button>
       </form>
 
