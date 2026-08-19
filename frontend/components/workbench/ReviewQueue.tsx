@@ -240,7 +240,9 @@ function DecisionCard({
       } ${actief ? "border-lint ring-1 ring-lint" : ""}`}
     >
       <div className="flex items-start justify-between gap-2">
-        <span className="flex flex-wrap items-center gap-1.5">
+        {/* `min-w-0`: een brede klassenaam ("Variabele en variabelewaarde") rekte deze kant anders
+            op en perste Akkoord en het kruisje tegen de kaartrand. */}
+        <span className="flex min-w-0 flex-wrap items-center gap-1.5">
           {el.aandacht && (
             <span title={el.critic || aandacht?.label} aria-label={aandacht?.label}>
               {aandacht?.emoji}
@@ -262,7 +264,7 @@ function DecisionCard({
               openRij(palet ? "geen" : "klasse");
             }}
             title="Andere klasse kiezen"
-            className={`focus-ring inline-flex min-h-[24px] items-center rounded px-2 py-0.5 text-xs font-semibold transition hover:ring-1 hover:ring-lint coarse:min-h-[44px] disabled:opacity-50 ${jasStyle(el.klasse)}`}
+            className={`focus-ring inline-flex min-h-[24px] max-w-full items-center whitespace-normal rounded px-2 py-0.5 text-left text-xs font-semibold transition hover:ring-1 hover:ring-lint coarse:min-h-[44px] disabled:opacity-50 ${jasStyle(el.klasse)}`}
           >
             {el.klasse} ▾
           </button>
@@ -573,7 +575,7 @@ export function ReviewQueue({
     <div className="space-y-2.5">
       {/* Voortgang: hoeveel van de N elementen zijn beoordeeld, met een dunne balk. */}
       <div className="rounded-kaart border border-line bg-surface px-3 py-2.5 shadow-zacht">
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
           <span className="text-xs font-medium text-ink">
             Review — {beslist}/{totaal} beoordeeld
           </span>
@@ -582,7 +584,7 @@ export function ReviewQueue({
               ✓ Review afgerond
             </span>
           ) : (
-            <span className="flex items-center gap-2 text-[0.65rem] text-muted">
+            <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[0.65rem] text-muted">
               {teReviewen > 0 && <span>{teReviewen} te gaan</span>}
               {zwevend > 0 && (
                 <span className="text-aandacht-geel-tekst">⚠ {zwevend} niet in de tekst</span>

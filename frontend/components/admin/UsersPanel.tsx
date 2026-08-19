@@ -175,8 +175,8 @@ export function UsersPanel() {
           {users.map((u) => (
             <Card key={u.userid} className="p-3">
               <div className="flex flex-wrap items-center gap-3">
-                <span className="font-display font-semibold text-ink">{u.userid}</span>
-                <span className="text-sm text-muted">{u.email}</span>
+                <span className="break-words font-display font-semibold text-ink">{u.userid}</span>
+                <span className="min-w-0 break-words text-sm text-muted">{u.email}</span>
                 <Tag>{u.role}</Tag>
                 {u.totp_enabled && <Tag>2FA ✓</Tag>}
                 {!u.active && (

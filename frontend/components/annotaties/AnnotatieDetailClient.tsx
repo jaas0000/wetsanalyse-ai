@@ -102,8 +102,10 @@ export function AnnotatieDetailClient({ slug }: { slug: string }) {
 
         <main className="flex min-w-0 flex-1 flex-col bg-paper">
           <MobieleTopbar titel={titel} onOpenSidebar={() => setDrawerOpen(true)} />
-          <div className="flex shrink-0 items-center justify-between gap-3 border-b border-line px-5 py-3 lg:pt-[max(0.75rem,env(safe-area-inset-top))]">
-            <div className="min-w-0">
+          {/* Zelfde afweging als de kop van het artefact hieronder: wrappen in plaats van de titel
+              laten wegdrukken door een knop die niet mag krimpen. */}
+          <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-b border-line px-5 py-3 lg:pt-[max(0.75rem,env(safe-area-inset-top))]">
+            <div className="min-w-0 flex-1 basis-56">
               <Link
                 href="/annotaties"
                 className="focus-ring rounded text-xs text-muted transition-colors hover:text-ink"
@@ -115,7 +117,7 @@ export function AnnotatieDetailClient({ slug }: { slug: string }) {
             {doc && (
               <Link
                 href={`/workbench?annotatie=${encodeURIComponent(slug)}`}
-                className="focus-ring inline-flex min-h-[24px] shrink-0 items-center rounded-full border border-line px-2.5 py-0.5 text-[11px] font-medium text-lint transition-colors hover:bg-surface coarse:min-h-[44px]"
+                className="focus-ring ml-auto inline-flex min-h-[24px] shrink-0 items-center rounded-full border border-line px-2.5 py-0.5 text-[11px] font-medium text-lint transition-colors hover:bg-surface coarse:min-h-[44px]"
               >
                 Openen in de werkplek
               </Link>

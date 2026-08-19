@@ -158,7 +158,7 @@ export function ApiTokensPanel() {
           {tokens.map((t) => (
             <Card key={t.id} className="p-3">
               <div className="flex flex-wrap items-center gap-3">
-                <span className="font-display font-semibold text-ink">{t.label || "(geen label)"}</span>
+                <span className="min-w-0 break-words font-display font-semibold text-ink">{t.label || "(geen label)"}</span>
                 <code className="rounded bg-paper px-1.5 py-0.5 font-mono text-xs text-muted">{t.token_prefix}…</code>
                 <Tag>{t.scope}</Tag>
                 {!t.active && (

@@ -285,13 +285,20 @@ export function ArtefactInhoud({
     // (het paneel is in de kolom-variant niet modaal), en moet Escape uit de chat ernaast kunnen
     // onderscheiden van Escape in een eigen invoerveld.
     <div data-artefact className="flex min-h-0 flex-1 flex-col">
-        {/* Kop */}
-        <div className="flex shrink-0 items-start justify-between gap-3 border-b border-line px-5 py-3.5 pt-[max(0.875rem,env(safe-area-inset-top))]">
-          <div className="min-w-0">
-            <p className="text-[0.65rem] font-semibold uppercase tracking-wide text-faint">Annotatie · JAS</p>
+        {/* Kop. Wél `flex-wrap`, géén breakpoint: het paneel is ook op een breed scherm smal (de
+            kolomvariant is 34rem), dus de viewport zegt hier niets over de beschikbare ruimte.
+            Zonder de wrap kon de knoppenrij — die niet mág krimpen — de titel tot nul breedte
+            persen, en dan kapte `truncate` hem helemaal weg: op een telefoon zag je niet meer wélk
+            artikel je annoteerde. De titel claimt daarom de regel (`basis-56`) en de knoppen zakken
+            eronder zodra er minder dan ~14rem overblijft. */}
+        <div className="flex shrink-0 flex-wrap items-start gap-x-3 gap-y-2 border-b border-line px-5 py-3.5 pt-[max(0.875rem,env(safe-area-inset-top))]">
+          <div className="min-w-0 flex-1 basis-56">
+            <p className="truncate text-[0.65rem] font-semibold uppercase tracking-wide text-faint">Annotatie · JAS</p>
             <h2 className="truncate font-display text-base font-semibold text-lint">{opschrift}</h2>
           </div>
-          <div className="flex shrink-0 items-center gap-2">
+          {/* Rechts uitgelijnd, zodat het kruisje op zijn plek blijft — op dezelfde regel als het
+              past, anders rechts op de regel eronder. */}
+          <div className="flex flex-wrap items-center justify-end gap-2">
             <span className={`inline-flex shrink-0 items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${DOCUMENT_STATUS_STYLE[doc.status]}`}>
               {DOCUMENT_STATUS_LABEL[doc.status]}
             </span>
@@ -303,7 +310,7 @@ export function ArtefactInhoud({
                 type="button"
                 onClick={onSluiten}
                 aria-label="Sluiten"
-                className="rounded-lg p-1.5 text-muted transition-colors hover:bg-surface hover:text-ink"
+                className="shrink-0 rounded-lg p-1.5 text-muted transition-colors hover:bg-surface hover:text-ink"
               >
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
                   <path d="M18 6 6 18M6 6l12 12" />
