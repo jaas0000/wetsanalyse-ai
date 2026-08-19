@@ -146,6 +146,9 @@ export interface CriticRonde {
   aandacht?: Aandacht | null;
   motivatie: string;
   actie: string;              // behoud | vervang | verwijder
+  /** Is de instructie ook uitgevoerd? De correctie gebeurt in code (graph-qa's patcher), dus
+   *  "de Critic vroeg erom" en "het is gebeurd" zijn twee verschillende feiten. */
+  toegepast?: boolean;
   voorstel_klasse: string;
   voorstel_tekst: string;
   tijd: string;

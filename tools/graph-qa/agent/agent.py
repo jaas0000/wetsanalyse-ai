@@ -94,14 +94,17 @@ def _recursielimiet(settings: Settings) -> int:
     `except` hieronder en werd "Er ging iets mis", terwijl het werk van tientallen calls weg was.
 
     Nu volgt de limiet de topologie: per worker de agent⇄tools-lus (2 stappen per beurt) plus de
-    vaste nodes eromheen (supervisor/annoteer/critic/emit/advance ≈ 6) plus twee stappen per
-    Critic-ronde, maal het maximum aantal workers (`supervisor._MAX_WORKERS`), met marge.
+    vaste nodes eromheen (supervisor/annoteer/critic/emit/advance ≈ 6) plus de correctieketen, maal
+    het maximum aantal workers (`supervisor._MAX_WORKERS`), met marge.
+
+    Die correctieketen is een **vast** aantal stappen — `patch → herzie → critic` — en niet meer een
+    lus die met `critic_max_rondes` meeschaalt. De instelling zegt alleen nog of hij aanstaat.
 
     Dit is een vangnet, geen kostenknop: de echte begrenzing is `max_turns`.
     """
     from .supervisor import _MAX_WORKERS
 
-    per_worker = 2 * settings.max_turns + 6 + 2 * max(0, settings.critic_max_rondes)
+    per_worker = 2 * settings.max_turns + 6 + (3 if settings.critic_max_rondes > 0 else 0)
     return _MAX_WORKERS * per_worker + 10
 
 
@@ -205,8 +208,7 @@ async def answer_stream(
         "critic_ronde": 0,
         "nieuw_ontbrekend": [],
         "gemeld_ontbrekend": [],
-        "geweigerde_feedback": [],
-        "herziening_wijzigde": False,
+        "patch_toegepast": 0,
         "stop_reden": "",
     }
 

@@ -59,6 +59,87 @@ def sleutel_van(tekst: str, lid: str) -> tuple[str, str]:
     return (_normaliseer(tekst).lower(), (lid or "").strip())
 
 
+def pas_critic_toe(
+    voorstellen: list[dict[str, Any]],
+    feedback: list[dict[str, Any]],
+    corpus: str,
+) -> tuple[list[dict[str, Any]], int]:
+    """Voer de correcties van de Critic uit. Geeft (nieuwe voorstellen, aantal toegepast) terug.
+
+    De Critic leverde altijd al een uitvoerbare instructie — `actie` met `voorstel_klasse` en/of
+    `voorstel_tekst`. Die ging vervolgens naar een tweede LLM (de herziener) die hem moest lezen,
+    uitvoeren, en alle ongemoeide elementen ongewijzigd terugtypen. Dat is werk dat code exact doet
+    en een taalmodel bij benadering: het kostte een call met het volle corpus, en het maakte van de
+    keten een onderhandeling tussen twee modellen — met vier guards nodig om te laten stoppen.
+
+    Wat hier NIET gebeurt, gebeurt nog steeds door het model: een bijna-goed citaat repareren en een
+    gemeld ontbrekend element toevoegen. Dat vraagt de brontekst lezen, geen instructie uitvoeren.
+
+    Drie grenzen, en ze zijn geen van drieën nieuw:
+    - **Een markering van de jurist blijft ongemoeid.** Een oordeel daarover is een suggestie; dat
+      staat zo in de api (`critic_suggestie`: "puur advies, wordt nooit toegepast") en het hoort hier
+      niet alsnog stilletjes te worden doorgevoerd.
+    - **Een voorgesteld fragment moet letterlijk in het corpus staan.** Dezelfde eis als bij een vers
+      voorstel (`_verwerk`); een Critic die parafraseert corrigeert niets, hij verzint.
+    - **Verwijderen alleen bij rood.** `_verwerk_critic` normaliseert dat al; hier vertrouwen we daar
+      niet blind op — het is de enige onomkeerbare handeling in deze functie.
+    """
+    op_id = {str(f.get("id", "")): f for f in feedback if f.get("id")}
+    uit: list[dict[str, Any]] = []
+    toegepast = 0
+
+    for v in voorstellen:
+        f = op_id.get(str(v.get("id", "")))
+        actie = str((f or {}).get("actie", "behoud"))
+        if f is None or actie == "behoud" or v.get("van_jurist"):
+            uit.append(v)
+            continue
+
+        if actie == "verwijder" and str(f.get("aandacht", "")) == "rood":
+            toegepast += 1
+            _markeer_toegepast(v)
+            continue
+
+        nieuw = dict(v)
+        gewijzigd = False
+        klasse = str(f.get("voorstel_klasse", "")).strip()
+        if actie == "vervang" and klasse in GELDIGE_JAS_KLASSEN and klasse != nieuw.get("klasse"):
+            nieuw["klasse"] = klasse
+            gewijzigd = True
+        tekst = str(f.get("voorstel_tekst", "")).strip()
+        if (
+            actie == "vervang"
+            and tekst
+            and tekst != nieuw.get("tekst")
+            and komt_letterlijk_voor(corpus, tekst)
+        ):
+            nieuw["tekst"] = tekst
+            gewijzigd = True
+
+        if gewijzigd:
+            toegepast += 1
+            _markeer_toegepast(nieuw)
+            # Het oordeel ging over de vórige versie. Leeg laten zou hem uit de aandacht-filters
+            # laten vallen zonder dat iemand er iets van vindt; daarom volgt er een tweede
+            # Critic-pas over het gecorrigeerde resultaat (zie `route_na_patch`).
+            nieuw["aandacht"] = ""
+            nieuw["critic"] = ""
+        uit.append(nieuw)
+
+    return uit, toegepast
+
+
+def _markeer_toegepast(voorstel: dict[str, Any]) -> None:
+    """Zet `toegepast` op de laatste Critic-ronde van dit element.
+
+    Zonder dit verschilt "de Critic vroeg erom" niet van "het is ook gebeurd" — en juist dat verschil
+    moet een auditspoor kunnen laten zien.
+    """
+    rondes = voorstel.get("critic_rondes") or []
+    if rondes:
+        rondes[-1]["toegepast"] = True
+
+
 def _balanced_objecten(text: str) -> Iterator[str]:
     """Yield elke gebalanceerde {…}-substring op élk niveau (string-/escape-bewust).
 

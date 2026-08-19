@@ -29,7 +29,9 @@ from langgraph.config import get_stream_writer
 from langgraph.graph import END, START, StateGraph
 
 from .agent_common import BeurtGestopt, truncate
-from .annotatie import _verwerk, _verwerk_critic, komt_letterlijk_voor, sleutel_van
+from .annotatie import (
+    _verwerk, _verwerk_critic, komt_letterlijk_voor, pas_critic_toe, sleutel_van,
+)
 from .artikel import artikel_corpus
 from .annotatie_prompt import (
     annotatie_systeemprompt,
@@ -120,11 +122,6 @@ def _kandidaten_uit_json(text: str) -> list[dict[str, str]]:
 def _ontbrekend_sleutel(item: dict[str, Any]) -> str:
     """Identiteit van een gemeld gemist element: klasse + het genoemde fragment."""
     return f"{str(item.get('klasse', '')).strip()}|{' '.join(str(item.get('tekst', '')).split()).lower()}"
-
-
-def _feedback_sleutel(f: dict[str, Any]) -> str:
-    """Identiteit van één correctie-instructie, om te herkennen dat hij al eens is afgewezen."""
-    return f"{f.get('id', '')}|{f.get('actie', '')}|{f.get('voorstel_klasse', '')}|{f.get('voorstel_tekst', '')}"
 
 
 def _stap(writer: Any, actor: str, bericht: str) -> None:
@@ -516,13 +513,12 @@ class State(TypedDict, total=False):
     critic_feedback: list[dict[str, Any]]        # [{id, aandacht, motivatie, actie, voorstel_*}]
     critic_ontbrekend: list[dict[str, Any]]
     critic_gefaald: bool
-    critic_ronde: int                            # hoeveel HERZIENINGEN deze beurt al zijn gedaan
+    critic_ronde: int                            # welke Critic-pas: 1 = oordeel, 2 = eindbeoordeling
     # Convergentie. Zonder deze drie draait de lus altijd tot de rondelimiet: de Critic bedenkt elke
     # ronde opnieuw wat er "mist", dus er is altijd een reden om door te gaan.
     nieuw_ontbrekend: list[dict[str, Any]]       # gemist én nog niet eerder gemeld — alleen dit is werk
     gemeld_ontbrekend: list[str]                 # sleutels van alles wat al ooit gemeld is
-    geweigerde_feedback: list[str]               # instructies die de annoteerder gemotiveerd liet liggen
-    herziening_wijzigde: bool                    # niets veranderd? dan heeft nog een Critic-pas geen zin
+    patch_toegepast: int                         # hoeveel Critic-aanwijzingen de patcher uitvoerde
     stop_reden: str                              # waaróm de lus eindigde; komt in de tijdlijn
     # Wat de werkplek meestuurt over de bepaling/markering die in beeld staat. `modus == "advies"`
     # betekent: een vraag bij een bestaande annotatie, die niets mag wijzigen.
@@ -636,8 +632,8 @@ def build_graph(
                 # tweede annotatie in dezelfde beurt op de rondeteller van de eerste doorbouwen.
                 "voorstellen": [], "verworpen_fragmenten": [], "critic_feedback": [],
                 "critic_ontbrekend": [], "critic_gefaald": False, "critic_ronde": 0,
-                "nieuw_ontbrekend": [], "gemeld_ontbrekend": [], "geweigerde_feedback": [],
-                "herziening_wijzigde": False, "stop_reden": "",
+                "nieuw_ontbrekend": [], "gemeld_ontbrekend": [], "patch_toegepast": 0,
+                "stop_reden": "",
             })
         return upd
 
@@ -972,7 +968,7 @@ def build_graph(
                 "critic_gefaald": True,
             }
 
-        # Rondenummer: `critic_ronde` telt HERZIENINGEN, en de eerste Critic-pas komt daarvóór.
+        # Rondenummer voor het spoor: 1 = het eerste oordeel, 2 = de eindbeoordeling na correctie.
         ronde = int(state.get("critic_ronde") or 0) + 1
 
         feedback: list[dict[str, Any]] = []
@@ -994,6 +990,10 @@ def build_graph(
                     "aandacht": aandacht,
                     "motivatie": motivatie,
                     "actie": oordeel.actie,
+                    # Expliciet, ook al is False de default in het contract: de patcher zet dit
+                    # verderop op True, en een spoor dat het veld pas krijgt zódra er iets gebeurde
+                    # is moeilijker te lezen dan een spoor dat het altijd draagt.
+                    "toegepast": False,
                     "voorstel_klasse": oordeel.voorstel_klasse,
                     "voorstel_tekst": oordeel.voorstel_tekst,
                 })
@@ -1012,6 +1012,10 @@ def build_graph(
             "critic_feedback": feedback,
             "critic_ontbrekend": [o.model_dump() for o in ontbrekend],
             "critic_gefaald": gefaald,
+            # De teller telt CRITIC-PASSEN (1 = eerste oordeel, 2 = eindbeoordeling na correctie) en
+            # hoort daarom hier thuis. Hij zat in de herziener en telde daar pogingen — een teller die
+            # ergens anders wordt opgehoogd dan waar hij over gaat.
+            "critic_ronde": ronde,
             # Wat al ooit is gemeld start geen nieuwe ronde meer. Hier berekend en niet in de route:
             # daar is de accumulatie al bijgewerkt en zou álles als "al gemeld" gelden.
             "nieuw_ontbrekend": nieuw_ontbrekend,
@@ -1019,43 +1023,65 @@ def build_graph(
         }
 
     def _open_werk(state: State) -> bool:
-        """Ligt er na de laatste Critic-pas nog werk?
+        """Ligt er werk dat alléén het model kan doen?
 
-        Eén definitie, gebruikt door de routering én door de stopreden in `emit_node`. Stonden die
-        los van elkaar, dan kan de tijdlijn "rondelimiet bereikt" melden terwijl er niets meer te doen
-        was — en dan liegt precies het signaal waarmee je convergentie beoordeelt.
+        Twee dingen, en ze hebben gemeen dat er brontekst voor gelezen moet worden in plaats van een
+        instructie uitgevoerd: een gemeld ontbrekend element (waar staat het?) en een eerder verworpen
+        fragment (welk citaat werd bedoeld?).
 
-        Alleen wat de Critic nog niet eerder meldde telt, en instructies die de annoteerder
-        gemotiveerd naast zich neerlegde tellen niet meer mee.
+        Correctie-instructies staan hier NIET meer bij. `vervang` en `verwijder` waren de reden dat de
+        herziener draaide, en die voert de patcher nu uit — exact, zonder call, zonder onderhandeling.
+
+        Eén definitie, gebruikt door de routering én door de stopreden in `emit_node`. Stonden die los
+        van elkaar, dan meldt de tijdlijn iets anders dan er gebeurde — en dat is precies het signaal
+        waarmee je deze keten beoordeelt.
         """
-        eigen_ids = {v.get("id") for v in (state.get("voorstellen") or []) if v.get("van_jurist")}
-        geweigerd = set(state.get("geweigerde_feedback") or [])
-        feedback = [
-            f for f in (state.get("critic_feedback") or [])
-            if f.get("id") not in eigen_ids and _feedback_sleutel(f) not in geweigerd
-        ]
-        return (
-            any(f.get("actie") in ("vervang", "verwijder") or f.get("aandacht") == "rood" for f in feedback)
-            or bool(state.get("nieuw_ontbrekend"))
-            or bool(state.get("verworpen_fragmenten"))
-        )
+        return bool(state.get("nieuw_ontbrekend")) or bool(state.get("verworpen_fragmenten"))
 
     def route_na_critic(state: State) -> str:
-        """Nog een herzieningsronde, of naar de jurist?
+        """Naar de correctiestap, of naar de jurist?
 
-        Herzien kost een annoteer- én een critic-call met het volle corpus, dus dit gebeurt alleen
-        als er iets te herstellen valt: een expliciete correctie-instructie, een rood oordeel, een
-        gemist element, of een citaat dat de grondingscheck niet haalde. Bij een schone annotatie —
-        het normale geval — kost de lus dus niets.
+        De keten is lineair: `critic₁ → patch → [herzie] → [critic₂] → emit`. Er valt hier dus niets
+        te kiezen behalve of er nog een correctieronde ís — en of dit al de eindbeoordeling was.
+        Eerder zat hier de ingang van een cyclus (`critic ⇄ herzie`) met vier guards eromheen.
         """
         if settings.critic_max_rondes <= 0:
-            return "emit"                                   # lus uit: exact het oude gedrag
+            return "emit"                                   # correctie uit: exact het oude gedrag
         if state.get("critic_gefaald"):
             return "emit"                                   # nooit de annotatie breken
-        if int(state.get("critic_ronde") or 0) >= settings.critic_max_rondes:
-            return "emit"
+        if int(state.get("critic_ronde") or 0) >= 2:
+            return "emit"                                   # dit wás de eindbeoordeling
+        return "patch"
 
-        return "herzie" if _open_werk(state) else "emit"
+    def patch_node(state: State) -> dict[str, Any]:
+        """Voer de correcties van de Critic uit — in code, niet via een tweede taalmodel.
+
+        Zie `annotatie.pas_critic_toe` voor de regels en waarom ze zo liggen. Deze node kost niets:
+        geen LLM-call, geen graafverkeer.
+        """
+        writer = get_stream_writer()
+        voorstellen, toegepast = pas_critic_toe(
+            list(state.get("voorstellen") or []),
+            list(state.get("critic_feedback") or []),
+            _corpus(state),
+        )
+        if toegepast:
+            _stap(writer, "Correctie",
+                  f"{toegepast} {'aanwijzing' if toegepast == 1 else 'aanwijzingen'} van de Critic toegepast")
+        return {"voorstellen": voorstellen, "patch_toegepast": toegepast}
+
+    def route_na_patch(state: State) -> str:
+        """Wat er ná het patchen nog over is.
+
+        - **Restant voor het model**: een bijna-goed citaat repareren of een gemeld ontbrekend element
+          toevoegen. Dat is brontekst lezen, geen instructie uitvoeren — dus daar draait de herziener.
+        - **Alleen gepatcht**: dan volgt de eindbeoordeling, zodat het oordeel op de kaart gaat over
+          de versie die de jurist vóór zich krijgt en niet over de versie die net is vervangen.
+        - **Niets veranderd**: klaar. Dit is het normale geval en het kost geen enkele extra call.
+        """
+        if _open_werk(state):
+            return "herzie"
+        return "critic" if state.get("patch_toegepast") else "emit"
 
     def herzie_node(state: State) -> dict[str, Any]:
         """Laat de annoteerder de Critic-instructies verwerken. Eén LLM-call, geen tools.
@@ -1070,19 +1096,12 @@ def build_graph(
         # als de Critic er iets van vindt. Die bevinding komt terug als suggestie, niet als wijziging.
         van_jurist = [v for v in alle if v.get("van_jurist")]
         voorstellen = [v for v in alle if not v.get("van_jurist")]
-        # De teller telt POGINGEN, niet successen. Hoogde alleen een geslaagde herziening hem op, dan
-        # bleef een onproductieve ronde gratis doorlopen: `critic_ontbrekend`/`verworpen_fragmenten`
-        # blijven staan, dus de route springt er meteen weer in. Op dev leverde dat vier herzieningen
-        # bij `CRITIC_MAX_RONDES=2` — precies de kosten die die knop hoort af te grendelen.
-        ronde = int(state.get("critic_ronde") or 0) + 1
+        # De herziener draait hoogstens één keer en telt niets meer op: de keten is lineair, dus er
+        # is geen ronde om te tellen. `critic_ronde` gaat over de Critic-passen en wordt daar gezet.
+        ronde = int(state.get("critic_ronde") or 0)
         if not voorstellen:
-            # Alleen markeringen van de jurist: er valt niets te herzien. `herziening_wijzigde`
-            # expliciet op False, anders blijft de waarde van de vórige ronde staan en stuurt
-            # `route_na_herziening` de keten naar nóg een Critic-pas over precies dezelfde,
-            # onveranderde voorstellen — een volle call met het hele corpus, gegarandeerd zonder
-            # nieuwe uitkomst.
-            return {"critic_ronde": ronde, "herziening_wijzigde": False,
-                    "stop_reden": "niets te herzien"}
+            # Alleen markeringen van de jurist: er valt niets te herzien.
+            return {"stop_reden": "niets te herzien"}
         doel = _bepaal_doel(state)
         corpus = _corpus(state)
         aanduiding = doel.get("artikel") or doel.get("nummer") or ""
@@ -1112,15 +1131,13 @@ def build_graph(
         except Exception:  # noqa: BLE001 — een mislukte herziening mag de annotatie niet breken
             logger.warning("herziening: mislukt; vorige voorstellen behouden", exc_info=True)
             _stap(writer, f"Herziening {ronde}", "mislukt — vorige voorstellen behouden")
-            return {"critic_feedback": [], "critic_ronde": ronde, "herziening_wijzigde": False,
-                    "stop_reden": "herziening mislukt"}
+            return {"critic_feedback": [], "stop_reden": "herziening mislukt"}
 
         if not herzien:
             logger.warning("herziening: leverde niets gegronds op; vorige voorstellen behouden")
             _stap(writer, f"Herziening {ronde}",
                   "leverde niets gegronds op — vorige voorstellen behouden")
-            return {"critic_feedback": [], "critic_ronde": ronde, "herziening_wijzigde": False,
-                    "stop_reden": "geen wijziging meer"}
+            return {"critic_feedback": [], "stop_reden": "geen wijziging meer"}
 
         te_verwijderen = {f.get("id") for f in feedback if f.get("actie") == "verwijder"}
         samengevoegd = {v["id"]: v for v in voorstellen if v.get("id") not in te_verwijderen}
@@ -1159,8 +1176,9 @@ def build_graph(
         uit = list(samengevoegd.values())
         _stap(writer, f"Herziening {ronde}", _herzien_melding(voorstellen, uit))
 
-        # Wat is er écht veranderd? Twee dingen hangen daaraan: of een volgende Critic-pas nog zin
-        # heeft, en welke kritiek de annoteerder gemotiveerd naast zich neerlegde.
+        # Wat is er écht veranderd? De eindbeoordeling leest dit ("je zei X, en de annotator heeft het
+        # wel/niet gedaan"). De boekhouding van gemotiveerd genegeerde instructies is weg: die bestond
+        # om een cyclus te laten stoppen die er niet meer is.
         voor_op_id = {v.get("id"): v for v in voorstellen}
         gewijzigd = {
             v.get("id") for v in uit
@@ -1168,31 +1186,20 @@ def build_graph(
             or any(voor_op_id[v["id"]].get(k) != v.get(k) for k in ("klasse", "tekst", "lid"))
         }
         for v in uit:
-            # De volgende Critic-pas leest dit: "je zei X, en de annotator heeft het wel/niet gedaan".
             v["aangepast_na_kritiek"] = v.get("id") in gewijzigd
-        geweigerd = set(state.get("geweigerde_feedback") or [])
-        for f in feedback:
-            if f.get("actie") in ("vervang", "verwijder") and f.get("id") not in gewijzigd:
-                # De annoteerder heeft deze instructie gezien en bewust laten liggen. Hem opnieuw als
-                # werk tellen levert een ronde op die hetzelfde meningsverschil herhaalt.
-                geweigerd.add(_feedback_sleutel(f))
 
         return {
             "voorstellen": uit + van_jurist,
             "verworpen_fragmenten": [x.model_dump() for x in verworpen],
             "critic_feedback": [],
-            "critic_ronde": ronde,
-            "herziening_wijzigde": bool(gewijzigd),
-            "geweigerde_feedback": sorted(geweigerd),
+            # Niets meer voor het model te doen: de herziener draait per beurt hoogstens één keer.
+            "nieuw_ontbrekend": [],
+            "verworpen_fragmenten": [x.model_dump() for x in verworpen] if gewijzigd else [],
         }
 
-    def route_na_herziening(state: State) -> str:
-        """Nog een Critic-pas, of klaar?
-
-        Veranderde er niets, dan zou de Critic exact dezelfde voorstellen opnieuw beoordelen. Dat kost
-        een volle call met het hele corpus en kan per definitie niets nieuws opleveren.
-        """
-        return "critic" if state.get("herziening_wijzigde") else "emit"
+    # Er is geen `route_na_herziening` meer: de herziener gaat altijd door naar de eindbeoordeling
+    # (`g.add_edge("herzie", "critic")`). Dat was de terugweg van een cyclus, met
+    # `herziening_wijzigde` als rem — en die cyclus bestaat niet meer.
 
     def emit_node(state: State) -> dict[str, Any]:
         """De enige plek die annotatie-events uitstuurt: één `run`, `element` per voorstel, één
@@ -1253,21 +1260,17 @@ def build_graph(
         met_suggestie = sum(1 for v in eigen if v.get("aandacht") in ("geel", "rood"))
         if met_suggestie:
             delen.append(f"{met_suggestie} kanttekening bij je eigen markeringen")
-        herzieningen = int(state.get("critic_ronde") or 0)
-        if herzieningen:
-            delen.append(f"na {herzieningen} herziening" + ("en" if herzieningen > 1 else ""))
+        if int(state.get("patch_toegepast") or 0):
+            delen.append("na correctie door de Critic")
         samenvatting = "; ".join(delen) + "."
         # De stopreden hoort hier te worden afgeleid: `route_na_critic` weet hem wel, maar een
         # conditionele edge geeft alleen een naam terug en kan geen state schrijven. Alle feiten
         # staan hier, dus is dit de plek waar één waarheid overblijft.
-        # Het plafond is alleen de reden als er ook écht nog werk lag. Raakt de lus het plafond
-        # precies op het moment dat de Critic niets meer te melden heeft, dan is dat convergentie —
-        # en dat hoort er niet uit te zien als uitputting.
+        # Er is geen rondelimiet meer om te bereiken: de keten is lineair. Wat overblijft is of de
+        # correctie überhaupt aanstond, of de Critic uitviel, en anders gewoon: klaar.
         reden = state.get("stop_reden") or (
             "Critic uitgevallen" if state.get("critic_gefaald")
-            else "herzieningslus uit" if settings.critic_max_rondes <= 0
-            else "rondelimiet bereikt"
-            if int(state.get("critic_ronde") or 0) >= settings.critic_max_rondes and _open_werk(state)
+            else "correctieronde uit" if settings.critic_max_rondes <= 0
             else "geen open punten"
         )
         _stap(writer, "Klaar", f"{reden} · {len(voorstellen)} elementen ter beoordeling")
@@ -1599,6 +1602,7 @@ def build_graph(
         add("tools", tools_node)
         add("annoteer", annoteer_node)
         add("critic", critic_node)
+        add("patch", patch_node)
         add("herzie", herzie_node)
         add("emit", emit_node)
         add("advance", advance_node)
@@ -1622,8 +1626,12 @@ def build_graph(
         g.add_edge("annoteer", "critic")
         # De herzieningslus: de Critic wijst aan, de annoteerder herstelt, de Critic kijkt opnieuw.
         # `emit` is de enige uitgang, zodat de werkplek nooit tussenversies ziet.
-        g.add_conditional_edges("critic", route_na_critic, {"herzie": "herzie", "emit": "emit"})
-        g.add_conditional_edges("herzie", route_na_herziening, {"critic": "critic", "emit": "emit"})
+        # Lineair: critic₁ → patch → [herzie] → [critic₂] → emit. Geen enkele edge wijst terug naar
+        # een eerdere stap, dus er is geen cyclus meer om te laten convergeren.
+        g.add_conditional_edges("critic", route_na_critic, {"patch": "patch", "emit": "emit"})
+        g.add_conditional_edges("patch", route_na_patch,
+                                {"herzie": "herzie", "critic": "critic", "emit": "emit"})
+        g.add_edge("herzie", "critic")
         g.add_edge("emit", "advance")
         g.add_conditional_edges("advance", route_after_advance, {**entrymap, "einde": END})
         return g
@@ -1638,6 +1646,7 @@ def build_graph(
         add("supervisor", supervisor_node)
         add("annoteer", annoteer_node)
         add("critic", critic_node)
+        add("patch", patch_node)
         add("herzie", herzie_node)
         add("emit", emit_node)
         add("advance", advance_node)
@@ -1657,8 +1666,12 @@ def build_graph(
         g.add_edge("annoteer", "critic")
         # De herzieningslus: de Critic wijst aan, de annoteerder herstelt, de Critic kijkt opnieuw.
         # `emit` is de enige uitgang, zodat de werkplek nooit tussenversies ziet.
-        g.add_conditional_edges("critic", route_na_critic, {"herzie": "herzie", "emit": "emit"})
-        g.add_conditional_edges("herzie", route_na_herziening, {"critic": "critic", "emit": "emit"})
+        # Lineair: critic₁ → patch → [herzie] → [critic₂] → emit. Geen enkele edge wijst terug naar
+        # een eerdere stap, dus er is geen cyclus meer om te laten convergeren.
+        g.add_conditional_edges("critic", route_na_critic, {"patch": "patch", "emit": "emit"})
+        g.add_conditional_edges("patch", route_na_patch,
+                                {"herzie": "herzie", "critic": "critic", "emit": "emit"})
+        g.add_edge("herzie", "critic")
         g.add_edge("emit", "advance")
         g.add_conditional_edges("advance", route_after_advance,
                                 {"agent": "agent", "annoteer": "annoteer",

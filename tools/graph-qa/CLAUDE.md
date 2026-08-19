@@ -233,24 +233,38 @@ blijft de werkplek verantwoordelijk — zo werkt lokaal draaien zonder api gewoo
 ### De annotatie-keten
 
 ```
-ophaal (agent ⇄ tools) → annoteer → critic →(route_na_critic)→ herzie → critic
-                                            └──────────────────────────→ emit → advance
+ophaal (agent ⇄ tools) → annoteer → critic₁ → patch ─┬─→ herzie → critic₂ → emit → advance
+                                                     ├─→ critic₂ ──────────→ emit
+                                                     └─────────────────────→ emit
 ```
 
-De **herzieningslus**: de Critic wijst aan wát er mis is, de annoteerder herstelt het, en pas daarna
-ziet de jurist de uitkomst. Begrensd door `settings.critic_max_rondes` (env `CRITIC_MAX_RONDES`,
-default 2 herzieningen). De route springt er alleen in als er iets te doen is — een rood oordeel, een
-vervang/verwijder-instructie, een gemist element of een verworpen fragment. Bij een schone annotatie
-kost de lus dus niets.
+**Lineair, geen cyclus.** De Critic wijst aan wát er mis is, **code** voert de eenduidige correcties
+uit (`annotatie.pas_critic_toe`), en het model draait alleen nog voor wat brontekst lézen vraagt.
+Hoogstens 4 LLM-calls per annotatie; een schone annotatie kost er 2 — net als voorheen.
 
-- **De lus convergeert, hij loopt niet leeg.** Drie deterministische uitgangen, want zonder die drie
-  draaide hij altijd tot de rondelimiet: (1) een herziening die niets wijzigt gaat via
-  `route_na_herziening` rechtstreeks naar `emit` — nog een Critic-pas zou dezelfde voorstellen
-  beoordelen; (2) alleen ontbrekende elementen die nog niet eerder zijn gemeld tellen als werk
-  (`gemeld_ontbrekend`); (3) een `vervang`-instructie die de annoteerder ongewijzigd liet is een
-  gemotiveerd meningsverschil en keert niet terug (`geweigerde_feedback`). `emit_node` meldt de
-  stopreden in de tijdlijn — "geen open punten" versus "rondelimiet bereikt" is precies het verschil
-  tussen overeenstemming en uitputting.
+Waarom dat zo is: de Critic leverde altijd al een uitvoerbare instructie (`actie` +
+`voorstel_klasse`/`voorstel_tekst`), en die ging naar een tweede LLM die hem moest lezen, uitvoeren
+en alle ongemoeide elementen ongewijzigd terugtypen. Dat is werk dat code exact doet en een taalmodel
+bij benadering — en het maakte van de keten een onderhandeling tussen twee modellen. Zeven van de
+vijfentwintig commits vóór deze wijziging repareerden die lus; er stonden vier convergentie-guards in
+(`herziening_wijzigde`, `geweigerde_feedback`, `gemeld_ontbrekend`, de rondecap). De eerste twee zijn
+weg: ze bestonden alleen om een cyclus te laten stoppen die er niet meer is.
+
+- **Wat de patcher doet** (`pas_critic_toe`): klasse vervangen, fragment vervangen — *alleen* als het
+  letterlijk in het corpus staat, dezelfde eis als bij een vers voorstel — en verwijderen bij een rood
+  oordeel. Nooit op een markering van de jurist: dat oordeel is een suggestie. Elke toepassing zet
+  `toegepast: true` op de laatste `critic_rondes`-regel, want "de Critic vroeg erom" is iets anders
+  dan "het is ook gebeurd".
+- **Wat de herziener nog doet**: een bijna-goed citaat repareren (`verworpen_fragmenten`) en een
+  gemeld ontbrekend element toevoegen. Dat vraagt de brontekst lezen, geen instructie uitvoeren.
+  `_open_werk` is precies die twee; correctie-instructies staan er niet meer bij.
+- **`critic₂` is het sluitstuk, geen ingang.** Hij draait alleen als er iets veranderd is, zodat het
+  oordeel op de kaart gaat over de versie die de jurist vóór zich krijgt. Vraagt hij dán opnieuw om
+  een correctie, dan gaat die naar de jurist — niet naar nóg een ronde. `critic_ronde` telt daarom
+  Critic-passen (1 = oordeel, 2 = eindbeoordeling) en wordt gezet waar hij over gaat.
+- **`CRITIC_MAX_RONDES` telt geen rondes meer**, ondanks zijn naam: 0 = uit (exact `annoteer → critic
+  → emit`, de terugvaloptie in productie), > 0 = aan. De naam blijft zodat een draaiende deployment
+  niet omvalt. Er is een test die het uit-gedrag bewaakt.
 - **De Critic heeft geheugen.** Vanaf ronde 2 krijgt hij per element zijn vorige oordeel terug plus of
   de annoteerder het aanpaste (`_vorige_ronde_blok`), en de al gemelde ontbrekende elementen. Zonder
   dat begon hij elke ronde met een schone lei: hij kon nooit zeggen "dit is opgelost" en bedacht elke
@@ -260,8 +274,6 @@ kost de lus dus niets.
 - **Twijfel is geen aandacht.** Alternatieven forceren geen "geel" meer (die regel maakte elk
   gedisambigueerd element permanent geel, waardoor de vlag betekenisloos werd). De Critic bepaalt de
   kleur; `emit_node` telt twijfel apart in de samenvatting.
-- **`critic_max_rondes=0` reproduceert exact het oude gedrag.** Dat is de terugvaloptie in productie:
-  één env-var, geen deploy-rollback. Er is een test die dat bewaakt.
 - **`emit_node` is de enige plek die annotatie-events uitstuurt.** Zou de Critic dat doen, dan zag de
   werkplek elke tussenversie van de lus voorbijkomen.
 - **Elke beurt meldt zijn herkomst.** `emit_node` stuurt vóór de elementen één `run`-event
@@ -273,15 +285,12 @@ kost de lus dus niets.
 - **Faalgedrag: nooit minder dan we al hadden.** Critic faalt → direct emitten met de voorstellen
   ongemoeid (ook hun eerdere oordeel). Herziening faalt of levert niets gegronds → vorige voorstellen
   behouden. De merge is een union; alleen een expliciete `verwijder`-instructie laat iets verdwijnen.
-- **Een herziening die een element ongewijzigd laat, behoudt het oordeel.** Is het element wél
-  aangepast, dan is de aandacht leeg tot de volgende Critic-pas — die versie is nog niet beoordeeld,
-  en er een oud oordeel op plakken zou schijnzekerheid zijn.
-- De rondeteller telt **herzieningspogingen** — ook een mislukte. Telde alleen een geslaagde
-  herziening mee, dan liep een onproductieve ronde gratis door (`critic_ontbrekend`/
-  `verworpen_fragmenten` blijven staan, dus de route springt er meteen weer in) en was
-  `critic_max_rondes` geen plafond. Hij telt geen Critic-passes, en wordt gereset in `advance_node` én in
-  de init van `answer_stream`. Zonder die reset begint een tweede beurt in dezelfde thread met een
-  volle teller (de checkpointer bewaart de state) en wordt de lus overgeslagen.
+- **Een gecorrigeerd element draagt geen oud oordeel.** Zodra de patcher of de herziener iets
+  wijzigt is de aandacht leeg tot `critic₂` erover heeft geoordeeld — een oordeel over een vórige
+  versie op de nieuwe plakken zou schijnzekerheid zijn.
+- **De rondeteller wordt gereset** in `advance_node` én in de init van `answer_stream`. Zonder die
+  reset begint een tweede beurt in dezelfde thread met een volle teller (de checkpointer bewaart de
+  state) en wordt de correctie overgeslagen.
 
 **Buiten de WETGEVING eindigt bij de supervisor.** Zegt hij `PLAN: AFWIJZEN`, dan routeert
 `_entry_node` naar de `afwijzen`-node: één beleefde melding, geen specialist, geen tool-call, geen
@@ -340,9 +349,10 @@ annotatie op een bepaling die niemand vroeg. De werkplek toont de lijst en stuur
 als nieuwe opdracht in.
 
 **De Critic kijkt ook mee op markeringen van de jurist.** Die komen via `context.bestaande_elementen`
-binnen en gaan als BEVROREN voorstellen (`van_jurist`) mee de Critic in: ze doen niet mee in de
-herzieningslus, komen niet terug als `element`-event, en hun oordeel gaat als apart
-`suggestie`-event naar de werkplek. Ook een rood oordeel op eigen werk start dus geen herziening.
+binnen en gaan als BEVROREN voorstellen (`van_jurist`) mee de Critic in: de patcher raakt ze niet aan,
+ze gaan niet mee de herziening in, ze komen niet terug als `element`-event, en hun oordeel gaat als
+apart `suggestie`-event naar de werkplek. Ook een rood oordeel op eigen werk wordt dus nooit
+uitgevoerd.
 Ze moeten wél **letterlijk in het opgehaalde corpus staan** (`komt_letterlijk_voor`) — dezelfde eis als
 voor de agent zelf. De werkplek stuurde ooit de markeringen van álle geopende documenten mee, en dan
 oordeelt de Critic over een fragment uit een andere bepaling dat hij niet voor zich heeft. Die grens

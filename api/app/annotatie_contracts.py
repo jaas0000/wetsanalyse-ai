@@ -118,6 +118,9 @@ class CriticRonde(BaseModel):
     aandacht: Aandacht | None = None
     motivatie: str = ""
     actie: str = "behoud"          # behoud | vervang | verwijder
+    # Is de instructie ook uitgevoerd? Sinds de correctie in code gebeurt (graph-qa's patcher) is dat
+    # een ander feit dan "de Critic stelde het voor", en het auditspoor hoort ze te onderscheiden.
+    toegepast: bool = False
     voorstel_klasse: str = ""
     voorstel_tekst: str = ""
     tijd: datetime = Field(default_factory=utcnow)

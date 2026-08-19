@@ -136,6 +136,7 @@ uv run --extra dev pytest -q                    # tests
 | `ENABLE_DECOMPOSITION` | `1` = multi-hop decompositie aan (default uit). |
 | `MAX_SUBQUESTIONS` | Cap op het aantal deelvragen (default 5). |
 | `SUB_MAX_TURNS` | Max. reason↔retrieve-beurten per deelvraag (default 8). |
+| `CRITIC_MAX_RONDES` | Correctie na de Critic: **0 = uit**, **> 0 = aan** (default 2). Telt géén rondes meer ondanks de naam — de keten ligt vast (`annoteer → critic → patch → [herzie] → [critic] → emit`). Uit = exact `annoteer → critic → emit`. |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | OTLP-endpoint; leeg = alleen gestructureerde JSON-logs (nul overhead). |
 
 ## De graaf

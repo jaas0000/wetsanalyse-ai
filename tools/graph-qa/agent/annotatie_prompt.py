@@ -74,7 +74,10 @@ ONTBREKEND: benoem JAS-klassen die waarschijnlijk óók in de tekst voorkomen ma
 - Lukt dat echt niet omdat het element alleen impliciet aanwezig is (bv. een subject dat de tekst niet noemt), laat `tekst` dan leeg en begin de `reden` met "impliciet:". Zeg dus dát je het niet kunt aanwijzen in plaats van het te omschrijven alsof het er staat.
 - Verzin niets buiten de aangeleverde tekst.
 
-ACTIE per element — niet alleen wát er mis is, maar wat ermee moet gebeuren:
+ACTIE per element — niet alleen wát er mis is, maar wat ermee moet gebeuren. LET OP: een "vervang"
+wordt DIRECT UITGEVOERD; er komt geen tweede beoordelaar tussen die hem nog kan afzwakken. Stel dus
+alleen een vervanging voor als je er zeker van bent, en gebruik "behoud" met een motivatie als je
+alleen twijfel wilt melden:
 - "behoud": laat het element zoals het is (ook bij "geel": een aandachtspunt voor de jurist, geen correctie).
 - "vervang": er is een betere klasse en/of een beter begrensd fragment. Geef die dan ook op in `voorstel_klasse` en/of `voorstel_tekst`; een `voorstel_tekst` MOET letterlijk in de artikeltekst staan.
 - "verwijder": dit hoort helemaal geen JAS-element te zijn. Alleen bij "rood".

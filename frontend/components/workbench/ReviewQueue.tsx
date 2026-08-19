@@ -483,6 +483,8 @@ function DecisionCard({
               {r.aandacht ? ` · ${r.aandacht}` : ""}
               {r.actie && r.actie !== "behoud" ? ` · ${r.actie}` : ""}
               {r.voorstel_klasse ? ` → ${r.voorstel_klasse}` : ""}
+              {/* Een voorstel dat is uitgevoerd leest anders dan een voorstel dat bleef liggen. */}
+              {r.toegepast ? " · toegepast" : ""}
               {r.motivatie ? ` — ${r.motivatie}` : ""}
             </li>
           ))}

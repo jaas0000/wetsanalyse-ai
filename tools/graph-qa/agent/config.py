@@ -100,10 +100,15 @@ class Settings(BaseModel):
     max_subquestions: int = 5         # cap op het aantal deelvragen (kosten/latency begrenzen)
     sub_max_turns: int = 8            # agent⇄tools-beurten per deelvraag (los van max_turns)
 
-    # Herzieningslus annoteerder ⇄ Critic: hoeveel keer de annoteerder een Critic-instructie mag
-    # verwerken vóór de jurist het ziet. Elke ronde kost een annoteer- én een critic-call met het
-    # volle corpus, dus dit is de kosten-/latency-knop. **0 = uit**, en dan is de keten exact de
-    # oude `annoteer → critic → emit` — de veiligheidsklep om dit zonder rollback terug te draaien.
+    # Correctie na de Critic: **0 = uit**, **> 0 = aan**.
+    #
+    # LET OP — deze knop telt géén rondes meer, ondanks zijn naam. De keten ligt vast:
+    # `annoteer → critic₁ → patch → [herzie] → [critic₂] → emit`, zonder cyclus. Er valt dus niets te
+    # begrenzen; er valt alleen te kiezen of de correctiestap er is. De naam en de env-var
+    # (`CRITIC_MAX_RONDES`) blijven bestaan zodat een draaiende deployment niet omvalt.
+    #
+    # Uit betekent exact het oude `annoteer → critic → emit` — de veiligheidsklep om dit zonder
+    # rollback terug te draaien.
     critic_max_rondes: int = 2
 
     # Geheugen (LangGraph-checkpointer). Voorrang: `checkpoint_db_url` (Postgres, gedeeld → horizontaal

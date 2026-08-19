@@ -150,6 +150,10 @@ class CriticRonde(BaseModel):
     aandacht: str = ""                 # groen | geel | rood
     motivatie: str = ""
     actie: str = "behoud"              # behoud | vervang | verwijder
+    # Is de instructie ook uitgevoerd? De patcher (`annotatie.pas_critic_toe`) zet dit. Zonder dit
+    # verschilt "de Critic vroeg erom" niet van "het is ook gebeurd" — en dat verschil moet een
+    # auditspoor kunnen laten zien.
+    toegepast: bool = False
     voorstel_klasse: str = ""
     voorstel_tekst: str = ""
 
