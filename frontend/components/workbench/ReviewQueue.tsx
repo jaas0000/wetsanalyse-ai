@@ -17,16 +17,26 @@ const REDENEN: { waarde: ReviewReason; label: string }[] = [
 ];
 
 // Het aandacht-niveau is de dragende visuele as: het kleurt de linker-accentrand, een zachte tint en
-// het rondje op de kaart. Alle kleuren via de aandacht-design-tokens, geen rauwe Tailwind-kleuren
-// buiten de huisstijl — en `stip` is dáárom een klassenstring en geen emoji meer: die werd door het
-// besturingssysteem getekend (glanzend op iOS, vlak op Android) in kleuren die niets te maken hebben
-// met de tokens die de app er zelf voor heeft. De ring geeft contrast op de zachte tint, die immers
-// in dezelfde kleurfamilie staat.
-const AANDACHT: Record<string, { stip: string; label: string; rand: string; tint: string }> = {
-  groen: { stip: "bg-aandacht-groen-tekst ring-aandacht-groen-rand", label: "groen — geen bezwaar", rand: "border-l-aandacht-groen-rand", tint: "bg-aandacht-groen-bg/40" },
-  geel: { stip: "bg-aandacht-geel-tekst ring-aandacht-geel-rand", label: "geel — even kijken", rand: "border-l-aandacht-geel-rand", tint: "bg-aandacht-geel-bg/40" },
-  rood: { stip: "bg-aandacht-rood-tekst ring-aandacht-rood-rand", label: "rood — waarschijnlijk fout", rand: "border-l-aandacht-rood-rand", tint: "bg-aandacht-rood-bg/40" },
+// een badge op de kaart. Alle kleuren via de aandacht-design-tokens, geen rauwe Tailwind-kleuren
+// buiten de huisstijl.
+//
+// Dit was een rondje van 8px zonder tekst, met de betekenis alleen in een `title`/`aria-label`. Wie
+// de kleurcode niet kent zag dus een stip en verder niets — op een reviewkaart waar juist het oordeel
+// van de Critic staat. Nu is het een **badge met tekst**, in dezelfde vorm als de documentstatus
+// ("In behandeling", `ArtefactInhoud`): één badgevorm in de hele app.
+//
+// De achtergrond staat op volle sterkte terwijl de kaart eronder dezelfde tint op 40% draagt — dat
+// verschil plus de rand maakt de badge zichtbaar binnen zijn eigen kleurfamilie.
+const AANDACHT: Record<string, { pill: string; label: string; rand: string; tint: string }> = {
+  groen: { pill: "border-aandacht-groen-rand bg-aandacht-groen-bg text-aandacht-groen-tekst", label: "Geen bezwaar", rand: "border-l-aandacht-groen-rand", tint: "bg-aandacht-groen-bg/40" },
+  geel: { pill: "border-aandacht-geel-rand bg-aandacht-geel-bg text-aandacht-geel-tekst", label: "Even kijken", rand: "border-l-aandacht-geel-rand", tint: "bg-aandacht-geel-bg/40" },
+  rood: { pill: "border-aandacht-rood-rand bg-aandacht-rood-bg text-aandacht-rood-tekst", label: "Waarschijnlijk fout", rand: "border-l-aandacht-rood-rand", tint: "bg-aandacht-rood-bg/40" },
 };
+
+// Zelfde vorm als de documentstatus-badge in `ArtefactInhoud`; alleen de kleuren verschillen per
+// niveau. Verander je die daar, verander hem dan hier mee — het is bewust één vormtaal.
+const AANDACHT_PILL =
+  "inline-flex shrink-0 items-center rounded-full border px-2 py-0.5 text-[11px] font-medium";
 
 // De hoofdactie is lintblauw, net als elke andere primaire knop in de app (`ui/Button.tsx`), en de
 // tweede keuze een outline. Dit was volvlak groen en volvlak hemelblauw: statuskleuren, die naast de
@@ -161,6 +171,7 @@ function DecisionCard({
   onAkkoord,
   onVraag,
   docVergrendeld,
+  toonLid,
 }: {
   el: AnnotatieElement;
   actief: boolean;
@@ -182,6 +193,9 @@ function DecisionCard({
   /** De hele annotatie is afgerond: dan ligt ook het opmerkingveld stil, want de api weigert élke
    *  mutatie tot het document heropend wordt. */
   docVergrendeld?: boolean;
+  /** Beslaat het document meer dan één lid? Zo niet, dan staat het lid al in de kop van het artefact
+   *  en herhaalt elke kaart dezelfde mededeling. */
+  toonLid?: boolean;
 }) {
   const [notitie, setNotitie] = useState(false);
   const palet = open === "klasse";
@@ -263,20 +277,19 @@ function DecisionCard({
         beslist ? "opacity-75" : aandacht ? `${aandacht.rand} ${aandacht.tint}` : "border-l-line"
       } ${actief ? "border-lint ring-1 ring-lint" : ""}`}
     >
-      <div className="flex items-start justify-between gap-2">
-        {/* `min-w-0`: een brede klassenaam ("Variabele en variabelewaarde") rekte deze kant anders
-            op en perste Akkoord en het kruisje tegen de kaartrand. */}
-        <span className="flex min-w-0 flex-wrap items-center gap-1.5">
+      {/* De kop in twee lagen, en op `sm:` weer op één regel.
+          Alles vocht eerder om dezelfde regel: een lange klassenaam ("Parameter en parameterwaarde")
+          duwde het lidnummer naar een eigen regel en perste Akkoord en het kruisje tegen de kaartrand.
+          Nu staan links de korte, voorspelbare dingen (aandacht, lid) mét de acties, en krijgt de
+          klassebadge daaronder de volle breedte. Op een breed scherm past het weer naast elkaar —
+          hetzelfde patroon als `ui/ButtonRow`: mobiel gestapeld, `sm:` naast elkaar. */}
+      <div className="flex flex-wrap items-center gap-1.5 sm:flex-nowrap sm:items-start sm:gap-2">
+        {/* `min-w-0`: zonder dit rekt een brede klassenaam deze kant alsnog op. */}
+        <span className="order-1 flex min-w-0 flex-wrap items-center gap-1.5">
           {el.aandacht && aandacht && (
-            // `role="img"`: een aria-label op een kale span wordt door een deel van de schermlezers
-            // genegeerd, en dan is dit een stil element. De vaste 8px (in plaats van een
-            // tekengrootte) is wat het rondje op elk toestel even groot maakt.
-            <span
-              role="img"
-              aria-label={aandacht.label}
-              title={el.critic || aandacht.label}
-              className={`inline-block h-2 w-2 shrink-0 rounded-full ring-1 ring-inset ${aandacht.stip}`}
-            />
+            <span className={`${AANDACHT_PILL} ${aandacht.pill}`} title={el.critic || undefined}>
+              {aandacht.label}
+            </span>
           )}
           {/* Twijfel is geen bezwaar: de annoteerder zag twee plausibele klassen. Eerder werd zoiets
               automatisch geel, waardoor een écht aandachtspunt niet meer opviel tussen de
@@ -285,12 +298,20 @@ function DecisionCard({
             <span role="img" title="Twijfel tussen klassen — zie de alternatieven" aria-label="twijfel"
                   className="text-xs text-muted"><Ruit /></span>
           )}
-          {/* De klasse ís de knop: klikken opent het palet, klikken op een klasse is de wijziging.
-              Op slot is het geen knop meer maar een badge — géén `disabled` knop, want die leest als
-              "tijdelijk kapot" terwijl er niets kapot is; er is alleen eerst iets anders nodig. */}
+          {/* Het lid alleen als het document méér dan één lid beslaat; anders staat het al in de kop
+              van het artefact ("artikel 9 lid 1") en herhaalt elke kaart dezelfde mededeling. */}
+          {toonLid && el.lid && <span className="text-[0.65rem] text-muted">lid {el.lid}</span>}
+        </span>
+
+        {/* De klasse ís de knop: klikken opent het palet, klikken op een klasse is de wijziging.
+            Op slot is het geen knop meer maar een badge — géén `disabled` knop, want die leest als
+            "tijdelijk kapot" terwijl er niets kapot is; er is alleen eerst iets anders nodig. */}
+        {/* `w-full` op mobiel dwingt de wrap: de klasse krijgt zo een eigen regel ónder de meta en de
+            acties. Op `sm:` valt dat weg en schuift hij ertussen. */}
+        <span className="order-3 flex w-full min-w-0 sm:order-2 sm:w-auto sm:flex-1">
           {slot ? (
             <span
-              className={`inline-flex min-h-[24px] max-w-full items-center whitespace-normal rounded px-2 py-0.5 text-left text-xs font-semibold ${jasStyle(el.klasse)}`}
+              className={`inline-flex min-h-[24px] max-w-full items-center whitespace-normal rounded px-2 py-0.5 text-left text-xs font-semibold leading-tight ${jasStyle(el.klasse)}`}
             >
               {el.klasse}
             </span>
@@ -303,15 +324,19 @@ function DecisionCard({
                 openRij(palet ? "geen" : "klasse");
               }}
               title="Andere klasse kiezen"
-              className={`focus-ring inline-flex min-h-[24px] max-w-full items-center whitespace-normal rounded px-2 py-0.5 text-left text-xs font-semibold transition hover:ring-1 hover:ring-lint coarse:min-h-[44px] disabled:opacity-50 ${jasStyle(el.klasse)}`}
+              className={`focus-ring inline-flex min-h-[24px] max-w-full items-center whitespace-normal rounded px-2 py-0.5 text-left text-xs font-semibold leading-tight transition hover:ring-1 hover:ring-lint coarse:min-h-[44px] disabled:opacity-50 ${jasStyle(el.klasse)}`}
             >
-              {el.klasse} <ChevronOmlaag className="ml-0.5 opacity-70" />
+              {el.klasse} <ChevronOmlaag className="ml-0.5 shrink-0 opacity-70" />
             </button>
           )}
-          {el.lid && <span className="text-[0.65rem] text-muted">lid {el.lid}</span>}
         </span>
 
-        <span className="flex shrink-0 items-center gap-1" onClick={(e) => e.stopPropagation()}>
+        {/* `ml-auto` duwt de acties op mobiel naar rechts op dezelfde regel als de aandacht-badge;
+            op `sm:` doet de flex-verdeling dat al. */}
+        <span
+          className="order-2 ml-auto flex shrink-0 items-center gap-1 sm:order-3 sm:ml-0"
+          onClick={(e) => e.stopPropagation()}
+        >
           {!slot && (
             <button
               type="button"
@@ -601,6 +626,7 @@ export function ReviewQueue({
   onVerwijder,
   onVraag,
   docVergrendeld,
+  toonLid,
 }: {
   /** Alle elementen — voor de tellingen in de kop. */
   elementen: AnnotatieElement[];
@@ -623,6 +649,8 @@ export function ReviewQueue({
   onVraag?: (el: AnnotatieElement) => void;
   /** De annotatie is afgerond: de hele lijst staat op slot tot hij heropend wordt. */
   docVergrendeld?: boolean;
+  /** Zie `Kaart`: alleen tonen als het document meer dan één lid beslaat. */
+  toonLid?: boolean;
 }) {
   const totaal = elementen.length;
   const beslist = elementen.filter(isBeslist).length;
@@ -714,6 +742,7 @@ export function ReviewQueue({
           onVerwijder={onVerwijder && el.herkomst === "mens" ? () => onVerwijder(el.id) : undefined}
           onVraag={onVraag ? () => onVraag(el) : undefined}
           docVergrendeld={docVergrendeld}
+          toonLid={toonLid}
         />
       ))}
     </div>

@@ -399,6 +399,9 @@ export function ArtefactInhoud({
               onVerwijder={onWisEigenMarkering && !vergrendeld ? wis : undefined}
               onVraag={onVraag}
               docVergrendeld={vergrendeld}
+              // Alleen als het document méér dan één lid beslaat. Is het tot één lid afgebakend, dan
+              // staat dat al in de kop hierboven en herhaalt elke kaart dezelfde mededeling.
+              toonLid={!doc.lid}
             />
           ) : (
             <p className="text-sm text-muted">Geen elementen.</p>

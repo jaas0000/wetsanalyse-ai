@@ -459,13 +459,28 @@ Eén uitzondering, en die is principieel: tekst die als **inhoud** wordt opgesla
 die als chatbericht de geschiedenis in gaat, `WerkplekClient`) kan geen component dragen. Daar staat
 geen icoon maar een woord.
 
-**De aandacht-as tekent zichzelf.** Het rood/geel/groene rondje op een reviewkaart is een `<span>`
-van 8px met `bg-aandacht-*-tekst` en een ring in `-rand` (`ReviewQueue.tsx`, de `AANDACHT`-map), niet
-een emoji. Vaste maat, huisstijlkleuren, overal hetzelfde. Hij draagt `role="img"` met een label:
-zonder die rol negeert een deel van de schermlezers het `aria-label` op een kale span, en dan is het
-een stil element.
+**De aandacht-as zegt wat hij bedoelt.** Het oordeel van de Critic staat op de reviewkaart als
+**badge met tekst** — *Geen bezwaar* / *Even kijken* / *Waarschijnlijk fout* — in dezelfde vorm als de
+documentstatus-badge (`AANDACHT_PILL` in `ReviewQueue.tsx` naast `DOCUMENT_STATUS_STYLE`): één
+badgevorm in de hele app. Dat was een rondje van 8px met de betekenis alleen in een `aria-label`; wie
+de kleurcode niet kende zag een stip en verder niets. Kleur blijft meedoen via de linker accentrand en
+de zachte tint (dat is het scan-signaal in een lange lijst), maar draagt het oordeel niet meer alleen.
+De badge-achtergrond staat op volle sterkte terwijl de kaart eronder dezelfde tint op 40% draagt —
+zonder dat verschil verdwijnt hij in zijn eigen kleurfamilie.
 
-**Kleur betekent iets, of hij hoort er niet.** De reviewkaart gebruikt kleur voor het aandacht-rondje,
+**De kaartkop is mobiel gestapeld en op `sm:` één regel.** Links de korte, voorspelbare dingen
+(aandacht-badge, lidnummer) mét de acties; de klassebadge daaronder over de volle breedte, en op een
+breed scherm ertussen. Zonder die splitsing vocht een lange klassenaam ("Parameter en
+parameterwaarde") met *Akkoord* en het kruisje om dezelfde regel. De klassenamen zijn canoniek, dus
+korter maken mag niet — dan moet de ruimte mee. Zelfde patroon als `ui/ButtonRow`.
+
+**Het lidnummer staat alleen op de kaart als het document méér dan één lid beslaat** (`toonLid` uit
+`ArtefactInhoud`, afgeleid van `doc.lid`). Is het tot één lid afgebakend, dan zegt de kop het al
+("Invorderingswet 1990 — artikel 9 lid 1") en herhaalde elke kaart dezelfde mededeling. Bewust
+afgeleid van het document en niet van de elementen: anders verschijnt en verdwijnt het lidnummer
+terwijl je reviewt.
+
+**Kleur betekent iets, of hij hoort er niet.** De reviewkaart gebruikt kleur voor de aandacht-badge,
 de JAS-badges en de accentrand — dingen die een oordeel dragen. De knoppen volgen de app: primair is
 lintblauw (`bg-accent`, zoals `Button variant="primary"`), tweede keuze is een outline. *Akkoord* was
 volvlak groen en *Naast me neerleggen* volvlak hemelblauw; dat zijn statuskleuren, en die schreeuwen
