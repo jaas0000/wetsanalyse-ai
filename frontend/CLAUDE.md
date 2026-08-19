@@ -396,6 +396,16 @@ het chatbericht hoort en niet bij het annotatiedocument, is niets vastleggen eer
   lopende tekst staan.
 - **Klikdoelen ≥ 24×24 CSS-px** (2.5.8) via `min-h-[24px]` op chips/knoppen, met de bestaande
   `coarse:`-variant naar 44px op aanraakschermen (het AAA-niveau 2.5.5 dat NLDS aanhoudt).
+- **Een uitklapper blijft binnen het scherm.** `components/ui/Popover` hangt met CSS aan zijn
+  trigger (`positie`), en die weet niet waar hij op het scherm staat: een rechts uitgelijnd paneel
+  bij een knop die zelf al rechts staat, steekt links buiten beeld — op een telefoon las de
+  exportlijst zo met de eerste tekens eraf. Het component meet daarom na het openen en corrigeert
+  horizontaal (`lib/popover.ts:klemHorizontaal`, pure functie, getest zonder DOM). Verticaal kiest
+  de aanroeper zelf een richting (`top-full`/`bottom-full`) — dát is de as waar hij zicht op heeft.
+  Wie een paneel de kolombreedte wil laten volgen gebruikt `positie="inset-x-3 …"` met
+  `containerClassName="static"`, zoals de berichtenbel en het gebruikersmenu in de sidebar; dan kán
+  het per definitie niet uitsteken. `SelectiePopover` staat los (hij hangt aan een muispositie, niet
+  aan een element) en klemt zichzelf via `plaatsPopover`, inclusief zijn breedte op een smal scherm.
 - Eén **`.focus-ring`-utility** in `globals.css` (2.4.13, AAA): dubbele ring zodat de focus ook op de
   donkere JAS-klassekleuren opvalt. Gebruik die in plaats van een eigen `focus-visible:outline`.
 - Elke wijziging wordt **aangekondigd** via de `sr-only aria-live`-regio in `WerkplekClient`

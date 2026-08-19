@@ -39,3 +39,25 @@ export function plaatsPopover(
   // Past nergens heel: tegen de bovenrand, zodat de bovenste knoppen bereikbaar blijven.
   return { left, top: marge, boven: false };
 }
+
+/** Hoeveel een popover horizontaal moet opschuiven om binnen het scherm te blijven.
+ *
+ *  Voor popovers die met CSS aan hun trigger hangen (`components/ui/Popover`): die weten niet waar
+ *  ze op het scherm staan. Een paneel dat rechts is uitgelijnd op een knop die zelf al rechts staat,
+ *  steekt links buiten beeld — op een telefoon las de exportlijst zo als "el in JAS-kleuren, met
+ *  wettekst en edig spoor", met de eerste tekens eraf.
+ *
+ *  Geeft de verschuiving in pixels (0 = het staat goed). Past het paneel helemaal niet, dan wint de
+ *  linkerrand: liever het begin van de tekst lezen dan het eind.
+ */
+export function klemHorizontaal(
+  paneel: { left: number; breedte: number },
+  schermbreedte: number,
+  marge = 8,
+): number {
+  const rechts = paneel.left + paneel.breedte;
+  if (paneel.breedte + 2 * marge >= schermbreedte) return marge - paneel.left;
+  if (paneel.left < marge) return marge - paneel.left;
+  if (rechts > schermbreedte - marge) return schermbreedte - marge - rechts;
+  return 0;
+}

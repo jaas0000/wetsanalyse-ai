@@ -81,7 +81,11 @@ export function SelectiePopover({
   // hangt af van het aantal klassen, van de aanpasbaar-strook en van de tekstgrootte van de
   // gebruiker, dus een vaste aanname klopt precies wanneer het misgaat. `useLayoutEffect` doet dat
   // vóór de paint, zodat je hem niet ziet verspringen.
-  const BREEDTE = 320;
+  // 320px, behalve op een scherm dat dat niet heeft: dan de volle breedte min de marges. Zonder die
+  // klem stak de popover op een smalle telefoon (≤ 336px, iPhone SE) rechts buiten beeld — de
+  // horizontale plaatsing kan een te breed paneel immers nergens meer kwijt.
+  const schermbreedte = globalThis.innerWidth || 1024;
+  const BREEDTE = Math.min(320, schermbreedte - 16);
   const [hoogte, setHoogte] = useState(280);
   useLayoutEffect(() => {
     const gemeten = ref.current?.offsetHeight;
@@ -91,7 +95,7 @@ export function SelectiePopover({
   const plek = plaatsPopover(
     { midden: doel.x, boven: doel.yBoven, onder: doel.y },
     { breedte: BREEDTE, hoogte },
-    { breedte: globalThis.innerWidth || 1024, hoogte: globalThis.innerHeight || 768 },
+    { breedte: schermbreedte, hoogte: globalThis.innerHeight || 768 },
   );
 
   return (
