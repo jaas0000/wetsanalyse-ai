@@ -131,6 +131,23 @@ def test_stoppen_laat_de_run_netjes_eindigen(client, monkeypatch):
     assert stand["volgende_seq"] > 0
 
 
+def test_gesprek_verwijderen_stopt_de_lopende_beurt(client):
+    """Live gevonden op dev: het gesprek werd verwijderd terwijl de beurt liep, en de agent
+    annoteerde daarna nog anderhalve minuut vrolijk door voor iets wat niet meer bestond."""
+    run_id = client.post("/v1/runs", json={"question": "v", "conversation_id": "g1"}).json()["run_id"]
+    assert client.delete("/v1/conversations/g1").status_code == 204
+
+    time.sleep(0.4)
+    stand = client.get(f"/v1/runs/{run_id}/events?vanaf=0")
+    assert stand.status_code == 200
+    assert client.get("/v1/conversations/g1/run").json()["status"] == "gestopt"
+
+
+def test_verwijderen_van_een_gesprek_zonder_run_blijft_stil(client):
+    """Idempotent: geen run, geen ophef."""
+    assert client.delete("/v1/conversations/bestaat-niet").status_code == 204
+
+
 def test_stoppen_is_een_verzoek(client):
     run_id = client.post("/v1/runs", json={"question": "v", "conversation_id": "g1"}).json()["run_id"]
     antwoord = client.post(f"/v1/runs/{run_id}/cancel")

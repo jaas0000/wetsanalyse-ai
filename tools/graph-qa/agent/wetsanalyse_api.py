@@ -37,6 +37,18 @@ TIMEOUT = httpx.Timeout(connect=5.0, read=30.0, write=30.0, pool=5.0)
 class WetsanalyseApiFout(Exception):
     """De uitkomst kon niet worden vastgelegd. Expliciet, want stil verliezen is het ergste."""
 
+    def __init__(self, melding: str, status: int = 0) -> None:
+        super().__init__(melding)
+        self.status = status
+
+
+class GesprekVerdwenen(WetsanalyseApiFout):
+    """Het gesprek bestaat niet meer — meestal omdat de jurist het verwijderde terwijl de beurt liep.
+
+    Geen storing, maar een gevolg van een bewuste handeling. De api weigert terecht: erin schrijven
+    zou een verwijderd gesprek half laten herrijzen. De aanroeper hoort hier stil te eindigen in
+    plaats van alarm te slaan over iets wat de gebruiker zelf deed."""
+
 
 class WetsanalyseApi:
     """Dunne HTTP-client. Eén instantie per beurt; sluit hem met `aclose()`."""
@@ -64,13 +76,15 @@ class WetsanalyseApi:
         antwoord = await self._client.request(
             methode, f"{self._basis}{pad}", json=payload, headers=self._headers,
         )
+        if antwoord.status_code == 404 and "/gesprekken/" in pad:
+            raise GesprekVerdwenen(f"{methode} {pad} → 404", 404)
         if antwoord.status_code >= 400:
             # De ruwe body kan gebruikersinhoud bevatten; log de status en het pad, niet de payload.
             logger.error(
                 "api-schrijffout",
                 extra={"categorie": "technisch", "http_status": antwoord.status_code, "http_path": pad},
             )
-            raise WetsanalyseApiFout(f"{methode} {pad} → {antwoord.status_code}")
+            raise WetsanalyseApiFout(f"{methode} {pad} → {antwoord.status_code}", antwoord.status_code)
         return antwoord.json() if antwoord.content else {}
 
     # -- annotatie-domein ------------------------------------------------------------------------

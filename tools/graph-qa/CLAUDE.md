@@ -183,7 +183,14 @@ Vier regels die je niet mag omdraaien:
   leeg skelet in de werkvoorraad van de jurist staan (`GET /documenten` kent geen zichtbaarheid).
 - **`run_id` reist mee met het bericht.** Dat is de idempotentiesleutel; de api weigert een tweede
   bericht met datzelfde id, zodat twee meekijkende tabbladen niet twee antwoorden opleveren.
-- **Niet kunnen schrijven is een zichtbare fout** (`error`-event), nooit een stil verlies.
+- **Niet kunnen schrijven is een zichtbare fout** (`error`-event), nooit een stil verlies. Met één
+  uitzondering: een **404 op het gesprek** (`GesprekVerdwenen`) betekent dat de jurist het gesprek
+  verwijderde terwijl de beurt liep. Dat is geen storing maar het gevolg van een eigen handeling, en
+  alarm slaan daarover leert mensen meldingen negeren. De beurt eindigt dan stil; het
+  annotatiedocument blijft staan, want annotaties bestaan los van hun gesprek.
+- **Een verwijderd gesprek stopt zijn beurt.** `DELETE /v1/conversations/{id}` zet ook het
+  stopverzoek. Zonder dat annoteerde de agent minutenlang door voor iets wat niet meer bestond —
+  live gevonden tijdens de eerste doorloop op dev.
 
 Geen api geconfigureerd (`Settings.legt_zelf_vast` is False), dan is de driver een doorgeefluik en
 blijft de werkplek verantwoordelijk — zo werkt lokaal draaien zonder api gewoon door.

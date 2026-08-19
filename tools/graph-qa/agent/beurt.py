@@ -24,7 +24,7 @@ from collections.abc import AsyncIterator
 from typing import Any
 
 from .config import Settings
-from .wetsanalyse_api import WetsanalyseApi, WetsanalyseApiFout
+from .wetsanalyse_api import GesprekVerdwenen, WetsanalyseApi, WetsanalyseApiFout
 
 logger = logging.getLogger("graph_qa.beurt")
 
@@ -187,6 +187,16 @@ async def _leg_vast(
         # De client hoeft de inhoud niet mee te krijgen: hij haalt het document bij de api op. Zo
         # blijft er één bron van waarheid en groeit het SSE-contract niet mee met het datamodel.
         yield {"type": "opgeslagen", "annotatie_slug": slug, "run_id": run.run_id}
+    except GesprekVerdwenen:
+        # De jurist verwijderde het gesprek terwijl de beurt liep. Dat is geen fout om over te
+        # klagen — alarm slaan over iemands eigen handeling leert mensen meldingen negeren.
+        #
+        # Het annotatiedocument blijft wél staan: annotaties zijn eersteklas objecten die los van
+        # hun gesprek bestaan (zie /annotaties), dus dat is bewaard werk, geen wees.
+        logger.info(
+            "gesprek verdwenen tijdens de beurt",
+            extra={"categorie": "functioneel", "run_id": run.run_id, "chat_session_id": gesprek_id},
+        )
     except (WetsanalyseApiFout, Exception):
         logger.exception(
             "beurt niet vastgelegd",

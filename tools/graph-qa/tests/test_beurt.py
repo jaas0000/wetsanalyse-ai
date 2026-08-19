@@ -13,7 +13,7 @@ import pytest
 
 from agent.beurt import BeurtSchrijver, voer_beurt_uit
 from agent.runs import Run
-from agent.wetsanalyse_api import WetsanalyseApiFout
+from agent.wetsanalyse_api import GesprekVerdwenen, WetsanalyseApiFout
 from tests.fakes import make_settings
 
 
@@ -27,7 +27,7 @@ def asyncio_test(fn):
 class NepApi:
     """Legt vast wát er geschreven zou worden, zonder netwerk."""
 
-    def __init__(self, *, faalt: bool = False) -> None:
+    def __init__(self, *, faalt: bool | str = False) -> None:
         self.faalt = faalt
         self.documenten: list[dict[str, Any]] = []
         self.element_puts: list[dict[str, Any]] = []
@@ -43,6 +43,8 @@ class NepApi:
         return {}
 
     async def voeg_bericht_toe(self, gesprek_id: str, bericht: dict[str, Any]) -> dict[str, Any]:
+        if self.faalt == "verdwenen":
+            raise GesprekVerdwenen("POST /v1/gesprekken/… → 404", 404)
         if self.faalt:
             raise WetsanalyseApiFout("POST /v1/gesprekken/… → 503")
         self.berichten.append((gesprek_id, bericht))
@@ -238,3 +240,27 @@ def test_schrijver_houdt_denkproces_en_tekst_gescheiden():
         schrijver.verwerk(event)
     assert schrijver.tekst == "Antwoord"
     assert schrijver.denk == "· Stap éénik denk na"
+
+
+@asyncio_test
+async def test_verwijderd_gesprek_is_geen_storing(monkeypatch):
+    """Live gevonden op dev: de jurist verwijderde het gesprek terwijl de beurt liep, en kreeg
+    vervolgens een foutmelding over zijn eigen handeling.
+
+    De api weigert terecht (erin schrijven zou een verwijderd gesprek half laten herrijzen), maar
+    dat is geen storing om alarm over te slaan — dat leert mensen meldingen negeren. Het
+    annotatiedocument blijft wél bestaan: annotaties staan los van hun gesprek.
+    """
+    nep = NepApi(faalt="verdwenen")
+    monkeypatch.setattr("agent.beurt.WetsanalyseApi", lambda *_a, **_k: nep)
+
+    uit = await _draai([
+        {"type": "doel", "doel": {"bwbId": "B", "artikel": "9", "citeertitel": "Wet"}},
+        {"type": "element", "element": {"id": "e1", "klasse": "Rechtssubject", "tekst": "t"}},
+        {"type": "done"},
+    ])
+
+    assert [e for e in uit if e["type"] == "error"] == []   # geen alarm
+    assert uit[-1]["type"] == "done"                        # de beurt eindigt gewoon
+    assert nep.documenten and nep.element_puts               # het werk is bewaard
+    assert nep.gesloten

@@ -194,7 +194,20 @@ async def verwijder_conversation(
 ) -> None:
     """Wis het agent-geheugen (checkpointer-thread) van één gesprek. Idempotent (onbekende id → 204).
     De werkplek roept dit aan náást de API-berichten-delete, zodat een verwijderd gesprek niet in de
-    checkpointer-DB achterblijft (privacy)."""
+    checkpointer-DB achterblijft (privacy).
+
+    Loopt er nog een beurt voor dit gesprek, dan stopt die hier ook. Zonder dat draait de agent
+    minutenlang door voor een gesprek dat niet meer bestaat — en probeert hij aan het eind te
+    schrijven in iets wat is weggegooid. Wat er al geannoteerd was blijft wél bestaan: een
+    annotatiedocument staat los van zijn gesprek (zie /annotaties)."""
+    lopend = runs.actief_voor(conversation_id)
+    if lopend is not None and lopend.loopt:
+        runs.vraag_stop(lopend)
+        logger.info(
+            "run gestopt: gesprek verwijderd",
+            extra={"categorie": "functioneel", "run_id": lopend.run_id,
+                   "chat_session_id": conversation_id},
+        )
     await delete_conversation(conversation_id, settings=settings)
 
 
