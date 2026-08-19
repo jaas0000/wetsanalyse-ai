@@ -38,3 +38,30 @@ def test_alle_specialisten_erven_de_identiteit():
     for naam, spec in specialists.SPECIALISTS.items():
         samengesteld = SYSTEM_PROMPT + (f"\n\n{spec.system}" if spec.system else "")
         assert "Lex" in samengesteld, naam
+
+
+def test_prompt_verbiedt_zelfbedachte_jas_klassen():
+    """De antwoordroute mag geen JAS-klassen voorstellen.
+
+    Op dev zette de `algemeen`-specialist onder een uitleg een lijstje "voorgestelde JAS-klassen"
+    met labels als `art36-IW` en `betalingsonmacht-melding` — die bestaan niet; de dertien staan
+    vast. De klassecontrole (`_verwerk`) zit alléén in de annotatieroute, dus hier is de prompt de
+    enige rem. De identiteitsregel noemt markeren wél als iets wat Lex doet, en dat las het model
+    als uitnodiging; deze grens hoort daar dus expliciet naast te staan.
+    """
+    laag = SYSTEM_PROMPT.lower()
+    assert "verzint er dus nooit één" in laag
+    assert "voorgestelde jas-klassen" in laag
+
+
+def test_prompt_eist_dat_een_citaat_letterlijk_is():
+    """Aanhalingstekens beloven letterlijkheid, dus mag er niets in bewerkt zijn.
+
+    Een antwoord op dev droeg zeven citaten die niet letterlijk in de bron stonden: weglatingen met
+    (...), eigen samenvattingen tussen [ ] en vet middenin het citaat — met daarboven de zin dat
+    alle citaten letterlijk waren. De groundingcontrole meldt dat achteraf; deze regel hoort te
+    voorkomen dat het gebeurt.
+    """
+    laag = SYSTEM_PROMPT.lower()
+    assert "letterlijk" in laag and "parafrase" in laag
+    assert "aanhalingstekens" in laag

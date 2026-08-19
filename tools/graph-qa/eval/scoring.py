@@ -35,6 +35,19 @@ def contains_ok(answer: str, expected: list[str]) -> bool:
     return all(e.lower() in low for e in (expected or []))
 
 
+def zonder_verboden(answer: str, verboden: list[str]) -> bool:
+    """Komt er niets in het antwoord voor dat er niet in hoort?
+
+    `expected_contains` meet of het goede erin staat; dit meet of het verkeerde eruit blijft. Nodig
+    voor eisen die je niet positief kunt formuleren — bijvoorbeeld dat een ANTWOORD geen zelfbedachte
+    JAS-klassen voorstelt. Dat gebeurde: de antwoordroute zette onder een uitleg een lijstje
+    "voorgestelde JAS-klassen" met labels die buiten het schema van dertien vallen, en niets in de
+    keten ving dat af — de klassecontrole zit alleen in de annotatieroute.
+    """
+    low = answer.lower()
+    return not any(v.lower() in low for v in (verboden or []))
+
+
 def refusal_ok(sources: list[dict[str, Any]], should_refuse: bool) -> bool:
     refused = len(sources) == 0
     return refused if should_refuse else not refused
@@ -47,6 +60,7 @@ class CaseResult:
     source_recall: float
     contains_ok: bool
     refusal_ok: bool
+    zonder_verboden_ok: bool = True
     error: str | None = None
     passed: bool = field(init=False)
 
@@ -57,6 +71,7 @@ class CaseResult:
             and self.source_recall >= 1.0
             and self.contains_ok
             and self.refusal_ok
+            and self.zonder_verboden_ok
         )
 
 
@@ -74,6 +89,7 @@ def score_case(
         source_recall=source_recall(sources, case.get("expected_sources", [])),
         contains_ok=contains_ok(answer, case.get("expected_contains", [])),
         refusal_ok=refusal_ok(sources, should_refuse),
+        zonder_verboden_ok=zonder_verboden(answer, case.get("verboden", [])),
         error=error,
     )
 

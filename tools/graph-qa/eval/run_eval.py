@@ -100,18 +100,19 @@ async def run_annotatie_suite(
 
 
 def print_report(results: list[CaseResult]) -> bool:
-    print(f"\n{'faith':>6} {'recall':>6} {'cont':>4} {'refu':>4}  vraag")
-    print("-" * 72)
+    print(f"\n{'faith':>6} {'recall':>6} {'cont':>4} {'refu':>4} {'schoon':>6}  vraag")
+    print("-" * 80)
     for r in results:
         flag = "OK " if r.passed else "XX "
         extra = f"  ! {r.error}" if r.error else ""
         print(
             f"{r.faithfulness:6.2f} {r.source_recall:6.2f} "
-            f"{'ja' if r.contains_ok else 'nee':>4} {'ja' if r.refusal_ok else 'nee':>4}  "
+            f"{'ja' if r.contains_ok else 'nee':>4} {'ja' if r.refusal_ok else 'nee':>4} "
+            f"{'ja' if r.zonder_verboden_ok else 'NEE':>6}  "
             f"{flag}{r.question[:44]}{extra}"
         )
     passed = sum(r.passed for r in results)
-    print("-" * 72)
+    print("-" * 80)
     print(f"{passed}/{len(results)} geslaagd")
     return passed == len(results)
 
