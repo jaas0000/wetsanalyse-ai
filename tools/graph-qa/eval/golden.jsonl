@@ -13,3 +13,8 @@
 # niet: de dertien staan vast, en de klassecontrole zit alleen in de annotatieroute. `verboden` vangt
 # dat af — in een ANTWOORD hoort geen JAS-klasse voor te komen, ook niet als suggestie.
 {"question": "alles over aansprakelijkheid van de bestuurder", "expected_sources": ["BWBR0004770"], "expected_contains": ["artikel 36"], "verboden": ["JAS-klasse"], "should_refuse": false}
+# Een wet die NIET in de graaf zit, maar wel wetgeving is. Dit hoort geen afwijzing te worden: de
+# supervisor heeft geen tools en kan dus niet weten wat er in de graaf staat. Art. 36 IW 1990 noemt
+# de Wet belastingen op milieugrondslag, dus er is zelfs iets aangrenzends te vinden. `should_refuse`
+# staat daarom op false: er horen bronnen te komen, ook als het antwoord "dat staat er niet in" is.
+{"question": "wat is bekend over het milieu in de milieuwet?", "should_refuse": false}

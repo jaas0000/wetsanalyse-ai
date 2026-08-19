@@ -283,9 +283,18 @@ kost de lus dus niets.
   de init van `answer_stream`. Zonder die reset begint een tweede beurt in dezelfde thread met een
   volle teller (de checkpointer bewaart de state) en wordt de lus overgeslagen.
 
-**Buiten de scope eindigt bij de supervisor.** Zegt hij `PLAN: AFWIJZEN`, dan routeert
+**Buiten de WETGEVING eindigt bij de supervisor.** Zegt hij `PLAN: AFWIJZEN`, dan routeert
 `_entry_node` naar de `afwijzen`-node: één beleefde melding, geen specialist, geen tool-call, geen
-graafverkeer. Dat stond eerder alleen in het promptformaat — het woord ging als plan de systeemprompt
+graafverkeer.
+
+Let op waar die grens ligt: afwijzen mag alleen als de vraag **niet over wetgeving gaat** (het weer,
+programmeren, meningen). Of een bepáálde regeling in de graaf zit, weet de supervisor niet — hij
+heeft geen tools en heeft niet gekeken — dus zo'n vraag gaat naar de antwoord-worker, die zoekt en
+volgens `SYSTEM_PROMPT` zelf zegt dat het niet in de kennisgraaf staat als hij niets vindt. Die twee
+stonden eerder in één zin ("niet over de wet- en regelgeving **in de graaf**"), en toen wees een gok
+een vraag af waar wél iets over te vinden was: *"de milieuwet"* leverde een afwijzing op terwijl art.
+36 IW 1990 de Wet belastingen op milieugrondslag noemt. Een afwijzing kost niets, maar een onterechte
+kost het antwoord. Dat stond eerder alleen in het promptformaat — het woord ging als plan de systeemprompt
 van de specialist in, waarna een tweede modelbeslissing bepaalde wat er gebeurde. De vlag hoort in de
 per-beurt-reset van `answer_stream`: zonder dat wijst een afgewezen vraag de hele thread af. De
 workerlijst is bovendien een **allowlist** (`antwoord`/`annotatie`) met een cap van twee — elke

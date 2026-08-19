@@ -708,20 +708,27 @@ def build_graph(
         return "\n".join(regels)
 
     def afwijs_node(state: State) -> dict[str, Any]:
-        """De supervisor plaatste de vraag buiten de scope: hier eindigt de beurt.
+        """De supervisor plaatste de vraag buiten de wetgeving: hier eindigt de beurt.
 
         Kort en zonder verwijt, met de uitnodiging erbij — een afwijzing die alleen "dat doe ik niet"
         zegt laat iemand raden wat dan wel kan. Geen tools, geen bronnen, geen tweede LLM-call.
+
+        Deze tekst zegt bewust NIET "staat niet in mijn kennisgraaf". Dit pad is er voor vragen die
+        buiten de wetgeving vallen (het weer, programmeren), en dat weet de supervisor zonder te
+        kijken. Of een bepáálde regeling in de graaf zit weet hij juist níét — hij heeft geen tools —
+        en die vraag hoort dus naar de antwoord-worker, die zoekt en het zelf zegt als hij niets
+        vindt. Anders wijst een gok een vraag af waar wel degelijk iets over te vinden was: "de
+        milieuwet" leverde een afwijzing op terwijl art. 36 IW 1990 de Wet belastingen op
+        milieugrondslag noemt.
         """
         writer = get_stream_writer()
         melding = (
-            "Deze vraag gaat niet over de Nederlandse wet- en regelgeving in mijn kennisgraaf "
-            "(invordering en belastingen), dus daar kan ik je niet mee helpen. Vraag me gerust naar "
-            "een bepaling, een begrip of de samenhang tussen artikelen — of laat me een artikel "
-            "annoteren volgens het JAS."
+            "Deze vraag gaat niet over Nederlandse wet- en regelgeving, dus daar kan ik je niet mee "
+            "helpen. Vraag me gerust naar een bepaling, een begrip of de samenhang tussen artikelen "
+            "— of laat me een artikel annoteren volgens het JAS."
         )
         writer({"type": "token", "content": melding})
-        _stap(writer, "Klaar", "niet beantwoord — buiten de wetgeving in de graaf")
+        _stap(writer, "Klaar", "niet beantwoord — buiten de wetgeving")
         return {"answer": melding, "messages": [{"role": "assistant", "content": melding}]}
 
     def agent_node(state: State) -> dict[str, Any]:
