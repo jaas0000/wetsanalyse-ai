@@ -7,7 +7,6 @@ import { ArtefactPaneel } from "@/components/werkplek/ArtefactPaneel";
 import { Melding } from "@/components/ui/Melding";
 import { Markdown, StreamendeTekst } from "@/components/werkplek/Markdown";
 import {
-  annoteerAgentStream,
   beslis,
   foutTekst,
   haalActieveRun,
@@ -30,6 +29,7 @@ import type {
   Anker,
   AnnotatieElement,
   AgentDoel,
+  AgentGrounding,
   AgentKandidaat,
   AgentRun,
   AnnotatieDocument,
@@ -52,7 +52,10 @@ import { bronHref } from "@/lib/url";
 
 type Item =
   | { id: string; type: "user"; tekst: string; over?: string }
-  | { id: string; type: "antwoord"; tekst: string; denk?: string; bronnen?: Bron[] }
+  | { id: string; type: "antwoord"; tekst: string; denk?: string; bronnen?: Bron[];
+      // De brongetrouwheidstoets van déze beurt. Live; hij reist niet mee in het berichtcontract,
+      // maar de statusregel ervan staat wél in `denk` en blijft dus na herladen terug te vinden.
+      grounding?: AgentGrounding }
   // `denk` = de tijdlijn van het samenspel (supervisor → ophaal → annoteerder ⇄ Critic). Die werd
   // eerder weggegooid zodra de beurt een annotatie bleek; juist bij een annotatie wil je achteraf
   // kunnen zien hoe hij tot stand kwam.
@@ -469,6 +472,7 @@ export function WerkplekClient({
             bronnen = b;
             updateItem(antId, { bronnen: b });
           },
+          onGrounding: (g) => updateItem(antId, { grounding: g }),
           onDoel: (d) => (doelRef.d = d),
           onElement: (e) => (els = mergeVoorstellen(els, e)),
           onRun: (r) => (run = r),
@@ -918,6 +922,7 @@ export function WerkplekClient({
                     <Punten />
                   )}
                   {item.bronnen && item.bronnen.length > 0 && <Bronnen bronnen={item.bronnen} />}
+                  {item.tekst && item.grounding && <Brongetrouwheid grounding={item.grounding} />}
                   {item.tekst && <KopieerKnop tekst={item.tekst} />}
                 </div>
               </div>
@@ -1284,6 +1289,52 @@ function DenkProces({
 }
 
 // Inklapbare bronnenlijst — standaard dicht met een teller, want de lijst kan lang zijn.
+/** Wat de brongetrouwheidstoets van dit antwoord vond — alleen als er iets te melden is.
+ *
+ *  Bij een schoon resultaat zwijgt dit blok: de bronnenlijst eronder is dan het signaal, en een
+ *  groen vinkje bij elk antwoord leert mensen er overheen te kijken. De twee gevallen die er wél
+ *  toe doen:
+ *
+ *  - **onbepaald** — het antwoord noemde geen vindplaats en geen citaat, dus er viel niets te
+ *    controleren. Dat is nadrukkelijk niet hetzelfde als "gecontroleerd en juist"; die twee vielen
+ *    voorheen samen in één bool, en de UI liet ze allebei weg.
+ *  - **ongegrond** — er staat een verwijzing in die niet uit de graaf kwam, of een citaat dat niet
+ *    letterlijk in de opgehaalde tekst staat. Dat is precies waar een jurist op afgaat. */
+function Brongetrouwheid({ grounding }: { grounding: AgentGrounding }) {
+  if (grounding.niveau === "gegrond") return null;
+  const onbepaald = grounding.niveau === "onbepaald";
+  return (
+    <div
+      className={`mt-2 flex items-start gap-2 rounded-kaart border px-3 py-2 text-xs ${
+        onbepaald
+          ? "border-line bg-surface text-muted"
+          : "border-aandacht-geel-rand bg-aandacht-geel-bg text-aandacht-geel-tekst"
+      }`}
+    >
+      <span aria-hidden>{onbepaald ? "○" : "⚠"}</span>
+      <span className="min-w-0">
+        {onbepaald ? (
+          "Dit antwoord noemt geen vindplaats of letterlijk citaat, dus er valt niets te controleren tegen de graaf."
+        ) : (
+          <>
+            {grounding.unsupported.length > 0 && (
+              <span className="block break-words">
+                Niet uit de graaf: {grounding.unsupported.join(", ")}
+              </span>
+            )}
+            {grounding.niet_letterlijk.length > 0 && (
+              <span className="block break-words">
+                {grounding.niet_letterlijk.length === 1 ? "Dit citaat staat" : "Deze citaten staan"} niet
+                letterlijk in de opgehaalde tekst: {grounding.niet_letterlijk.map((c) => `“${c}”`).join(" · ")}
+              </span>
+            )}
+          </>
+        )}
+      </span>
+    </div>
+  );
+}
+
 function Bronnen({ bronnen }: { bronnen: Bron[] }) {
   const [open, setOpen] = useState(false);
   return (

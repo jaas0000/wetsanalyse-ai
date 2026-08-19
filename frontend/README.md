@@ -104,8 +104,8 @@ AUTH_SECRET=<openssl rand -base64 32>   # ondertekent de login-sessiecookie (Aut
 
 De **werkplek** (`/workbench`) praat met de graph-qa-agent via `GRAPH_QA_URL` (server-side, default
 intern `http://graph-qa:8080`) en optioneel `GRAPH_QA_TOKEN`/`GRAPH_QA_TOKEN_FILE`. De BFF-routes
-`app/api/annotatie/agent` (SSE naar `POST /v1/chat`) en `app/api/annotatie/artikel` (`GET /v1/artikel`)
-houden dat token server-side.
+`app/api/annotatie/run/**` (starten, meekijken via SSE, stoppen) en `app/api/annotatie/artikel`
+(`GET /v1/artikel`) houden dat token server-side.
 
 ## Observability
 

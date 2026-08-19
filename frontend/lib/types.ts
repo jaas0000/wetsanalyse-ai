@@ -326,6 +326,21 @@ export interface Bron {
   uri: string;
 }
 
+/** De uitkomst van de brongetrouwheidstoets op één antwoord (graph-qa `grounding`-event).
+ *
+ *  `niveau` is de waarde om te tonen, niet `grounded`: **onbepaald** betekent dat het antwoord geen
+ *  enkele vindplaats of citaat noemde en er dus niets te controleren viel. Dat als "gecontroleerd"
+ *  presenteren zou schijnzekerheid zijn — precies wat dit platform wil vermijden. */
+export interface AgentGrounding {
+  niveau: "gegrond" | "onbepaald" | "ongegrond";
+  grounded: boolean;
+  cited: number;
+  /** Verwijzingen die niet in de graafresultaten voorkwamen. */
+  unsupported: string[];
+  /** Als citaat gepresenteerde tekst die niet letterlijk in de opgehaalde tekst staat. */
+  niet_letterlijk: string[];
+}
+
 /** Artikeltekst uit de graaf (weergave == annotatie-corpus). */
 export interface GraafArtikel {
   bwbId: string;

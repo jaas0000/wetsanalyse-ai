@@ -44,10 +44,10 @@ De **harde scheidingslijn**: alles met een token is server-only.
   fetch-logica — leid alles via deze helper. Hij bewaakt ook de **wachttijd**: Node's `fetch` kent
   geen standaardtimeout, dus een upstream die wél verbindt maar niet antwoordt liet de UI eeuwig in
   zijn laadstand staan. Default 30 s → **504** met een leesbare reden (onbereikbaar blijft 502);
-  `timeoutMs` per route hoger waar dat hoort (de modeltest doet een echte LLM-aanroep: 120 s). De **SSE-uitzondering** is de werkplek-agent-route
-  (`app/api/annotatie/agent/route.ts`): geen `proxy()`, maar rauwe passthrough van `upstream.body`
-  met `X-Accel-Buffering: no` en `Cache-Control: no-transform` (NPM moet proxy-buffering óók uit
-  hebben) — zie §*Werkplek*.
+  `timeoutMs` per route hoger waar dat hoort (de modeltest doet een echte LLM-aanroep: 120 s). De **SSE-uitzondering** is de run-events-route
+  (`app/api/annotatie/run/[id]/events/route.ts`): geen `proxy()`, maar rauwe passthrough van
+  `upstream.body` met `X-Accel-Buffering: no` en `Cache-Control: no-transform` (NPM moet
+  proxy-buffering óók uit hebben) — zie §*Werkplek*.
 - `lib/server.ts` — server-side helpers voor Server Components / auth (rechtstreeks server→server,
   scheelt een extra self-fetch via de BFF bij de eerste render). Bevat de auth-verificatie
   (`verifyCredentials`/`getAccountStatus`/`getSetupStatus`) die de login-flow gebruikt.
@@ -126,8 +126,9 @@ Bovenaan de shell staat de klikbare **testomgeving-strook**. De shell is twee ko
   `verwijderGesprek`). **Twee stores op dezelfde `conversation_id`**: de UI-historie staat in de API, het
   **agent-geheugen** in graph-qa's checkpointer — `verwijderGesprek` wist béíde (de BFF-DELETE roept ná de
   API-delete óók graph-qa `DELETE /v1/conversations/{id}` aan, best-effort). Het **live agent-verkeer via graph-qa** — BFF
-  `app/api/annotatie/agent/route.ts` = SSE-passthrough naar `graphQaBaseUrl()` + `GRAPH_QA_TOKEN`
-  (client-helper `annoteerAgentStream` in `lib/api.ts`), en het documentpaneel haalt de artikeltekst via
+  `app/api/annotatie/run/**` (starten/meekijken/stoppen) met `graphQaBaseUrl()` + `GRAPH_QA_TOKEN`
+  én de vertrouwde `X-User-Id` (client-helpers `startRun`/`volgRun`/`stopRun` in `lib/api.ts`); de
+  events-route is de SSE-passthrough. Het documentpaneel haalt de artikeltekst via
   `app/api/annotatie/artikel/route.ts` → graph-qa `GET /v1/artikel` (`haalArtikelGraaf`). De **persistente
   review-state via de api** — BFF `app/api/annotatie/documenten/*` → `/v1/annotatie/*` via `proxy()`, mét
   de vertrouwde `X-User-Id` uit de sessie (annotatie-documenten zijn **per-gebruiker gescopet**, net als
@@ -329,7 +330,25 @@ niet gewist".
 
 Bij een 409 op `startRun` (er loopt al een beurt op dit gesprek) haakt de client aan bij de bestaande
 run in plaats van te falen: twee gelijktijdige beurten zouden door elkaar in het agent-geheugen
-schrijven. `annoteerAgentStream` blijft bestaan voor het oude, aan-de-verbinding-gekoppelde pad.
+schrijven.
+
+**Er is nog één weg naar de agent, en dat is met opzet.** `annoteerAgentStream` en zijn route
+`app/api/annotatie/agent` zijn verwijderd. Die stuurden het `conversation_id` uit de browser
+ongewijzigd door naar graph-qa — waar het de thread_id van het agent-geheugen is — zonder te
+controleren of het gesprek van deze gebruiker was; met andermans gespreks-id (dat staat in de URL van
+de werkplek) las je zo diens historie terug. Zet er geen tweede ingang naast: elk pad dat een
+`conversation_id` aanneemt, hoort eerst bij de api te verifiëren van wie dat gesprek is, zoals
+`app/api/annotatie/run/route.ts` doet.
+
+**Brongetrouwheid staat onder het antwoord** (`Brongetrouwheid` in `WerkplekClient`). graph-qa stuurt
+per beurt een `grounding`-event; dat kwam altijd al binnen maar werd door niemand uitgelezen, dus een
+niet-onderbouwde verwijzing bleef onzichtbaar. Het blok zwijgt bij `niveau: "gegrond"` — een groen
+vinkje bij élk antwoord leert mensen erover heen te kijken — en spreekt in twee gevallen: **ongegrond**
+(een verwijzing die niet uit de graaf kwam, of een citaat dat niet letterlijk in de opgehaalde tekst
+staat) en **onbepaald** (het antwoord noemde geen vindplaats en geen citaat, dus er viel niets te
+controleren). Dat laatste is nadrukkelijk geen goedkeuring; toon het dus niet als groen. De uitkomst
+reist niet mee in het berichtcontract, maar de bijbehorende statusregel staat in `denk` en blijft na
+herladen in de tijdlijn terug te vinden.
 
 **Niets faalt meer stil.** Het artefact openen toont een laadstand en bij een fout een `Melding` met
 *Opnieuw proberen* (voorheen: een klik waar letterlijk niets van gebeurde als de graaf plat lag). Een

@@ -11,7 +11,7 @@ describe("vereistAkkoord", () => {
   });
 
   it("laat de BFF-routes met rust (anders breekt de SSE-stream)", () => {
-    expect(vereistAkkoord("/api/annotatie/agent")).toBe(false);
+    expect(vereistAkkoord("/api/annotatie/run/r1/events")).toBe(false);
   });
 
   it("laat de disclaimer zelf met rust (anders een redirect-lus)", () => {

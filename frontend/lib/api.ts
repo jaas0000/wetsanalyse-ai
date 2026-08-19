@@ -21,6 +21,7 @@ import type {
   AdminBerichtOut,
   AgentContext,
   AgentDoel,
+  AgentGrounding,
   AgentKandidaat,
   AgentRun,
   Anker,
@@ -396,13 +397,16 @@ export async function verwijderGesprek(id: string): Promise<void> {
   if (!res.ok) throw await parseError(res);
 }
 
-/** De callbacks waarmee een beurt binnenkomt. Gedeeld door het starten-en-meteen-volgen (`annoteerAgentStream`)
- *  en het aanhaken bij een lopende run (`volgRun`) — één contract, twee ingangen. */
+/** De callbacks waarmee een beurt binnenkomt. Gedeeld door het starten van een run (`startRun`) en
+ *  het aanhaken bij een lopende (`volgRun`) — één contract, twee ingangen. */
 export type AgentHandlers = {
     onStatus?: (m: string) => void;
     onReason?: (t: string) => void;
     onToken?: (t: string) => void;
     onSources?: (bronnen: Bron[]) => void;
+    /** De brongetrouwheidstoets op dit antwoord. Kwam altijd al binnen als `grounding`-event, maar
+     *  werd nergens uitgelezen — dus een niet-onderbouwde verwijzing bleef onzichtbaar. */
+    onGrounding?: (g: AgentGrounding) => void;
     onDoel?: (doel: AgentDoel) => void;
     onElement?: (el: VoorstelElement) => void;
     /** De herkomst van deze beurt (model/agentversie); komt vóór de elementen. */
@@ -423,38 +427,17 @@ export type AgentHandlers = {
   onOpgeslagen?: (uitkomst: { annotatie_slug: string; run_id: string }) => void;
 };
 
-/** Stuur een vrije prompt naar de unified agent (BFF → graph-qa /v1/chat, SSE). De supervisor kiest
- *  per beurt `antwoord` (streamt tekst-`token`s + `sources`) of `annotatie` (`doel` + `element`).
- *  `conversationId` houdt het gespreksgeheugen vast (thread_id).
- *
- *  Let op: hier hangt de beurt nog aan déze verbinding — afbreken doodt hem. Voor een beurt die
- *  wegklikken en herladen overleeft: `startRun` + `volgRun`. */
-export async function annoteerAgentStream(
-  prompt: string,
-  handlers: AgentHandlers,
-  conversationId?: string,
-  signal?: AbortSignal,
-  extra?: { modus?: "auto" | "advies"; context?: AgentContext },
-): Promise<void> {
-  const res = await fetch("/api/annotatie/agent", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      question: prompt,
-      conversation_id: conversationId,
-      ...(extra?.modus ? { modus: extra.modus } : {}),
-      ...(extra?.context ? { context: extra.context } : {}),
-    }),
-    signal,
-  });
-  await verwerkSseStroom(res, handlers);
-}
-
 // --- Runs: de beurt is van de server -----------------------------------------
 //
-// `annoteerAgentStream` hierboven bindt de beurt aan één verbinding. Deze vier helpers doen het
-// andersom: de run draait bij graph-qa en de browser kijkt mee. Wegklikken, van gesprek wisselen of
-// herladen koppelt alleen de kijker los — stoppen doe je met `stopRun`.
+// De run draait bij graph-qa en de browser kijkt mee. Wegklikken, van gesprek wisselen of herladen
+// koppelt alleen de kijker los — stoppen doe je met `stopRun`.
+//
+// Hier stond ook `annoteerAgentStream`: één POST naar `/api/annotatie/agent` die de beurt aan de
+// verbinding van dat ene tabblad hing. Die is weg, en niet alleen omdat de run-route hem overbodig
+// maakte. Hij stuurde het `conversation_id` uit de browser ongewijzigd door naar graph-qa, waar het
+// de thread_id van het agent-geheugen is — zónder te controleren of dat gesprek van deze gebruiker
+// was. Met een gespreks-id van iemand anders (die staat gewoon in de URL van de werkplek) las je zo
+// diens gesprekshistorie terug. `startRun` hieronder verifieert het eigenaarschap wél, bij de api.
 
 /** Start een beurt. Geeft de run terug, of — als er al een run voor dit gesprek loopt — de
  *  bestaande, zodat de aanroeper daarop aanhaakt in plaats van een tweede te starten.
@@ -587,6 +570,12 @@ async function verwerkSseStroom(res: Response, handlers: AgentHandlers): Promise
               weggevallen?: number;
               annotatie_slug?: string;
               run_id?: string;
+              // grounding: `niveau` is nieuw; een oudere agent stuurt alleen `grounded`.
+              niveau?: AgentGrounding["niveau"];
+              grounded?: boolean;
+              cited?: number;
+              unsupported?: string[];
+              niet_letterlijk?: string[];
             }
           | null;
         if (!ev) continue;
@@ -596,6 +585,14 @@ async function verwerkSseStroom(res: Response, handlers: AgentHandlers): Promise
         else if (ev.type === "reason") handlers.onReason?.(ev.content ?? "");
         else if (ev.type === "token") handlers.onToken?.(ev.content ?? "");
         else if (ev.type === "sources" && ev.sources) handlers.onSources?.(ev.sources);
+        else if (ev.type === "grounding")
+          handlers.onGrounding?.({
+            niveau: ev.niveau ?? (ev.grounded === false ? "ongegrond" : "gegrond"),
+            grounded: ev.grounded !== false,
+            cited: ev.cited ?? 0,
+            unsupported: ev.unsupported ?? [],
+            niet_letterlijk: ev.niet_letterlijk ?? [],
+          });
         else if (ev.type === "doel" && ev.doel) handlers.onDoel?.(ev.doel);
         else if (ev.type === "element" && ev.element) handlers.onElement?.(ev.element);
         else if (ev.type === "run" && ev.run) handlers.onRun?.(ev.run);

@@ -86,10 +86,20 @@ class SourcesEvent(BaseModel):
 
 
 class GroundingEvent(BaseModel):
+    """De uitkomst van de brongetrouwheidstoets op het antwoord.
+
+    `niveau` is fijner dan `grounded` en is de waarde om te tonen: "onbepaald" betekent dat het
+    antwoord geen enkele vindplaats of citaat noemde en er dus niets te controleren viel. Dat als
+    "gegrond" presenteren zou schijnzekerheid zijn.
+    """
+
     type: Literal["grounding"] = "grounding"
     grounded: bool
     cited: int = 0
     unsupported: list[str] = []
+    # Als citaat gepresenteerde tekst die niet letterlijk in de opgehaalde tekst staat.
+    niet_letterlijk: list[str] = []
+    niveau: Literal["gegrond", "onbepaald", "ongegrond"] = "gegrond"
 
 
 class DoneEvent(BaseModel):

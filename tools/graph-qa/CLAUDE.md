@@ -106,6 +106,15 @@ veilig**, verplicht bij >1 replica) → **`CHECKPOINT_DB_PATH`** → `AsyncSqlit
   waarvan het BWB-id niet in de trace voorkomt. Deterministisch, op BWB-granulariteit (geen vals alarm
   op jci-formattering of geparafraseerde IRI's). `curate_sources` snoeit de lijst tot aangehaalde
   regelingen.
+- **Twee controles, drie uitkomsten.** Naast de vindplaatsen toetst hij ook de **citaten**: tekst die
+  het antwoord tussen aanhalingstekens zet, moet letterlijk (witruimte-ongevoelig) in de trace staan —
+  dezelfde eis als `annotatie.komt_letterlijk_voor` stelt aan een markering. Korte quotes (< 5
+  woorden) blijven erbuiten: dat zijn begrippen, geen citaten, en daar levert de controle vooral vals
+  alarm. En het oordeel is niet langer een bool maar `niveau`: **gegrond** / **ongegrond** /
+  **onbepaald**. Die laatste is de belangrijkste toevoeging — een antwoord dat géén vindplaats en géén
+  citaat noemt viel eerder in dezelfde bak als "alles gecontroleerd en in orde", terwijl er niets te
+  controleren viel. `grounded` blijft bestaan (event-contract, eval) en betekent nu: er is niets
+  aangetroffen dat níét klopt. De werkplek toont `niveau`.
 
 ### API-laag (`api/main.py`)
 
@@ -321,7 +330,15 @@ Drie dingen die je verder moet kennen voordat je hieraan werkt:
 ## Kern-invarianten (niet breken)
 
 - **Brongetrouwheid.** Bronnen én grounding komen uit de **tool-trace**, nooit uit een regex over
-  modeltekst. Als iets niet uit een tool kwam, is het geen bron en niet gegrond.
+  modeltekst. Als iets niet uit een tool kwam, is het geen bron en niet gegrond. En "niets te
+  controleren" is geen goedkeuring: dat is `niveau: "onbepaald"`, niet gegrond.
+- **Het annotatie-corpus is één bepaling.** `annoteer_node` haalt de tekst gericht op met
+  `artikel.artikel_corpus(bwbId, artikel, lid)` — dezelfde functie als `GET /v1/artikel`, dus wat de
+  jurist ziet en waartegen wordt gegrond is één tekst — en zet hem in `state["corpus"]`, waar de
+  Critic en de herziening hem uit lezen. Reconstrueer hem **niet** uit de tool-trace: dat plakt álle
+  fetch-resultaten van de beurt aaneen (haalde de ophaal-agent eerst het hele artikel en daarna het
+  lid, dan zit lid 2 er ook in) en elk resultaat is afgekapt op 8000 tekens. `_corpus_uit_trace` is
+  alleen nog de terugval als de graaf niets geeft.
 - **`GRAPHDB_TOKEN` is verplicht.** Afgedwongen bij startup (lifespan) én per request (`make_graph →
   require_graph`). Het token is de sleutel voor de auth-proxy, die hem vervangt door het
   GraphDB-service-account; de agent kent die credentials zelf niet. Maak dit niet optioneel.

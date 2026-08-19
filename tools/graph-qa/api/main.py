@@ -176,6 +176,18 @@ async def chat(
     _rl: None = Depends(_rate_limit),
     _auth: None = Depends(_check_auth),
 ) -> EventSourceResponse:
+    """Eén beurt, gekoppeld aan déze verbinding. Voor de werkplek is `/v1/runs` de weg (zie hieronder).
+
+    **Dit endpoint kent geen eigenaar.** Het `conversation_id` uit de body is de thread_id van de
+    checkpointer, en graph-qa kan niet weten van wie dat gesprek is — die administratie zit in de
+    wetsanalyse-api. Een aanroeper die hier een vreemd gespreks-id instuurt, krijgt dus de historie
+    van dat gesprek in de context van zijn eigen vraag. De frontend-route die dat pad gebruikte is
+    daarom verwijderd; `POST /v1/runs` verifieert het eigenaarschap wél (via de BFF, bij de api) en
+    draagt `X-User-Id`.
+
+    Bouw hier geen nieuwe client op zonder die controle in de aanroeper. Wie het toch nodig heeft
+    (een script, een eval-run), gebruikt het met een eigen conversation_id.
+    """
     logger.info(
         "chat ontvangen",
         extra={

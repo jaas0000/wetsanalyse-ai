@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { annoteerAgentStream, isApiError, parseError, startRun, volgRun } from "./api";
+import { isApiError, parseError, startRun, volgRun } from "./api";
+import type { AgentGrounding } from "./types";
 
 describe("parseError", () => {
   it("haalt een string-detail uit de JSON-body", async () => {
@@ -50,7 +51,7 @@ function sseResponse(frames: string[]): Response {
   return new Response(stream, { status: 200, headers: { "Content-Type": "text/event-stream" } });
 }
 
-describe("annoteerAgentStream", () => {
+describe("verwerkSseStroom — via volgRun", () => {
   afterEach(() => vi.restoreAllMocks());
 
   it("splitst token/sources/doel/element-frames (incl. \\r\\n) naar de juiste handlers", async () => {
@@ -74,7 +75,7 @@ describe("annoteerAgentStream", () => {
     const elementen: unknown[] = [];
     let ontbrekend: unknown[] = [];
     let bronnen: unknown[] = [];
-    await annoteerAgentStream("annoteer artikel 9 lid 1 IW", {
+    await volgRun("run-1", {
       onStatus: (m) => (denk += `[${m}]`),
       onReason: (t) => (denk += t),
       onToken: (t) => (tekst += t),
@@ -128,6 +129,41 @@ describe("volgRun — aanhaken bij een lopende beurt", () => {
 
     expect(gat).toBe(12);
     expect(tekst).toBe("de rest");
+  });
+});
+
+describe("grounding-event", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("levert het niveau door, zodat 'niets te controleren' niet als 'gecontroleerd' leest", async () => {
+    const frames = [
+      `data: ${JSON.stringify({ type: "token", content: "Een antwoord." })}\r\n\r\n`,
+      `data: ${JSON.stringify({
+        type: "grounding", grounded: true, cited: 0, unsupported: [],
+        niet_letterlijk: [], niveau: "onbepaald",
+      })}\r\n\r\n`,
+    ];
+    vi.stubGlobal("fetch", vi.fn(async () => sseResponse(frames)));
+
+    const gevangen: AgentGrounding[] = [];
+    await volgRun("run-1", { onGrounding: (x) => gevangen.push(x) });
+
+    expect(gevangen[0]).toEqual({
+      niveau: "onbepaald", grounded: true, cited: 0, unsupported: [], niet_letterlijk: [],
+    });
+  });
+
+  it("valt terug op grounded als een oudere agent nog geen niveau stuurt", async () => {
+    const frames = [
+      `data: ${JSON.stringify({ type: "grounding", grounded: false, cited: 2, unsupported: ["BWBR9999999"] })}\r\n\r\n`,
+    ];
+    vi.stubGlobal("fetch", vi.fn(async () => sseResponse(frames)));
+
+    const gevangen: AgentGrounding[] = [];
+    await volgRun("run-1", { onGrounding: (x) => gevangen.push(x) });
+
+    expect(gevangen[0]?.niveau).toBe("ongegrond");
+    expect(gevangen[0]?.niet_letterlijk).toEqual([]);
   });
 });
 

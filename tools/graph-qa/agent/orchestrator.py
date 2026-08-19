@@ -30,6 +30,7 @@ from langgraph.graph import END, START, StateGraph
 
 from .agent_common import BeurtGestopt, truncate
 from .annotatie import _verwerk, _verwerk_critic, komt_letterlijk_voor, sleutel_van
+from .artikel import artikel_corpus
 from .annotatie_prompt import (
     annotatie_systeemprompt,
     annotatie_userprompt,
@@ -180,6 +181,24 @@ def _critic_melding(oordelen: dict[str, Any], ontbrekend: list[Any], nieuw: int 
     return regel
 
 
+def _grounding_melding(report: Any) -> str:
+    """Wat de brongetrouwheidstoets opleverde — inclusief het geval dat er niets te toetsen viel.
+
+    "brongetrouwheid: 0 verwijzingen onderbouwd" las als een geslaagde controle terwijl het antwoord
+    simpelweg geen enkele vindplaats noemde. Dat verschil is precies wat een jurist moet weten.
+    """
+    if report.niveau == "onbepaald":
+        return "brongetrouwheid: geen vindplaats of citaat genoemd — niets te controleren"
+    delen: list[str] = []
+    if report.unsupported:
+        delen.append(f"{len(report.unsupported)} verwijzing(en) niet uit de graaf")
+    if report.niet_letterlijk:
+        delen.append(f"{len(report.niet_letterlijk)} citaat(en) niet letterlijk teruggevonden")
+    if delen:
+        return "brongetrouwheid: " + ", ".join(delen)
+    return f"brongetrouwheid: {len(report.cited)} verwijzingen onderbouwd"
+
+
 def _herzien_melding(voor: list[dict[str, Any]], na: list[dict[str, Any]]) -> str:
     """Wat de annoteerder met de kritiek deed. Dít is het samenspel: aangepast versus behouden."""
     oud = {v.get("id"): v for v in voor}
@@ -236,8 +255,15 @@ def _bepaal_doel(state: State) -> dict[str, str]:
 
 
 def _corpus_uit_trace(source_trace: list[tuple[str, str]]) -> str:
-    """Reconstrueer de opgehaalde artikeltekst uit de get_lid/get_artikel-resultaten in de trace,
-    zodat de brongetrouwheid-check dezelfde tekst gebruikt die de agent zag."""
+    """Reconstrueer de opgehaalde artikeltekst uit de get_lid/get_artikel-resultaten in de trace.
+
+    **Terugval, geen eerste keus** — zie `_corpus_voor_doel`. Deze reconstructie plakt álle
+    fetch-resultaten van de beurt aaneen, terwijl het doel de láátste fetch-call is: haalde de
+    ophaal-agent eerst het hele artikel op en daarna het gevraagde lid, dan zit de tekst van de
+    andere leden er ook in — en dan keurt de brongetrouwheidscheck een fragment uit lid 2 goed als
+    markering "in lid 1". Bovendien is elk tool-resultaat afgekapt op 8000 tekens (`truncate`),
+    dus bij een lange bepaling ontbreekt hier stilzwijgend het staartstuk.
+    """
     delen: list[str] = []
     for naam, resultaat in source_trace:
         if naam not in ("get_lid", "get_artikel", "get_bepaling"):
@@ -247,6 +273,36 @@ def _corpus_uit_trace(source_trace: list[tuple[str, str]]) -> str:
             if tekst:
                 delen.append(tekst)
     return "\n\n".join(delen)
+
+
+def _corpus_voor_doel(doel: dict[str, str], graph: GraphPort, source_trace: list[tuple[str, str]]) -> str:
+    """De tekst waarop geannoteerd wordt: precies de bepaling uit `doel`, ongekapt.
+
+    Eén gerichte ophaalactie via `artikel.artikel_corpus` — dezelfde functie waarmee `GET /v1/artikel`
+    het documentpaneel vult. Daarmee is er weer één bron voor wat de jurist ziet en waartegen de
+    brongetrouwheid wordt gecheckt, zoals `agent/artikel.py` altijd al beloofde.
+
+    Kost één extra SPARQL-call per annotatiebeurt. Dat is de prijs voor een corpus dat niet afhangt
+    van hoeveel omwegen de ophaal-agent nam; het resultaat gaat in de state, dus Critic en herziening
+    betalen hem niet opnieuw.
+
+    Levert de graaf niets (of kennen we het doel niet), dan valt dit terug op de trace-reconstructie:
+    liever de tekst die de agent zag dan helemaal geen corpus — dan zou de hele beurt afbreken.
+    """
+    bwb = (doel.get("bwbId") or "").strip()
+    aanduiding = (doel.get("artikel") or doel.get("nummer") or "").strip()
+    if bwb and aanduiding:
+        try:
+            corpus = artikel_corpus(bwb, aanduiding, graph, (doel.get("lid") or "").strip() or None)
+            if corpus.strip():
+                return corpus
+            logger.info(
+                "corpus: graaf gaf niets voor het doel; terugval op de tool-trace",
+                extra={"bwb_id": bwb, "aanduiding": aanduiding, "lid": doel.get("lid", "")},
+            )
+        except Exception:  # noqa: BLE001 — een mislukte ophaal mag de annotatie niet breken
+            logger.warning("corpus: gericht ophalen mislukt; terugval op de tool-trace", exc_info=True)
+    return _corpus_uit_trace(source_trace)
 
 _DECOMPOSE_SYSTEM = (
     "Je splitst een juridische vraag over de kennisgraaf op in de deelvragen die je apart moet "
@@ -360,6 +416,8 @@ class State(TypedDict, total=False):
     grounded: bool
     cited: int
     unsupported: list[str]
+    niet_letterlijk: list[str]   # als citaat gepresenteerd, maar niet letterlijk in de trace
+    grounding_niveau: str        # gegrond | onbepaald | ongegrond
     sources: list[dict[str, Any]]
     pending_tools: list[dict[str, Any]]
     turns: int
@@ -368,6 +426,10 @@ class State(TypedDict, total=False):
     # solve_node zet ze in één keer). De per-deelvraag agent⇄tools-loop draait lokaal in solve_node.
     sub_questions: list[str]
     sub_findings: list[dict[str, str]]
+    # De tekst waarop deze annotatiebeurt draait: gericht opgehaald door annoteer_node (zie
+    # `_corpus_voor_doel`) en daarna hergebruikt door de Critic en de herziening, zodat alle drie
+    # over exact dezelfde bepaling oordelen én er maar één ophaalactie nodig is.
+    corpus: str
     # Annotatie: de gegronde voorstellen (als dicts) die annoteer_node maakt; critic_node scoort ze
     # met een aandacht-niveau en emit ze dán pas als `element`-events.
     #
@@ -414,6 +476,11 @@ def build_graph(
             "aanknopingspunt voor verwijzingen als 'dat artikel'; verifieer elk feit opnieuw via "
             f"de tools):\n{lijst}"
         )
+
+    def _corpus(state: State) -> str:
+        """De tekst van deze annotatiebeurt. `annoteer_node` haalde hem gericht op en zette hem in de
+        state; de terugval is er voor een state van vóór dit veld (een hervatte thread)."""
+        return state.get("corpus") or _corpus_uit_trace(state.get("source_trace", []))
 
     def supervisor_node(state: State) -> dict[str, Any]:
         """Bepaalt de worker-keten (antwoord/annotatie) voor deze vraag; zet de eerste worker actief."""
@@ -639,7 +706,9 @@ def build_graph(
                     "messages": [{"role": "assistant", "content": melding}]}
 
         doel = _bepaal_doel(state)
-        corpus = _corpus_uit_trace(state.get("source_trace", []))
+        # Gericht ophalen op basis van het doel — niet reconstrueren uit de trace. Zie
+        # `_corpus_voor_doel`: die reconstructie mengt bepalingen en is afgekapt op 8000 tekens.
+        corpus = _corpus_voor_doel(doel, graph, state.get("source_trace", []))
         aanduiding = doel.get("artikel") or doel.get("nummer") or ""
 
         if not corpus.strip():
@@ -672,7 +741,7 @@ def build_graph(
                 f" lid {doel['lid']}." if doel.get("lid") else "."
             )
             writer({"type": "token", "content": leeg})
-            return {"answer": leeg, "voorstellen": [], "verworpen_fragmenten": [],
+            return {"answer": leeg, "voorstellen": [], "verworpen_fragmenten": [], "corpus": corpus,
                     "messages": [{"role": "assistant", "content": leeg}]}
         # Markeringen die de JURIST zelf maakte gaan mee als BEVROREN voorstellen: de Critic mag er
         # iets van vinden (dat is een tweede paar ogen op eigen werk), maar ze doen niet mee in de
@@ -706,6 +775,9 @@ def build_graph(
         return {
             "voorstellen": [v.model_dump() for v in voorstellen] + eigen,
             "verworpen_fragmenten": [x.model_dump() for x in verworpen],
+            # De Critic en de herziening lezen dit; zonder dit zouden ze de bepaling opnieuw ophalen
+            # (of erger: terugvallen op de trace en over een ándere tekst oordelen).
+            "corpus": corpus,
             "answer": "",
         }
 
@@ -725,7 +797,7 @@ def build_graph(
             return {}  # annoteer_node heeft de lege/foutmelding al geëmit
 
         _stap(writer, "Critic", f"beoordeelt {len(voorstellen)} markeringen")
-        corpus = _corpus_uit_trace(state.get("source_trace", []))
+        corpus = _corpus(state)
 
         oordelen: dict[str, Any] = {}
         ontbrekend: list[Any] = []
@@ -863,7 +935,7 @@ def build_graph(
         if not voorstellen:
             return {"critic_ronde": ronde}
         doel = _bepaal_doel(state)
-        corpus = _corpus_uit_trace(state.get("source_trace", []))
+        corpus = _corpus(state)
         aanduiding = doel.get("artikel") or doel.get("nummer") or ""
         feedback = [f for f in (state.get("critic_feedback") or [])
                     if f.get("id") not in {v.get("id") for v in van_jurist}]
@@ -1074,13 +1146,16 @@ def build_graph(
         writer = get_stream_writer()
         report = check_grounding(state.get("answer", ""), state.get("source_trace", []))
         # Deze controle heeft geen eigen narratie (geen LLM), dus zonder deze regel gebeurt er iets
-        # wezenlijks — de brongetrouwheidstoets — zonder dat de jurist het ziet.
-        _stap(writer, "Controle", (
-            f"brongetrouwheid: {len(report.cited)} verwijzingen onderbouwd"
-            if report.grounded
-            else f"brongetrouwheid: {len(report.unsupported)} verwijzing(en) niet uit de graaf"
-        ))
-        return {"grounded": report.grounded, "cited": len(report.cited), "unsupported": report.unsupported}
+        # wezenlijks — de brongetrouwheidstoets — zonder dat de jurist het ziet. De tijdlijn wordt
+        # bij de beurt bewaard, dus dit is tegelijk het spoor waarop je achteraf terugvalt.
+        _stap(writer, "Controle", _grounding_melding(report))
+        return {
+            "grounded": report.grounded,
+            "cited": len(report.cited),
+            "unsupported": report.unsupported,
+            "niet_letterlijk": report.niet_letterlijk,
+            "grounding_niveau": report.niveau,
+        }
 
     def route_after_verify(state: State) -> str:
         if not state.get("grounded", True) and settings.grounding_correct and not state.get("corrected"):
@@ -1144,6 +1219,8 @@ def build_graph(
             "grounded": state.get("grounded", True),
             "cited": state.get("cited", 0),
             "unsupported": state.get("unsupported", []),
+            "niet_letterlijk": state.get("niet_letterlijk", []),
+            "niveau": state.get("grounding_niveau", "gegrond"),
         })
         # entiteit-tier: alleen nieuwe IRI's toevoegen (append-reducer + dedup).
         existing = set(state.get("entities_seen") or [])

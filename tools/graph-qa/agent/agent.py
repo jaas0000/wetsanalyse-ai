@@ -141,6 +141,10 @@ async def answer_stream(
         # Annotatie-velden: MOETEN mee in de reset. De checkpointer bewaart de state per thread, dus
         # zonder dit begint een tweede beurt met `critic_ronde` van de vorige annotatie en wordt de
         # herzieningslus overgeslagen.
+        # Het corpus is van déze beurt. Zonder reset annoteert een tweede vraag in hetzelfde gesprek
+        # tegen de tekst van de vorige bepaling — precies de verwisseling die de gerichte ophaal
+        # moet uitsluiten.
+        "corpus": "",
         "voorstellen": [],
         "verworpen_fragmenten": [],
         "critic_feedback": [],

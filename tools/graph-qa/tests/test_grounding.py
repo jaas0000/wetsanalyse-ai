@@ -78,3 +78,77 @@ def test_jci_backslash_wordt_gestript():
 
 def test_citations_in_negeert_vocabulaire_namespace():
     assert citations_in("?s <https://ipalm.nl/ns/bwb#heeftLid> ?o") == []
+
+
+# --- Niveau: gegrond / onbepaald / ongegrond -----------------------------------------------------
+#
+# `grounded` was een bool, en "geen enkele verwijzing genoemd" viel daarmee in dezelfde bak als
+# "alles gecontroleerd en in orde". Dat is de gevaarlijkste soort meting: de afwezigheid van bewijs
+# telde als bewijs van afwezigheid.
+
+def test_antwoord_zonder_vindplaats_is_onbepaald_niet_gegrond():
+    report = check_grounding(
+        "De aanslag is invorderbaar zes weken na de dagtekening.",
+        _trace(f"<{IW}> bwb:tekst 'iets' ."),
+    )
+    assert report.niveau == "onbepaald"
+    assert report.cited == []
+    # De bool blijft doen wat hij deed (er is niets AANGETROFFEN dat niet klopt) — het onderscheid
+    # zit in het niveau, zodat de weergave er iets anders van kan maken dan groen.
+    assert report.grounded is True
+
+
+def test_gecontroleerde_verwijzing_is_gegrond():
+    report = check_grounding("Zie BWBR0004770, artikel 9.", _trace("resultaat met BWBR0004770"))
+    assert report.niveau == "gegrond"
+
+
+def test_verzonnen_verwijzing_is_ongegrond():
+    report = check_grounding("Zie BWBR9999999.", _trace("resultaat met BWBR0004770"))
+    assert report.niveau == "ongegrond"
+
+
+# --- Citaatcontrole ------------------------------------------------------------------------------
+#
+# De agent belooft letterlijk te citeren, en de annotatieketen dwingt dat af. In het antwoordpad
+# ontbrak die controle: een citaat met één woord verschil passeerde ongemerkt.
+
+WETTEKST = _trace(
+    "?lidtekst\nEen belastingaanslag is invorderbaar zes weken na de dagtekening van het aanslagbiljet."
+)
+
+
+def test_letterlijk_citaat_passeert():
+    report = check_grounding(
+        'De wet zegt: "Een belastingaanslag is invorderbaar zes weken na de dagtekening".',
+        WETTEKST,
+    )
+    assert report.niet_letterlijk == []
+    assert report.niveau == "gegrond" or report.niveau == "onbepaald"
+
+
+def test_bijna_letterlijk_citaat_wordt_gemarkeerd():
+    report = check_grounding(
+        'De wet zegt: "Een belastingaanslag is invorderbaar binnen zes weken na de dagtekening".',
+        WETTEKST,
+    )
+    assert report.niet_letterlijk, "een ingevoegd woord hoort op te vallen"
+    assert report.niveau == "ongegrond"
+    assert report.grounded is False
+
+
+def test_citaat_met_afwijkende_witruimte_is_geen_afwijking():
+    # Dezelfde normalisatie als bij een JAS-markering: layout mag verschillen, woorden niet.
+    report = check_grounding(
+        'Er staat:  "Een belastingaanslag   is invorderbaar\nzes weken na de dagtekening".',
+        WETTEKST,
+    )
+    assert report.niet_letterlijk == []
+
+
+def test_kort_aangehaald_begrip_wordt_niet_gecontroleerd():
+    # "belastingschuldige" tussen quotes is een begrip, geen citaat van een passage. Daarop
+    # controleren levert vals alarm bij elke verbuiging.
+    report = check_grounding('Het begrip "de belastingschuldige" komt hier terug.', WETTEKST)
+    assert report.niet_letterlijk == []
+    assert report.niveau == "onbepaald"

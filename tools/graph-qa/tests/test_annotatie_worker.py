@@ -274,3 +274,81 @@ def test_run_event_draagt_de_herkomst_van_de_beurt():
     soorten = [e["type"] for e in events]
     assert soorten.index("run") < soorten.index("element")
 
+
+
+# --- Het corpus is de bepaling, niet de zoektocht ernaartoe -------------------------------------
+#
+# De ophaal-agent mag omwegen nemen (eerst het hele artikel, dan het lid). Het corpus waarop
+# geannoteerd wordt hoort dát niet te weerspiegelen: het is precies de bepaling uit het doel,
+# gericht opgehaald. Werd het uit de tool-trace gereconstrueerd, dan zat de tekst van álle
+# opgehaalde leden erin — en dan keurt de brongetrouwheidscheck een fragment uit lid 2 goed als
+# markering "in lid 1", mét de vindplaats van lid 1.
+
+# Twee leden in één artikel-resultaat, zoals get_artikel dat teruggeeft.
+ARTIKEL_TSV = json.dumps(
+    "?tekst\t?jci\t?lid\t?lidnummer\t?lidtekst\n"
+    '\t"jci"\t<https://ipalm.nl/bwb/BWBR0004770/artikel/9/lid/1>\t"1"'
+    '\t"Een belastingaanslag is invorderbaar zes weken na de dagtekening."\n'
+    '\t"jci"\t<https://ipalm.nl/bwb/BWBR0004770/artikel/9/lid/2>\t"2"'
+    '\t"De ontvanger kan uitstel van betaling verlenen."'
+)
+
+TWEE_LEDEN_JSON = json.dumps({
+    "elementen": [
+        {"klasse": "Rechtsobject", "tekst": "Een belastingaanslag", "lid": "1",
+         "toelichting": "waarover", "alternatieven": []},
+        # Staat WEL in het artikel, maar niet in lid 1 — het lid dat geannoteerd wordt.
+        {"klasse": "Rechtsbetrekking", "tekst": "kan uitstel van betaling verlenen", "lid": "2",
+         "toelichting": "wat", "alternatieven": []},
+    ],
+})
+
+
+def test_corpus_blijft_binnen_het_gevraagde_lid():
+    llm = FakeLLM([
+        response([text_block("WORKERS: annotatie\nPLAN: annoteer art 9 lid 1")], "end_turn"),
+        # De ophaal-agent haalt het HELE artikel op — een normale omweg.
+        response([tool_block("t1", "get_artikel", {"bwb_id": "BWBR0004770", "artikel": "9"})], "tool_use"),
+        response([text_block('{"bwbId":"BWBR0004770","artikel":"9","lid":"1","nummer":"","citeertitel":"IW 1990"}')], "end_turn"),
+        response([text_block(TWEE_LEDEN_JSON)], "end_turn"),
+        response([text_block(json.dumps({"oordelen": [], "ontbrekend": []}))], "end_turn"),
+    ])
+    graaf = FakeGraph(result=ARTIKEL_TSV)   # élke query levert beide leden; het lid-filter doet het werk
+    events = _run(answer_stream(
+        "annoteer artikel 9 lid 1 van de Invorderingswet 1990",
+        settings=make_settings(enable_decomposition=True, critic_max_rondes=0),
+        llm=llm, graph=graaf,
+    ))
+
+    corpus = next(e for e in events if e["type"] == "doel")["doel"]["leden_teksten"][0]["tekst"]
+    assert "Een belastingaanslag" in corpus
+    assert "uitstel van betaling" not in corpus, "lid 2 hoort niet in het corpus van lid 1"
+
+    elementen = [e["element"] for e in events if e["type"] == "element"]
+    assert [el["tekst"] for el in elementen] == ["Een belastingaanslag"]
+    assert elementen[0]["vindplaats"] == "BWBR0004770 art. 9 lid 1"
+
+
+def test_corpus_valt_terug_op_de_trace_als_de_graaf_niets_geeft():
+    """Geen corpus uit de graaf (onbekende vindplaats, andere structuur) mag de beurt niet slopen:
+    dan is de tekst die de agent zag beter dan geen tekst."""
+    llm = FakeLLM([
+        response([text_block("WORKERS: annotatie\nPLAN: annoteer art 9 lid 1")], "end_turn"),
+        response([tool_block("t1", "get_lid", {"bwb_id": "BWBR0004770", "artikel": "9", "lid": "1"})], "tool_use"),
+        response([text_block('{"bwbId":"BWBR0004770","artikel":"9","lid":"1","nummer":"","citeertitel":"IW 1990"}')], "end_turn"),
+        response([text_block(ELEMENTEN_JSON)], "end_turn"),
+        response([text_block(json.dumps({"oordelen": [], "ontbrekend": []}))], "end_turn"),
+    ])
+
+    def alleen_voor_de_toolcall(query: str) -> str:
+        # get_artikel (de gerichte ophaal) levert niets; de lid-query van de agent wél.
+        return "" if "/artikel/9>" in query else LID_TSV
+
+    events = _run(answer_stream(
+        "annoteer artikel 9 lid 1 van de Invorderingswet 1990",
+        settings=make_settings(enable_decomposition=True, critic_max_rondes=0),
+        llm=llm, graph=FakeGraph(results=alleen_voor_de_toolcall),
+    ))
+
+    elementen = [e["element"] for e in events if e["type"] == "element"]
+    assert {el["klasse"] for el in elementen} == {"Rechtssubject", "Rechtsbetrekking"}
