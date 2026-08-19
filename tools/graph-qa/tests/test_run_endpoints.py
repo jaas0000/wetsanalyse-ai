@@ -118,6 +118,28 @@ def test_botsing_op_een_thread_geldt_over_gebruikers_heen(client):
     assert botsing.json()["detail"]["run_id"] == eerste["run_id"]
 
 
+def test_rate_limit_telt_per_gebruiker(client, monkeypatch):
+    """Al het verkeer komt van één container (de BFF), dus op IP tellen gaf één gedeelde emmer voor
+    alle juristen samen — de één kreeg een 429 door de activiteit van de ander."""
+    from api import main
+
+    monkeypatch.setattr(main.settings, "rate_limit", 2)
+    main._hits.clear()
+
+    # A verbruikt zijn eigen budget (eigen gesprek per run, anders botst hij op de 409).
+    for n in range(2):
+        assert client.post("/v1/runs", json={"question": "v", "conversation_id": f"g-a{n}"},
+                           headers=A).status_code == 201
+    # De volgende van A wordt geweigerd...
+    assert client.post("/v1/runs", json={"question": "v", "conversation_id": "g-a9"},
+                       headers=A).status_code == 429
+    # ...maar B heeft daar niets mee te maken.
+    assert client.post("/v1/runs", json={"question": "v", "conversation_id": "g-b0"},
+                       headers=B).status_code == 201
+
+    main._hits.clear()
+
+
 def test_onbekende_run_is_404(client):
     """Na een herstart is het register leeg. Dan hoort de client dát te horen, in plaats van eeuwig
     te wachten op een run die niet meer bestaat."""
@@ -172,6 +194,27 @@ def test_gesprek_verwijderen_stopt_de_lopende_beurt(client):
     stand = client.get(f"/v1/runs/{run_id}/events?vanaf=0")
     assert stand.status_code == 200
     assert client.get("/v1/conversations/g1/run").json()["status"] == "gestopt"
+
+
+def test_gesprek_van_een_ander_verwijderen_stopt_zijn_beurt_niet(client):
+    """De eigenaarscontrole op `/v1/runs/{id}/cancel` was via deze route te omzeilen.
+
+    graph-qa kán niet weten van wie een gesprek is — die administratie zit in de wetsanalyse-api, en
+    de BFF vraagt het daar op vóór hij hier belt. Maar van wie de *run* is weet hij wél, en dat is
+    genoeg om te weigeren dat iemand met een vreemd gespreks-id andermans lopende beurt afkapt.
+    """
+    run_id = client.post(
+        "/v1/runs", json={"question": "v", "conversation_id": "g-a"}, headers=A
+    ).json()["run_id"]
+
+    assert client.delete("/v1/conversations/g-a", headers=B).status_code == 404
+
+    # De beurt van A loopt gewoon door: geen stopverzoek, geen gewist geheugen.
+    assert client.get("/v1/conversations/g-a/run", headers=A).json()["run_id"] == run_id
+    assert client.get(f"/v1/runs/{run_id}/events?vanaf=0", headers=A).status_code == 200
+
+    # De eigenaar mag het uiteraard wél.
+    assert client.delete("/v1/conversations/g-a", headers=A).status_code == 204
 
 
 def test_verwijderen_van_een_gesprek_zonder_run_blijft_stil(client):

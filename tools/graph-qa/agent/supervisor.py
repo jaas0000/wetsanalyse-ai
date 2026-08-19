@@ -29,11 +29,27 @@ SUPERVISOR_SYSTEM = (
 
 _QA_SPECIALISTS = ("definitie", "duiding", "algemeen")
 
+# De enige twee workers die bestaan. Alles daarbuiten is een verzinsel van het model en telt niet
+# mee: eerder werd élke onbekende naam stilzwijgend een extra ANTWOORD-worker, zodat "WORKERS:
+# antwoord, samenvatten" dezelfde vraag twee keer beantwoordde — dubbele kosten, twee antwoorden.
+_WORKERS = ("antwoord", "annotatie")
 
-def parse_supervisor(text: str) -> tuple[list[str], str]:
-    """(worker_plan, plan). worker_plan is een geordende lijst specialist-namen die de agent-node
-    draait: een `antwoord`-worker wordt de gekozen QA-specialist, een `annotatie`-worker wordt
-    'annotatie'."""
+# Meer dan twee schakels heeft geen enkele vraag nodig (annoteren en dan samenvatten is de langste
+# zinnige keten). Zonder plafond kan één supervisor-respons de beurt willekeurig lang maken.
+_MAX_WORKERS = 2
+
+
+def parse_supervisor(text: str) -> tuple[list[str], str, bool]:
+    """(worker_plan, plan, afwijzen).
+
+    `worker_plan` is een geordende lijst specialist-namen die de agent-node draait: een
+    `antwoord`-worker wordt de gekozen QA-specialist, een `annotatie`-worker wordt 'annotatie'.
+
+    `afwijzen` betekent dat de supervisor de vraag buiten de scope plaatste. Dat stond al in het
+    promptformaat maar werd nergens gelezen: het woord "AFWIJZEN" ging als plan de systeemprompt van
+    de specialist in, waarna een tweede modelbeslissing bepaalde wat er gebeurde. Nu is het een
+    besluit dat de orkestrator uitvoert — de vraag eindigt vóór de eerste tool-call.
+    """
     workers_raw, qa_specialist, plan = "", "algemeen", ""
     for line in text.splitlines():
         low = line.strip()
@@ -49,6 +65,8 @@ def parse_supervisor(text: str) -> tuple[list[str], str]:
     if not plan:
         plan = text.strip()
 
-    workers = [w.strip() for w in workers_raw.split(",") if w.strip()] or ["antwoord"]
-    plan_spec = ["annotatie" if w == "annotatie" else qa_specialist for w in workers]
-    return plan_spec, plan
+    # Alleen bekende workers, en nooit meer dan het plafond. Blijft er niets over, dan is
+    # 'antwoord' de veilige terugval — een beurt zonder worker zou niets doen.
+    workers = [w.strip() for w in workers_raw.split(",") if w.strip() in _WORKERS][:_MAX_WORKERS]
+    plan_spec = ["annotatie" if w == "annotatie" else qa_specialist for w in workers or ["antwoord"]]
+    return plan_spec, plan, plan.strip().upper().startswith("AFWIJZEN")

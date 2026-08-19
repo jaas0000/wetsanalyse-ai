@@ -410,6 +410,7 @@ class State(TypedDict, total=False):
     specialist: str
     plan: str
     worker_plan: list[str]   # geordende worker-keten (specialist-namen) die de supervisor koos
+    afwijzen: bool           # supervisor plaatste de vraag buiten de scope → geen worker draait
     worker_idx: int          # index van de huidige worker in worker_plan
     source_trace: list[tuple[str, str]]
     answer: str
@@ -505,14 +506,26 @@ def build_graph(
             messages=[{"role": "user", "content": state["question"]}],
         )
         text = "".join(b.text for b in resp.content if b.type == "text")
-        worker_plan, plan = parse_supervisor(text)
+        worker_plan, plan, afwijzen = parse_supervisor(text)
+        if afwijzen:
+            # Buiten de scope. Dit hoort hier te eindigen en niet als "AANPAK: AFWIJZEN" de
+            # systeemprompt van een specialist in te gaan, waar een tweede modelbeslissing bepaalt
+            # wat er gebeurt — dat kost minstens één extra call en is bovendien geen garantie.
+            _stap(writer, "Supervisor", "buiten de wet- en regelgeving in de graaf")
+            return {"specialist": "", "plan": plan, "worker_plan": [], "worker_idx": 0,
+                    "afwijzen": True}
         eerste = worker_plan[0]
         _stap(writer, "Supervisor", f"kiest de {eerste}-worker · {plan[:80]}")
-        return {"specialist": eerste, "plan": plan, "worker_plan": worker_plan, "worker_idx": 0}
+        return {"specialist": eerste, "plan": plan, "worker_plan": worker_plan, "worker_idx": 0,
+                "afwijzen": False}
 
     def _entry_node(state: State) -> str:
         """Ingang voor de huidige worker: de annotatie-worker draait altijd de agent⇄tools-lus; een
-        antwoord-worker gaat in decompositie-modus langs decompose, anders ook langs de agent-lus."""
+        antwoord-worker gaat in decompositie-modus langs decompose, anders ook langs de agent-lus.
+
+        Wees de vraag afgewezen, dan gaat er geen enkele worker draaien — dat is de hele winst."""
+        if state.get("afwijzen"):
+            return "afwijzen"
         if state.get("specialist") == "annotatie":
             return "agent"
         return "decompose" if settings.enable_decomposition else "agent"
@@ -600,6 +613,23 @@ def build_graph(
                 regels.append("--- EINDE ---")
         return "\n".join(regels)
 
+    def afwijs_node(state: State) -> dict[str, Any]:
+        """De supervisor plaatste de vraag buiten de scope: hier eindigt de beurt.
+
+        Kort en zonder verwijt, met de uitnodiging erbij — een afwijzing die alleen "dat doe ik niet"
+        zegt laat iemand raden wat dan wel kan. Geen tools, geen bronnen, geen tweede LLM-call.
+        """
+        writer = get_stream_writer()
+        melding = (
+            "Deze vraag gaat niet over de Nederlandse wet- en regelgeving in mijn kennisgraaf "
+            "(invordering en belastingen), dus daar kan ik je niet mee helpen. Vraag me gerust naar "
+            "een bepaling, een begrip of de samenhang tussen artikelen — of laat me een artikel "
+            "annoteren volgens het JAS."
+        )
+        writer({"type": "token", "content": melding})
+        _stap(writer, "Klaar", "niet beantwoord — buiten de wetgeving in de graaf")
+        return {"answer": melding, "messages": [{"role": "assistant", "content": melding}]}
+
     def agent_node(state: State) -> dict[str, Any]:
         writer = get_stream_writer()
         # Alleen bij de eerste beurt: daarna is elke ronde al herkenbaar aan de graafbevragingen, en
@@ -611,13 +641,17 @@ def build_graph(
         # vindt de exacte bepaling. De JAS-annotatie gebeurt daarna in annoteer_node (pure LLM-call).
         spec_naam = "retrieval" if state.get("specialist") == "annotatie" else state.get("specialist")
         spec = get_specialist(spec_naam)
-        system = SYSTEM_PROMPT
-        if spec.system:
-            system = f"{system}\n\n{spec.system}"
+        # Twee delen, en de volgorde is betekenisdragend: het stabiele deel (identiteit +
+        # specialist) is bij elke tool-ronde van elke beurt hetzelfde en draagt daarom het
+        # prompt-cache-punt; het plan, de geheugen-context en de adviescontext verschillen per
+        # beurt en horen er dus áchter. Caching is een prefix-match — één byte verschil vóór het
+        # cache-punt maakt de cache waardeloos.
+        stabiel = SYSTEM_PROMPT + (f"\n\n{spec.system}" if spec.system else "")
+        variabel = ""
         if state.get("plan"):
-            system = f"{system}\n\nAANPAK (door jou gepland):\n{state['plan']}"
-        system += _memory_context(state)
-        system += _advies_context(state)
+            variabel += f"AANPAK (door jou gepland):\n{state['plan']}"
+        variabel += _memory_context(state)
+        variabel += _advies_context(state)
 
         # De annotatie-worker produceert JSON, geen leesbaar antwoord — díe narratie tonen we niet
         # (annoteer_node emit straks een korte samenvatting). De narratie van een gewone worker is de
@@ -626,7 +660,7 @@ def build_graph(
         with llm.stream(
             model=model,
             max_tokens=4096,
-            system=system,
+            system=[stabiel, variabel],
             tools=anthropic_schemas(only=spec.tools),
             # Historie begrenzen (tegen onbegrensde promptgroei in een lange sessie); state blijft heel.
             messages=_trim_messages(_schoon_messages(state["messages"]), settings.max_history_chars),
@@ -933,7 +967,13 @@ def build_graph(
         # bij `CRITIC_MAX_RONDES=2` — precies de kosten die die knop hoort af te grendelen.
         ronde = int(state.get("critic_ronde") or 0) + 1
         if not voorstellen:
-            return {"critic_ronde": ronde}
+            # Alleen markeringen van de jurist: er valt niets te herzien. `herziening_wijzigde`
+            # expliciet op False, anders blijft de waarde van de vórige ronde staan en stuurt
+            # `route_na_herziening` de keten naar nóg een Critic-pas over precies dezelfde,
+            # onveranderde voorstellen — een volle call met het hele corpus, gegarandeerd zonder
+            # nieuwe uitkomst.
+            return {"critic_ronde": ronde, "herziening_wijzigde": False,
+                    "stop_reden": "niets te herzien"}
         doel = _bepaal_doel(state)
         corpus = _corpus(state)
         aanduiding = doel.get("artikel") or doel.get("nummer") or ""
@@ -1281,13 +1321,15 @@ def build_graph(
         for i, sub in enumerate(subs, 1):
             if len(subs) > 1:
                 _stap(writer, f"Deelvraag {i}/{len(subs)}", sub[:80])
-            system = base_system
+            # Zelfde splitsing als in `agent_node`: base_system is stabiel over alle deelvragen
+            # heen, de bevindingen en de geheugen-context groeien per deelvraag.
+            variabel = ""
             if findings:
                 ctx = "\n".join(f"- {f['vraag']} → {f['antwoord'][:300]}" for f in findings)
-                system += (
-                    "\n\nEERDERE DEELBEVINDINGEN (context; verifieer elk feit opnieuw via de tools):\n" + ctx
+                variabel += (
+                    "EERDERE DEELBEVINDINGEN (context; verifieer elk feit opnieuw via de tools):\n" + ctx
                 )
-            system += _memory_context(state)
+            variabel += _memory_context(state)
             msgs: list[dict[str, Any]] = [{"role": "user", "content": sub}]
             antwoord = ""
             for _turn in range(settings.sub_max_turns):
@@ -1299,7 +1341,7 @@ def build_graph(
                 if laatste_beurt:
                     _stap(writer, "Deelvraag", "beurtlimiet bereikt — verder met wat is gevonden")
                 with llm.stream(
-                    model=model, max_tokens=4096, system=system,
+                    model=model, max_tokens=4096, system=[base_system, variabel],
                     tools=[] if laatste_beurt else schemas,
                     messages=_trim_messages(_schoon_messages(msgs), settings.max_history_chars),
                 ) as stream:
@@ -1416,8 +1458,10 @@ def build_graph(
         add("herzie", herzie_node)
         add("emit", emit_node)
         add("advance", advance_node)
-        entrymap = {"agent": "agent", "decompose": "decompose"}
+        add("afwijzen", afwijs_node)
+        entrymap = {"agent": "agent", "decompose": "decompose", "afwijzen": "afwijzen"}
         g.add_edge(START, "supervisor")
+        g.add_edge("afwijzen", END)
         g.add_conditional_edges("supervisor", _entry_node, entrymap)
         g.add_edge("decompose", "solve")
         g.add_conditional_edges("solve", route_after_solve, {"verify": "verify", "synthesize": "synthesize"})
@@ -1452,8 +1496,10 @@ def build_graph(
         add("herzie", herzie_node)
         add("emit", emit_node)
         add("advance", advance_node)
+        add("afwijzen", afwijs_node)
         g.add_edge(START, "supervisor")
-        g.add_conditional_edges("supervisor", _entry_node, {"agent": "agent"})
+        g.add_conditional_edges("supervisor", _entry_node, {"agent": "agent", "afwijzen": "afwijzen"})
+        g.add_edge("afwijzen", END)
         g.add_conditional_edges(
             "agent", route_after_agent,
             {"tools": "tools", "verify": "verify", "annoteer": "annoteer"},
@@ -1468,7 +1514,8 @@ def build_graph(
         g.add_conditional_edges("critic", route_na_critic, {"herzie": "herzie", "emit": "emit"})
         g.add_conditional_edges("herzie", route_na_herziening, {"critic": "critic", "emit": "emit"})
         g.add_edge("emit", "advance")
-        g.add_conditional_edges("advance", route_after_advance, {"agent": "agent", "einde": END})
+        g.add_conditional_edges("advance", route_after_advance,
+                                {"agent": "agent", "afwijzen": "afwijzen", "einde": END})
         return g
 
     # Geen classificatie (planning off, decomp off): pure QA-agent, ongewijzigd (geen annotatie-route).

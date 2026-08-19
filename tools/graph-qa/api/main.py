@@ -102,7 +102,7 @@ _bearer = HTTPBearer(auto_error=False)
 
 # Per-IP sliding-window rate-limit (per proces).
 _hits: dict[str, deque[float]] = {}
-_MAX_TRACKED_IPS = 10_000  # bovengrens; boven deze grens vervallen buckets opruimen (geen geheugenlek)
+_MAX_TRACKED_IPS = 10_000  # bovengrens per sleutel (gebruiker of IP); daarboven vervallen buckets opruimen
 
 
 def _client_ip(request: Request) -> str:
@@ -117,6 +117,19 @@ def _client_ip(request: Request) -> str:
     return request.client.host if request.client else "onbekend"
 
 
+def _limiet_sleutel(request: Request) -> str:
+    """Waarop de rate-limit telt: bij voorkeur de gebruiker, anders het IP.
+
+    graph-qa is intern-only en al zijn verkeer komt van één container — de frontend-BFF. Op het IP
+    tellen betekende daarom één gedeelde emmer van `rate_limit` verzoeken per minuut voor álle
+    juristen samen, zodat de één een 429 kreeg door de activiteit van de ander. `X-User-Id` komt uit
+    de sessie (de BFF zet hem, nooit de browser), dus hij is hier net zo betrouwbaar als het peer-IP
+    en veel bruikbaarder. Zonder header valt het terug op het oude gedrag.
+    """
+    gebruiker = request.headers.get("x-user-id", "").strip()
+    return f"user:{gebruiker}" if gebruiker else f"ip:{_client_ip(request)}"
+
+
 def _prune_hits(now: float, window: float) -> None:
     # Voorkom onbegrensde groei van _hits: gooi buckets weg waarvan de laatste hit buiten het venster
     # ligt (volledig verlopen). Alleen als de dict te groot wordt, zodat het pad normaal goedkoop blijft.
@@ -128,7 +141,7 @@ def _prune_hits(now: float, window: float) -> None:
 
 
 def _rate_limit(request: Request) -> None:
-    ip = _client_ip(request)
+    ip = _limiet_sleutel(request)
     now = time.monotonic()
     window = settings.rate_window_seconds
     _prune_hits(now, window)
@@ -210,6 +223,7 @@ async def chat(
 @app.delete("/v1/conversations/{conversation_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def verwijder_conversation(
     conversation_id: str,
+    gebruiker: str = Depends(_aanroeper),
     _rl: None = Depends(_rate_limit),
     _auth: None = Depends(_check_auth),
 ) -> None:
@@ -221,7 +235,14 @@ async def verwijder_conversation(
     minutenlang door voor een gesprek dat niet meer bestaat — en probeert hij aan het eind te
     schrijven in iets wat is weggegooid. Wat er al geannoteerd was blijft wél bestaan: een
     annotatiedocument staat los van zijn gesprek (zie /annotaties)."""
+    # Tweede net op de eigenaar. graph-qa kán niet weten van wie een gesprek is — die administratie
+    # zit in de wetsanalyse-api, en de BFF vraagt het daar ook op voordat hij hier belt. Wat hij wél
+    # weet is van wie de run op dit gesprek is; dat is genoeg om te weigeren dat iemand met een
+    # vreemd gespreks-id andermans lopende beurt afkapt. Zonder deze regel was de eigenaarscontrole
+    # op `/v1/runs/{id}/cancel` langs deze route te omzeilen.
     lopend = runs.actief_voor(conversation_id)
+    if lopend is not None and gebruiker and lopend.user_id and lopend.user_id != gebruiker:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Onbekend gesprek")
     if lopend is not None and lopend.loopt:
         runs.vraag_stop(lopend)
         logger.info(

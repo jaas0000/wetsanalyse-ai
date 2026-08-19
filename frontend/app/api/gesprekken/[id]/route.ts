@@ -11,11 +11,14 @@ type Params = { params: Promise<{ id: string }> };
 /** Stop de lopende beurt en wis het agent-geheugen (graph-qa checkpointer-thread) van dit gesprek.
  *  Best-effort: een falen mag de UI-delete niet blokkeren — de checkpointer-thread ruimt anders later
  *  op (of blijft hooguit ongebruikt staan). */
-async function wisAgentGeheugen(id: string): Promise<void> {
+async function wisAgentGeheugen(id: string, userid: string): Promise<void> {
   try {
     await fetch(`${graphQaBaseUrl()}/v1/conversations/${pathSegment(id)}`, {
       method: "DELETE",
-      headers: { ...graphQaAuthHeader() },
+      // De identiteit gaat mee, net als op de run-routes: deze delete stopt ook een lopende beurt,
+      // en graph-qa weigert dat voor een run van iemand anders. De api heeft het eigenaarschap dan
+      // al vastgesteld — dit is het tweede net, niet het eerste.
+      headers: { ...graphQaAuthHeader(), "X-User-Id": userid },
       cache: "no-store",
     });
   } catch (err) {
@@ -50,7 +53,7 @@ export async function DELETE(_req: Request, { params }: Params) {
   const eigen = await proxy(`/v1/gesprekken/${pathSegment(id)}`, { headers: { "X-User-Id": userid } });
   // Stoppen vóór verwijderen: andersom bleef er een venster waarin de agent doorwerkte en aan het
   // eind in een gesprek schreef dat al weg was.
-  if (eigen.ok) await wisAgentGeheugen(id);
+  if (eigen.ok) await wisAgentGeheugen(id, userid);
   return proxy(`/v1/gesprekken/${pathSegment(id)}`, {
     method: "DELETE",
     headers: { "X-User-Id": userid },

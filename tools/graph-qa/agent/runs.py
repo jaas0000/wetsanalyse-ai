@@ -75,10 +75,18 @@ class Run:
     # erboven kunnen tonen in plaats van tokens uit het niets.
     vraag: str = ""
     status: str = "loopt"          # loopt | klaar | gestopt | mislukt
+    # Elk event draagt zijn EIGEN `seq`, toegekend bij het toevoegen. Eerder werd het volgnummer
+    # afgeleid uit de positie in deze lijst (`index = cursor - weggevallen`), en dat klopt alleen als
+    # precies de eerste N events verdwijnen. `_cap` snoeit echter selectief — het gooit narratie weg
+    # waar die ook staat — dus schoof na het snoeien alles op: een `doel`-event dat seq 0 had kwam
+    # terug als seq 1, en een client die opnieuw aanhaakte kreeg juist de betekenisvolle events
+    # dubbel. Nu is een seq een identiteit, geen positie.
     events: list[dict[str, Any]] = field(default_factory=list)
-    # Hoeveel vluchtige events er vóór de bewaarde log zijn weggevallen. > 0 betekent dat de client
-    # een gat moet tónen in plaats van te doen alsof de tekst compleet is.
+    # Hoeveel vluchtige events er in totaal zijn weggegooid. Puur informatief (metriek/logging); het
+    # gat dat een kijker moet tonen wordt berekend uit de seq-sprong, niet hieruit.
     weggevallen: int = 0
+    # Hoeveel events deze run ooit produceerde = het seq-nummer dat het volgende krijgt.
+    geproduceerd: int = 0
     gestart: float = field(default_factory=time.monotonic)
     eind_op: float | None = None
     stop_gevraagd: bool = False
@@ -92,7 +100,7 @@ class Run:
     @property
     def volgende_seq(self) -> int:
         """Het seq-nummer dat het eerstvolgende event krijgt (= aantal ooit geproduceerd)."""
-        return self.weggevallen + len(self.events)
+        return self.geproduceerd
 
     def samenvatting(self) -> dict[str, Any]:
         """Wat een client krijgt als hij vraagt of er nog iets loopt."""
@@ -201,7 +209,8 @@ class RunRegister:
             run._wakker.notify_all()
 
     async def _voeg_toe(self, run: Run, event: dict[str, Any]) -> None:
-        run.events.append(event)
+        run.events.append({**event, "seq": run.geproduceerd})
+        run.geproduceerd += 1
         self._cap(run)
         async with run._wakker:
             run._wakker.notify_all()
@@ -245,25 +254,33 @@ class RunRegister:
         Elke abonnee houdt zijn eigen cursor en wacht op een `Condition` — geen `asyncio.Queue`,
         want die kun je maar één keer leegdrinken en er kunnen meerdere tabbladen meekijken.
         Losraken van deze generator laat de run ongemoeid.
+
+        Twee dingen die eerder misgingen en waar de vorm nu op is gebouwd:
+
+        - **Een gat blijkt uit de seq-sprong**, niet uit een teller. Het snoeien (`_cap`) haalt
+          narratie weg waar die ook staat, dus "de eerste N zijn weg" was een verkeerde aanname:
+          daarmee schoven de nummers op en kreeg een aanhaker betekenisvolle events dubbel.
+        - **De toestandscontrole hoort onder de lock.** Stond ze erbuiten, dan kon de run afronden
+          tussen `if not run.loopt` en het wachten — de `notify_all` was dan al geweest en de kijker
+          bleef hangen op een run die klaar was, met een SSE-stream die nooit sloot.
         """
-        cursor = max(vanaf, run.weggevallen)
-        if vanaf < run.weggevallen:
-            # Wees expliciet over het gat in plaats van stilzwijgend een verminkte tekst te leveren.
-            yield {"type": "gat", "weggevallen": run.weggevallen - vanaf}
+        cursor = vanaf
         while True:
-            while cursor < run.volgende_seq:
-                index = cursor - run.weggevallen
-                # Het cappen kan de cursor achterhaald hebben terwijl we niet keken.
-                if index < 0:
-                    yield {"type": "gat", "weggevallen": run.weggevallen - cursor}
-                    cursor = run.weggevallen
-                    continue
-                yield {**run.events[index], "seq": cursor}
-                cursor += 1
-            if not run.loopt:
-                return
+            for event in [e for e in run.events if e.get("seq", 0) >= cursor]:
+                seq = int(event.get("seq", cursor))
+                if seq > cursor:
+                    # Wees expliciet over het gat in plaats van stilzwijgend een verminkte tekst te
+                    # leveren; dit dekt zowel te laat aanhaken als tussentijds snoeien.
+                    yield {"type": "gat", "weggevallen": seq - cursor}
+                yield event
+                cursor = seq + 1
             async with run._wakker:
-                await run._wakker.wait()
+                if cursor >= run.geproduceerd and not run.loopt:
+                    return
+                if cursor >= run.geproduceerd:
+                    await run._wakker.wait_for(
+                        lambda: cursor < run.geproduceerd or not run.loopt
+                    )
 
     # -- opruimen ------------------------------------------------------------------------------
 

@@ -97,6 +97,13 @@ class Settings(BaseModel):
     checkpoint_db_url: str | None = None
     checkpoint_db_path: str | None = "conversations_checkpoints.db"
 
+    # Prompt-caching op het stabiele deel van de systeemprompt (identiteit, JAS-klassen,
+    # specialist). Die blokken zijn groot en gaan per beurt meermaals identiek de deur uit — de
+    # annotatieketen alleen al doet 3 tot 5 calls met dezelfde dertien-klassen-referentie. Uit te
+    # zetten met `PROMPT_CACHING=false`; de adapter schakelt zichzelf bovendien uit zodra de
+    # provider `cache_control` weigert (het is op Azure AI Foundry een beta-functie).
+    prompt_caching: bool = True
+
     # Grounding
     grounding_correct: bool = False   # bij niet-onderbouwde citaties één corrigerende her-vraag
     curate_sources: bool = True       # bronnenlijst beperken tot in het antwoord aangehaalde regelingen
@@ -129,6 +136,7 @@ class Settings(BaseModel):
             "max_subquestions": e.get("MAX_SUBQUESTIONS"),
             "sub_max_turns": e.get("SUB_MAX_TURNS"),
             "critic_max_rondes": e.get("CRITIC_MAX_RONDES"),
+            "prompt_caching": e.get("PROMPT_CACHING"),
             "wetsanalyse_api_url": e.get("WETSANALYSE_API_URL"),
             "wetsanalyse_api_token": _read_secret(e, "WETSANALYSE_API_TOKEN"),
             "qa_api_token": _read_secret(e, "QA_API_TOKEN"),

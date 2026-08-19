@@ -209,3 +209,73 @@ async def test_fout_in_de_stroom_wordt_een_error_event():
     assert run.events[-1]["type"] == "error"
     # De ruwe fout hoort niet in de browser.
     assert "kapot" not in run.events[-1]["message"]
+
+
+@asyncio_test
+async def test_seq_is_identiteit_geen_positie():
+    """Na selectief snoeien houdt elk event zijn eigen volgnummer.
+
+    Het volgnummer werd afgeleid uit de positie in de lijst (`cursor - weggevallen`), en dat klopt
+    alleen als precies de eerste N events verdwijnen. `_cap` haalt narratie weg wáár die ook staat,
+    dus schoof alles op: het `doel`-event dat seq 0 had kwam terug als seq 1. Een kijker die seq 0 al
+    had gezien en vanaf 1 aanhaakte, kreeg dat doel daardoor nóg een keer — precies de betekenisvolle
+    events die het snoeien wilde beschermen.
+    """
+    register = RunRegister(max_events=4)
+    events = [
+        {"type": "doel", "doel": {"artikel": "9"}},
+        {"type": "token", "content": "a"},
+        {"type": "token", "content": "b"},
+        {"type": "element", "element": {"id": "e1"}},
+        {"type": "token", "content": "c"},
+        {"type": "done"},
+    ]
+    run = register.start(conversation_id="g1", vraag="v", maak_stroom=_stroom(events))
+    await _wacht_af(run)
+
+    # Het doel is bewaard gebleven en draagt nog steeds zijn oorspronkelijke nummer.
+    doel = next(e for e in run.events if e["type"] == "doel")
+    assert doel["seq"] == 0
+
+    # De kijker had seq 0 al; wat hij nu krijgt begint erná — geen tweede doel.
+    vervolg = [e async for e in register.volg(run, vanaf=1)]
+    assert not any(e["type"] == "doel" for e in vervolg)
+    # Wat er tussenuit is gesnoeid wordt wél gemeld.
+    assert [e["type"] for e in vervolg if e["type"] != "gat"] == ["element", "token", "done"]
+
+
+@asyncio_test
+async def test_volgen_sluit_ook_als_de_run_afrondt_tijdens_het_wachten():
+    """De toestandscontrole hoort onder dezelfde lock als het wachten.
+
+    Stond ze erbuiten, dan paste hier een race: tussen `if not run.loopt` en het verkrijgen van de
+    lock kon de run afronden, was de `notify_all` al geweest, en bleef de kijker wachten op een
+    signaal dat nooit meer kwam. Voor de gebruiker betekende dat een SSE-stream die niet sloot en een
+    werkplek die "bezig" bleef tonen terwijl de beurt allang klaar en vastgelegd was.
+
+    De interleaving wordt hier afgedwongen (in productie is het een race met een smal venster) door
+    de run af te ronden op het moment dat de kijker de lock probeert te pakken.
+    """
+    register = RunRegister()
+    run = register.start(conversation_id="g1", vraag="v", maak_stroom=_stroom([]))
+    await asyncio.sleep(0)
+    run.status = "loopt"           # doe alsof hij nog loopt; wij bepalen wanneer hij eindigt
+    run.eind_op = None
+    await register._voeg_toe(run, {"type": "token", "content": "a"})
+
+    origineel = run._wakker.acquire
+    eerste = {"keer": True}
+
+    async def acquire_en_rond_af():
+        if eerste["keer"]:
+            eerste["keer"] = False
+            await register._voeg_toe(run, {"type": "done"})
+            await register._rond_af(run, "klaar")
+        return await origineel()
+
+    run._wakker.acquire = acquire_en_rond_af
+
+    async with asyncio.timeout(3):   # zonder de fix loopt dit af in plaats van te sluiten
+        geleverd = [e async for e in register.volg(run, vanaf=0)]
+
+    assert [e["type"] for e in geleverd] == ["token", "done"]

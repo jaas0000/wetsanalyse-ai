@@ -83,7 +83,15 @@ veilig**, verplicht bij >1 replica) → **`CHECKPOINT_DB_PATH`** → `AsyncSqlit
 - **`ports.py`** — `GraphPort` / `LLMPort` protocols. Alles wat naar buiten praat, loopt hierlangs,
   zodat tests fakes injecteren i.p.v. netwerk te raken.
 - **`adapters/anthropic_llm.py`** — Anthropic Messages API via Azure AI Foundry (`…/anthropic`), met
-  `create()` en `stream()`. Bewust géén langchain-chatmodel.
+  `create()` en `stream()`. Bewust géén langchain-chatmodel. Hier zit ook de **prompt-caching**: het
+  systeemblok mag als `[stabiel, variabel]` binnenkomen (`ports.Systeem`) en het cache-punt gaat op
+  het stabiele deel. Caching is een **prefix-match**, dus die volgorde is betekenisdragend — zet je
+  het plan of de geheugen-context vóór de identiteit, dan is de cache stil waardeloos (geen fout,
+  wel de volle rekening). Onder `_MIN_CACHE_TEKENS` gaat er geen cache-punt op: de annotatieketen
+  (8-10k tekens systeemprompt, 3-5 calls per beurt) profiteert, de kortere QA-prompt niet. Weigert
+  de provider `cache_control` — op Foundry is het een beta-functie — dan zet de adapter zichzelf uit
+  en herhaalt de call zonder; de prijs van caching mag nooit "de dienst ligt plat" zijn. Knop:
+  `PROMPT_CACHING=false`.
 - **`adapters/graphdb_graph.py`** — `make_graph(settings)` → `MCPClient`; roept `settings.require_graph()`.
 - **`mcp_client.py`** — synchrone MCP-client (Streamable HTTP): `sparql()` via tool `sparql_query`,
   `semantic_search()` via `similarity_search`. Eén persistente `httpx.Client`. `_reject_updates`
@@ -125,8 +133,10 @@ dit aan bij het verwijderen van een gesprek, náást de API-berichten-delete) en
 (artikeltekst uit de graaf voor het documentpaneel van de werkplek; query `bwb_id`/`artikel`/`lid?`).
 De **lifespan** doet fail-fast `settings.require_graph()` bij boot en flush't de OTel-buffers bij
 shutdown (`observability.shutdown()`). Beveiliging: CORS-credentials nooit samen met `*` (elke `"*"`
-in de origin-lijst telt als wildcard), per-IP rate-limit (dependency, geen middleware — anders buffert
-de SSE), timing-safe token-check.
+in de origin-lijst telt als wildcard), rate-limit per **gebruiker** (`X-User-Id`, met het IP als
+terugval; dependency en geen middleware, anders buffert de SSE — al het verkeer komt van één
+BFF-container, dus op IP tellen gaf één gedeelde emmer voor álle juristen samen), timing-safe
+token-check.
 
 ### Runs: de beurt is van de server, niet van het tabblad
 
@@ -266,6 +276,15 @@ kost de lus dus niets.
   `critic_max_rondes` geen plafond. Hij telt geen Critic-passes, en wordt gereset in `advance_node` én in
   de init van `answer_stream`. Zonder die reset begint een tweede beurt in dezelfde thread met een
   volle teller (de checkpointer bewaart de state) en wordt de lus overgeslagen.
+
+**Buiten de scope eindigt bij de supervisor.** Zegt hij `PLAN: AFWIJZEN`, dan routeert
+`_entry_node` naar de `afwijzen`-node: één beleefde melding, geen specialist, geen tool-call, geen
+graafverkeer. Dat stond eerder alleen in het promptformaat — het woord ging als plan de systeemprompt
+van de specialist in, waarna een tweede modelbeslissing bepaalde wat er gebeurde. De vlag hoort in de
+per-beurt-reset van `answer_stream`: zonder dat wijst een afgewezen vraag de hele thread af. De
+workerlijst is bovendien een **allowlist** (`antwoord`/`annotatie`) met een cap van twee — elke
+andere naam werd stilzwijgend een extra antwoord-worker, dus "WORKERS: antwoord, samenvatten"
+beantwoordde dezelfde vraag twee keer.
 
 **Advies bij twijfel** (`modus: "advies"` op `POST /v1/chat`): de supervisor kiest dan niet zelf maar
 routeert hard naar de `duiding`-specialist. Een adviesvraag kan daardoor *topologisch* geen annotatie
