@@ -444,9 +444,12 @@ naast de gedempte tinten van een kaart.
 
 ### Toegankelijkheid (WCAG 2.2 AA, NLDS-niveau)
 
-- Markeringen in de tekst zijn **`<button>`**, geen `<mark onClick>`: anders zijn ze niet focusbaar
-  en niet met het toetsenbord te bedienen (2.1.1). `<button>` is phrasing content en mag dus in de
-  lopende tekst staan.
+- Markeringen in de tekst zijn **`<mark role="button" tabIndex={0}>`** met een `onKeyDown` voor
+  Enter/Space — focusbaar en met het toetsenbord te bedienen (2.1.1), maar wél **inline**. Een echte
+  `<button>` is inline-block en dus atomair: liep de markering over twee regels, dan werd hij een
+  rechthoekig blok tot aan de rechterrand en zakte de tekst erna (de afsluitende punt van het lid)
+  naar de volgende regel. Daarbij hoort `box-decoration-clone`, anders krijgt alleen het eerste
+  regelfragment een linkerrand en het laatste een rechter.
 - **Klikdoelen ≥ 24×24 CSS-px** (2.5.8) via `min-h-[24px]` op chips/knoppen, met de bestaande
   `coarse:`-variant naar 44px op aanraakschermen (het AAA-niveau 2.5.5 dat NLDS aanhoudt).
 - **Een uitklapper blijft binnen het scherm.** `components/ui/Popover` hangt met CSS aan zijn

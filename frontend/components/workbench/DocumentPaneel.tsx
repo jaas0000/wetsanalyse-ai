@@ -73,7 +73,7 @@ export function DocumentPaneel({
   const segmenten = useMemo(() => segmenteer(bron, elementen, actiefId), [bron, elementen, actiefId]);
   const gekozen = actiefId ? elementen.find((e) => e.id === actiefId) : undefined;
   const tekstRef = useRef<HTMLParagraphElement>(null);
-  const markRef = useRef<HTMLButtonElement>(null);
+  const markRef = useRef<HTMLElement>(null);
 
   // Een selectie eindigt niet altijd met een muisklik. Met Shift+pijltjes komt er geen enkel
   // muisevent langs — dan is zelf markeren met het toetsenbord onmogelijk (WCAG 2.1.1) — en op een
@@ -187,22 +187,34 @@ export function DocumentPaneel({
       >
         {segmenten.map((s, i) =>
           s.klasse ? (
-            // Een knop en geen `<mark onClick>`: dat laatste is niet focusbaar en dus niet met het
-            // toetsenbord te bedienen (WCAG 2.1.1). `<button>` is phrasing content, dus het mag hier
-            // in de lopende tekst staan.
-            <button
+            // Nadrukkelijk géén `<button>`: die is inline-block en dus één atomaire box. Zodra de
+            // markering over meer dan één regel liep, groeide hij naar de volle regelbreedte — een
+            // rechthoekig blok tot aan de rechterrand in plaats van een markering om de woorden — en
+            // zakte de tekst erna (bij een hele zin: de afsluitende punt) naar de volgende regel.
+            // Een `<mark>` is inline en breekt dus gewoon met de tekst mee; `box-decoration-clone`
+            // tekent achtergrond, afronding en `px-0.5` opnieuw op elk regelfragment, anders krijgt
+            // alleen het eerste stuk een linkerrand en het laatste een rechter. Weghalen = de blokvorm
+            // terug. De WCAG-2.1.1-eis die de knop kwam oplossen (focusbaar en met het toetsenbord te
+            // bedienen) staat hier als `role="button"` + `tabIndex` + `onKeyDown`.
+            <mark
               key={i}
               ref={s.id === actiefId ? markRef : undefined}
-              type="button"
+              role="button"
+              tabIndex={0}
               onClick={() => onKies?.(s.id)}
+              onKeyDown={(e) => {
+                if (e.key !== "Enter" && e.key !== " ") return;
+                e.preventDefault();   // Space scrolt anders de tekst weg onder je vinger vandaan
+                onKies?.(s.id);
+              }}
               aria-label={`${s.klasse}: ${s.tekst}${s.herkomst === "mens" ? " — door jou gemarkeerd" : ""}`}
               title={s.herkomst === "mens" ? `${s.klasse} — door jou gemarkeerd` : s.klasse}
-              className={`focus-ring cursor-pointer rounded px-0.5 text-left ${jasStyle(s.klasse)} ${
+              className={`focus-ring box-decoration-clone cursor-pointer rounded px-0.5 ${jasStyle(s.klasse)} ${
                 s.herkomst === "mens" ? "underline decoration-dotted underline-offset-2" : ""
               } ${actiefId && s.id === actiefId ? "ring-2 ring-lint" : ""}`}
             >
               {s.tekst}
-            </button>
+            </mark>
           ) : (
             <span key={i}>{s.tekst}</span>
           ),
