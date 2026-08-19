@@ -25,6 +25,7 @@ def _bericht_uit_row(row) -> Bericht:
         bronnen=inhoud.get("bronnen", []) or [],
         annotatie_slug=inhoud.get("annotatie_slug", ""),
         annotatie_titel=inhoud.get("annotatie_titel", ""),
+        run_id=inhoud.get("run_id", ""),
         ontbrekend=inhoud.get("ontbrekend", []) or [],
         created=db.aware(d["created"]),
     )
@@ -43,6 +44,8 @@ def _inhoud(inv: BerichtInvoer | Bericht) -> dict:
         inhoud["annotatie_titel"] = inv.annotatie_titel
     if inv.ontbrekend:
         inhoud["ontbrekend"] = inv.ontbrekend
+    if inv.run_id:
+        inhoud["run_id"] = inv.run_id
     return inhoud
 
 
@@ -106,9 +109,40 @@ class GesprekStore:
             for r in rows
         ]
 
+    @staticmethod
+    async def _bericht_van_run(conn, gesprek_id: str, run_id: str) -> Bericht | None:
+        """Staat de uitkomst van deze run er al? Kijkt alleen naar de staart van het gesprek: een
+        run schrijft aan het eind van zijn eigen beurt, dus verder terug zoeken heeft geen zin."""
+        rows = (await conn.execute(
+            select(db.gesprek_berichten)
+            .where(db.gesprek_berichten.c.gesprek_id == gesprek_id)
+            .order_by(db.gesprek_berichten.c.id.desc())
+            .limit(20)
+        )).fetchall()
+        for row in rows:
+            if (row._mapping["inhoud"] or {}).get("run_id") == run_id:
+                return _bericht_uit_row(row)
+        return None
+
     async def voeg_bericht_toe(self, gesprek_id: str, inv: BerichtInvoer) -> Bericht:
+        """Voeg één beurt toe. Append-only, behalve dat een `run_id` maar één keer mag landen.
+
+        Die uitzondering is er omdat een agent-run niet meer aan één browserverbinding hangt: er
+        kunnen meerdere tabbladen op dezelfde run meekijken, en die zouden anders elk hun eigen kopie
+        van hetzelfde antwoord wegschrijven. De controle staat bewust ín dezelfde transactie als de
+        insert. Er is géén unieke index: `reconcile_schema` voegt op bestaande tabellen alleen
+        kolommen toe, en de index op (gesprek_id, id) maakt deze check goedkoop.
+
+        Let op de aanname: dit werkt omdat er per run feitelijk één schrijver tegelijk is. Komt er
+        ooit een tweede API-replica die gelijktijdig dezelfde run afrondt, dan is check-then-insert
+        niet meer genoeg en moet er een unieke constraint bij.
+        """
         now = db.utcnow()
         async with db.get_engine().begin() as conn:
+            if inv.run_id:
+                bestaand = await self._bericht_van_run(conn, gesprek_id, inv.run_id)
+                if bestaand is not None:
+                    return bestaand
             result = await conn.execute(insert(db.gesprek_berichten).values(
                 gesprek_id=gesprek_id,
                 rol=inv.rol.value,
@@ -125,7 +159,7 @@ class GesprekStore:
         return Bericht(
             id=nieuw_id, rol=inv.rol, tekst=inv.tekst, denk=inv.denk, bronnen=inv.bronnen,
             annotatie_slug=inv.annotatie_slug, annotatie_titel=inv.annotatie_titel,
-            ontbrekend=inv.ontbrekend, created=db.aware(now),
+            ontbrekend=inv.ontbrekend, run_id=inv.run_id, created=db.aware(now),
         )
 
     async def hernoem_gesprek(self, gesprek_id: str, titel: str) -> None:

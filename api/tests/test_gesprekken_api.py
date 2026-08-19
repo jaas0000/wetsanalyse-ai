@@ -107,6 +107,33 @@ async def test_annotatie_titel_is_optioneel(client):
     assert doc["berichten"][0]["annotatie_titel"] == ""
 
 
+async def test_run_id_maakt_de_beurt_idempotent(client):
+    """Een agent-run hangt niet meer aan één browserverbinding: er kunnen twee tabbladen meekijken.
+    Die zouden elk hun eigen kopie van hetzelfde antwoord wegschrijven — vandaar de sleutel."""
+    gid = await _maak(client)
+    eerste = await client.post(f"{BASIS}/{gid}/berichten", json={
+        "rol": "assistant", "tekst": "Het antwoord.", "run_id": "run-abc",
+    }, headers=A)
+    tweede = await client.post(f"{BASIS}/{gid}/berichten", json={
+        "rol": "assistant", "tekst": "Het antwoord.", "run_id": "run-abc",
+    }, headers=A)
+    assert eerste.status_code == 201 and tweede.status_code == 201
+    # Dezelfde rij terug, geen tweede.
+    assert tweede.json()["id"] == eerste.json()["id"]
+    doc = (await client.get(f"{BASIS}/{gid}", headers=A)).json()
+    assert len(doc["berichten"]) == 1
+    assert doc["berichten"][0]["run_id"] == "run-abc"
+
+
+async def test_zonder_run_id_blijft_alles_append_only(client):
+    """De dedupe mag het gewone gedrag niet aanraken: twee losse beurten zijn twee berichten."""
+    gid = await _maak(client)
+    await client.post(f"{BASIS}/{gid}/berichten", json={"rol": "user", "tekst": "hoi"}, headers=A)
+    await client.post(f"{BASIS}/{gid}/berichten", json={"rol": "user", "tekst": "hoi"}, headers=A)
+    doc = (await client.get(f"{BASIS}/{gid}", headers=A)).json()
+    assert len(doc["berichten"]) == 2
+
+
 async def test_user_scoping_404(client):
     # andermans gesprek → 404 op alle sub-resources (lekt niet)
     assert (await client.get(f"{BASIS}/andermans", headers=A)).status_code == 404

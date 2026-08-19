@@ -49,6 +49,22 @@ class ChatRequest(BaseModel):
     context: ChatContext | None = None
 
 
+class RunStart(BaseModel):
+    """Wat een client van een run weet zónder mee te kijken.
+
+    `vraag` zit erbij omdat een tabblad dat halverwege aanhaakt anders tokens uit het niets krijgt:
+    de vraag hoort bij de run, niet bij het tabblad dat hem startte. `volgende_seq` en `weggevallen`
+    zeggen waar de eventlog staat, zodat aanhaken vanaf het juiste punt kan.
+    """
+
+    run_id: str
+    conversation_id: str = ""
+    vraag: str = ""
+    status: str = "loopt"          # loopt | klaar | gestopt | mislukt
+    volgende_seq: int = 0
+    weggevallen: int = 0
+
+
 class Source(BaseModel):
     label: str
     uri: str

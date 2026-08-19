@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { annoteerAgentStream, isApiError, parseError } from "./api";
+import { annoteerAgentStream, isApiError, parseError, startRun, volgRun } from "./api";
 
 describe("parseError", () => {
   it("haalt een string-detail uit de JSON-body", async () => {
@@ -90,6 +90,69 @@ describe("annoteerAgentStream", () => {
     expect(doel).toEqual({ bwbId: "BWBR0004770", artikel: "9", lid: "1" });
     expect(elementen).toEqual([element]);
     expect(ontbrekend).toEqual([{ klasse: "Rechtsfeit", reden: "handeling" }]);
+  });
+});
+
+describe("volgRun — aanhaken bij een lopende beurt", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("meldt het volgnummer terug, zodat aanhaken na een onderbreking op het juiste punt begint", async () => {
+    const frames = [
+      `data: ${JSON.stringify({ type: "token", content: "een ", seq: 4 })}\r\n\r\n`,
+      `data: ${JSON.stringify({ type: "token", content: "antwoord", seq: 5 })}\r\n\r\n`,
+      `data: ${JSON.stringify({ type: "done", seq: 6 })}\r\n\r\n`,
+    ];
+    const nep = vi.fn(async (_url: string | URL) => sseResponse(frames));
+    vi.stubGlobal("fetch", nep);
+
+    let tekst = "";
+    const seqs: number[] = [];
+    await volgRun("run-1", { onToken: (t) => (tekst += t), onSeq: (n) => seqs.push(n) }, 4);
+
+    expect(tekst).toBe("een antwoord");
+    expect(seqs).toEqual([4, 5, 6]);
+    // De cursor gaat mee in de URL: je vraagt precies wat je miste, niet de hele beurt opnieuw.
+    expect(String(nep.mock.calls[0]?.[0])).toContain("vanaf=4");
+  });
+
+  it("benoemt een gat in plaats van stilzwijgend een verminkte tekst te leveren", async () => {
+    const frames = [
+      `data: ${JSON.stringify({ type: "gat", weggevallen: 12 })}\r\n\r\n`,
+      `data: ${JSON.stringify({ type: "token", content: "de rest", seq: 12 })}\r\n\r\n`,
+    ];
+    vi.stubGlobal("fetch", vi.fn(async () => sseResponse(frames)));
+
+    let gat = 0;
+    let tekst = "";
+    await volgRun("run-1", { onGat: (n) => (gat = n), onToken: (t) => (tekst += t) });
+
+    expect(gat).toBe(12);
+    expect(tekst).toBe("de rest");
+  });
+});
+
+describe("startRun — er loopt er al een", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("geeft bij 409 de bestaande run terug, zodat de client aanhaakt in plaats van faalt", async () => {
+    // Twee gelijktijdige beurten op één gesprek zouden door elkaar heen in het agent-geheugen
+    // schrijven (thread_id == conversation_id) — vandaar dat de server weigert en verwijst.
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(
+      JSON.stringify({ detail: { reden: "run_loopt_al", run_id: "run-bestaand" } }),
+      { status: 409, headers: { "Content-Type": "application/json" } },
+    )));
+
+    const run = await startRun("nog een vraag", "gesprek-1");
+    expect(run.run_id).toBe("run-bestaand");
+    expect(run.status).toBe("loopt");
+  });
+
+  it("laat een echte fout wél een fout zijn", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(
+      JSON.stringify({ detail: "Agent onbereikbaar" }),
+      { status: 502, headers: { "Content-Type": "application/json" } },
+    )));
+    await expect(startRun("vraag", "gesprek-1")).rejects.toMatchObject({ status: 502 });
   });
 });
 

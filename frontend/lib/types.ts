@@ -363,6 +363,21 @@ export interface OntbrekendItem {
   tekst?: string;
 }
 
+/** Eén agent-beurt als server-object (graph-qa `/v1/runs`).
+ *
+ *  De run leeft bij de agent, niet in het tabblad: wegklikken of herladen koppelt alleen de kijker
+ *  los. `vraag` reist mee omdat een tabblad dat halverwege aanhaakt anders tokens uit het niets
+ *  krijgt, en `volgende_seq`/`weggevallen` zeggen waar de eventlog staat zodat aanhaken op het
+ *  juiste punt begint. */
+export interface RunStart {
+  run_id: string;
+  conversation_id: string;
+  vraag: string;
+  status: "loopt" | "klaar" | "gestopt" | "mislukt";
+  volgende_seq: number;
+  weggevallen: number;
+}
+
 // --- Gesprekken (chatgeschiedenis) — afgeleid van api/app/gesprek_contracts.py ---
 
 export type Rol = "user" | "assistant";
@@ -383,6 +398,9 @@ export interface Bericht {
   annotatie_slug: string;
   annotatie_titel: string;
   ontbrekend: OntbrekendItem[];
+  /** Van welke agent-run deze beurt de uitkomst is; de api gebruikt het als idempotentiesleutel,
+   *  zodat twee meekijkende tabbladen niet elk hun eigen kopie wegschrijven. */
+  run_id: string;
   created?: string;
 }
 
@@ -413,6 +431,7 @@ export interface BerichtInvoer {
   annotatie_slug?: string;
   annotatie_titel?: string;
   ontbrekend?: OntbrekendItem[];
+  run_id?: string;
 }
 
 // --- Berichtensysteem --------------------------------------------------------

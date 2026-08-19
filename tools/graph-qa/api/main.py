@@ -48,9 +48,14 @@ from agent import observability  # noqa: E402
 from agent.agent import answer_stream, delete_conversation  # noqa: E402
 from agent.agent_common import run_sync  # noqa: E402
 from agent.config import Settings  # noqa: E402
-from agent.models import ArtikelResult, ChatRequest  # noqa: E402
+from agent.models import ArtikelResult, ChatRequest, RunStart  # noqa: E402
+from agent.runs import Run, RunBestaatAl, RunRegister  # noqa: E402
 
 logger = logging.getLogger("graph_qa.chat")
+
+# Het run-register: een beurt leeft hier, niet in de HTTP-request van één tabblad. Zie agent/runs.py
+# voor de aannames (één proces, herstart wist het register, alleen de run-taak schrijft).
+runs = RunRegister()
 
 settings = Settings.from_env()
 observability.setup(settings)  # logging + gated OTel, vóór de app draait
@@ -209,6 +214,102 @@ async def artikel(
     finally:
         graph.close()
     return ArtikelResult.model_validate(data)
+
+
+# --- Runs: de beurt is van de server ---------------------------------------------------------
+#
+# `POST /v1/chat` hierboven koppelt de beurt aan de verbinding: valt de client weg, dan sneuvelt de
+# stream. Deze drie endpoints draaien dat om — starten, meekijken en stoppen zijn losse handelingen,
+# zodat wegklikken, van gesprek wisselen of herladen een lopend antwoord niet meer doodt.
+
+
+def _stroom_voor(request: ChatRequest):
+    """De eventstroom van één run. `run` komt binnen zodat een latere fase het stopverzoek kan
+    lezen; vandaag consumeert dit exact hetzelfde `answer_stream` als `POST /v1/chat`."""
+    async def maak(_run: Run) -> AsyncIterator[dict]:
+        async for event in answer_stream(
+            request.question, request.conversation_id,
+            modus=request.modus, context=request.context,
+        ):
+            yield event
+    return maak
+
+
+@app.post("/v1/runs", status_code=status.HTTP_201_CREATED)
+async def start_run(
+    request: ChatRequest,
+    _rl: None = Depends(_rate_limit),
+    _auth: None = Depends(_check_auth),
+) -> RunStart:
+    """Start een beurt als achtergrondtaak en geef het run_id terug.
+
+    409 als er al een run voor dit gesprek loopt — dat is geen nettigheid maar bescherming:
+    `thread_id == conversation_id`, dus twee gelijktijdige lussen schrijven door elkaar heen in
+    dezelfde checkpointer-thread. De aanroeper hoort dan aan te haken bij het meegegeven run_id.
+    """
+    try:
+        run = runs.start(
+            conversation_id=request.conversation_id or "",
+            vraag=request.question or "",
+            maak_stroom=_stroom_voor(request),
+        )
+    except RunBestaatAl as al:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"reden": "run_loopt_al", "run_id": al.run_id},
+        ) from al
+    logger.info(
+        "run gestart",
+        extra={
+            "categorie": "functioneel",
+            "run_id": run.run_id,
+            "chat_session_id": run.conversation_id,
+            "chat_vraag_lengte": len(request.question or ""),
+        },
+    )
+    return RunStart(**run.samenvatting())
+
+
+@app.get("/v1/runs/{run_id}/events")
+async def run_events(run_id: str, vanaf: int = 0, _auth: None = Depends(_check_auth)) -> EventSourceResponse:
+    """Kijk mee met een run: eerst wat je miste (vanaf `vanaf`), dan live.
+
+    Bewust **geen** rate-limit: al het verkeer komt van één container-IP, en opnieuw aanhaken na een
+    remount mag nooit op de limiet stuklopen. Losraken van deze stream laat de run ongemoeid — dat
+    is het hele punt.
+    """
+    run = runs.get(run_id)
+    if run is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Onbekende run")
+
+    async def event_generator() -> AsyncIterator[dict]:
+        async for event in runs.volg(run, vanaf):
+            yield {"data": json.dumps(event, ensure_ascii=False)}
+
+    return EventSourceResponse(event_generator())
+
+
+@app.post("/v1/runs/{run_id}/cancel", status_code=status.HTTP_202_ACCEPTED)
+async def stop_run(run_id: str, _auth: None = Depends(_check_auth)) -> RunStart:
+    """Vraag een run te stoppen. 202, niet 204: stoppen is een verzoek, geen feit.
+
+    De nodes zijn synchroon, dus een lopende LLM-call maakt zichzelf af; de run eindigt op de
+    eerstvolgende grens. Wie hier 'gestopt' uit leest, leest een intentie."""
+    run = runs.get(run_id)
+    if run is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Onbekende run")
+    runs.vraag_stop(run)
+    return RunStart(**run.samenvatting())
+
+
+@app.get("/v1/conversations/{conversation_id}/run")
+async def actieve_run(conversation_id: str, _auth: None = Depends(_check_auth)) -> RunStart | None:
+    """De run van dit gesprek waar je op kunt aanhaken, of niets.
+
+    Dit is wat de werkplek bij binnenkomst vraagt. Ook een net afgeronde run telt mee: kom je terug
+    binnen de bewaartermijn, dan hoor je de uitkomst alsnog te zien."""
+    run = runs.actief_voor(conversation_id)
+    return RunStart(**run.samenvatting()) if run else None
 
 
 def run() -> None:

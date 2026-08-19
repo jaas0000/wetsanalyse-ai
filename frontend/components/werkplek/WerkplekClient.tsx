@@ -9,6 +9,10 @@ import { Markdown, StreamendeTekst } from "@/components/werkplek/Markdown";
 import {
   annoteerAgentStream,
   beslis,
+  haalActieveRun,
+  startRun,
+  stopRun,
+  volgRun,
   haalArtikelGraaf,
   haalDocument,
   haalGesprek,
@@ -123,6 +127,13 @@ export function WerkplekClient({
   const [vraagOver, setVraagOver] = useState<{ slug: string; el: AnnotatieElement } | null>(null);
   // Het artefact openen haalt document + wettekst op. Dat mag niet stil gebeuren: zonder deze twee
   // leverde een mislukte graaf-call een klik op waar lettérlijk niets van gebeurde.
+  // De run die nu loopt. Die leeft bij de agent, niet in dit venster: dit id is waarmee we
+  // aanhaken en waarmee de stopknop hem beëindigt.
+  const [runId, setRunId] = useState<string | null>(null);
+  // Stoppen is gevraagd maar nog niet gebeurd. De agent-nodes zijn synchroon, dus een lopende
+  // LLM-call maakt zichzelf af — dat kan tientallen seconden duren en de knop hoort dat te tonen
+  // in plaats van te doen alsof het al klaar is.
+  const [stopt, setStopt] = useState(false);
   const [artefactLaadt, setArtefactLaadt] = useState<string | null>(null);
   const [artefactFout, setArtefactFout] = useState<{ slug: string; melding: string } | null>(null);
   // Zojuist geprobeerd te openen, maar het document bestaat niet meer. Los van `artefactFout`, want
@@ -144,9 +155,13 @@ export function WerkplekClient({
   // blijft Lex bereikbaar tijdens het reviewen.
   const breed = useBreedScherm();
 
-  // Een lopende beurt hoort te stoppen als dit venster verdwijnt (van gesprek wisselen remount het
-  // component). Zonder dit liep de SSE-verbinding — en de agent erachter — door voor een scherm dat
-  // niemand meer ziet.
+  // Verdwijnt dit venster (van gesprek wisselen remount het component), dan koppelen we alleen de
+  // KIJKER los. De run zelf draait bij de agent door en wordt opgepakt zodra je terugkomt.
+  //
+  // Dit stond hier eerder als `abort()` op de beurt zelf, en dat was de oorzaak van "vragen worden
+  // afgebroken": van gesprek wisselen, naar het annotatie-overzicht lopen of herladen doodde het
+  // antwoord waar je op wachtte. Stoppen is nu een expliciete handeling (`stop()`), geen bijwerking
+  // van navigeren.
   useEffect(() => () => afbrekenRef.current?.abort(), []);
 
   // Hydrateer één keer bij mount: bestaande gespreksberichten → thread. Lees de id uit een MOUNT-vaste
@@ -172,6 +187,8 @@ export function WerkplekClient({
         );
         // Documenten van annotatie-berichten alvast laden voor de chip-labels.
         for (const b of g.berichten) if (b.annotatie_slug) void laadDoc(b.annotatie_slug);
+        // Liep hier nog een beurt terwijl je ergens anders keek? Pak hem weer op.
+        void hervatBeurt(hydratieId);
       })
       .catch(() => {});
     return () => {
@@ -304,11 +321,6 @@ export function WerkplekClient({
 
     // Toon de user-bubbel + antwoord-placeholder OPTIMISTISCH, vóór het (bij een nieuw gesprek) awaiten
     // van maakGesprek — anders "verdwijnt" het bericht tijdens die round-trip.
-    // De controller bestaat vóórdat de knop een stopknop wordt. Stond hij verderop (na het
-    // aanmaken van het gesprek), dan deed "stoppen" in dat eerste venster niets.
-    const beheerser = new AbortController();
-    afbrekenRef.current = beheerser;
-
     const antId = uid();
     setItems((xs) => [
       ...xs,
@@ -336,7 +348,54 @@ export function WerkplekClient({
 
     // De chip is UI-state en reist niet mee naar de api; zonder deze regel leest een herladen gesprek
     // als een losse vraag zonder onderwerp.
-    void persisteer(gid, "user", { tekst: contextLabel ? `Bij ${contextLabel}: ${prompt}` : prompt });
+    //
+    // Bewust GEAWAIT: de vraag moet vastliggen vóórdat de run begint. De volgorde in de thread is de
+    // autoincrement-id, dus een snelle beurt zou anders vóór zijn eigen vraag kunnen landen — en bij
+    // het aanhaken na een herlaadbeurt is deze regel de user-bubbel waar het antwoord onder hoort.
+    await persisteer(gid, "user", { tekst: contextLabel ? `Bij ${contextLabel}: ${prompt}` : prompt });
+
+    // Markeringen die de jurist al maakte gaan mee: de Critic kan er dan een kanttekening bij
+    // zetten. De agent kan niet zelf in het document kijken — dat leeft in de api. Alleen de
+    // bepaling die nú open staat: de Critic beoordeelt ze tegen de tekst die hij zelf ophaalt, dus
+    // markeringen uit een ander artikel kan hij daar per definitie niet in terugvinden.
+    const reedsEigen = eigenMarkeringenVoorContext(artefactSlug ? docs[artefactSlug] : undefined);
+    const extra = context
+      ? {
+          modus: "advies" as const,
+          context: vraagContextVan(context.slug, docs[context.slug], infos[context.slug], context.el),
+        }
+      : reedsEigen.length
+        ? { context: { bestaande_elementen: reedsEigen } }
+        : undefined;
+
+    let gestart;
+    try {
+      gestart = await startRun(prompt, gid, extra);
+    } catch (e) {
+      updateItem(antId, { tekst: `⚠️ ${foutTekst(e)}` });
+      setBezig(false);
+      bezigRef.current = false;
+      return;
+    }
+
+    await volgBeurt({ runId: gestart.run_id, gid, antId });
+  }
+
+  /** Haak aan bij een run en verwerk hem tot het eind: verzamelen wat binnenkomt, en vastleggen wat
+   *  eruit komt.
+   *
+   *  Eén functie voor twee ingangen — een verse beurt (`verstuur`) en het weer oppakken van een
+   *  beurt die doorliep terwijl je ergens anders keek (`hervatBeurt`). Dat moet dezelfde code zijn,
+   *  anders lopen de twee paden uit elkaar op precies het moment dat het ertoe doet.
+   */
+  async function volgBeurt({
+    runId: id, gid, antId, vanaf = 0,
+  }: { runId: string; gid: string; antId: string; vanaf?: number }) {
+    const beheerser = new AbortController();
+    afbrekenRef.current = beheerser;
+    setRunId(id);
+    bezigRef.current = true;
+    setBezig(true);
 
     const doelRef: { d: AgentDoel | null } = { d: null };
     // Ontdubbeld verzamelen: de agent kan hetzelfde element in meerdere rondes opnieuw sturen
@@ -352,14 +411,8 @@ export function WerkplekClient({
     let denk = "";
     let bronnen: Bron[] = [];
     try {
-      // Markeringen die de jurist al maakte gaan mee: de Critic kan er dan een kanttekening bij
-      // zetten. De agent kan niet zelf in het document kijken — dat leeft in de api. Alleen de
-      // bepaling die nú open staat: de Critic beoordeelt ze tegen de tekst die hij zelf ophaalt, dus
-      // markeringen uit een ander artikel kan hij daar per definitie niet in terugvinden.
-      const reedsEigen = eigenMarkeringenVoorContext(artefactSlug ? docs[artefactSlug] : undefined);
-
-      await annoteerAgentStream(
-        prompt,
+      await volgRun(
+        id,
         {
           onStatus: (m) => {
             denk += (denk ? "\n" : "") + "· " + m;
@@ -383,17 +436,15 @@ export function WerkplekClient({
           onOntbrekend: (xs) => ontbrekend.push(...xs),
           onSuggestie: (s) => suggesties.push(s),
           onKandidaten: (k) => (kandidaten = k),
+          // De eventlog van de run is gecapt: er is narratie weggevallen. Benoem dat, in plaats van
+          // een tekst te tonen die compleet lijkt maar het niet is.
+          onGat: () => {
+            tekst += tekst ? "\n\n…\n\n" : "…\n\n";
+            updateItem(antId, { tekst });
+          },
         },
-        gid,
+        vanaf,
         beheerser.signal,
-        context
-          ? {
-              modus: "advies",
-              context: vraagContextVan(context.slug, docs[context.slug], infos[context.slug], context.el),
-            }
-          : reedsEigen.length
-            ? { context: { bestaande_elementen: reedsEigen } }
-            : undefined,
       );
 
       if (kandidaten.length) {
@@ -402,7 +453,7 @@ export function WerkplekClient({
         );
         // Alleen de tekst overleeft een herlaadbeurt: de kandidaten zitten niet in het
         // berichtcontract van de api. Beter een leesbare opsomming dan "ik vond 5 bepalingen".
-        void persisteer(gid, "assistant", { tekst: kandidatenAlsTekst(tekst, kandidaten), denk });
+        void persisteer(gid, "assistant", { tekst: kandidatenAlsTekst(tekst, kandidaten), denk, run_id: id });
         onGewijzigd();
         return;
       }
@@ -441,32 +492,63 @@ export function WerkplekClient({
         // later verdwijnt (er is geen foreign key die daarvoor zorgt).
         void persisteer(gid, "assistant", {
           annotatie_slug: bijgewerkt.slug, annotatie_titel: annotatieTitel(bijgewerkt), ontbrekend, denk,
+          run_id: id,
         });
       } else {
         if (!tekst.trim()) updateItem(antId, { tekst: "(geen antwoord)" });
-        void persisteer(gid, "assistant", { tekst: tekst.trim() || "(geen antwoord)", denk, bronnen });
+        // `run_id` maakt dit bericht idempotent: kijken er twee tabbladen mee, dan landt de
+        // uitkomst van deze run toch maar één keer.
+        void persisteer(gid, "assistant", { tekst: tekst.trim() || "(geen antwoord)", denk, bronnen, run_id: id });
       }
       onGewijzigd();
     } catch (e) {
-      // Zelf afgebroken is geen fout: bewaar wat er al stond, gemarkeerd als afgebroken. Weggooien
-      // wat de agent al schreef is niet wat "stop" betekent.
-      if (isAfgebroken(e)) {
-        const bewaard = `${tekst.trim()}${tekst.trim() ? "\n\n" : ""}_(afgebroken)_`;
-        updateItem(antId, { tekst: bewaard });
-        void persisteer(gid, "assistant", { tekst: bewaard, denk, bronnen });
-      } else {
-        updateItem(antId, { tekst: `⚠️ ${foutTekst(e)}` });
-      }
+      // Losgekoppeld is géén fout en géén einde: de run draait door bij de agent en wordt opgepakt
+      // zodra dit venster terugkomt. Niets bewaren dus — het definitieve antwoord komt later.
+      if (isAfgebroken(e)) return;
+      updateItem(antId, { tekst: `⚠️ ${foutTekst(e)}` });
     } finally {
       afbrekenRef.current = null;
+      setRunId(null);
+      setStopt(false);
       setBezig(false);
       bezigRef.current = false;
     }
   }
 
-  /** Breek de lopende beurt af. De `finally` hierboven bewaart wat er al binnen was. */
-  function stop() {
-    afbrekenRef.current?.abort();
+  /** Loopt er nog een beurt in dit gesprek? Haak er dan weer op aan.
+   *
+   *  Dit is de terugweg van de omkering: de run overleefde het wegklikken, dus bij binnenkomst
+   *  hoort hij weer in beeld te komen — inclusief wat je gemist hebt (`vanaf: 0` speelt de eventlog
+   *  af). Alleen bij een lópende run: een beurt die klaar is staat al in de gehydrateerde
+   *  geschiedenis, en die twee keer tonen is erger dan hem missen.
+   */
+  async function hervatBeurt(gid: string) {
+    if (bezigRef.current) return;
+    const lopend = await haalActieveRun(gid);
+    if (!lopend || lopend.status !== "loopt") return;
+
+    const antId = uid();
+    setItems((xs) => [...xs, { id: antId, type: "antwoord", tekst: "" }]);
+    await volgBeurt({ runId: lopend.run_id, gid, antId, vanaf: 0 });
+  }
+
+  /** Stop de lopende beurt. Een verzoek aan de agent, geen dichtvallende verbinding.
+   *
+   *  De agent-nodes zijn synchroon: een lopende LLM-call maakt zichzelf af en de run eindigt op de
+   *  eerstvolgende grens. Dat kan tientallen seconden duren, dus de knop blijft in de "stopt"-stand
+   *  staan tot het echt zover is — doen alsof het meteen klaar is zou liegen. Wat er tot dan toe
+   *  binnenkwam, wordt gewoon vastgelegd zoals bij een normale afloop.
+   */
+  async function stop() {
+    if (!runId || stopt) return;
+    setStopt(true);
+    try {
+      await stopRun(runId);
+    } catch {
+      // Mislukt het stopverzoek, dan loopt de beurt gewoon door. Zet de knop terug in plaats van
+      // hem eeuwig op "Stoppen…" te laten staan.
+      setStopt(false);
+    }
   }
 
   /** De jurist markeert zelf een fragment. Gooit door naar het paneel, dat de fout bij de selectie
@@ -771,9 +853,10 @@ export function WerkplekClient({
                 niet te zoeken waar je moet klikken om te onderbreken. */}
             <button
               type="button"
-              onClick={() => (bezig ? stop() : verstuur())}
-              disabled={!bezig && !invoer.trim()}
-              aria-label={bezig ? "Stoppen" : "Versturen"}
+              onClick={() => (bezig ? void stop() : void verstuur())}
+              disabled={(!bezig && !invoer.trim()) || stopt}
+              aria-label={bezig ? (stopt ? "Bezig met stoppen" : "Stoppen") : "Versturen"}
+              title={stopt ? "De agent rondt zijn huidige stap nog af" : undefined}
               className="focus-ring mb-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent text-paper transition-colors hover:bg-accent-soft disabled:cursor-not-allowed disabled:opacity-40"
             >
               {bezig ? (

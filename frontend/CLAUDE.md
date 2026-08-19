@@ -283,9 +283,24 @@ de kaart een vraag klaar in het chatveld:
 - Op een **smal scherm** sluit het artefact bij het versturen: daar ligt het over de chat heen en zou
   je het antwoord niet zien binnenkomen.
 
-**Stoppen kan.** De verzendknop wordt tijdens het streamen een stopknop (`AbortController` →
-`annoteerAgentStream(..., signal)`). Een `AbortError` is géén fout: wat er al stond blijft staan met
-`_(afgebroken)_` erachter en wordt zo ook bewaard.
+**De beurt is van de server, niet van dit tabblad.** Een lopend antwoord hing aan de SSE-verbinding
+van het venster: van gesprek wisselen, naar `/annotaties` lopen of herladen brak hem af. Nu draait de
+beurt als **run** bij graph-qa (`POST /api/annotatie/run` → `startRun`) en kijkt de werkplek mee
+(`volgRun` op `/api/annotatie/run/[id]/events`). Vier regels om niet te breken:
+
+- **Unmount koppelt alleen los.** `afbrekenRef.current?.abort()` beëindigt de kijker, niet de run.
+  Een `AbortError` in `volgBeurt` is dáárom géén einde: niets bewaren, het echte antwoord komt later.
+- **Bij binnenkomst haken we weer aan** (`hervatBeurt` na de hydratatie): loopt er nog een beurt, dan
+  komt hij vanaf `seq 0` terug in beeld. Alleen bij status `loopt` — een afgeronde beurt staat al in
+  de gehydrateerde geschiedenis, en twee keer tonen is erger dan missen.
+- **Stoppen is een verzoek** (`stopRun`), geen dichtvallende socket. De agent-nodes zijn synchroon,
+  dus de run eindigt pas op de eerstvolgende grens; de knop blijft daarom in de `stopt`-stand staan.
+- **`run_id` reist mee naar de api** bij het bewaren van de assistent-beurt. Kijken er twee tabbladen
+  mee, dan landt de uitkomst tóch één keer (de api dedupliceert erop).
+
+Bij een 409 op `startRun` (er loopt al een beurt op dit gesprek) haakt de client aan bij de bestaande
+run in plaats van te falen: twee gelijktijdige beurten zouden door elkaar in het agent-geheugen
+schrijven. `annoteerAgentStream` blijft bestaan voor het oude, aan-de-verbinding-gekoppelde pad.
 
 **Niets faalt meer stil.** Het artefact openen toont een laadstand en bij een fout een `Melding` met
 *Opnieuw proberen* (voorheen: een klik waar letterlijk niets van gebeurde als de graaf plat lag). Een

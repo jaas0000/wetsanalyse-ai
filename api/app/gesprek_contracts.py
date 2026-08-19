@@ -37,6 +37,9 @@ class Bericht(BaseModel):
     annotatie_slug: str = ""
     annotatie_titel: str = ""
     ontbrekend: list[dict] = []
+    # Van welke agent-run deze beurt de uitkomst is. Dient als idempotentiesleutel: dezelfde run mag
+    # maar één assistent-bericht opleveren, ook als er twee tabbladen meekeken.
+    run_id: str = ""
     created: datetime | None = None
 
 
@@ -69,6 +72,7 @@ class BerichtInvoer(BaseModel):
     annotatie_slug: str = ""
     annotatie_titel: str = ""
     ontbrekend: list[dict] = []
+    run_id: str = ""
 
 
 class GesprekSamenvatting(BaseModel):

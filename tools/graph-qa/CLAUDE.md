@@ -109,7 +109,8 @@ veilig**, verplicht bij >1 replica) → **`CHECKPOINT_DB_PATH`** → `AsyncSqlit
 
 ### API-laag (`api/main.py`)
 
-`GET /health`, `POST /v1/chat` (SSE; body `{question, conversation_id?}`), `DELETE /v1/conversations/{id}`
+`GET /health`, `POST /v1/chat` (SSE; body `{question, conversation_id?}`), de **run-endpoints**
+(zie hieronder), `DELETE /v1/conversations/{id}`
 (wist het agent-geheugen — de checkpointer-thread — van één gesprek; idempotent → 204; de werkplek roept
 dit aan bij het verwijderen van een gesprek, náást de API-berichten-delete) en `GET /v1/artikel`
 (artikeltekst uit de graaf voor het documentpaneel van de werkplek; query `bwb_id`/`artikel`/`lid?`).
@@ -117,6 +118,44 @@ De **lifespan** doet fail-fast `settings.require_graph()` bij boot en flush't de
 shutdown (`observability.shutdown()`). Beveiliging: CORS-credentials nooit samen met `*` (elke `"*"`
 in de origin-lijst telt als wildcard), per-IP rate-limit (dependency, geen middleware — anders buffert
 de SSE), timing-safe token-check.
+
+### Runs: de beurt is van de server, niet van het tabblad
+
+`POST /v1/chat` koppelt de beurt aan de verbinding: valt de client weg, dan sneuvelt de stream. Dat
+was de oorzaak van "vragen worden afgebroken" — van gesprek wisselen, naar een andere pagina lopen of
+herladen doodde het antwoord. Het werk stopte er niet eens van (de nodes zijn synchroon, zie
+§Aandachtspunten); het resultaat werd alleen weggegooid.
+
+`agent/runs.py` draait dat om, naar het model van Claude: de **run** draait als achtergrondtaak met
+een eigen, seq-genummerde event-log; een client *kijkt* mee en kan opnieuw aanhaken.
+
+| endpoint | betekenis |
+|---|---|
+| `POST /v1/runs` | start; geeft `run_id`. **409 + het actieve run_id** als er al een run voor dit gesprek loopt. |
+| `GET /v1/runs/{id}/events?vanaf=<seq>` | SSE: eerst replay vanaf `vanaf`, dan live. Elk frame draagt zijn `seq`. Geen rate-limit. |
+| `POST /v1/runs/{id}/cancel` | 202 — stoppen is een verzoek, geen feit. |
+| `GET /v1/conversations/{id}/run` | de run waar je op kunt aanhaken, of `null`. |
+
+Vier dingen om niet te breken:
+
+- **Losraken ≠ annuleren.** De generator in `runs.volg` is alleen een kijker; het werk zit in
+  `run.taak`. Sluit een client zijn stream, dan gebeurt er met de run niets.
+- **409 is bescherming, geen nettigheid.** `thread_id == conversation_id`, dus twee gelijktijdige
+  beurten schrijven door elkaar heen in dezelfde checkpointer-thread.
+- **Cappen is klassebewust.** Alleen `token`/`reason`/`status` mogen sneuvelen (`VLUCHTIGE_TYPES`);
+  `element`, `doel`, `run`, `ontbrekend`, `done` en `error` blijven staan, en er gaat een
+  `gat`-event voorop zodat de client "…" toont in plaats van een verminkt antwoord.
+- **Stoppen is een vlag, geen `task.cancel()`.** De MCP-verbinding wordt in een `finally` gesloten;
+  die onder een draaiende executor-thread wegtrekken breekt hem. De run eindigt op de eerstvolgende
+  grens die de driver leest.
+
+Het register is **in-proces** (één uvicorn-proces zonder `--workers`). Een herstart wist het: dat is
+bewust — hervatten-vanaf-checkpoint vraagt async nodes, en `agent/agent.py` reset bij elke beurt de
+werkvelden. Komt er ooit een tweede replica, dan moet dit naar een gedeelde store.
+
+> **Testen:** gebruik `with TestClient(app)` (zie `tests/test_run_endpoints.py`). Zonder de `with`
+> breekt de harnas per request zijn event loop af en sneuvelt de achtergrondtaak — dan meet je de
+> harnas, niet de code.
 
 ### De annotatie-keten
 

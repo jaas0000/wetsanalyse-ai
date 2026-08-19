@@ -41,6 +41,7 @@ import type {
   GraafArtikel,
   OngelezenAantalOut,
   OntbrekendItem,
+  RunStart,
   VoorstelElement,
 } from "./types";
 import { pathSegment } from "./url";
@@ -383,12 +384,9 @@ export async function verwijderGesprek(id: string): Promise<void> {
   if (!res.ok) throw await parseError(res);
 }
 
-/** Stuur een vrije prompt naar de unified agent (BFF → graph-qa /v1/chat, SSE). De supervisor kiest
- *  per beurt `antwoord` (streamt tekst-`token`s + `sources`) of `annotatie` (`doel` + `element`).
- *  `conversationId` houdt het gespreksgeheugen vast (thread_id). */
-export async function annoteerAgentStream(
-  prompt: string,
-  handlers: {
+/** De callbacks waarmee een beurt binnenkomt. Gedeeld door het starten-en-meteen-volgen (`annoteerAgentStream`)
+ *  en het aanhaken bij een lopende run (`volgRun`) — één contract, twee ingangen. */
+export type AgentHandlers = {
     onStatus?: (m: string) => void;
     onReason?: (t: string) => void;
     onToken?: (t: string) => void;
@@ -400,9 +398,25 @@ export async function annoteerAgentStream(
     onOntbrekend?: (items: OntbrekendItem[]) => void;
     /** Kanttekening van de Critic bij een markering die de JURIST maakte. Nooit een wijziging. */
     onSuggestie?: (s: { element_id: string; aandacht: string; motivatie: string }) => void;
-    /** De vraag noemde een onderwerp, geen bepaling: dit zijn de gevonden bepalingen om uit te kiezen. */
-    onKandidaten?: (k: AgentKandidaat[]) => void;
-  },
+  /** De vraag noemde een onderwerp, geen bepaling: dit zijn de gevonden bepalingen om uit te kiezen. */
+  onKandidaten?: (k: AgentKandidaat[]) => void;
+  /** Het volgnummer van het laatst verwerkte event. Daarmee haakt een client na een onderbreking
+   *  weer aan op precies het juiste punt in plaats van vanaf het begin. */
+  onSeq?: (seq: number) => void;
+  /** Er zijn events weggevallen (de eventlog van de run is gecapt). Toon een gat in plaats van te
+   *  doen alsof de tekst compleet is. */
+  onGat?: (aantal: number) => void;
+};
+
+/** Stuur een vrije prompt naar de unified agent (BFF → graph-qa /v1/chat, SSE). De supervisor kiest
+ *  per beurt `antwoord` (streamt tekst-`token`s + `sources`) of `annotatie` (`doel` + `element`).
+ *  `conversationId` houdt het gespreksgeheugen vast (thread_id).
+ *
+ *  Let op: hier hangt de beurt nog aan déze verbinding — afbreken doodt hem. Voor een beurt die
+ *  wegklikken en herladen overleeft: `startRun` + `volgRun`. */
+export async function annoteerAgentStream(
+  prompt: string,
+  handlers: AgentHandlers,
   conversationId?: string,
   signal?: AbortSignal,
   extra?: { modus?: "auto" | "advies"; context?: AgentContext },
@@ -418,6 +432,108 @@ export async function annoteerAgentStream(
     }),
     signal,
   });
+  await verwerkSseStroom(res, handlers);
+}
+
+// --- Runs: de beurt is van de server -----------------------------------------
+//
+// `annoteerAgentStream` hierboven bindt de beurt aan één verbinding. Deze vier helpers doen het
+// andersom: de run draait bij graph-qa en de browser kijkt mee. Wegklikken, van gesprek wisselen of
+// herladen koppelt alleen de kijker los — stoppen doe je met `stopRun`.
+
+/** Start een beurt. Geeft de run terug, of — als er al een run voor dit gesprek loopt — de
+ *  bestaande, zodat de aanroeper daarop aanhaakt in plaats van een tweede te starten.
+ *
+ *  Die tweede zou niet alleen verwarrend zijn: `conversation_id` is ook de thread_id van het
+ *  agent-geheugen, dus twee gelijktijdige beurten schrijven door elkaar heen. */
+export async function startRun(
+  prompt: string,
+  conversationId?: string,
+  extra?: { modus?: "auto" | "advies"; context?: AgentContext },
+): Promise<RunStart> {
+  const res = await fetch("/api/annotatie/run", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      question: prompt,
+      conversation_id: conversationId,
+      ...(extra?.modus ? { modus: extra.modus } : {}),
+      ...(extra?.context ? { context: extra.context } : {}),
+    }),
+  });
+  if (res.status === 409) {
+    // Er loopt al een beurt op dit gesprek. Dat is geen fout maar een verwijzing: haak daarop aan.
+    // `parseError` maakt van een objectdetail een JSON-string, dus die lezen we hier terug uit.
+    const fout = await parseError(res);
+    const bestaand = runIdUitDetail(fout.detail);
+    if (bestaand) {
+      return {
+        run_id: bestaand,
+        conversation_id: conversationId ?? "",
+        vraag: prompt,
+        status: "loopt",
+        volgende_seq: 0,
+        weggevallen: 0,
+      };
+    }
+    throw fout;
+  }
+  return json<RunStart>(res);
+}
+
+/** Vist het actieve run_id uit een 409-detail. Levert niets op bij een onverwachte vorm — dan is
+ *  het gewoon een fout en hoort hij als fout behandeld te worden. */
+function runIdUitDetail(detail: string): string | null {
+  try {
+    const ontleed = JSON.parse(detail) as { run_id?: unknown };
+    return typeof ontleed?.run_id === "string" ? ontleed.run_id : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Haak aan bij een run en volg hem vanaf `vanaf`. Loskoppelen (abort) laat de run doorlopen —
+ *  dat is het hele verschil met de oude stream. */
+export async function volgRun(
+  runId: string,
+  handlers: AgentHandlers,
+  vanaf = 0,
+  signal?: AbortSignal,
+): Promise<void> {
+  const res = await fetch(`/api/annotatie/run/${pathSegment(runId)}/events?vanaf=${vanaf}`, {
+    cache: "no-store",
+    signal,
+  });
+  await verwerkSseStroom(res, handlers);
+}
+
+/** Vraag een run te stoppen. Een verzoek, geen feit: de agent-nodes zijn synchroon, dus een lopende
+ *  LLM-call maakt zichzelf af en de run eindigt pas op de eerstvolgende grens. */
+export async function stopRun(runId: string): Promise<void> {
+  const res = await fetch(`/api/annotatie/run/${pathSegment(runId)}/cancel`, { method: "POST" });
+  if (!res.ok) throw await parseError(res);
+}
+
+/** Loopt er nog een beurt in dit gesprek? Dit vraagt de werkplek bij binnenkomst, zodat een beurt
+ *  die tijdens het wegklikken doorliep weer in beeld komt. Faalt stil: geen run kunnen vinden mag de
+ *  werkplek niet blokkeren — dan zie je gewoon de gehydrateerde geschiedenis. */
+export async function haalActieveRun(gesprekId: string): Promise<RunStart | null> {
+  try {
+    const res = await fetch(`/api/annotatie/run?gesprek=${encodeURIComponent(gesprekId)}`, {
+      cache: "no-store",
+    });
+    if (!res.ok) return null;
+    return (await res.json()) as RunStart | null;
+  } catch {
+    return null;
+  }
+}
+
+/** De SSE-parser: frames uit de body halen en op de handlers afvuren.
+ *
+ *  Eén implementatie voor beide ingangen, zodat het eventcontract niet op twee plekken uit elkaar
+ *  kan lopen. sse-starlette scheidt met \r\n; de CR wordt gestript zodat de framegrens klopt. */
+async function verwerkSseStroom(res: Response, handlers: AgentHandlers): Promise<void> {
   if (!res.ok) throw await parseError(res);
   if (!res.body) throw { status: 0, detail: "Geen agentstroom." } as ApiError;
 
@@ -452,10 +568,14 @@ export async function annoteerAgentStream(
               sources?: Bron[];
               suggestie?: { element_id: string; aandacht: string; motivatie: string };
               kandidaten?: AgentKandidaat[];
+              seq?: number;
+              weggevallen?: number;
             }
           | null;
         if (!ev) continue;
-        if (ev.type === "status") handlers.onStatus?.(ev.message ?? "");
+        if (typeof ev.seq === "number") handlers.onSeq?.(ev.seq);
+        if (ev.type === "gat") handlers.onGat?.(ev.weggevallen ?? 0);
+        else if (ev.type === "status") handlers.onStatus?.(ev.message ?? "");
         else if (ev.type === "reason") handlers.onReason?.(ev.content ?? "");
         else if (ev.type === "token") handlers.onToken?.(ev.content ?? "");
         else if (ev.type === "sources" && ev.sources) handlers.onSources?.(ev.sources);

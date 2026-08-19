@@ -20,7 +20,12 @@ De API bedient zeven dingen:
    **geen foreign key**, dus draagt het bericht er zijn eigen leesbare label bij (`annotatie_titel`):
    wordt het document later verwijderd, dan blijft het gesprek leesbaar in plaats van naar een
    naamloze slug te wijzen. `DELETE` van een annotatie-document raakt de berichten bewust niet — het
-   gesprek is een verslag van wat er gebeurde.
+   gesprek is een verslag van wat er gebeurde. Een bericht draagt daarnaast optioneel een `run_id`:
+   dat is een **idempotentiesleutel**, want een agent-beurt hangt niet meer aan één browserverbinding
+   en er kunnen meerdere tabbladen op dezelfde run meekijken. `voeg_bericht_toe` weigert een tweede
+   bericht met hetzelfde `run_id` en geeft het bestaande terug (check-then-insert binnen de
+   transactie; géén unieke index, want `reconcile_schema` voegt die op bestaande tabellen niet toe —
+   bij een tweede API-replica is dat niet meer genoeg).
 3. **Login + gebruikersbeheer** (`/v1/auth/*` + `/v1/admin/users`): de API is de identiteitsbron van
    de webapp (userid + wachtwoord, rollen, optionele TOTP-2FA).
 4. **LLM-modelprofielbeheer** (`/v1/admin/profiles`).
