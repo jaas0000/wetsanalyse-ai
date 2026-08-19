@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { AppSidebar } from "@/components/werkplek/AppSidebar";
+import { MobieleTopbar } from "@/components/werkplek/MobieleTopbar";
 import { WerkplekClient } from "@/components/werkplek/WerkplekClient";
 import type { GesprekSamenvatting } from "@/lib/types";
 
@@ -96,31 +97,22 @@ export function WorkbenchShell({
 
       {/* Rechterkolom: mobiele topbar + chatvenster */}
       <div className="flex min-w-0 flex-1 flex-col">
-        <div className="flex shrink-0 items-center gap-2 border-b border-line px-3 py-2 pt-[max(0.5rem,env(safe-area-inset-top))] lg:hidden">
-          <button
-            type="button"
-            onClick={() => setDrawerOpen(true)}
-            aria-label="Gesprekken openen"
-            className="inline-flex items-center justify-center rounded-lg border border-line p-2 text-lint transition-colors hover:bg-surface"
-          >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
-              <line x1="3" y1="6" x2="21" y2="6" />
-              <line x1="3" y1="12" x2="21" y2="12" />
-              <line x1="3" y1="18" x2="21" y2="18" />
-            </svg>
-          </button>
-          <span className="min-w-0 flex-1 truncate text-sm font-medium text-lint">{actieveTitel}</span>
-          <button
-            type="button"
-            onClick={nieuwGesprek}
-            aria-label="Nieuw gesprek"
-            className="inline-flex items-center justify-center rounded-lg border border-line p-2 text-lint transition-colors hover:bg-surface"
-          >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
-              <path d="M12 5v14M5 12h14" />
-            </svg>
-          </button>
-        </div>
+        <MobieleTopbar
+          titel={actieveTitel}
+          onOpenSidebar={() => setDrawerOpen(true)}
+          actie={
+            <button
+              type="button"
+              onClick={nieuwGesprek}
+              aria-label="Nieuw gesprek"
+              className="focus-ring inline-flex items-center justify-center rounded-lg border border-line p-2 text-lint transition-colors hover:bg-surface"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
+                <path d="M12 5v14M5 12h14" />
+              </svg>
+            </button>
+          }
+        />
 
         <WerkplekClient
           key={mountKey}

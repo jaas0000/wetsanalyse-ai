@@ -160,6 +160,12 @@ sidebar blijft staan**, je stapt niet uit de app.
   verschillen per scherm: in de werkplek wisselt een klik van gesprek in lokale state, op
   `/annotaties` navigeert hij naar `/workbench?gesprek=<id>`. `WorkbenchShell` verhoogt
   `verversSignaal` als een beurt een gesprek aanmaakt — de lijst woont daar niet meer.
+- **Elk scherm met `AppSidebar` moet de drawer openen.** Onder `lg` is de sidebar een `hidden`-kolom
+  en verschijnt de drawer alléén als het scherm `drawerOpen` + `onDrawerSluit` doorgeeft. De
+  annotatiepagina's deden dat niet, en daar was op een half scherm dus géén navigatie: geen
+  gesprekken, geen account, geen uitloggen. De hamburger zit nu in de gedeelde
+  **`components/werkplek/MobieleTopbar.tsx`**, gebruikt door alle drie de schermen, en
+  `components/werkplek/sidebar.test.ts` bewaakt dat er geen vierde scherm zonder aankomt.
 - **`/annotaties`** (`components/annotaties/AnnotatiesClient.tsx`) heeft twee weergaven op één lijst:
   *te doen* (werkvoorraad: rood → geel → langst stil) en *alles* (per regeling gegroepeerd). De
   stand staat in de URL (`?weergave=alles`, via `replace` — een weergavewissel is geen stap in de

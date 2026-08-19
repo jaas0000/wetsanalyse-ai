@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { AnnotatieKaart } from "@/components/annotaties/AnnotatieKaart";
 import { AppSidebar } from "@/components/werkplek/AppSidebar";
+import { MobieleTopbar } from "@/components/werkplek/MobieleTopbar";
 import { Melding } from "@/components/ui/Melding";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { isApiError, lijstDocumenten, verwijderDocument } from "@/lib/api";
@@ -25,6 +26,9 @@ export function AnnotatiesClient({ beginWeergave }: { beginWeergave: Weergave })
   const [fout, setFout] = useState<string | null>(null);
   const [weergave, setWeergave] = useState<Weergave>(beginWeergave);
   const [term, setTerm] = useState("");
+  // Onder `lg` is de sidebar een drawer. Zonder deze state was er op een smal scherm géén sidebar
+  // én geen manier om er een te openen: geen gesprekken, geen account, geen uitloggen.
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   const laad = useCallback(async () => {
     setFout(null);
@@ -73,8 +77,12 @@ export function AnnotatiesClient({ beginWeergave }: { beginWeergave: Weergave })
           onNieuw={() => router.push("/workbench")}
           onOpen={(id) => router.push(`/workbench?gesprek=${encodeURIComponent(id)}`)}
           onFout={setFout}
+          drawerOpen={drawerOpen}
+          onDrawerSluit={() => setDrawerOpen(false)}
         />
 
+        <div className="flex min-w-0 flex-1 flex-col">
+        <MobieleTopbar titel="Annotaties" onOpenSidebar={() => setDrawerOpen(true)} />
         <main className="min-w-0 flex-1 overflow-y-auto">
           <div className="mx-auto w-full max-w-5xl px-5 py-6 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
             <header className="mb-5">
@@ -171,6 +179,7 @@ export function AnnotatiesClient({ beginWeergave }: { beginWeergave: Weergave })
             )}
           </div>
         </main>
+        </div>
       </div>
     </div>
   );

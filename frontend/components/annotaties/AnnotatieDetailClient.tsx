@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 import { AppSidebar } from "@/components/werkplek/AppSidebar";
+import { MobieleTopbar } from "@/components/werkplek/MobieleTopbar";
 import { ArtefactInhoud } from "@/components/werkplek/ArtefactInhoud";
 import { Melding } from "@/components/ui/Melding";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -33,6 +34,8 @@ export function AnnotatieDetailClient({ slug }: { slug: string }) {
   const [fout, setFout] = useState<string | null>(null);
   const [weg, setWeg] = useState(false);
   const [melding, setMelding] = useState("");
+  // Onder `lg` is de sidebar een drawer; zonder deze state stond je hier zonder navigatie.
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   const laad = useCallback(async () => {
     setFout(null);
@@ -93,10 +96,13 @@ export function AnnotatieDetailClient({ slug }: { slug: string }) {
           onNieuw={() => router.push("/workbench")}
           onOpen={(id) => router.push(`/workbench?gesprek=${encodeURIComponent(id)}`)}
           onFout={setFout}
+          drawerOpen={drawerOpen}
+          onDrawerSluit={() => setDrawerOpen(false)}
         />
 
         <main className="flex min-w-0 flex-1 flex-col bg-paper">
-          <div className="flex shrink-0 items-center justify-between gap-3 border-b border-line px-5 py-3 pt-[max(0.75rem,env(safe-area-inset-top))]">
+          <MobieleTopbar titel={titel} onOpenSidebar={() => setDrawerOpen(true)} />
+          <div className="flex shrink-0 items-center justify-between gap-3 border-b border-line px-5 py-3 lg:pt-[max(0.75rem,env(safe-area-inset-top))]">
             <div className="min-w-0">
               <Link
                 href="/annotaties"
