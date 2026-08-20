@@ -5,7 +5,7 @@
 // Deployment (vanuit de projectroot):
 //   python3 deploy/azure/gen-deploy.py "<azure-ai-key>" \
 //       --llm-api-base https://<resource>.services.ai.azure.com \
-//       --resource-group rg-wetsanalyse [--env-name dev] [--run]
+//       --env-name dev|acc [--run]
 
 @description('Azure-regio; erft van de resource group.')
 param location string = resourceGroup().location

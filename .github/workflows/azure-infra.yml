@@ -14,7 +14,7 @@ on:
   workflow_dispatch:
     inputs:
       env_name:
-        description: "Doel-env (dev = master → rg-wetsanalyse; acc = release/acceptance → rg-wetsanalyse-acc)"
+        description: "Doel-env (dev = master; acc = release/acceptance). Beide envs delen dezelfde resource group rg-wetsanalyse."
         required: true
         default: dev
         type: choice

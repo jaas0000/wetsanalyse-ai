@@ -10,12 +10,12 @@ Gebruik:
 
 Vereisten:
     - az (Azure CLI) geïnstalleerd en ingelogd: az login
-    - Resource group bestaat: az group create -n <rg> -l westeurope
+    - Resource group bestaat: az group create -n rg-wetsanalyse -l westeurope
 
-`--env-name` is de enige env-hendel: `dev` → `rg-wetsanalyse` + appName
-`wetsanalyse`; `acc` → `rg-wetsanalyse-acc` + appName `wetsanalyse-acc`.
-De env-naam wordt óók als `DEPLOY_ENV` in de containers gezet (OTel +
-app-side env-checks).
+`--env-name` is de enige env-hendel: `dev` → appName `wetsanalyse`; `acc` →
+appName `wetsanalyse-acc`. Beide envs staan in dezelfde resource group
+`rg-wetsanalyse` — de resource-prefix scheidt ze. De env-naam wordt óók
+als `DEPLOY_ENV` in de containers gezet (OTel + app-side env-checks).
 """
 import argparse
 import base64
@@ -45,8 +45,8 @@ def main() -> None:
     p.add_argument("--graphdb-mcp-url", default=os.environ.get("GRAPHDB_MCP_URL", "https://graphdb-mcp.ipalm.nl/mcp"),
                    help="GraphDB-MCP-URL voor graph-qa. Fase 1: de huidige publieke MCP (default).")
     p.add_argument("--env-name",      required=True, choices=["dev", "acc"],
-                   help="Doel-env. Bepaalt ook --app-name en --resource-group: "
-                        "dev → wetsanalyse / rg-wetsanalyse; acc → wetsanalyse-acc / rg-wetsanalyse-acc.")
+                   help="Doel-env. Bepaalt --app-name (dev → wetsanalyse; acc → wetsanalyse-acc). "
+                        "Beide envs delen dezelfde resource group rg-wetsanalyse.")
     p.add_argument("--location",      default="westeurope")
     p.add_argument("--db-server-name", default=None)
     p.add_argument("--params-file",   default=str(DEFAULT_PARAMS))
@@ -61,7 +61,7 @@ def main() -> None:
                 "(bearer van de huidige GraphDB-MCP; zonder dit start graph-qa niet).")
 
     app_name       = "wetsanalyse" if args.env_name == "dev" else f"wetsanalyse-{args.env_name}"
-    resource_group = f"rg-{app_name}"
+    resource_group = "rg-wetsanalyse"
 
     tok_frontend = secrets.token_hex(24)
     tok_admin    = secrets.token_hex(24)

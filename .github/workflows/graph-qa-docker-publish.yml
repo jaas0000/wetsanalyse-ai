@@ -113,7 +113,6 @@ jobs:
         env:
           IMAGE_DIGEST_REF: ${{ env.IMAGE }}@${{ steps.build.outputs.digest }}
           APP: ${{ github.ref == 'refs/heads/release/acceptance' && 'wetsanalyse-acc-graph-qa' || 'wetsanalyse-graph-qa' }}
-          RG:  ${{ github.ref == 'refs/heads/release/acceptance' && 'rg-wetsanalyse-acc'       || 'rg-wetsanalyse'       }}
         run: |
           az login --service-principal \
             --username "$AZURE_CLIENT_ID" \
@@ -122,5 +121,5 @@ jobs:
           az account set --subscription "$AZURE_SUBSCRIPTION_ID"
           az containerapp update \
             --name "$APP" \
-            --resource-group "$RG" \
+            --resource-group rg-wetsanalyse \
             --image "$IMAGE_DIGEST_REF"
