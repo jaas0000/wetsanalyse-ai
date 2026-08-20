@@ -537,3 +537,54 @@ def test_een_genegeerde_instructie_heet_nog_steeds_genegeerd():
                            "voorstel_klasse": "Voorwaarde", "toegepast": False}],
     }
     assert "ongewijzigd gelaten" in _vorige_ronde_blok([voorstel], [])
+
+
+def test_een_toegepaste_klasse_blijft_niet_ook_als_alternatief_staan():
+    """Anders wijst de chip naar de keuze die er al staat.
+
+    Op dev kregen twee elementen een alternatief dat gelijk was aan hun eigen klasse: hetzelfde
+    fragment was in twee klassen voorgesteld, `_voeg_alternatief_toe` maakte er een alternatief van,
+    en de Critic verhief dat alternatief vervolgens tot hoofdklasse.
+    """
+    uit, n, _rest = pas_critic_toe(
+        [{
+            "id": "a", "klasse": "Rechtsobject", "tekst": "niet betaling",
+            "alternatieven": [{"klasse": "Rechtsfeit", "motivatie": "ook een gebeurtenis"}],
+        }],
+        [{"id": "a", "aandacht": "rood", "actie": "vervang", "voorstel_klasse": "Rechtsfeit"}],
+        CORPUS,
+    )
+    assert n.toegepast == 1
+    assert uit[0]["klasse"] == "Rechtsfeit"
+    assert uit[0]["alternatieven"] == []
+
+
+def test_een_geel_fragmentvoorstel_heet_afgehandeld():
+    """Geel verandert niets, maar het is wél gemeld — anders herhaalt de Critic het letterlijk.
+
+    Op dev deed hij dat bij 'aansprakelijk': ronde 1 en ronde 2 droegen woordelijk hetzelfde gele
+    advies. Er was geen klasse in het spoor, dus de alternatief-tak greep niet en de stand viel terug
+    op "ongewijzigd gelaten" — wat de prompt leest als een meningsverschil.
+    """
+    from agent.annotatie_prompt import _vorige_ronde_blok
+
+    voorstel = {
+        "id": "a", "klasse": "Rechtsbetrekking", "tekst": "aansprakelijk", "alternatieven": [],
+        "critic_rondes": [{"ronde": 1, "aandacht": "geel", "actie": "vervang",
+                           "voorstel_klasse": "", "voorstel_tekst": "is … aansprakelijk",
+                           "toegepast": False}],
+    }
+    blok = _vorige_ronde_blok([voorstel], [])
+    assert "als kanttekening aan de jurist gemeld" in blok
+    assert "ongewijzigd" not in blok
+
+
+def test_geel_zonder_instructie_is_geen_kanttekening():
+    """Een geel 'behoud' is een observatie, geen advies dat is voorgelegd."""
+    from agent.annotatie_prompt import _vorige_ronde_blok
+
+    voorstel = {
+        "id": "a", "klasse": "Rechtsfeit", "tekst": "x", "alternatieven": [],
+        "critic_rondes": [{"ronde": 1, "aandacht": "geel", "actie": "behoud", "toegepast": False}],
+    }
+    assert "ongewijzigd gelaten" in _vorige_ronde_blok([voorstel], [])

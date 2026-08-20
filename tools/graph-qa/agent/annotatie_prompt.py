@@ -129,6 +129,12 @@ def _stand_van(voorstel: dict, laatste_ronde: dict) -> str:
         str(a.get("klasse")) == voorstel_klasse for a in (voorstel.get("alternatieven") or [])
     ):
         return "als ALTERNATIEF aan de jurist voorgelegd — die kiest; herhaal het niet"
+    # Geel verandert nooit iets (zie `pas_critic_toe`), maar het is wél afgehandeld: de motivatie
+    # staat als kanttekening op de kaart van de jurist. Zonder deze regel viel een geel voorstel dat
+    # géén klasse noemde — dus een fragmentvoorstel — terug op "ongewijzigd gelaten", en herhaalde de
+    # Critic zijn advies woord voor woord in ronde 2. Dat gebeurde op dev bij 'aansprakelijk'.
+    if str(laatste_ronde.get("aandacht", "")) == "geel" and laatste_ronde.get("actie") != "behoud":
+        return "als kanttekening aan de jurist gemeld — die weegt het; herhaal het niet"
     if voorstel.get("aangepast_na_kritiek"):
         return "de annotator heeft dit AANGEPAST"
     return "ongewijzigd gelaten"

@@ -151,6 +151,14 @@ def pas_critic_toe(
         gewijzigd = False
         if actie == "vervang" and rood and klasse in GELDIGE_JAS_KLASSEN and klasse != nieuw.get("klasse"):
             nieuw["klasse"] = klasse
+            # Stond die klasse al als alternatief op het element (bijv. omdat hetzelfde fragment in
+            # twee klassen was voorgesteld en `_voeg_alternatief_toe` er een alternatief van maakte),
+            # dan is hij nu de hoofdklasse. Hem laten staan levert de jurist een chip op die naar de
+            # keuze wijst die er al staat — op dev kregen twee elementen zo een alternatief dat gelijk
+            # was aan hun eigen klasse. Dezelfde invariant die `_voeg_alternatief_toe` bewaakt.
+            alts = [a for a in (nieuw.get("alternatieven") or []) if str(a.get("klasse")) != klasse]
+            if alts != (nieuw.get("alternatieven") or []):
+                nieuw["alternatieven"] = alts
             gewijzigd = True
         tekst = str(f.get("voorstel_tekst", "")).strip()
         if (
