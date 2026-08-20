@@ -1,0 +1,34 @@
+# Deze repo is publiek. Hostnamen, interne IP's en machinenamen van de omgeving waar hij draait
+# horen er dus niet in: ze vertellen aan iedereen wat er waar staat, terwijl de code er niets aan
+# heeft — alle omgevingswaarden komen uit repo-variabelen en secrets.
+#
+# Ze zijn er één keer helemaal uitgehaald. Deze guard bestaat om te voorkomen dat ze via een
+# copy-paste uit een terminal weer terugsluipen; dat is precies hoe ze er de eerste keer in kwamen.
+name: geen-omgevingsgegevens
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Scan op omgevingsgegevens
+        run: |
+          set -uo pipefail
+          # Krap gehouden: alleen vormen die nooit een legitieme reden hebben om in deze repo te
+          # staan. Documentatie hoort rollen te beschrijven ("de docker-host"), geen exemplaren.
+          PATROON='ipalm\.nl|192\.168\.[0-9]+\.[0-9]+|\bpve[0-9]+\b|\bvzdump\b'
+          if grep -rInE "$PATROON" \
+               --exclude-dir=.git --exclude-dir=node_modules --exclude-dir=.venv \
+               --exclude-dir=analyses --exclude="geen-omgevingsgegevens.yml" . ; then
+            echo "::error::Omgevingsgegevens gevonden (zie hierboven). Gebruik een repo-variabele of een neutrale placeholder zoals wetsanalyse.example."
+            exit 1
+          fi
+          echo "Schoon: geen hostnamen, interne IP's of machinenamen in de repo."
