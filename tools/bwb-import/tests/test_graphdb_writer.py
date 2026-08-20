@@ -370,15 +370,20 @@ class _StubSession:
     ``bestaande_config`` bepaalt het antwoord op de listConnectors-SELECT.
     """
 
-    def __init__(self, bestaande_config: dict | None = None) -> None:
+    def __init__(self, bestaande_config: dict | None = None, rauw: str | None = None) -> None:
         self.updates: list[str] = []
         self._bestaand = bestaande_config
+        # `rauw` bootst de GraphDB-versies na die géén JSON-config teruggeven maar
+        # bijvoorbeeld alleen de connectornaam.
+        self._rauw = rauw
 
     def post(self, url: str, *, data=None, **_kw) -> _StubResponse:
         data = data or {}
         if "query" in data:
             bindings = []
-            if self._bestaand is not None:
+            if self._rauw is not None:
+                bindings = [{"createString": {"value": self._rauw}}]
+            elif self._bestaand is not None:
                 bindings = [{"createString": {"value": json.dumps(self._bestaand)}}]
             return _StubResponse({"results": {"bindings": bindings}})
         self.updates.append(data["update"])
@@ -420,6 +425,22 @@ def test_ensure_fts_is_idempotent_bij_actuele_config() -> None:
     session = _StubSession(bestaande_config=bestaand)
     _fts_writer(session).ensure_fts_connector()
     assert session.updates == []
+
+
+def test_ensure_fts_hermaakt_wanneer_de_config_onleesbaar_is() -> None:
+    """Onleesbare config betekent: we weten niet waarop hij indexeert — dus opnieuw bouwen.
+
+    Dit gedrag is er na een echte storing gekomen. Bij de overgang naar de URN-namespace gaf
+    listConnectors alleen de connectornaam terug; de code nam toen aan dat de config actueel was
+    en liet de connector staan. Die bleef op de oude predicaten indexeren, waarna full-text
+    zoeken stil nul treffers gaf — geen foutmelding, alleen lege antwoorden. Een herindexering
+    van enkele seconden is dat risico niet waard.
+    """
+    session = _StubSession(rauw="bwb_tekst")
+    _fts_writer(session).ensure_fts_connector()
+    assert len(session.updates) == 2
+    assert "dropConnector" in session.updates[0]
+    assert "createConnector" in session.updates[1]
 
 
 def test_ensure_fts_hermaakt_bij_gewijzigde_config() -> None:

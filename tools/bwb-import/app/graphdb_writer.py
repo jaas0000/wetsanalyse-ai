@@ -406,15 +406,22 @@ class GraphDbWriter:
             return json.loads(raw)
         except (json.JSONDecodeError, TypeError):
             # Sommige GraphDB-versies geven via listConnectors niet de JSON-config
-            # maar bv. de connector-naam terug. De connector bestáát dan wél; geef
-            # de gewenste config terug zodat de subset-check slaagt en we niet
-            # onnodig droppen + herindexeren.
-            logger.info(
-                "FTS-connector %s bestaat (config niet uitleesbaar: %r); laat ongemoeid",
+            # maar bv. de connector-naam terug. De connector bestáát dan wél, maar we
+            # weten niet wáárop hij indexeert.
+            #
+            # Dit gaf eerder de gewenste config terug, zodat de subset-check slaagde en
+            # er niet onnodig geherindexeerd werd. Die aanname brak bij de overgang naar
+            # de URN-namespace: de connector bleef op de oude predicaten staan en de
+            # full-text-zoekopdrachten leverden daarna stil nul treffers. Stille
+            # zoekuitval is erger dan een herindexering van enkele seconden, dus bij
+            # twijfel bouwen we hem opnieuw.
+            logger.warning(
+                "FTS-connector %s bestaat maar de config is niet uitleesbaar (%r); "
+                "opnieuw aanmaken om te voorkomen dat hij op verouderde predicaten blijft staan",
                 _FTS_CONNECTOR_NAAM,
                 raw,
             )
-            return _fts_connector_config(self._vocab)
+            return {}
 
     def _sparql_update(self, update: str) -> None:
         resp = self._http.post(
