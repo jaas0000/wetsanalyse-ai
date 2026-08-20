@@ -8,6 +8,10 @@
 #             de template tegen je echte subscription te valideren (quota, regio, rechten).
 #   deploy    rolt de stack daadwerkelijk uit (10-15 min; PostgreSQL is de trage stap).
 #   afbreken  verwijdert de hele resource group. Vereist dat je de naam ter bevestiging intypt.
+#   vul-graaf start de import-job en wacht hem af. Apart van `deploy`, want importeren schrijft naar
+#             de graaf en hoort een expliciete keuze te blijven — en na een herstart van de
+#             graphdb-app (die geen persistente opslag heeft) is dit de enige manier om de graaf
+#             terug te krijgen zonder een volledige infra-deploy.
 #
 # Na een `deploy` is de omgeving nog leeg: draai de import-job om de graaf te vullen. Het commando
 # staat in de samenvatting aan het eind van de run.
@@ -24,7 +28,7 @@ on:
       actie:
         description: "Wat doen"
         type: choice
-        options: [wat-if, deploy, afbreken]
+        options: [wat-if, deploy, afbreken, vul-graaf]
         default: wat-if
       bevestig_resource_group:
         description: "Alleen voor 'afbreken': typ de resource group ter bevestiging"
@@ -103,14 +107,14 @@ jobs:
           echo "Opdracht gegeven. Controleer in de portal wanneer het klaar is."
 
       - name: Resource group waarborgen
-        if: ${{ inputs.actie != 'afbreken' }}
+        if: ${{ inputs.actie == 'wat-if' || inputs.actie == 'deploy' }}
         run: |
           set -euo pipefail
           az group create --name "$RESOURCE_GROUP" --location "$AZURE_LOCATION" --output none
           echo "Resource group '$RESOURCE_GROUP' gereed in $AZURE_LOCATION."
 
       - name: Licentie klaarzetten
-        if: ${{ inputs.actie != 'afbreken' }}
+        if: ${{ inputs.actie == 'wat-if' || inputs.actie == 'deploy' }}
         run: |
           set -euo pipefail
           # Het secret is base64; gen-deploy.py verwacht het RUWE bestand en codeert zelf.
@@ -136,6 +140,38 @@ jobs:
                 --resource-group "$RESOURCE_GROUP" --location "$AZURE_LOCATION" --run)
           [ -f "$RUNNER_TEMP/graphdb.license" ] && args+=(--license-file "$RUNNER_TEMP/graphdb.license")
           python3 deploy/azure/gen-deploy.py "$AZURE_AI_KEY" "${args[@]}"
+
+      - name: Graaf vullen (import-job)
+        if: ${{ inputs.actie == 'vul-graaf' }}
+        run: |
+          set -euo pipefail
+          JOB=wetsanalyse-bwb-import
+          az containerapp job start -n "$JOB" -g "$RESOURCE_GROUP" --output none
+          # De job draait asynchroon: pak de nieuwste execution en wacht hem af. Zonder dit wachten
+          # meldt de workflow succes terwijl de import nog loopt of al gefaald is.
+          uitvoering=$(az containerapp job execution list -n "$JOB" -g "$RESOURCE_GROUP" \
+                        --query "sort_by([], &properties.startTime)[-1].name" -o tsv)
+          echo "Execution: $uitvoering"
+          status=Unknown
+          for i in $(seq 1 60); do
+            status=$(az containerapp job execution show -n "$JOB" -g "$RESOURCE_GROUP" \
+                       --job-execution-name "$uitvoering" --query properties.status -o tsv)
+            echo "[$i] $status"
+            case "$status" in Succeeded|Failed|Cancelled|Degraded) break ;; esac
+            sleep 10
+          done
+          # Logs zijn hulpmiddel, geen oordeel: niet elke CLI-versie kent dit subcommando.
+          az containerapp job logs show -n "$JOB" -g "$RESOURCE_GROUP" \
+            --execution "$uitvoering" --tail 60 2>/dev/null || \
+            echo "(logs niet op te halen met deze CLI-versie — zie de portal)"
+          {
+            echo "## Import-job"
+            echo ""
+            echo "- Execution: \`$uitvoering\`"
+            echo "- Status: **$status**"
+            [ "$status" = "Succeeded" ] && echo "- De graaf staat in \`urn:bwb:\`; controleer een vraag in de webapp."
+          } >> "$GITHUB_STEP_SUMMARY"
+          [ "$status" = "Succeeded" ] || { echo "::error::import-job eindigde als $status"; exit 1; }
 
       - name: Samenvatting
         if: ${{ always() && inputs.actie == 'deploy' }}
