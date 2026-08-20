@@ -98,6 +98,14 @@ class BeurtSchrijver:
                 bestaand.get("tekst") or "", bestaand.get("lid") or ""
             )
 
+        # Een leeg aandacht-veld is geen oordeel maar de afwezigheid ervan, en het contract kent
+        # daar `None` voor: `Aandacht` accepteert alleen groen/geel/rood. Een lege string liet de
+        # HELE PUT stuklopen op 422 — dus één element zonder eindoordeel wiste de complete annotatie.
+        # Op dev gebeurde dat: de agent was klaar en gegrond, en de jurist hield een leeg document
+        # over. Hier normaliseren en niet bij de bron, want elk pad hierheen kan het veld leeglaten.
+        if not element.get("aandacht"):
+            element = {**element, "aandacht": None}
+
         for i, bestaand in enumerate(self.elementen):
             if zelfde(bestaand):
                 self.elementen[i] = element
@@ -173,6 +181,7 @@ async def _leg_vast(
     try:
         bericht: dict[str, Any] = {"rol": "assistant", "run_id": run.run_id}
         slug = ""
+        elementen_bewaard = False
 
         if schrijver.is_annotatie:
             # Vanaf hier kan een deel geslaagd zijn: het document en zijn elementen staan er dan al
@@ -192,6 +201,7 @@ async def _leg_vast(
                 suggesties=schrijver.suggesties,
                 run=schrijver.run,
             )
+            elementen_bewaard = True
             bericht |= {
                 "annotatie_slug": slug,
                 "annotatie_titel": _titel(doel),
@@ -239,12 +249,22 @@ async def _leg_vast(
         # Zichtbaar falen: de jurist moet weten dat dit werk niet bewaard is, niet later ontdekken
         # dat het gesprek een gat heeft. Wél eerlijk zijn over wat er al staat: "probeer opnieuw" is
         # een slecht advies als de annotatie er al is — dat levert een tweede document op.
-        if slug:
+        if slug and elementen_bewaard:
             yield {
                 "type": "error",
                 "message": ("De annotatie is bewaard, alleen het bericht in dit gesprek niet. "
                             "Je vindt hem terug bij Annotaties; de vraag opnieuw stellen maakt een "
                             "tweede annotatie."),
+                "annotatie_slug": slug,
+            }
+        elif slug:
+            # Het document bestaat, de markeringen niet. Zeggen dat de annotatie bewaard is, is dan
+            # onwaar — en het advies "niet opnieuw proberen" is precies verkeerd: er valt niets terug
+            # te vinden. Op dev liep een run hierop stuk en hield de jurist een leeg document over.
+            yield {
+                "type": "error",
+                "message": ("De markeringen konden niet worden opgeslagen; bij Annotaties staat een "
+                            "leeg document. Stel de vraag opnieuw."),
                 "annotatie_slug": slug,
             }
         else:

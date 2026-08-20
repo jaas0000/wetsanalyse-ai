@@ -39,6 +39,8 @@ class NepApi:
         return "slug-1"
 
     async def zet_elementen(self, slug: str, **kw: Any) -> dict[str, Any]:
+        if self.faalt == "elementen":
+            raise WetsanalyseApiFout("PUT /v1/annotatie/documenten/…/elementen → 422", 422)
         self.element_puts.append({"slug": slug, **kw})
         return {}
 
@@ -139,6 +141,29 @@ async def test_annotatiebeurt_maakt_document_en_elementen(api):
 
 
 @asyncio_test
+async def test_een_element_zonder_eindoordeel_breekt_de_hele_annotatie_niet(api):
+    """`Aandacht` kent alleen groen/geel/rood; een lege string is geen oordeel maar 422.
+
+    Op dev liep daar een complete annotatie op stuk: de agent was klaar en gegrond, de PUT gaf 422 op
+    één element zonder eindoordeel, en de jurist hield een leeg document over. Alles-of-niets bij het
+    wegschrijven betekent dat het zwakste element de rest meesleurt.
+    """
+    doel = {"bwbId": "BWBR0004770", "artikel": "9", "lid": "1", "citeertitel": "Invorderingswet 1990"}
+    await _draai([
+        {"type": "doel", "doel": doel},
+        {"type": "element", "element": {"id": "e1", "klasse": "Rechtssubject", "tekst": "de ontvanger",
+                                        "aandacht": ""}},
+        {"type": "element", "element": {"id": "e2", "klasse": "Voorwaarde", "tekst": "indien",
+                                        "aandacht": "geel"}},
+        {"type": "done"},
+    ])
+
+    elementen = api.element_puts[0]["elementen"]
+    assert elementen[0]["aandacht"] is None, "geen oordeel is None, niet een lege string"
+    assert elementen[1]["aandacht"] == "geel", "een echt oordeel blijft staan"
+
+
+@asyncio_test
 async def test_zonder_elementen_geen_leeg_document(api):
     """`emit_node` is terminaal: een beurt die eerder eindigt heeft nul elementen. Zou het document
     al bij het `doel`-event ontstaan, dan bleef elk afgebroken pad als leeg skelet in de
@@ -151,6 +176,28 @@ async def test_zonder_elementen_geen_leeg_document(api):
     assert api.documenten == []
     _, bericht = api.berichten[0]
     assert bericht["tekst"] == "Ik vond geen JAS-elementen."
+
+
+@asyncio_test
+async def test_mislukte_elementen_beloven_geen_bewaarde_annotatie(monkeypatch):
+    """Het document bestaat dan wel, de markeringen niet — dat is iets anders dan "bewaard".
+
+    Op dev liep een run hierop stuk (422 op de PUT) en las de jurist dat de annotatie bewaard was en
+    dat opnieuw proberen een tweede zou opleveren. Er viel niets terug te vinden: het document was
+    leeg. Een melding die het werk veiliger voorstelt dan het is, is erger dan geen melding.
+    """
+    nep = NepApi(faalt="elementen")
+    monkeypatch.setattr("agent.beurt.WetsanalyseApi", lambda *_a, **_k: nep)
+    uit = await _draai([
+        {"type": "doel", "doel": {"bwbId": "B", "artikel": "9", "citeertitel": "Wet"}},
+        {"type": "element", "element": {"id": "e1", "klasse": "Rechtssubject", "tekst": "t"}},
+        {"type": "done"},
+    ])
+
+    fout = [e for e in uit if e["type"] == "error"][0]
+    assert "leeg document" in fout["message"]
+    assert "opnieuw" in fout["message"], "hier is opnieuw proberen juist wél het advies"
+    assert "bewaard" not in fout["message"]
 
 
 @asyncio_test
