@@ -40,6 +40,7 @@ jobs:
       PORTAINER_API_KEY: ${{ secrets.PORTAINER_API_KEY }}
       GRAPHDB_TOKEN: ${{ secrets.GRAPHDB_TOKEN }}
       GRAPHDB_HEAP: ${{ vars.GRAPHDB_HEAP || '2g' }}
+      BWB_IMAGE: ${{ vars.BWB_IMAGE }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -103,7 +104,11 @@ jobs:
                  '[{name:"MCP_BEARER_TOKEN",value:$tok},{name:"GRAPHDB_HEAP",value:$heap}]')"
           fi
           if [ "$KEUZE" = "beide" ] || [ "$KEUZE" = "bwb-import" ]; then
-            deploy_stack bwb-import deploy/bwb-import/docker-compose.yml '[]'
+            # Zonder BWB_IMAGE valt de compose terug op het lokaal gebouwde `bwb-import:0.1`, dat
+            # niet in een registry staat: Portainer faalt dan op `pull access denied`.
+            deploy_stack bwb-import deploy/bwb-import/docker-compose.yml \
+              "$(jq -n --arg img "${BWB_IMAGE:-ghcr.io/${GITHUB_REPOSITORY_OWNER}/bwb-import:latest}" \
+                 '[{name:"BWB_IMAGE",value:$img}]')"
           fi
 
       - name: Wachten tot de containers draaien
