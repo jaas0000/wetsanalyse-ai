@@ -42,7 +42,7 @@ Aangemaakt via `POST /rest/similarity` (header `X-GraphDB-Repository: inning`), 
 - `analyzerClass`: `org.apache.lucene.analysis.nl.DutchAnalyzer`
 - `options`: `-trainingcycles 5 -dimension 200`  (SemanticVectors — let op: `-dimension`, niet `-vectorsize`)
 - `selectQuery`: `SELECT ?documentID ?documentText { ?documentID bwb:tekst ?documentText
-  FILTER(STRSTARTS(STR(?documentID), "https://ipalm.nl/bwb/")) }`  (eigen IRI-ruimte → geen sameAs-dubbels)
+  FILTER(STRSTARTS(STR(?documentID), "urn:bwb:")) }`  (eigen IRI-ruimte → geen sameAs-dubbels)
 - `searchQuery`: de standaard similarity-template (`:searchTerm`/`:documentResult`/`:value`/`:score`).
 
 Build duurde ~enkele seconden (native training over ~4000 literals). Herbouwen bij nieuwe/gewijzigde

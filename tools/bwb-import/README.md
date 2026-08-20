@@ -31,9 +31,22 @@ SRU-discovery → toestand-XML downloaden → XSD-validatie → lxml-parse → c
 ## Datamodel (GraphDB / RDF)
 
 Custom ontologie (`app/rdf_vocab.py` + T-Box in `app/ontology.py`) met twee
-namespaces: resources onder `GRAPHDB_BASE_IRI` (default `https://ipalm.nl/bwb/`),
-de ontologie onder `GRAPHDB_ONTOLOGY_IRI` (default `https://ipalm.nl/ns/bwb#`,
+namespaces: resources onder `GRAPHDB_BASE_IRI` (default `urn:bwb:`),
+de ontologie onder `GRAPHDB_ONTOLOGY_IRI` (default `urn:bwb-ns:`,
 prefix `bwb:`).
+
+Waarom een **URN** en geen http-IRI: een domeinnaam in het datamodel bindt de data aan wie dat
+domein toevallig bezit, en verhuizen kost dan een herimport van álles. Dat een URN niet
+dereferenceerbaar is, kost hier niets — elke citeerbare node krijgt een `owl:sameAs` naar
+`wetten.overheid.nl`, en dát is de publieke, klikbare vindplaats.
+
+De twee ruimtes zijn bewust **disjunct** (`urn:bwb:` naast `urn:bwb-ns:`, niet `urn:bwb:ns:`):
+graph-qa herkent vindplaatsen door op de documentbasis te prefixen, dus een vocabulaire *onder* de
+documentruimte zou predicaten als "bron" onder een antwoord laten verschijnen.
+
+De vorm is `urn:bwb:{bwbId}[:{sleutel}:{waarde}]*`, bijvoorbeeld
+`urn:bwb:BWBR0004770:artikel:9:lid:1`. Waarden worden percent-escaped, zodat een `:` in een
+waarde niet als segmentgrens leest.
 
 - **Klassen**: `bwb:Regeling/Hoofdstuk/Titeldeel/Afdeling/Paragraaf/Artikel/Lid/
   Onderdeel/Divisie/Bijlage` (+ abstracte `bwb:Structuurdeel`); elke node met een
@@ -101,7 +114,7 @@ definieertBegrip/rdfs:label`). Voorbeeldquery voor een chatbot:
 ```sparql
 PREFIX luc: <http://www.ontotext.com/connectors/lucene#>
 PREFIX inst: <http://www.ontotext.com/connectors/lucene/instance#>
-PREFIX bwb: <https://ipalm.nl/ns/bwb#>
+PREFIX bwb: <urn:bwb-ns:>
 SELECT ?node ?score ?tekst WHERE {
   [] a inst:bwb_tekst ;
      luc:query "rijksbelastingen AND invordering" ;
@@ -146,8 +159,8 @@ cp .env.example .env   # vul GRAPHDB_* in (bij anonieme GraphDB volstaan de defa
 | `GRAPHDB_REPOSITORY`   | `inning`                      | Doel-repository                               |
 | `GRAPHDB_USER`         | —                             | Optioneel; leeg = anoniem                     |
 | `GRAPHDB_PASSWORD`     | —                             | Optioneel                                     |
-| `GRAPHDB_BASE_IRI`     | `https://ipalm.nl/bwb/`       | IRI-namespace voor resources                  |
-| `GRAPHDB_ONTOLOGY_IRI` | `https://ipalm.nl/ns/bwb#`    | IRI-namespace voor de ontologie               |
+| `GRAPHDB_BASE_IRI`     | `urn:bwb:`       | IRI-namespace voor resources                  |
+| `GRAPHDB_ONTOLOGY_IRI` | `urn:bwb-ns:`    | IRI-namespace voor de ontologie               |
 | `BWB_DEFAULT_ID`       | `BWBR0004770`                 | Standaardregeling                             |
 | `BWB_VALIDATE_XSD`     | `true`                        | XSD-validatie (niet-blokkerend)               |
 | `BWB_DETECT_TEKSTUELE_REFS` | `true`                   | Ongetagde tekstverwijzingen detecteren        |

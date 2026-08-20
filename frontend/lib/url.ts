@@ -32,18 +32,22 @@ export function normaliseerJci(jci: string): string {
 
 // De basis van de IRI's in de kennisgraaf (`GRAPHDB_BASE_IRI` in de bwb-importer). Vindplaatsen uit
 // de tool-trace kunnen in die vorm binnenkomen; ze zijn intern en dus niet publiek te openen.
-const GRAAF_BASIS = "https://ipalm.nl/bwb/";
+// Bewaakt door tools/graph-qa/tests/test_namespace_drift.py — deze constante is de enige koppeling
+// met de importer, want client-side code kan de env niet lezen.
+const GRAAF_BASIS = "urn:bwb:";
+// Segmentscheiding: `:` in de URN-ruimte, `/` als de basis ooit weer een http-IRI wordt.
+const GRAAF_SEP = GRAAF_BASIS.startsWith("urn:") ? ":" : "/";
 const BWB_ID = /^BWBR\d+$/;
 
 // Een graaf-IRI naar de publieke vindplaats vertalen. De IRI is systematisch opgebouwd uit
-// sleutel/waarde-paren achter het BWB-id (`…/BWBR0004770/artikel/2/lid/1`), dus de omzetting naar een
-// jci is mechanisch — de spiegel van `Vocab.canonieke_url` in de importer.
+// sleutel/waarde-paren achter het BWB-id (`urn:bwb:BWBR0004770:artikel:2:lid:1`), dus de omzetting
+// naar een jci is mechanisch — de spiegel van `Vocab.canonieke_url` in de importer.
 //
-// Niet elke IRI hééft een publieke vorm: `/id/…` (niet-citeerbare knoop), `/ref/…` (gehashte
-// terugval), `/begrip/…`, `/graph/…` en `/verwijzing/…` bestaan alleen in de graaf. Daar is geen link
+// Niet elke IRI hééft een publieke vorm: `:id:…` (niet-citeerbare knoop), `:ref:…` (gehashte
+// terugval), `:begrip:…`, `:graph:…` en `:verwijzing:…` bestaan alleen in de graaf. Daar is geen link
 // beter dan een link die ergens anders uitkomt.
 function uitGraafIri(iri: string): string | undefined {
-  const pad = iri.slice(GRAAF_BASIS.length).split("/").filter(Boolean).map(decodeURIComponent);
+  const pad = iri.slice(GRAAF_BASIS.length).split(GRAAF_SEP).filter(Boolean).map(decodeURIComponent);
   const [bwb, ...rest] = pad;
   if (!bwb || !BWB_ID.test(bwb)) return undefined;
   if (rest.length === 0) return `https://wetten.overheid.nl/${bwb}`;
@@ -63,10 +67,12 @@ function uitGraafIri(iri: string): string | undefined {
 // in een href: een waarde als `javascript:…` zou klikbare scriptuitvoering opleveren (React escaped
 // tekst, maar niet de href-scheme). Eén functie voor álle vormen die de agent kan leveren, want twee
 // helpers met bijna dezelfde naam leverden precies één verkeerde keuze op: de bronnenlijst bouwde
-// `https://wetten.overheid.nl/https://ipalm.nl/…` en dat kwam door de hostcontrole heen.
+// `https://wetten.overheid.nl/<graaf-IRI>` en dat kwam door de hostcontrole heen. De URN-tak is
+// bewust gepind op `urn:bwb:` en niet op `urn:` in het algemeen: een willekeurige URN is geen
+// vindplaats en mag hier niets worden.
 //   - jci-uri (`jci1.3:c:BWBR…`)  → deeplink op wetten.overheid.nl (repareert meteen het
 //     anders niet-navigeerbare jci-linkje);
-//   - graaf-IRI (`https://ipalm.nl/bwb/…`) → vertaald naar diezelfde deeplink, of undefined als de
+//   - graaf-IRI (`urn:bwb:…`) → vertaald naar diezelfde deeplink, of undefined als de
 //     knoop geen publieke vindplaats heeft;
 //   - kaal BWB-id (`BWBR0004770`)  → de regelingpagina;
 //   - al complete http(s)-URL     → alleen toegestaan als de host wetten.overheid.nl is (host-pinning) —

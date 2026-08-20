@@ -27,7 +27,7 @@ UPDATES = [
 # Vormen die de oude blocklist doorliet omdat het verb niet aan het regelbegin stond.
 BYPASS = [
     "PREFIX x: <http://a/> LOAD <http://evil/x.ttl>",
-    "PREFIX x: <http://a/> CLEAR GRAPH <https://ipalm.nl/bwb/BWBR0004770>",
+    "PREFIX x: <http://a/> CLEAR GRAPH <urn:bwb:BWBR0004770>",
     "PREFIX x: <http://a/> DROP GRAPH <http://g>",
     "# onschuldig ogend commentaar\nPREFIX x: <http://a/> COPY <http://a> TO <http://b>",
 ]
@@ -35,7 +35,7 @@ BYPASS = [
 BENIGN = [
     "SELECT ?s WHERE { ?s ?p ?o } LIMIT 10",
     'SELECT ?t WHERE { ?s bwb:tekst ?t FILTER(CONTAINS(LCASE(?t), "delete")) }',
-    "PREFIX bwb: <https://ipalm.nl/ns/bwb#>\nSELECT (COUNT(DISTINCT ?w) AS ?n) WHERE { ?w a bwb:Regeling }",
+    "PREFIX bwb: <urn:bwb-ns:>\nSELECT (COUNT(DISTINCT ?w) AS ?n) WHERE { ?w a bwb:Regeling }",
     "ASK { ?s ?p ?o }",
     "CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }",
     "BASE <http://x/> PREFIX a: <b#> CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }",

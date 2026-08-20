@@ -42,7 +42,7 @@ def test_dispatch_get_artikel():
     g = FakeGraph(result="artikel 9")
     out = tools.dispatch("get_artikel", g, {"bwb_id": "BWBR0004770", "artikel": "9"})
     assert out == "artikel 9"
-    assert "/artikel/9>" in g.queries[0]
+    assert ":artikel:9>" in g.queries[0]
 
 
 def test_dispatch_vangt_validatiefout_op():

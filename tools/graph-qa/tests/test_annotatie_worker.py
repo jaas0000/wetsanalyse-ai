@@ -287,9 +287,9 @@ def test_run_event_draagt_de_herkomst_van_de_beurt():
 # Twee leden in één artikel-resultaat, zoals get_artikel dat teruggeeft.
 ARTIKEL_TSV = json.dumps(
     "?tekst\t?jci\t?lid\t?lidnummer\t?lidtekst\n"
-    '\t"jci"\t<https://ipalm.nl/bwb/BWBR0004770/artikel/9/lid/1>\t"1"'
+    '\t"jci"\t<urn:bwb:BWBR0004770:artikel:9:lid:1>\t"1"'
     '\t"Een belastingaanslag is invorderbaar zes weken na de dagtekening."\n'
-    '\t"jci"\t<https://ipalm.nl/bwb/BWBR0004770/artikel/9/lid/2>\t"2"'
+    '\t"jci"\t<urn:bwb:BWBR0004770:artikel:9:lid:2>\t"2"'
     '\t"De ontvanger kan uitstel van betaling verlenen."'
 )
 

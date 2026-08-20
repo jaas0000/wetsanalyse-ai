@@ -21,17 +21,17 @@ def test_fts_limit_wordt_begrensd():
 def test_list_regelingen_filtert_eigen_iri_ruimte():
     sparql = q.list_regelingen()
     assert "a bwb:Regeling" in sparql
-    assert 'STRSTARTS(STR(?regeling), "https://ipalm.nl/bwb/")' in sparql
+    assert 'STRSTARTS(STR(?regeling), "urn:bwb:")' in sparql
 
 
 def test_get_artikel_bouwt_iri_en_leden():
     sparql = q.get_artikel("BWBR0004770", "9")
-    assert "<https://ipalm.nl/bwb/BWBR0004770/artikel/9>" in sparql
+    assert "<urn:bwb:BWBR0004770:artikel:9>" in sparql
     assert "bwb:heeftLid" in sparql
 
 
 def test_get_lid_iri():
-    assert "<https://ipalm.nl/bwb/BWBR0004770/artikel/9/lid/1>" in q.get_lid("BWBR0004770", "9", "1")
+    assert "<urn:bwb:BWBR0004770:artikel:9:lid:1>" in q.get_lid("BWBR0004770", "9", "1")
 
 
 def test_get_lid_levert_de_onderdelen_mee():
@@ -58,9 +58,9 @@ def test_get_artikel_levert_directe_onderdelen_mee():
 
 def test_verwijzingen_met_en_zonder_lid():
     met = q.follow_verwijzingen("BWBR0004770", "9", "1")
-    assert "/artikel/9/lid/1>" in met and "bwb:heeftVerwijzing" in met
+    assert ":artikel:9:lid:1>" in met and "bwb:heeftVerwijzing" in met
     zonder = q.follow_verwijzingen("BWBR0004770", "9")
-    assert "/artikel/9>" in zonder and "/lid/" not in zonder
+    assert ":artikel:9>" in zonder and ":lid:" not in zonder
 
 
 def test_referenced_by_gebruikt_verwijzingdoor():
@@ -76,7 +76,7 @@ def test_count_by_type():
 def test_context_subgraaf_dekt_alle_relaties():
     sparql = q.context("BWBR0004770", "9")
     # node zelf + structuur + leden + uit-/ingaande verwijzingen in één query
-    assert "<https://ipalm.nl/bwb/BWBR0004770/artikel/9>" in sparql
+    assert "<urn:bwb:BWBR0004770:artikel:9>" in sparql
     assert "bwb:bevat" in sparql
     assert "bwb:heeftLid" in sparql
     assert "bwb:heeftVerwijzing" in sparql
@@ -86,8 +86,8 @@ def test_context_subgraaf_dekt_alle_relaties():
 
 def test_context_lid_gebruikt_lid_iri_maar_verwijzingdoor_op_artikel():
     sparql = q.context("BWBR0004770", "9", "1")
-    assert "/artikel/9/lid/1>" in sparql          # node = het lid
-    assert "<https://ipalm.nl/bwb/BWBR0004770/artikel/9> bwb:verwijzingDoor" in sparql  # incoming op artikel
+    assert ":artikel:9:lid:1>" in sparql          # node = het lid
+    assert "<urn:bwb:BWBR0004770:artikel:9> bwb:verwijzingDoor" in sparql  # incoming op artikel
 
 
 def test_resolve_begrip_escapet_term():

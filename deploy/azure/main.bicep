@@ -293,8 +293,8 @@ resource bwbImportJob 'Microsoft.App/jobs@2024-03-01' = {
           env: [
             { name: 'GRAPHDB_URL', value: graphdbInternalUrl }
             { name: 'GRAPHDB_REPOSITORY', value: 'inning' }
-            { name: 'GRAPHDB_BASE_IRI', value: 'https://ipalm.nl/bwb/' }
-            { name: 'GRAPHDB_ONTOLOGY_IRI', value: 'https://ipalm.nl/ns/bwb#' }
+            { name: 'GRAPHDB_BASE_IRI', value: 'urn:bwb:' }
+            { name: 'GRAPHDB_ONTOLOGY_IRI', value: 'urn:bwb-ns:' }
             { name: 'BWB_VALIDATE_XSD', value: 'true' }
             { name: 'BWB_IMPORT_WTI', value: 'true' }
             { name: 'BWB_DETECT_TEKSTUELE_REFS', value: 'true' }

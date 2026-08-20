@@ -343,7 +343,7 @@ def test_tekstuele_fallback_uitschakelbaar() -> None:
 
 def test_named_graph_per_wet() -> None:
     # De graaf-IRI hangt aan het bwb-id (idempotente re-import per wet).
-    assert str(V.graph("BWBR0000001")).endswith("graph/BWBR0000001")
+    assert str(V.graph("BWBR0000001")) == "urn:bwb:graph:BWBR0000001"
 
 
 def test_serialiseert_naar_turtle() -> None:

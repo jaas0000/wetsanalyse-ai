@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import re
 
-from ..namespace import BASIS, ONTOLOGIE
+from ..namespace import BASIS, ONTOLOGIE, SEP
 
 PREFIXES = f"""PREFIX bwb: <{ONTOLOGIE}>
 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
@@ -77,11 +77,11 @@ def regeling_iri(bwb_id: str) -> str:
 
 
 def artikel_iri(bwb_id: str, artikel: str) -> str:
-    return f"{NS}{_bwb(bwb_id)}/artikel/{_art(artikel)}"
+    return f"{NS}{_bwb(bwb_id)}{SEP}artikel{SEP}{_art(artikel)}"
 
 
 def lid_iri(bwb_id: str, artikel: str, lid: str) -> str:
-    return f"{artikel_iri(bwb_id, artikel)}/lid/{_num(lid)}"
+    return f"{artikel_iri(bwb_id, artikel)}{SEP}lid{SEP}{_num(lid)}"
 
 
 # ------------------------------------------------------------------

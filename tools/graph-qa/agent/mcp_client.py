@@ -37,7 +37,7 @@ class MCPError(Exception):
 _LEESVORMEN = ("select", "ask", "construct", "describe")
 
 # Commentaar tot regeleinde — maar niet elk '#' begint commentaar: een stringliteral kan er een
-# bevatten ("nr. #3") en vrijwel elke prefix-IRI eindigt erop (<https://ipalm.nl/ns/bwb#>). Beide
+# bevatten ("nr. #3") en vrijwel elke prefix-IRI eindigt erop (<urn:bwb-ns:>). Beide
 # vormen matchen daarom éérst, zodat alleen een echt losstaand '#' als commentaar wordt gestript.
 _STRING_OF_HASH = re.compile(r'"(?:[^"\\]|\\.)*"' r"|'(?:[^'\\]|\\.)*'" r"|<[^>\s]*>" r"|#[^\n]*")
 # Een PREFIX-/BASE-declaratie vooraan; herhaald strippen tot de eigenlijke query overblijft.

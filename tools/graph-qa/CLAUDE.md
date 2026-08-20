@@ -117,7 +117,7 @@ veilig**, verplicht bij >1 replica) → **`CHECKPOINT_DB_PATH`** → `AsyncSqlit
 
 ### Brongetrouwheid (`provenance.py` + `grounding.py`)
 
-- `provenance.iter_refs` herkent vindplaatsen — BWB-IRI's (`https://ipalm.nl/bwb/…`), jci-strings
+- `provenance.iter_refs` herkent vindplaatsen — BWB-IRI's (`urn:bwb:…`), jci-strings
   (`jci…:c:BWBR…`) en kale BWB-id's — in **tool-resultaten**. `collect_sources` bouwt daaruit de
   ontdubbelde bronnenlijst. Bronnen komen dus nooit uit de prozatekst van het model.
 - `grounding.check_grounding` past diezelfde herkenning toe op het **antwoord** en markeert citaten

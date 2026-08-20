@@ -8,15 +8,15 @@ tool `get_jas_annotaties`. Bewust **minimaal** en losstaand van de begrippen/SKO
 ## Namespace
 
 ```
-jas: <https://ipalm.nl/ns/jas#>
+jas: <urn:jas-ns:>
 ```
 
 ## Named graphs (idempotentie)
 
-Eén **named graph per analyse**: `<JAS_GRAPH_PREFIX><slug>` (default `https://ipalm.nl/jas/<slug>`).
+Eén **named graph per analyse**: `<JAS_GRAPH_PREFIX><slug>` (default `urn:jas:<slug>`).
 Promoveren = die graaf volledig **vervangen** (`DROP SILENT GRAPH … ; INSERT DATA { GRAPH … { … } }`).
 Opnieuw promoveren is dus idempotent: geen dubbele of verweesde annotaties. De annotatie-IRI's zijn
-stabiel (`<prefix><slug>/<bron_id>/<markering_id>`), zodat een re-promotie exact dezelfde resources
+stabiel (`<prefix><slug>:<bron_id>:<markering_id>`), zodat een re-promotie exact dezelfde resources
 herschrijft.
 
 ## Klassen
@@ -52,17 +52,17 @@ herschrijft.
 ## Voorbeeld
 
 ```turtle
-GRAPH <https://ipalm.nl/jas/iab-zorgverzekeringswet> {
-  <https://ipalm.nl/jas/iab-zorgverzekeringswet> a jas:AnnotatieLaag ;
+GRAPH <urn:jas:iab-zorgverzekeringswet> {
+  <urn:jas:iab-zorgverzekeringswet> a jas:AnnotatieLaag ;
     jas:uitAnalyse "iab-zorgverzekeringswet" ; jas:gepromoveerdOp "2026-08-05T…Z" .
 
-  <https://ipalm.nl/jas/iab-zorgverzekeringswet/br1/m1> a jas:Annotatie ;
+  <urn:jas:iab-zorgverzekeringswet:br1:m1> a jas:Annotatie ;
     jas:klasse "Rechtssubject" ;
     jas:formulering "De verzekeringsplichtige" ;
     jas:markeringId "m1" ; jas:uitAnalyse "iab-zorgverzekeringswet" ;
     jas:bwbId "BWBR0018450" ; jas:artikel "43" ; jas:lid "2" ;
     jas:vindplaats "lid 2" ;
-    jas:overBepaling <https://ipalm.nl/bwb/BWBR0018450/artikel/43/lid/2> .
+    jas:overBepaling <urn:bwb:BWBR0018450:artikel:43:lid:2> .
 }
 ```
 

@@ -21,10 +21,15 @@ import os
 import re
 
 #: Documentruimte: de IRI's van regelingen, artikelen en leden.
-BASIS = os.getenv("GRAPHDB_BASE_IRI") or "https://ipalm.nl/bwb/"
+BASIS = os.getenv("GRAPHDB_BASE_IRI") or "urn:bwb:"
 
 #: Vocabulaireruimte: de predicaten en klassen. Bewust géén vindplaatsen — zie provenance.
-ONTOLOGIE = os.getenv("GRAPHDB_ONTOLOGY_IRI") or "https://ipalm.nl/ns/bwb#"
+ONTOLOGIE = os.getenv("GRAPHDB_ONTOLOGY_IRI") or "urn:bwb-ns:"
+
+
+#: Scheidingsteken tussen segmenten: ``:`` in een URN-ruimte, ``/`` in een http-IRI.
+#: Spiegelt ``Vocab._sep`` in tools/bwb-import/app/rdf_vocab.py.
+SEP = ":" if BASIS.startswith("urn:") else "/"
 
 
 def vindplaats_patroon(basis: str = BASIS) -> str:
