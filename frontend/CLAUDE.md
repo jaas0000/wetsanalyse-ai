@@ -711,8 +711,12 @@ npm run dev          # http://localhost:3000 (draait API óók op 3000? → npm 
 npm run build        # productiebuild (output: 'standalone')
 npm run lint         # ESLint
 npm run typecheck    # tsc --noEmit
+npm test             # vitest (node-env, geen DOM — zie §Lagen)
 ```
 
 Vereist een draaiende API (lokaal of het publieke domein) + de env-vars uit `.env.local`
-(`API_BASE_URL`, `API_TOKEN`, `ADMIN_API_TOKEN`; zie README). Draai `npm run lint && npm run
-typecheck` vóór een commit.
+(`API_BASE_URL`, `API_TOKEN`, `ADMIN_API_TOKEN`; zie README).
+
+**Vóór een commit: `npm test && npm run lint && npm run typecheck`.** De testsuite hoort daarbij —
+de rekenkern van deze app staat bewust in `lib/` juist zódat hij getest kan worden, en die tests
+overslaan maakt die keuze zinloos.

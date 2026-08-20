@@ -29,16 +29,20 @@ benoemt daarom expliciet welke packages in de wheel horen — anders faalt `uv s
 
 ### De uitvoeringsketen (`agent/orchestrator.py`)
 
-Het hart is een LangGraph `StateGraph`:
+Het hart is een LangGraph `StateGraph`. Een **supervisor** kiest per opdracht een worker-keten:
 
 ```
-router → agent ⇄ tools → verify → (correct) → finalize
+supervisor ─┬─ antwoord-worker:  agent ⇄ tools → verify → (correct) → finalize
+            ├─ annotatie-worker: zie §De annotatie-keten
+            └─ afwijzen (geen wetgevingsvraag)
 ```
 
-- **`router_node`** — één LLM-call (`llm.create`, geen tools) die exact twee regels teruggeeft:
-  `SPECIALIST:` (definitie|duiding|algemeen) en `PLAN:` (of `AFWIJZEN` bij een off-topic vraag). De
-  eerder geraadpleegde bepalingen worden als context meegegeven.
-- **`agent_node`** — draait de gekozen specialist: `SYSTEM_PROMPT` + het specialist-addendum + het plan,
+- **`supervisor_node`** — één LLM-call (`llm.create`, geen tools) die de worker(s), de specialist en
+  het plan bepaalt; `PLAN: AFWIJZEN` bij een vraag die niet over wetgeving gaat. De eerder
+  geraadpleegde bepalingen gaan als context mee. De workerlijst is een **allowlist**
+  (`antwoord`/`annotatie`) met een cap van twee — zie §*Buiten de WETGEVING*. `_entry_node` vertaalt
+  de uitkomst naar de eerste node; met een meegegeven `doel` slaat hij de supervisor over.
+- **`agent_node`** — draait de gekozen specialist (`agent/specialists.py`): `SYSTEM_PROMPT` + het specialist-addendum + het plan,
   met `anthropic_schemas(only=spec.tools)` als toolset. Streamt tekst-deltas via `get_stream_writer()`.
   *Let op:* op een beurt-grens (turns > 0) wordt vóór de eerste tekst-delta één `\n\n` geëmit, zodat de
   narratie van opeenvolgende beurten niet aan elkaar plakt.
@@ -224,6 +228,18 @@ Vier regels die je niet mag omdraaien:
 Geen api geconfigureerd (`Settings.legt_zelf_vast` is False), dan is de driver een doorgeefluik en
 blijft de werkplek verantwoordelijk — zo werkt lokaal draaien zonder api gewoon door.
 
+**De contractgrens ligt in `wetsanalyse_api.naar_contract`.** Wij en de api hebben elk een eigen model
+van hetzelfde object, met een andere opvatting van "geen waarde": hier `aandacht: str = ""`, daar
+`Aandacht | None`. Dat verschil is geen typefout maar een 422 op de PUT — en dat kostte op dev een
+complete annotatie van vijftien markeringen terwijl de agent klaar en gegrond was. Vertaal zulke
+velden **op de grens**, niet bij de aanroeper, en zet ze in `OPGEVANGEN` in
+`tests/test_contract_drift.py`; die guard houdt beide modellen veld voor veld tegen elkaar.
+
+**Niet alles bewaard is geen fout, maar wel iets om te melden.** De api laat sinds die episode een
+element dat zijn schema niet haalt vallen in plaats van de hele ronde te weigeren, en telt ze in de
+header `X-Verworpen`. Die lezen we uit en sturen we door als `waarschuwing`-event: een luide fout
+inruilen voor een stille zou geen verbetering zijn.
+
 > **Vertrouwensgrens.** Het verzoek draagt zelf de `user_id` waarnamens er geschreven wordt, en de
 > api bindt `client_id` niet aan `user_id`. Het api-token van graph-qa is daarmee een schrijfprimitief
 > op elk gebruikersgesprek. Vandaar `Settings.require_api`: kan graph-qa schrijven, dan **weigert hij
@@ -355,7 +371,8 @@ en de ophaal-agent op een eigen model; `Settings.model_voor` doet de terugval. D
 Critic en de QA-specialisten hebben **geen** eigen knop en draaien altijd op `LLM_MODEL`: wie een
 oordeel velt over wetgeving hoort niet met een env-var te verzwakken.
 
-**Advies bij twijfel** (`modus: "advies"` op `POST /v1/chat`): de supervisor kiest dan niet zelf maar
+**Advies bij twijfel** (`modus: "advies"` in de body; werkt op `/v1/runs` én `/v1/chat`, want beide
+lezen dezelfde `ChatRequest`): de supervisor kiest dan niet zelf maar
 routeert hard naar de `duiding`-specialist. Een adviesvraag kan daardoor *topologisch* geen annotatie
 wijzigen — die route emit geen `doel`/`element`-events. Dat is een garantie, geen prompt-belofte. Het
 contextblok (bepaling, klasse, fragment, corpus) gaat mee in de systeemprompt.
@@ -440,14 +457,14 @@ Drie dingen die je verder moet kennen voordat je hieraan werkt:
 - **Geen vrije SPARQL voor het model.** Nieuwe retrieval = een **getypeerde tool** in `tools/` met een
   bouwer in `graph/queries.py`. `raw_sparql` blijft de afgeschermde ontsnapping.
 - **DI, geen globale clients.** Afhankelijkheden achter een poort + adapter, zodat ze faken te zijn.
-- **SSE-event-contract.** De event-types (`status`/`reason`/`token`/`sources`/`grounding`/`done`/`error`,
-  plus `doel`/`run`/`element`/`ontbrekend`/`suggestie`/`kandidaten` van de annotatie-worker — alles over `POST /v1/chat`) zijn het
-  contract met de consumenten (de werkplek); wijzig ze
-  bewust en gelijktijdig. **`reason` = het denkproces** (tool-narratie, live gestreamd); **`token` = alléén
-  het eindantwoord** — hou die twee gescheiden zodat de werkplek ze los kan tonen. De annotatie-keten is
-  `annoteer → critic → advance`: `annoteer_node` grondt de voorstellen (state), `critic_node` zet per
-  element een **aandacht**-niveau (groen|geel|rood) + `critic`-motivatie, emit de `element`-events en één
-  `ontbrekend`-event (waarschijnlijk ontbrekende JAS-klassen). De Critic mag de annotatie nooit breken.
+- **SSE-event-contract.** De event-types zijn het contract met de consumenten (de werkplek); wijzig
+  ze bewust en gelijktijdig, en over beide wegen gelijk (`/v1/chat` én de run-events).
+  Antwoordroute: `status`/`reason`/`token`/`sources`/`grounding`/`done`/`error`. Annotatie-worker:
+  `doel`/`run`/`element`/`ontbrekend`/`suggestie`/`kandidaten`/`opgeslagen`/`waarschuwing`.
+  **`reason` = het denkproces** (tool-narratie, live gestreamd); **`token` = alléén het eindantwoord**
+  — hou die twee gescheiden zodat de werkplek ze los kan tonen. Niet elk event is een fout:
+  `waarschuwing` betekent dat de beurt slaagde maar niet alles bewaard is (zie §*De uitkomst
+  vastleggen*), en dat is iets anders dan `error`. De Critic mag de annotatie nooit breken.
 - **De keten meldt zich.** De annotatiefase duurt 60-90 s; daar tussenin ging vroeger geen enkel
   event uit, dus de jurist keek naar een leeg scherm. Elke stap stuurt nu een `status`-regel met zijn
   naam en uitkomst: `Supervisor → …` / `Graaf bevragen · get_lid(BWBR…, 9, 1)` / `Annoteerder · N
@@ -508,10 +525,12 @@ instructies erin). Dat vraagt om vervuiling van de graaf; de eigenschap staat we
   `AZURE_FOUNDRY_BASE_URL` (repo-var, mét `/anthropic`) — dat is de LLM-provider, niet een deploydoel.
 - **Secrets** zijn host-bestanden die via `*_FILE`-env worden ingelezen (`config._read_secret`); een
   named volume houdt de checkpointer-db durabel. Zie `deploy/README.md`.
-- **Werkplek-integratie:** de werkplek (frontend `/workbench`) belt `POST /v1/chat` **rechtstreeks**
-  via een SSE-BFF-route (`{question, conversation_id}`); `conversation_id` geeft geheugen-continuïteit.
-  Het documentpaneel haalt artikeltekst op via `GET /v1/artikel`. De persistente review-state loopt
-  niet hierlangs maar via de wetsanalyse-API (`/v1/annotatie/*`).
+- **Werkplek-integratie:** de werkplek (frontend `/workbench`) gebruikt de **run-endpoints**, niet
+  `/v1/chat`: `POST /v1/runs` start de beurt, `GET /v1/runs/{id}/events` kijkt mee (BFF-routes in
+  `frontend/app/api/annotatie/run/**`). `conversation_id` geeft geheugen-continuïteit. Het
+  documentpaneel haalt artikeltekst op via `GET /v1/artikel`. De persistente review-state loopt niet
+  hierlangs maar via de wetsanalyse-API (`/v1/annotatie/*`) — en die schrijft graph-qa sinds
+  §*De uitkomst vastleggen* zelf, niet de browser.
 
 ## Aandachtspunten
 

@@ -203,5 +203,8 @@ read-only opkomt.
   over de methode; de skill-`references/` zijn de operationele samenvatting daarvan.
 - `docs/regelspraak/` — de RegelSpraak-specificaties (PDF), voor de latere formaliseringsfase.
 - `docs/wetsanalyse-workbench/` — het plan achter de werkplek + de JAS-annotatie-ontologie.
+- `docs/kennisbank/PLAN.md` — het gefaseerde plan voor een **tweede corpus** naast de wetsgraaf
+  (beleidsstukken en handleidingen die Lex samen met de wettekst mag bevragen). Nog niet gebouwd;
+  lees het vóór je aan retrieval of grounding werkt, want het stelt eisen aan beide.
 - `docs/observability.md` en `docs/schrijfrichtlijn-lex.md` (de toon van Lex; zijn identiteit staat in
   `tools/graph-qa/agent/prompts.py`).
