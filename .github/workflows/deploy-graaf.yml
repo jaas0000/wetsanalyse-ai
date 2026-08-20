@@ -67,6 +67,17 @@ jobs:
             sid=$(jq -r --arg n "$naam" '.[] | select(.Name==$n) | .Id' /tmp/stacks.json | head -n1)
             if [ -n "$sid" ] && [ "$sid" != "null" ]; then
               echo "→ $naam bestaat (id=$sid): update"
+              # Portainer VERVANGT de env bij een update; hij voegt niet samen. De stack-secrets
+              # (GRAPHDB_SVC_USER/_PASSWORD, GRAPHDB_BASIC) leven alleen in Portainer en niet als
+              # repo-secret, dus zonder dit wist een deploy ze — en beide composes eisen ze met
+              # `:?`, waarna de stack niet meer opkomt. Meesturen wat er al staat; wat wij zelf
+              # zetten wint.
+              local bestaand
+              bestaand=$(curl -sS -H "X-API-Key: $PORTAINER_API_KEY" \
+                "$PORTAINER_URL/api/stacks/$sid" | jq '.Env // []')
+              env_json=$(jq -n --argjson oud "$bestaand" --argjson nieuw "$env_json" \
+                '($oud + $nieuw) | group_by(.name) | map(last)')
+              echo "   env: $(jq -r 'map(.name) | join(", ")' <<<"$env_json")"
               body=$(jq -n --rawfile c "$pad" --argjson env "$env_json" \
                 '{stackFileContent:$c, env:$env, prune:true, pullImage:true}')
               code=$(curl -sS -o /tmp/resp.json -w '%{http_code}' -X PUT \
