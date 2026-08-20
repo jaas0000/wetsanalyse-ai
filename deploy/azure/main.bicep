@@ -3,7 +3,7 @@
 //
 //   PostgreSQL Flexible Server · GraphDB · BWB-import (job) · API · graph-qa · Frontend
 //
-// Deze stack praat NIET met de docker-LXC: hij brengt zijn eigen kennisgraaf mee. Dat scheelt een
+// Deze stack praat NIET met de docker-host: hij brengt zijn eigen kennisgraaf mee. Dat scheelt een
 // publieke ingang naar het thuisnetwerk, en maakt de omgeving los aan- en uitzetbaar.
 //
 // Deployment (vanuit de projectroot):
@@ -155,7 +155,7 @@ resource cae 'Microsoft.App/managedEnvironments@2024-03-01' = {
 // GEEN persistente opslag, en dat is een bewuste keuze. GraphDB's opslaglaag gebruikt
 // geheugen-gemapte bestanden en file-locking; op Azure Files levert dat hetzelfde risico als op een
 // NFS-share (traagheid, in het slechtste geval stille indexcorruptie) — precies waarom de graaf op
-// de LXC lokale opslag heeft. Een managed disk lost dat op maar kan niet aan een container-app.
+// de zelfgehoste opzet lokale opslag heeft. Een managed disk lost dat op maar kan niet aan een container-app.
 //
 // Dat kan hier, omdat de graaf volledig REPRODUCEERBAAR is: de import-job haalt alle regelingen
 // rechtstreeks bij overheid.nl (~20s). Herstart betekent dus opnieuw importeren, niet dataverlies.
@@ -293,8 +293,8 @@ resource bwbImportJob 'Microsoft.App/jobs@2024-03-01' = {
           env: [
             { name: 'GRAPHDB_URL', value: graphdbInternalUrl }
             { name: 'GRAPHDB_REPOSITORY', value: 'inning' }
-            { name: 'GRAPHDB_BASE_IRI', value: 'https://ipalm.nl/bwb/' }
-            { name: 'GRAPHDB_ONTOLOGY_IRI', value: 'https://ipalm.nl/ns/bwb#' }
+            { name: 'GRAPHDB_BASE_IRI', value: 'urn:bwb:' }
+            { name: 'GRAPHDB_ONTOLOGY_IRI', value: 'urn:bwb-ns:' }
             { name: 'BWB_VALIDATE_XSD', value: 'true' }
             { name: 'BWB_IMPORT_WTI', value: 'true' }
             { name: 'BWB_DETECT_TEKSTUELE_REFS', value: 'true' }
@@ -409,12 +409,12 @@ resource apiApp 'Microsoft.App/containerApps@2024-03-01' = {
 // ─────────────────────────────────────────────────────────────────────────────
 // Praat met de GraphDB uit deze stack, via de MCP-server die GraphDB >= 11.2 zelf meebrengt op /mcp.
 //
-// LET OP — geen auth-proxy zoals op de LXC. Daar controleert een nginx het bearer-token en vervangt
+// LET OP — geen auth-proxy zoals in de zelfgehoste opzet. Daar controleert een nginx het bearer-token en vervangt
 // het door het GraphDB-service-account; hier is de graaf alleen binnen de Container Apps
 // Environment bereikbaar (`external: false`) en dat is de grens. `GRAPHDB_TOKEN` blijft gezet omdat
 // de code het fail-closed eist (`require_graph`), maar het is hier GEEN slot — GraphDB draait
 // zonder eigen security. Zodra deze omgeving meer dan standby/demo wordt, hoort daar hetzelfde
-// service-account + proxy-patroon als op de LXC.
+// service-account + proxy-patroon als in de zelfgehoste opzet.
 resource graphQaApp 'Microsoft.App/containerApps@2024-03-01' = {
   name: '${appName}-graph-qa'
   location: location

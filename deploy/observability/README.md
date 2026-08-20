@@ -1,7 +1,7 @@
 # Observability-stack
 
 Maakt de instrumentatie van api/frontend/graph-qa zichtbaar: OTLP-ingest, opslag en **Grafana**.
-Draait op de docker-LXC (Portainer-endpoint 3, stack `observability`).
+Draait op de docker-host (stack `observability`).
 
 ```
 api / frontend / graph-qa  ──OTLP──►  otel-collector ──►  Tempo   (traces)
@@ -9,12 +9,12 @@ api / frontend / graph-qa  ──OTLP──►  otel-collector ──►  Tempo 
                                                       └─►  Prometheus (metrics)
                                                                ▲
                                                      Grafana ──┘ (3 datasources)
-                                              grafana.ipalm.nl
+                                              grafana.example
 docker-logs ──► Alloy ──► Loki
 ```
 
 Componenten (alle op `observability_default`; alleen Grafana publiceert een hostpoort, omdat NPM op
-een andere LXC draait en geen docker-netwerk deelt):
+een andere host draait en geen docker-netwerk deelt):
 - **otel-collector** (`otel/opentelemetry-collector-contrib`) — ontvangt OTLP op 4317/4318. Leidt met
   de **`spanmetrics`- en `servicegraph`-connectors** ook RED-metrics per service én topologie-edges
   (`traces_service_graph_request_total`) uit de traces af; die voeden het Node Graph-panel en de
@@ -24,7 +24,7 @@ een andere LXC draait en geen docker-netwerk deelt):
 - **prometheus** — metrics, query op `http://prometheus:9090` (scrapet de collector op `:8889`).
 - **alloy** — leest de docker-logs van `wetsanalyse-dev-*`, `graphdb`, `bwb-import` en
   `mcp-auth-proxy` en shipt ze naar Loki (JSON-parse → `detected_level`, `trace_id`, `categorie`).
-- **grafana** — UI op poort 3001 (host) → `https://grafana.ipalm.nl` via nginx-proxy-manager. De drie
+- **grafana** — UI op poort 3001 (host) → `https://grafana.example` via nginx-proxy-manager. De drie
   datasources komen als **file-provisioning** uit de compose en zijn daardoor in de UI read-only. Dat
   is de bedoeling: de definitie hoort in de stack, niet in de database van Grafana.
 
@@ -39,7 +39,7 @@ Via `.github/workflows/deploy-observability.yml` (handmatig of bij wijzigingen i
 de configs zitten **inline** in de compose, dus er hoeft niets gemount te worden.
 
 Stack-env: `OBS_NETWORK` (default `observability_default`), `GRAFANA_ADMIN_PASSWORD` (verplicht,
-`secrets.GRAFANA_ADMIN_PASSWORD`) en `GRAFANA_ROOT_URL` (default `https://grafana.ipalm.nl`).
+`secrets.GRAFANA_ADMIN_PASSWORD`) en `GRAFANA_ROOT_URL` (default `https://grafana.example`).
 
 Het netwerk wordt door **deze** stack aangemaakt; de dev-stack joint er als extern netwerk op. Deploy
 observability dus vóór een dev-deploy, anders faalt die op een ontbrekend netwerk.
@@ -137,7 +137,7 @@ bewust op `wetsanalyse-frontend` (de API niet — die komt al via OTLP, dus geen
   eigen contactpunt** en volgen het **default notification-beleid** van je Grafana — richt daar je
   gewenste ontvanger in (e-mail, Slack, …).
 - `apply.sh` — idempotent toepassen:
-  `GRAFANA_URL=https://grafana.ipalm.nl GRAFANA_TOKEN=<sa-token> ./apply.sh`.
+  `GRAFANA_URL=https://grafana.example GRAFANA_TOKEN=<sa-token> ./apply.sh`.
 
 ## 8. Reproduceerbare deploy (CI, één dispatch)
 

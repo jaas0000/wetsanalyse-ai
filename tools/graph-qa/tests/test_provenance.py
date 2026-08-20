@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from agent.provenance import collect_sources
 
-ART_IRI = "https://ipalm.nl/bwb/BWBR0004770/artikel/9"
+ART_IRI = "urn:bwb:BWBR0004770:artikel:9"
 JCI = "jci1.3:c:BWBR0004770&artikel=9&lid=1"
 
 
@@ -30,8 +30,8 @@ def test_prozatekst_is_geen_bron():
 
 
 def test_vocabulaire_namespace_telt_niet_mee():
-    # https://ipalm.nl/ns/bwb#... zijn predicaten, geen vindplaatsen.
-    sources = collect_sources([("t", "?s <https://ipalm.nl/ns/bwb#heeftLid> ?o")])
+    # urn:bwb-ns:... zijn predicaten, geen vindplaatsen.
+    sources = collect_sources([("t", "?s <urn:bwb-ns:heeftLid> ?o")])
     assert sources == []
 
 

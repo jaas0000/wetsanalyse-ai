@@ -20,7 +20,7 @@ graaf-stack.
 
 ## Deployen
 
-Via Portainer (`portainer.ipalm.nl`, endpoint 3) of de API, met deze stack-env:
+Via Portainer (je Portainer) of de API, met deze stack-env:
 
 | var | doel |
 |---|---|
@@ -37,7 +37,7 @@ draaiende database, niet een nieuwe secret.
 stack niet met *"remove volumes"* aangevinkt — dat is de database. Hernoem het volume ook niet: een
 andere naam betekent een lege DB.
 
-Back-up: de LXC gaat mee in de dagelijkse vzdump (03:30). Voor een logische dump:
+Back-up: de host gaat mee in de dagelijkse host-back-up. Voor een logische dump:
 
 ```bash
 docker exec wetsanalyse-postgres \

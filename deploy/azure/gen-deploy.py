@@ -79,7 +79,7 @@ def main() -> None:
     tok_qa = secrets.token_hex(24)      # frontend ↔ graph-qa (QA_API_TOKEN)
     # graph-qa eist fail-closed een GRAPHDB_TOKEN (require_graph). Binnen deze omgeving is de graaf
     # alleen intern bereikbaar en draait GraphDB zonder eigen security, dus dit token is daar geen
-    # slot — het wordt wel meegestuurd. Zelf genereren is beter dan het LXC-token hierheen kopiëren.
+    # slot — het wordt wel meegestuurd. Zelf genereren is beter dan het token van de zelfgehoste opzet hierheen kopiëren.
     tok_graphdb = secrets.token_hex(24)
     db_pass = secrets.token_hex(24)
     fernet = base64.urlsafe_b64encode(os.urandom(32)).decode()

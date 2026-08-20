@@ -10,7 +10,7 @@
 
 services:
   bwb-import:
-    # Default is het op de LXC gebouwde image. Zodra bwb-import-docker-publish.yml op master heeft
+    # Default is het lokaal gebouwde image. Zodra bwb-import-docker-publish.yml op master heeft
     # gedraaid staat het in GHCR: zet dan BWB_IMAGE=ghcr.io/palmw01/bwb-import:latest als stack-env.
     image: ${BWB_IMAGE:-bwb-import:0.1}
     container_name: bwb-import
@@ -21,8 +21,8 @@ services:
       # GraphDB-security staat aan: schrijven vereist het service-account.
       GRAPHDB_USER:         ${GRAPHDB_SVC_USER:?zet GRAPHDB_SVC_USER}
       GRAPHDB_PASSWORD:     ${GRAPHDB_SVC_PASSWORD:?zet GRAPHDB_SVC_PASSWORD}
-      GRAPHDB_BASE_IRI:     https://ipalm.nl/bwb/
-      GRAPHDB_ONTOLOGY_IRI: https://ipalm.nl/ns/bwb#
+      GRAPHDB_BASE_IRI:     "urn:bwb:"
+      GRAPHDB_ONTOLOGY_IRI: "urn:bwb-ns:"
       BWB_DEFAULT_ID:       ${BWB_DEFAULT_ID:-BWBR0004770}
       BWB_VALIDATE_XSD:     "true"
       # WTI-verrijking: citeertitels/afkortingen, rechtsgebieden (skos), grondslagen.

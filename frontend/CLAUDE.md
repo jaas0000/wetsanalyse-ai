@@ -647,7 +647,7 @@ tokens/secrets/inhoud loggen. In de vitest-node-omgeving wordt `server-only` ges
 - **Geen onbetrouwde waarde rechtstreeks in een `href`.** Velden uit de analyse-pipeline/LLM
   (`bronreferentie`, `verwijzing.doel.target`) kunnen een `javascript:`/`data:`-scheme bevatten —
   React escaped tekst, maar niet de href-scheme. Route ze altijd via **`bronHref`** in `lib/url.ts` —
-  één functie voor alle vormen die de agent levert (jci, graaf-IRI `https://ipalm.nl/bwb/…`, kaal
+  één functie voor alle vormen die de agent levert (jci, graaf-IRI `urn:bwb:…`, kaal
   BWB-id, complete wetten.overheid.nl-URL); onbekend of onbetrouwbaar → `undefined` ⇒ platte tekst.
   Er stonden twee bijna gelijknamige helpers en de bronnenlijst greep de verkeerde: die plakte een
   graaf-IRI achter `wetten.overheid.nl/` en kwam door de hostcontrole heen, dus stond er een

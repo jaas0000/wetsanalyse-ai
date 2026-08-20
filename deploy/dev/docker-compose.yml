@@ -1,12 +1,12 @@
-# DEV-omgeving (dev.wetsanalyse.ipalm.nl) — één vaste, gedeelde stack naast productie.
+# DEV-omgeving — één vaste, gedeelde stack naast productie.
 #
-# Draait op de docker-LXC (Proxmox, endpoint 3 in portainer.ipalm.nl) en wordt als string via de
+# Draait op de docker-host die Portainer beheert (endpoint uit DEV_PORTAINER_ENDPOINT_ID) en wordt als string via de
 # Portainer-API gedeployd. Daarom: alle config via **stack-env** (geen `file:`-secrets — die kan een
 # string-deploy niet mounten; api én graph-qa lezen elk secret via `${NAME}` OF `${NAME}_FILE`).
 #
-# Bereikbaarheid: nginx-proxy-manager draait op een ANDERE LXC (101) en deelt dus geen docker-netwerk
+# Bereikbaarheid: nginx-proxy-manager draait op een ANDERE host (101) en deelt dus geen docker-netwerk
 # met deze host. Proxyen op containernaam kan daarom niet — de frontend publiceert een hostpoort
-# (${HOST_PORT}) en NPM stuurt dev.wetsanalyse.ipalm.nl door naar <docker-lxc-ip>:${HOST_PORT}.
+# (${HOST_PORT}) en NPM stuurt de dev-hostnaam (DEV_HOSTNAME) door naar <docker-host-ip>:${HOST_PORT}.
 # postgres/api/graph-qa blijven op het interne netwerk. GraphDB-MCP + LLM zijn externe diensten.
 
 services:
@@ -122,7 +122,7 @@ services:
       AUTH_SECRET:          ${AUTH_SECRET:?zet AUTH_SECRET}
       GRAPH_QA_TOKEN:       ${QA_API_TOKEN}
     ports:
-      # Enige naar buiten geopende poort: NPM (andere LXC) proxyt hierheen over het LAN.
+      # Enige naar buiten geopende poort: NPM (andere host) proxyt hierheen over het LAN.
       - "${HOST_PORT:-8090}:3000"
     networks:
       - internal

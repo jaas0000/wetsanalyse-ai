@@ -89,7 +89,5 @@ def test_zonder_wti_geen_verrijking() -> None:
 
 
 def test_begrip_iri_slug() -> None:
-    assert str(V.begrip("Belastingrecht")).endswith("begrip/belastingrecht")
-    assert str(V.begrip("Sociale zekerheid & pensioen")).endswith(
-        "begrip/sociale-zekerheid-pensioen"
-    )
+    assert str(V.begrip("Belastingrecht")) == "urn:bwb:begrip:belastingrecht"
+    assert str(V.begrip("Sociale zekerheid & pensioen")) == "urn:bwb:begrip:sociale-zekerheid-pensioen"

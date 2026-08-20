@@ -19,8 +19,16 @@ from urllib.parse import quote
 
 from rdflib import XSD, Literal, Namespace, URIRef
 
-DEFAULT_BASE_IRI = "https://ipalm.nl/bwb/"
-DEFAULT_ONTOLOGY_IRI = "https://ipalm.nl/ns/bwb#"
+# De IRI-ruimte van de graaf. Bewust een URN en geen http-IRI: een domeinnaam in het datamodel
+# bindt de data aan wie dat domein toevallig bezit, en verhuizen kost dan een herimport van alles.
+# Een URN heeft die binding niet. Dat hij niet dereferenceerbaar is, kost hier niets: elke
+# citeerbare node krijgt een ``owl:sameAs`` naar ``WETTEN_BASE`` — dát is de publieke vindplaats.
+DEFAULT_BASE_IRI = "urn:bwb:"
+# LET OP: de vocabulaireruimte moet **disjunct** zijn van de documentruimte, niet eronder liggen.
+# Met ``urn:bwb:ns:`` zou elk predicaat als vindplaats worden herkend door de provenance-controle
+# in graph-qa (die op de documentbasis prefixt), en dan verschijnen predicaten als "bron" onder een
+# antwoord. Vandaar ``urn:bwb-ns:``: geen prefix-relatie met ``urn:bwb:``.
+DEFAULT_ONTOLOGY_IRI = "urn:bwb-ns:"
 
 # Canonieke publicatie-omgeving van het BWB; doel van ``owl:sameAs``-links.
 WETTEN_BASE = "https://wetten.overheid.nl/"
@@ -78,22 +86,35 @@ class Vocab:
     def ns(self) -> Namespace:
         return Namespace(self.ontology)
 
+    @property
+    def _sep(self) -> str:
+        """URN-ruimtes scheiden hun segmenten met ``:``, http-IRI's met ``/``."""
+        return ":" if self.base.startswith("urn:") else "/"
+
+    def _iri(self, *segmenten: str) -> URIRef:
+        """Samengestelde IRI onder de basis; elk segment volledig ge-escaped.
+
+        ``safe=''`` is hier wezenlijk: bij een URN moet een ``:`` in een waarde
+        percent-escaped worden, anders leest hij als een extra segment.
+        """
+        return URIRef(self.base + self._sep.join(quote(s, safe="") for s in segmenten))
+
     # ------------------------------------------------------------- resource-IRI's
     def wet(self, bwb_id: str) -> URIRef:
-        return URIRef(f"{self.base}{quote(bwb_id, safe='')}")
+        return self._iri(bwb_id)
 
     def graph(self, bwb_id: str) -> URIRef:
         """Named-graph-IRI voor één wet (idempotente re-import per graaf)."""
-        return URIRef(f"{self.base}graph/{quote(bwb_id, safe='')}")
+        return self._iri("graph", bwb_id)
 
     def ontology_graph(self) -> URIRef:
         """Named-graph-IRI voor de ontologie (T-Box); PUT = idempotent."""
-        return URIRef(f"{self.base}graph/ontologie")
+        return self._iri("graph", "ontologie")
 
     @property
     def ontology_resource(self) -> URIRef:
-        """IRI van de ontologie zelf (namespace zonder afsluitende ``#``/``/``)."""
-        return URIRef(self.ontology.rstrip("#/"))
+        """IRI van de ontologie zelf (namespace zonder afsluitend scheidingsteken)."""
+        return URIRef(self.ontology.rstrip("#/:"))
 
     def canonieke_url(self, ref_key: str) -> URIRef | None:
         """Canonieke wetten.overheid.nl-URL voor een ref_key (``owl:sameAs``-doel).
@@ -117,16 +138,16 @@ class Vocab:
 
     def by_id(self, bwb_id: str, xml_id: str) -> URIRef:
         """IRI voor een niet-citeerbare node (hoofdstuk/afdeling/lid/onderdeel …)."""
-        return URIRef(f"{self.base}{quote(bwb_id, safe='')}/id/{quote(xml_id, safe='')}")
+        return self._iri(bwb_id, "id", xml_id)
 
     def by_ref_key(self, ref_key: str) -> URIRef:
         """IRI voor een citeerbare node/verwijs-doel, afgeleid van de ref_key.
 
         ``{bwb}``                         -> ``BASE{bwb}`` (de wet zelf)
-        ``{bwb}#artikel={nr}``            -> ``BASE{bwb}/artikel/{nr}``
-        ``{bwb}#hoofdstuk={nr}`` (etc.)   -> ``BASE{bwb}/hoofdstuk/{nr}``
-        ``{bwb}#artikel=2#lid=1#o=a``     -> ``BASE{bwb}/artikel/2/lid/1/o/a``
-        ``{bwb}#id={id}``                 -> ``BASE{bwb}/id/{id}``
+        ``{bwb}#artikel={nr}``            -> ``BASE{bwb}:artikel:{nr}``
+        ``{bwb}#hoofdstuk={nr}`` (etc.)   -> ``BASE{bwb}:hoofdstuk:{nr}``
+        ``{bwb}#artikel=2#lid=1#o=a``     -> ``BASE{bwb}:artikel:2:lid:1:o:a``
+        ``{bwb}#id={id}``                 -> ``BASE{bwb}:id:{id}``
         (val terug op een gehashte IRI als het formaat onbekend is).
         """
         bwb, _, rest = ref_key.partition("#")
@@ -137,14 +158,14 @@ class Vocab:
             sleutel, _, waarde = segment.partition("=")
             if not bwb or not sleutel or not waarde:
                 digest = hashlib.sha1(ref_key.encode("utf-8")).hexdigest()[:16]
-                return URIRef(f"{self.base}ref/{digest}")
-            segmenten.append(f"{quote(sleutel, safe='')}/{quote(waarde, safe='')}")
-        return URIRef(f"{self.base}{quote(bwb, safe='')}/{'/'.join(segmenten)}")
+                return self._iri("ref", digest)
+            segmenten.extend((sleutel, waarde))
+        return self._iri(bwb, *segmenten)
 
     def begrip(self, label: str) -> URIRef:
         """IRI voor een thesaurusterm (rechtsgebied/overheidsdomein) op slug."""
         slug = re.sub(r"[^a-z0-9]+", "-", label.lower()).strip("-")
-        return URIRef(f"{self.base}begrip/{quote(slug, safe='')}")
+        return self._iri("begrip", slug)
 
     def entiteit(self, soort: str, sleutel: str) -> URIRef:
         """Deterministische, wet-overstijgende IRI voor een gedeelde entiteit
@@ -154,13 +175,13 @@ class Vocab:
         (open-world; elke wet-graaf her-assert de node, net als thesaurustermen).
         """
         slug = re.sub(r"[^a-z0-9]+", "-", sleutel.lower()).strip("-")
-        return URIRef(f"{self.base}{quote(soort, safe='')}/{quote(slug, safe='')}")
+        return self._iri(soort, slug)
 
     def verwijzing(self, bron: URIRef, doel: URIRef, soort: str) -> URIRef:
         """Deterministische IRI voor de tussenresource van één verwijzing."""
         sleutel = f"{bron}|{doel}|{soort}".encode()
         digest = hashlib.sha1(sleutel).hexdigest()[:16]
-        return URIRef(f"{self.base}verwijzing/{digest}")
+        return self._iri("verwijzing", digest)
 
     # ---------------------------------------------------------------------- termen
     def klasse(self, entiteit: str) -> URIRef:

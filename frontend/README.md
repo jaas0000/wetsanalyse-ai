@@ -59,7 +59,7 @@ npm run dev                     # http://localhost:3000
 `.env.local`:
 
 ```
-API_BASE_URL=http://localhost:3000      # of https://wetsanalyse-api.ipalm.nl
+API_BASE_URL=http://localhost:3000      # of https://api.wetsanalyse.example
 API_TOKEN=<alleen-de-tokenwaarde>       # het deel NA de ":" uit de API-tokenlijst
 ADMIN_API_TOKEN=<alleen-de-tokenwaarde> # idem, maar uit de ADMIN-tokenlijst (voor /beheer)
 AUTH_SECRET=<openssl rand -base64 32>   # ondertekent de login-sessiecookie (Auth.js)
@@ -97,7 +97,7 @@ AUTH_SECRET=<openssl rand -base64 32>   # ondertekent de login-sessiecookie (Aut
 | `ADMIN_API_TOKEN`      | —                             | Admin-bearer voor `/beheer` → `/v1/admin/*` (server-side).     |
 | `ADMIN_API_TOKEN_FILE` | —                             | Pad naar secret-bestand met het admin-token (heeft voorrang).  |
 | `AUTH_SECRET`          | —                             | Ondertekent de Auth.js-sessiecookie/JWT. Verplicht voor login. |
-| `AUTH_URL`             | —                             | Publieke origin (bv. `https://wetsanalyse.ipalm.nl`). **Verplicht achter een reverse proxy** — anders redirecten login/logout naar het interne `0.0.0.0:3000`. |
+| `AUTH_URL`             | —                             | Publieke origin (bv. `https://wetsanalyse.example`). **Verplicht achter een reverse proxy** — anders redirecten login/logout naar het interne `0.0.0.0:3000`. |
 | `GRAPH_QA_URL`         | `http://graph-qa:8080`        | Server-side adres van de graph-qa-agent (werkplek). |
 | `GRAPH_QA_TOKEN`       | —                             | Bearer voor graph-qa (alleen nodig als die achter een token staat). Server-side. |
 | `GRAPH_QA_TOKEN_FILE`  | —                             | Pad naar secret-bestand met het graph-qa-token (heeft voorrang). |
@@ -123,7 +123,7 @@ achter Nginx Proxy Manager, identiek aan de API-stijl. CI:
 publiceert alleen het image; de stack-update is een aparte stap.
 
 De stack joint op `wetsanalyse_internal` (van `deploy/postgres/`) en `observability_default`, en
-**publiceert een hostpoort** (`HOST_PORT`, default 8080): NPM draait op een andere LXC en deelt geen
+**publiceert een hostpoort** (`HOST_PORT`, default 8080): NPM draait op een andere host en deelt geen
 docker-netwerk, dus proxyen op containernaam kan niet.
 
 Eénmalig op de host (in `SECRETS_DIR`, gedeeld met de API-stack), alle mode 644:
@@ -133,9 +133,9 @@ login-sessie (`openssl rand -base64 32`). De container-entrypoint laadt dat laat
 `AUTH_SECRET` (`AUTH_SECRET_FILE=/run/secrets/frontend_auth_secret`), zodat het — net als de andere
 tokens — een bestand blijft en niet als plain env in Portainer staat. 2FA hergebruikt de
 API-secret `llm_config_secret` (geen extra frontend-bestand). Zet daarnaast de stack-env
-**`AUTH_URL`** op de publieke origin (bv. `https://wetsanalyse.ipalm.nl`) — verplicht achter NPM,
+**`AUTH_URL`** op de publieke origin (bv. `https://wetsanalyse.example`) — verplicht achter NPM,
 anders redirecten login/logout naar het interne `0.0.0.0:3000`. In NPM een Proxy Host
-`wetsanalyse.ipalm.nl` → `<docker-lxc-ip>:${HOST_PORT}`, met **proxy buffering uit** voor SSE (zie de
+`wetsanalyse.example` → `<docker-host-ip>:${HOST_PORT}`, met **proxy buffering uit** voor SSE (zie de
 commentaarregels in `docker-compose.yml`).
 
 > **Toegang.** De hele webapp zit achter een login met **userid + wachtwoord** (Auth.js);

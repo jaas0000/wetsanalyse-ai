@@ -28,9 +28,9 @@ def test_decimaal_nummer_valt_terug_op_get_bepaling():
 
 ARTIKEL_TSV = (
     "?tekst\t?jci\t?lid\t?lidnummer\t?lidtekst\n"
-    '\t"jci"\t<https://ipalm.nl/bwb/X/artikel/9/lid/1>\t"1"\t"Eerste lid."@nl\n'
-    '\t"jci"\t<https://ipalm.nl/bwb/X/artikel/9/lid/10>\t"10"\t"Tiende lid."@nl\n'
-    '\t"jci"\t<https://ipalm.nl/bwb/X/artikel/9/lid/2>\t"2"\t"Tweede lid."@nl'
+    '\t"jci"\t<urn:bwb:X:artikel:9:lid:1>\t"1"\t"Eerste lid."@nl\n'
+    '\t"jci"\t<urn:bwb:X:artikel:9:lid:10>\t"10"\t"Tiende lid."@nl\n'
+    '\t"jci"\t<urn:bwb:X:artikel:9:lid:2>\t"2"\t"Tweede lid."@nl'
 )
 REGELING_TSV = '?citeertitel\t?opschrift\t?afkorting\t?soort\n"Invorderingswet 1990"\t""\t"IW"\t"wet"'
 

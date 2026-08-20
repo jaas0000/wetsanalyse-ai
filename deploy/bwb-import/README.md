@@ -4,17 +4,17 @@ Laadt Nederlandse wetgeving (Basiswettenbestand) in de kennisgraaf: haalt de XML
 `repository.officiele-overheidspublicaties.nl`, valideert tegen de officiële XSD's, parseert de
 structuur en schrijft RDF naar GraphDB (repository `inning`). Per wet **idempotent**.
 
-Draait op de docker-LXC naast de graaf, op het netwerk `graphdb_default`.
+Draait op de docker-host naast de graaf, op het netwerk `graphdb_default`.
 
 ## Broncode en image
 
 De broncode staat in **`tools/bwb-import/`** (Python, XSD's, tests). CI bouwt het image naar
 `ghcr.io/palmw01/bwb-import` via `.github/workflows/bwb-import-docker-publish.yml`, dat draait bij
 een push naar `master` die `tools/bwb-import/**` raakt: eerst de unit-tests, dan build + push +
-Trivy-scan. Deze map bevat alleen de compose voor de LXC.
+Trivy-scan. Deze map bevat alleen de compose voor de docker-host.
 
 De stack heeft bewust **geen `build:`** — Portainer kan bij een string-deploy niet bouwen. De default
-`BWB_IMAGE` is het op de LXC gebouwde `bwb-import:0.1`; zodra de publish-workflow op master heeft
+`BWB_IMAGE` is het lokaal gebouwde `bwb-import:0.1`; zodra de publish-workflow op master heeft
 gedraaid, zet je `BWB_IMAGE=ghcr.io/palmw01/bwb-import:latest` als stack-env.
 
 ## Wekelijkse herimport

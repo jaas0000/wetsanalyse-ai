@@ -5,8 +5,8 @@ from agent.grounding import check_grounding, curate_sources
 from agent.models import Source
 from agent.provenance import citations_in, iter_refs
 
-IW = "https://ipalm.nl/bwb/BWBR0004770/artikel/9"
-LEIDRAAD = "https://ipalm.nl/bwb/BWBR0024096/artikel/26"
+IW = "urn:bwb:BWBR0004770:artikel:9"
+LEIDRAAD = "urn:bwb:BWBR0024096:artikel:26"
 
 
 def _trace(text: str):
@@ -44,7 +44,7 @@ def test_prefix_bwb_wordt_niet_vals_gegrond():
 
 def test_curate_prefix_bwb_wordt_niet_meegesleept():
     # L1: een bron met langer id mag niet meeliften op een genoemde prefix-id.
-    langer = "https://ipalm.nl/bwb/BWBR00012345/artikel/1"
+    langer = "urn:bwb:BWBR00012345:artikel:1"
     sources = [Source(label=langer, uri=langer), Source(label=IW, uri=IW)]
     kept = [s.uri for s in curate_sources(sources, "Zie BWBR0001 en de Invorderingswet (BWBR0004770).")]
     assert IW in kept
@@ -77,7 +77,7 @@ def test_jci_backslash_wordt_gestript():
 
 
 def test_citations_in_negeert_vocabulaire_namespace():
-    assert citations_in("?s <https://ipalm.nl/ns/bwb#heeftLid> ?o") == []
+    assert citations_in("?s <urn:bwb-ns:heeftLid> ?o") == []
 
 
 # --- Niveau: gegrond / onbepaald / ongegrond -----------------------------------------------------

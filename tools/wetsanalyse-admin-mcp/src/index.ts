@@ -7,7 +7,7 @@
  * genereerbare API-tokens (read).
  *
  * Config via env (nooit in de repo):
- *   WETSANALYSE_ADMIN_API_URL   — basis-URL van de API, bv. https://wetsanalyse-api.ipalm.nl
+ *   WETSANALYSE_ADMIN_API_URL   — basis-URL van de API, bv. https://api.wetsanalyse.example
  *   WETSANALYSE_ADMIN_TOKEN     — een admin-token (statisch env-token óf een via /beheer gegenereerd token)
  *
  * Fail-closed: zonder beide env-vars weigert de server te starten. Logs (JSON) gaan naar stderr;

@@ -177,7 +177,7 @@ def _offline_scenario():
     """Eén gescripte case + fakes die de harnas end-to-end aantonen (geen netwerk)."""
     from tests.fakes import FakeGraph, FakeLLM, response, text_block, tool_block
 
-    graph = FakeGraph(result='<https://ipalm.nl/bwb/BWBR0004770> bwb:citeertitel "Invorderingswet 1990" .')
+    graph = FakeGraph(result='<urn:bwb:BWBR0004770> bwb:citeertitel "Invorderingswet 1990" .')
     llm = FakeLLM([
         response([text_block("Ik raadpleeg list_regelingen.")], "end_turn"),          # plan-node (create)
         response([tool_block("t1", "list_regelingen", {})], "tool_use"),              # agent-turn 1 (stream)

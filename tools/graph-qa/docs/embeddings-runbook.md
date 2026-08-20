@@ -18,7 +18,7 @@ op exacte termen.
 - De GraphDB-`similarity_search`-MCP-tool vraagt om een `similarityIndex` → de **Similarity-plugin
   is aanwezig**, er is alleen nog geen index.
 
-> ⚠️ **Doe dit eerst:** de GraphDB-REST op `https://graphdb.ipalm.nl` staat **open (geen auth) en
+> ⚠️ **Doe dit eerst:** de GraphDB-REST op `https://graphdb.example` staat **open (geen auth) en
 > writable**. Zet 'm achter authenticatie (GraphDB Security aanzetten + NPM-basic-auth of een
 > service-account), anders is elke read-only-garantie in de MCP-client omzeilbaar. Zonder dit is
 > een vector-index net zo goed publiek muteerbaar.
@@ -42,7 +42,7 @@ Aangemaakt via `POST /rest/similarity` (header `X-GraphDB-Repository: inning`), 
 - `analyzerClass`: `org.apache.lucene.analysis.nl.DutchAnalyzer`
 - `options`: `-trainingcycles 5 -dimension 200`  (SemanticVectors — let op: `-dimension`, niet `-vectorsize`)
 - `selectQuery`: `SELECT ?documentID ?documentText { ?documentID bwb:tekst ?documentText
-  FILTER(STRSTARTS(STR(?documentID), "https://ipalm.nl/bwb/")) }`  (eigen IRI-ruimte → geen sameAs-dubbels)
+  FILTER(STRSTARTS(STR(?documentID), "urn:bwb:")) }`  (eigen IRI-ruimte → geen sameAs-dubbels)
 - `searchQuery`: de standaard similarity-template (`:searchTerm`/`:documentResult`/`:value`/`:score`).
 
 Build duurde ~enkele seconden (native training over ~4000 literals). Herbouwen bij nieuwe/gewijzigde

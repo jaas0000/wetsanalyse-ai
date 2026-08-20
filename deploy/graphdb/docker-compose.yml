@@ -1,6 +1,6 @@
-# GraphDB — de BWB-kennisgraaf, op de docker-LXC (Proxmox, Portainer-endpoint 3).
+# GraphDB — de BWB-kennisgraaf, op de docker-host.
 #
-# De data staat LOKAAL op de LXC (/var/lib/graphdb/home), niet op een NFS-share: GraphDB's
+# De data staat LOKAAL op de docker-host (/var/lib/graphdb/home), niet op een NFS-share: GraphDB's
 # opslaglaag gebruikt geheugen-gemapte bestanden en file-locking, en over NFS levert dat traagheid
 # op en in het slechtste geval stille indexcorruptie. De NAS is de plek voor back-ups (zie README).
 #
@@ -23,7 +23,7 @@ services:
     ports:
       - "7200:7200"                 # workbench-UI + SPARQL + ingebouwde MCP (/mcp)
     environment:
-      # Let op het RAM van de LXC: GraphDB claimt de heap echt. Bij 4 GB draait de dev-stack
+      # Let op het RAM van de host: GraphDB claimt de heap echt. Bij 4 GB draait de dev-stack
       # ernaast krap — 8 GB is comfortabeler, anders -Xmx1500m.
       GDB_JAVA_OPTS: >-
         -Xms1g -Xmx${GRAPHDB_HEAP:-2g}
@@ -86,10 +86,10 @@ services:
     depends_on:
       - graphdb
 
-  # Applicatie-consistente dump, elke nacht om 03:00 — vlak vóór de vzdump van 03:30, zodat de
-  # dump meelift naar de Synology. De vzdump zelf is filesystem-consistent (LVM-snapshot met
+  # Applicatie-consistente dump, elke nacht — plan hem vlak vóór de host-back-up, zodat de
+  # dump daarin meelift. De host-back-up zelf is filesystem-consistent (snapshot met
   # fs-freeze), maar GraphDB kan daarbij midden in een schrijfactie zitten; een RDF-export is dat
-  # per definitie niet. Twee lagen dus: de dump voor zekerheid, de vzdump voor volledigheid.
+  # per definitie niet. Twee lagen dus: de dump voor zekerheid, de host-back-up voor volledigheid.
   graphdb-backup:
     image: alpine:3.21
     container_name: graphdb-backup

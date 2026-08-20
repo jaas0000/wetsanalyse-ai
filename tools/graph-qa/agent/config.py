@@ -40,7 +40,7 @@ def _read_secret(env: Mapping[str, str], name: str) -> str | None:
 
 class Settings(BaseModel):
     # GraphDB MCP
-    graphdb_mcp_url: str = "https://graphdb-mcp.ipalm.nl/mcp"
+    graphdb_mcp_url: str = ""                  # verplicht; zie require_graph()
     graphdb_token: str | None = None
     repository_id: str = "inning"
     graphdb_sparql_tool: str = "sparql_query"  # naam van de SPARQL-tool op de MCP-server
@@ -243,5 +243,7 @@ class Settings(BaseModel):
             )
 
     def require_graph(self) -> None:
+        if not self.graphdb_mcp_url:
+            raise ValueError("Graaf niet geconfigureerd: zet GRAPHDB_MCP_URL.")
         if not self.graphdb_token:
             raise ValueError("Graaf niet geconfigureerd: zet GRAPHDB_TOKEN.")

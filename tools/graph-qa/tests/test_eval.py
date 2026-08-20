@@ -19,7 +19,7 @@ def test_faithfulness_uit_grounding_event():
 
 
 def test_source_recall():
-    src = [{"uri": "https://ipalm.nl/bwb/BWBR0004770/artikel/9"}]
+    src = [{"uri": "urn:bwb:BWBR0004770:artikel:9"}]
     assert scoring.source_recall(src, ["BWBR0004770"]) == 1.0
     assert scoring.source_recall(src, ["BWBR9999999"]) == 0.0
     assert scoring.source_recall([], []) == 1.0  # niets verwacht
@@ -38,7 +38,7 @@ def test_score_case_geslaagd():
     res = scoring.score_case(
         case,
         answer="Dit is een wet.",
-        sources=[{"uri": "https://ipalm.nl/bwb/BWBR0004770"}],
+        sources=[{"uri": "urn:bwb:BWBR0004770"}],
         grounding={"cited": 1, "unsupported": []},
     )
     assert res.passed is True

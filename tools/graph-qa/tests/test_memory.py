@@ -6,7 +6,7 @@ import asyncio
 from agent.agent import answer_stream, delete_conversation
 from fakes import FakeGraph, FakeLLM, make_settings, response, text_block, tool_block
 
-ART_IRI = "https://ipalm.nl/bwb/BWBR0004770/artikel/9"
+ART_IRI = "urn:bwb:BWBR0004770:artikel:9"
 
 
 def _run(gen):

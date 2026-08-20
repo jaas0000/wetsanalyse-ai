@@ -108,4 +108,4 @@ def test_sameas_naar_wettenoverheid() -> None:
 
 
 def test_ontologie_graph_iri() -> None:
-    assert str(V.ontology_graph()).endswith("graph/ontologie")
+    assert str(V.ontology_graph()) == "urn:bwb:graph:ontologie"

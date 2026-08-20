@@ -38,9 +38,15 @@ npm run build      # → dist/ (gecommit, zodat `node dist/index.js` zonder buil
    }
    ```
 
-   De server zelf staat al in `.mcp.json` (`wetsanalyse-admin`, met de prod-URL
-   `https://wetsanalyse-api.ipalm.nl`); `enableAllProjectMcpServers` staat aan, dus hij wordt
-   opgepakt zodra het token is gezet.
+   De **registratie van de server is machine-lokaal**, niet gecommit: deze repo is publiek en een
+   `.mcp.json` erin zou de API-URL van je omgeving prijsgeven. Registreer hem dus zelf, met je eigen
+   URL:
+
+   ```bash
+   claude mcp add wetsanalyse-admin -- node tools/wetsanalyse-admin-mcp/dist/index.js
+   ```
+
+   en zet `WETSANALYSE_ADMIN_API_URL` in dezelfde `env`-sectie als het token hierboven.
 3. **Verifieer**: `claude mcp list` → `wetsanalyse-admin` verbonden. Vraag Claude bijv. de
    modelprofielen te tonen (`list_profiles`).
 
@@ -51,7 +57,7 @@ in — de MCP kan er niets meer mee.
 
 | Var | Verplicht | Betekenis |
 |-----|-----------|-----------|
-| `WETSANALYSE_ADMIN_API_URL` | ja | Basis-URL van de API (bv. `https://wetsanalyse-api.ipalm.nl`). Staat in `.mcp.json`. |
+| `WETSANALYSE_ADMIN_API_URL` | ja | Basis-URL van de API (bv. `https://api.wetsanalyse.example`). Machine-lokaal zetten. |
 | `WETSANALYSE_ADMIN_TOKEN`   | ja | Admin-token (env-token óf een via `/beheer` gegenereerd token). Uit je lokale env. |
 
 Zonder beide weigert de server te starten (fail-closed).
@@ -61,32 +67,18 @@ Zonder beide weigert de server te starten (fail-closed).
 ## Grafana-MCP (aparte, officiële server)
 
 Voor het inrichten van Grafana (datasources/dashboards/alerting) gebruik je de **officiële**
-`mcp/grafana`-server — geen eigen build. Die staat **al in `.mcp.json`** (server `grafana`, via
-`docker run --rm -i mcp/grafana -t stdio`); hij wordt alleen actief zodra het token gezet is. Twee
-stappen:
+`mcp/grafana`-server — geen eigen build, en net als hierboven **machine-lokaal geregistreerd** in
+plaats van gecommit. Twee stappen:
 
 1. **Grafana service-account + token**: in Grafana → *Administration → Users and access → Service
    accounts* → nieuw account (rol *Editor* of *Admin*) → *Add service account token*. Kopieer het.
-2. Zet in `.claude/settings.local.json` → `env` het token als **`GRAFANA_TOKEN`** (dat vult
-   `GRAFANA_SERVICE_ACCOUNT_TOKEN` in `.mcp.json`), plus `grafana` in `enabledMcpjsonServers`:
+2. Registreer de server lokaal met jouw Grafana-URL en het token uit stap 1:
 
-   ```json
-   "env": { "GRAFANA_TOKEN": "glsa_…" },
-   "enabledMcpjsonServers": ["wetsanalyse-admin", "grafana"]
-   ```
-
-   Het `.mcp.json`-blok zelf staat vast:
-
-   ```json
-   "grafana": {
-     "command": "docker",
-     "args": ["run", "--rm", "-i", "-e", "GRAFANA_URL", "-e", "GRAFANA_SERVICE_ACCOUNT_TOKEN",
-              "mcp/grafana", "-t", "stdio"],
-     "env": {
-       "GRAFANA_URL": "https://grafana.ipalm.nl",
-       "GRAFANA_SERVICE_ACCOUNT_TOKEN": "${GRAFANA_TOKEN}"
-     }
-   }
+   ```bash
+   claude mcp add grafana \
+     -e GRAFANA_URL=https://grafana.example \
+     -e GRAFANA_SERVICE_ACCOUNT_TOKEN=glsa_… \
+     -- docker run --rm -i -e GRAFANA_URL -e GRAFANA_SERVICE_ACCOUNT_TOKEN mcp/grafana -t stdio
    ```
 
 3. `claude mcp list` → `grafana` verbonden. De observability-stack is al gebouwd in
