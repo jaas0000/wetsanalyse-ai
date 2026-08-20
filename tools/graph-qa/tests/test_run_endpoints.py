@@ -33,7 +33,10 @@ def _nep_stroom(_request, _gebruiker=""):
 
 @pytest.fixture
 def client(monkeypatch):
+    # De lifespan roept require_graph() aan; die eist sinds de URN-migratie ook een MCP-URL.
+    # Hier telt alleen dát de configuratie compleet is — de graaf zelf wordt niet benaderd.
     monkeypatch.setattr(main.settings, "graphdb_token", "test", raising=False)
+    monkeypatch.setattr(main.settings, "graphdb_mcp_url", "https://graaf.test/mcp", raising=False)
     monkeypatch.setattr(main, "_stroom_voor", _nep_stroom)
     monkeypatch.setattr(main, "runs", type(main.runs)())
     with TestClient(main.app) as c:
