@@ -228,6 +228,37 @@ def demp_zelfweerspreking(voorstellen: list[dict[str, Any]]) -> int:
     return gedempt
 
 
+# De spaties eromheen blijven van de motivatie, niet van de match — anders plakken de woorden
+# aan weerszijden van een vervangen id aan elkaar.
+_ELEMENT_ID = re.compile(r"(?:\[|\()?(?:id\s*=\s*)?\b([0-9a-f]{12})\b(?:\]|\))?")
+
+
+def vervang_ids_door_citaat(motivatie: str, voorstellen: list[dict[str, Any]]) -> str:
+    """Zet interne element-ids in een Critic-motivatie om naar het fragment waar ze op slaan.
+
+    De Critic krijgt de ids in zijn prompt omdat hij zijn oordeel eraan moet hangen, en verwijst
+    vervolgens naar buurelementen met diezelfde id — "de Voorwaarde zit eigenlijk in [635074d49a74]".
+    Die motivatie staat één-op-één op de reviewkaart, dus de jurist las een hexcode. Dat gebeurde op
+    dev in drie van de zestien kaarten.
+
+    Een id dat bij geen enkel voorstel hoort (de Critic verzint er soms een) wordt neutraal
+    weggeschreven in plaats van blijven staan; anders ruilt de kaart een hexcode in voor een
+    verkeerde verwijzing.
+    """
+    if not motivatie:
+        return motivatie
+    op_id = {str(v.get("id", "")): str(v.get("tekst", "")) for v in voorstellen}
+
+    def _vervang(m: re.Match[str]) -> str:
+        tekst = op_id.get(m.group(1), "")
+        if not tekst:
+            return "een ander element"
+        kort = tekst if len(tekst) <= 45 else tekst[:44].rstrip() + "…"
+        return f"'{kort}'"
+
+    return _ELEMENT_ID.sub(_vervang, motivatie).strip()
+
+
 def _markeer_toegepast(voorstel: dict[str, Any]) -> None:
     """Zet `toegepast` op de laatste Critic-ronde van dit element.
 

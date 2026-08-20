@@ -31,7 +31,7 @@ from langgraph.graph import END, START, StateGraph
 from .agent_common import BeurtGestopt, truncate
 from .annotatie import (
     _verwerk, _verwerk_critic, demp_zelfweerspreking, komt_letterlijk_voor, pas_critic_toe,
-    sleutel_van,
+    sleutel_van, vervang_ids_door_citaat,
 )
 from .artikel import artikel_corpus
 from .annotatie_prompt import (
@@ -1008,7 +1008,9 @@ def build_graph(
         for v in voorstellen:
             oordeel = oordelen.get(str(v.get("id", "")))
             aandacht = oordeel.aandacht if oordeel else ""
-            motivatie = oordeel.motivatie if oordeel else ""
+            # De motivatie gaat één-op-één naar de reviewkaart. Interne ids horen daar niet: de
+            # Critic gebruikt ze om naar buurelementen te verwijzen, de jurist leest een hexcode.
+            motivatie = vervang_ids_door_citaat(oordeel.motivatie, voorstellen) if oordeel else ""
             # Alternatieven forceren GEEN geel meer. Dat maakte disambiguatie ononderscheidbaar van
             # een probleem: een element met alternatieven kon nooit groen worden, dus stond straks
             # alles "met aandacht" en zei die vlag niets meer. Twijfel telt nu apart (zie emit_node).

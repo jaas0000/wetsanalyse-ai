@@ -103,6 +103,8 @@ UITVOER — geef UITSLUITEND geldige JSON terug, zonder omliggende tekst of code
 ]}}
 Geef voor ELK aangeleverd element precies één oordeel, met het `id` zoals het is aangeleverd. `ontbrekend` mag leeg zijn.
 
+De MOTIVATIE leest een jurist letterlijk op zijn reviewkaart. Schrijf hem dus voor die jurist: geen ids (ook niet tussen haakjes) — verwijs naar een ander element met zijn fragment tussen aanhalingstekens. En schrijf niet óver de beoordeling ("herhaal niet", "jurist hoeft dit niet opnieuw te bekijken"); schrijf wat er aan de hand is.
+
 NIET DE EERSTE RONDE? Dan staat er onder de voorstellen wat je vórige ronde vond en wat de annotator daarmee heeft gedaan.
 - Is een punt opgelost? Zeg dat: `aandacht: "groen"`, `actie: "behoud"`. Dat is een uitkomst, geen zwakte.
 - Heeft de annotator jouw voorstel bewust laten liggen? Dan is dat een gemotiveerd meningsverschil. Herhaal het niet — zet het hooguit op "geel" zodat de jurist het ziet, en ga verder.

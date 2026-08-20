@@ -653,3 +653,43 @@ def test_de_tijdlijn_telt_een_gedempt_oordeel_als_geel():
     assert "rood" not in regel
     assert "1 geel" in regel
     assert "1 oordeel over een eigen correctie" in regel
+
+
+def test_een_id_in_de_motivatie_wordt_het_fragment_waar_het_op_slaat():
+    """De motivatie staat één-op-één op de reviewkaart; een hexcode zegt de jurist niets.
+
+    Op dev stond in drie van de zestien kaarten een verwijzing als "de Voorwaarde zit eigenlijk in
+    [635074d49a74]" — de Critic gebruikt de ids die hij in zijn prompt krijgt om naar buurelementen
+    te wijzen.
+    """
+    from agent.annotatie import vervang_ids_door_citaat
+
+    voorstellen = [{"id": "635074d49a74", "tekst": "die aannemelijk maakt dat het niet aan hem is te wijten"}]
+    uit = vervang_ids_door_citaat("De Voorwaarde zit in [635074d49a74].", voorstellen)
+    assert "635074d49a74" not in uit
+    assert uit.startswith("De Voorwaarde zit in 'die aannemelijk maakt dat het niet aan hem")
+    assert uit.endswith("…'.")                      # lange fragmenten worden afgekapt
+
+
+def test_de_vormen_waarin_de_critic_naar_een_element_verwijst():
+    from agent.annotatie import vervang_ids_door_citaat
+
+    voorstellen = [{"id": "abc123def456", "tekst": "de bestuurder"}]
+    for vorm in ("[abc123def456]", "(id=abc123def456)", "id=abc123def456", "abc123def456"):
+        uit = vervang_ids_door_citaat(f"zie {vorm} hierboven", voorstellen)
+        assert uit == "zie 'de bestuurder' hierboven", vorm
+
+
+def test_een_verzonnen_id_wordt_neutraal_weggeschreven():
+    """Anders ruilt de kaart een hexcode in voor een verwijzing naar iets dat niet bestaat."""
+    from agent.annotatie import vervang_ids_door_citaat
+
+    uit = vervang_ids_door_citaat("overlapt met [aaaaaaaaaaaa]", [{"id": "abc123def456", "tekst": "x"}])
+    assert uit == "overlapt met een ander element"
+
+
+def test_gewone_tekst_blijft_ongemoeid():
+    from agent.annotatie import vervang_ids_door_citaat
+
+    tekst = "Rechtssubject correct gemarkeerd; drie jaren is een vaste termijn."
+    assert vervang_ids_door_citaat(tekst, []) == tekst
