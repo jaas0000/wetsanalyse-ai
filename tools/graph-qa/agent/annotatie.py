@@ -189,6 +189,45 @@ def pas_critic_toe(
     return uit, PatchTelling(toegepast=toegepast, alternatief=alternatief), rest
 
 
+def demp_zelfweerspreking(voorstellen: list[dict[str, Any]]) -> int:
+    """Zwak een eindoordeel af dat de eigen uitgevoerde correctie terugdraait. Geeft het aantal terug.
+
+    De eindbeoordeling gaat rechtstreeks naar de jurist — daar zit geen patcher meer achter die hem
+    kan wegen. Komt de Critic daar terug op een klasse die hij zélf in de vorige ronde liet
+    aanbrengen, dan levert dat een rode kaart op waarin de agent zichzelf tegenspreekt. Op dev stond
+    er zo "dit is een Rechtsobject, geen Rechtsbetrekking" op een element dat hij één ronde eerder
+    van Rechtsobject náár Rechtsbetrekking had gebracht.
+
+    Dat is geen zekerheid maar twijfel: hetzelfde fragment, twee keer gewogen, twee uitkomsten. Dus
+    behandelen we het als twijfel — de klasse blijft staan, het niveau zakt naar geel en de andere
+    lezing komt als alternatief naast de kaart te liggen. De jurist ziet beide en kiest.
+
+    Een eindoordeel over iets ánders (het fragment, overlap, een klasse die de Critic niet zelf heeft
+    aangebracht) blijft onaangeroerd: dat is wél een nieuw bezwaar.
+    """
+    gedempt = 0
+    for v in voorstellen:
+        rondes = v.get("critic_rondes") or []
+        if len(rondes) < 2 or str(rondes[-1].get("aandacht", "")) != "rood":
+            continue
+        klasse = str(rondes[-1].get("voorstel_klasse", "")).strip()
+        huidig = str(v.get("klasse", ""))
+        if not klasse or klasse == huidig:
+            continue
+        if not any(r.get("toegepast") and str(r.get("voorstel_klasse", "")) == huidig
+                   for r in rondes[:-1]):
+            continue
+
+        alts = list(v.get("alternatieven") or [])
+        if not any(str(a.get("klasse")) == klasse for a in alts):
+            alts.append({"klasse": klasse, "motivatie": str(rondes[-1].get("motivatie", "")).strip()})
+            v["alternatieven"] = alts
+        v["aandacht"] = "geel"
+        rondes[-1]["aandacht"] = "geel"
+        gedempt += 1
+    return gedempt
+
+
 def _markeer_toegepast(voorstel: dict[str, Any]) -> None:
     """Zet `toegepast` op de laatste Critic-ronde van dit element.
 

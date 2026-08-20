@@ -30,7 +30,8 @@ from langgraph.graph import END, START, StateGraph
 
 from .agent_common import BeurtGestopt, truncate
 from .annotatie import (
-    _verwerk, _verwerk_critic, komt_letterlijk_voor, pas_critic_toe, sleutel_van,
+    _verwerk, _verwerk_critic, demp_zelfweerspreking, komt_letterlijk_voor, pas_critic_toe,
+    sleutel_van,
 )
 from .artikel import artikel_corpus
 from .annotatie_prompt import (
@@ -160,15 +161,31 @@ def _annoteer_melding(voorstellen: list[Any], verworpen: list[Any]) -> str:
     return f"{regel} — {len(verworpen)} verworpen ({details})"
 
 
-def _critic_melding(oordelen: dict[str, Any], ontbrekend: list[Any], nieuw: int | None = None) -> str:
+def _critic_melding(
+    oordelen: dict[str, Any],
+    ontbrekend: list[Any],
+    nieuw: int | None = None,
+    gedempt: int = 0,
+) -> str:
     """Tellingen per aandacht-niveau; de oordelen zelf staan al op de reviewkaarten."""
     telling: dict[str, int] = {}
     for o in oordelen.values():
         niveau = getattr(o, "aandacht", "") or "geen oordeel"
         telling[niveau] = telling.get(niveau, 0) + 1
+    # Een gedempt oordeel staat als geel op de kaart. Het hier als rood tellen zou de tijdlijn iets
+    # anders laten zeggen dan de jurist ziet — precies het soort verschil waarmee je deze keten
+    # beoordeelt.
+    if gedempt:
+        telling["rood"] = max(0, telling.get("rood", 0) - gedempt)
+        telling["geel"] = telling.get("geel", 0) + gedempt
+        if not telling["rood"]:
+            telling.pop("rood", None)
     volgorde = ["rood", "geel", "groen", "geen oordeel"]
     delen = [f"{telling[n]} {n}" for n in volgorde if telling.get(n)]
     regel = ", ".join(delen) if delen else "geen oordelen"
+    if gedempt:
+        woord = "oordeel" if gedempt == 1 else "oordelen"
+        regel += f" · {gedempt} {woord} over een eigen correctie: als twijfel voorgelegd"
     if ontbrekend:
         regel += f" · {len(ontbrekend)} mogelijk gemist"
         # Onderscheid maken tussen "hij ziet iets nieuws" en "hij herhaalt zichzelf" is precies wat
@@ -1019,7 +1036,13 @@ def build_graph(
         nieuw_ontbrekend = [o.model_dump() for o in ontbrekend
                             if _ontbrekend_sleutel(o.model_dump()) not in al_gemeld]
 
-        _stap(writer, "Critic", _critic_melding(oordelen, ontbrekend, len(nieuw_ontbrekend)))
+        # De eindbeoordeling gaat rechtstreeks naar de jurist; er komt geen patcher meer overheen
+        # die haar kan wegen. Dus hier, en alleen hier, dempen we een oordeel dat de eigen
+        # uitgevoerde correctie terugdraait — zie `demp_zelfweerspreking`.
+        gedempt = demp_zelfweerspreking(voorstellen) if ronde >= 2 else 0
+
+        _stap(writer, "Critic",
+              _critic_melding(oordelen, ontbrekend, len(nieuw_ontbrekend), gedempt))
 
         # `voorstellen` expliciet teruggeven: eerder werkten de aandacht-velden alleen door omdat het
         # dezelfde dict-objecten waren. Dat is fragiel zodra er meerdere rondes over de state lopen.

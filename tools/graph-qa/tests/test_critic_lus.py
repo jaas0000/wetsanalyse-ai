@@ -403,7 +403,11 @@ def test_de_keten_is_hard_begrensd():
 
     assert llm.index == NA_PATCH, "de eindbeoordeling is het sluitstuk, geen nieuwe ingang"
     assert elementen[0]["klasse"] == "Voorwaarde", "alleen de eerste correctie is uitgevoerd"
-    assert elementen[0]["aandacht"] == "rood", "het openstaande oordeel gaat mee naar de jurist"
+    # Het oordeel gaat mee naar de jurist, maar als twijfel: de Critic komt hier terug op een klasse
+    # die hij zélf liet aanbrengen, en noemt daarmee drie klassen in twee rondes. Zie
+    # `demp_zelfweerspreking` — eerder stond hier "rood".
+    assert elementen[0]["aandacht"] == "geel", "het openstaande oordeel gaat mee naar de jurist"
+    assert any(a["klasse"] == "Rechtssubject" for a in elementen[0]["alternatieven"])
     assert not any("rondelimiet" in r for r in _statusregels(events))
 
 
@@ -588,3 +592,64 @@ def test_geel_zonder_instructie_is_geen_kanttekening():
         "critic_rondes": [{"ronde": 1, "aandacht": "geel", "actie": "behoud", "toegepast": False}],
     }
     assert "ongewijzigd gelaten" in _vorige_ronde_blok([voorstel], [])
+
+
+def _element_met_uitgevoerde_correctie(eind_klasse: str, eind_aandacht: str = "rood") -> dict:
+    """Een element dat de Critic in ronde 1 zelf van Rechtsobject naar Rechtsbetrekking bracht."""
+    return {
+        "id": "a", "klasse": "Rechtsbetrekking", "tekst": "de schuldenaar", "alternatieven": [],
+        "critic_rondes": [
+            {"ronde": 1, "aandacht": "rood", "actie": "vervang",
+             "voorstel_klasse": "Rechtsbetrekking", "toegepast": True},
+            {"ronde": 2, "aandacht": eind_aandacht, "actie": "vervang",
+             "voorstel_klasse": eind_klasse, "motivatie": "toch een voorwerp", "toegepast": False},
+        ],
+    }
+
+
+def test_een_eindoordeel_dat_de_eigen_correctie_terugdraait_wordt_twijfel():
+    """Anders houdt de jurist een rode kaart over waarin de agent zichzelf tegenspreekt.
+
+    Op dev bracht de Critic 'zijn in het tweede lid bedoelde verplichting' in ronde 1 van
+    Rechtsobject naar Rechtsbetrekking (uitgevoerd), en zei in ronde 2 rood dat het toch een
+    Rechtsobject was. Hetzelfde fragment, twee keer gewogen, twee uitkomsten — dat is twijfel.
+    """
+    from agent.annotatie import demp_zelfweerspreking
+
+    el = _element_met_uitgevoerde_correctie("Rechtsobject")
+    assert demp_zelfweerspreking([el]) == 1
+    assert el["klasse"] == "Rechtsbetrekking"          # de uitgevoerde correctie blijft staan
+    assert el["aandacht"] == "geel"                    # geen rode zelfweerspreking meer
+    assert el["critic_rondes"][-1]["aandacht"] == "geel"
+    assert el["alternatieven"] == [{"klasse": "Rechtsobject", "motivatie": "toch een voorwerp"}]
+
+
+def test_dempen_raakt_een_klasse_die_de_critic_niet_zelf_aanbracht_niet():
+    """Alleen de omkering van eigen werk wordt gedempt, niet elk streng eindoordeel."""
+    from agent.annotatie import demp_zelfweerspreking
+
+    el = _element_met_uitgevoerde_correctie("Rechtsobject")
+    el["critic_rondes"][0]["toegepast"] = False        # de correctie is nooit uitgevoerd
+    assert demp_zelfweerspreking([el]) == 0
+    assert el.get("aandacht") is None
+
+
+def test_dempen_raakt_een_geel_eindoordeel_niet():
+    """Geel is al twijfel; daar valt niets af te zwakken."""
+    from agent.annotatie import demp_zelfweerspreking
+
+    el = _element_met_uitgevoerde_correctie("Rechtsobject", eind_aandacht="geel")
+    assert demp_zelfweerspreking([el]) == 0
+
+
+def test_de_tijdlijn_telt_een_gedempt_oordeel_als_geel():
+    """De melding moet zeggen wat de jurist ziet, niet wat de Critic aanvankelijk vond."""
+    from agent.orchestrator import _critic_melding
+
+    class _O:
+        def __init__(self, a): self.aandacht = a
+
+    regel = _critic_melding({"a": _O("rood"), "b": _O("groen")}, [], None, gedempt=1)
+    assert "rood" not in regel
+    assert "1 geel" in regel
+    assert "1 oordeel over een eigen correctie" in regel
