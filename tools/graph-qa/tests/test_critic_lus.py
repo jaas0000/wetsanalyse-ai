@@ -757,3 +757,13 @@ def test_een_element_zonder_oordeel_levert_niets_op():
     from agent.annotatie import openstaand_voorstel
 
     assert openstaand_voorstel({"id": "a", "tekst": "x"}, CORPUS) == ("", "", "")
+
+
+def test_de_critic_zijn_eigen_aanhalingstekens_winnen():
+    """Anders staat er element ''zo'n fragment'' op de kaart — twee paar quotes om één citaat."""
+    from agent.annotatie import vervang_ids_door_citaat
+
+    voorstellen = [{"id": "abc123def456", "tekst": "de bestuurder"}]
+    assert vervang_ids_door_citaat("zie 'abc123def456'", voorstellen) == "zie 'de bestuurder'"
+    assert vervang_ids_door_citaat("zie '[abc123def456]'", voorstellen) == "zie 'de bestuurder'"
+    assert vervang_ids_door_citaat("zie [abc123def456]", voorstellen) == "zie 'de bestuurder'"

@@ -254,7 +254,11 @@ def vervang_ids_door_citaat(motivatie: str, voorstellen: list[dict[str, Any]]) -
         if not tekst:
             return "een ander element"
         kort = tekst if len(tekst) <= 45 else tekst[:44].rstrip() + "…"
-        return f"'{kort}'"
+        # Zette de Critic er zelf al aanhalingstekens omheen ("element '[<id>]'"), dan zouden die van
+        # ons erbij komen: element ''zo'n fragment''. De zijne winnen.
+        omsloten = motivatie[m.start() - 1: m.start()] in "'\u2018\u201c" and (
+            motivatie[m.end(): m.end() + 1] in "'\u2019\u201d")
+        return kort if omsloten else f"'{kort}'"
 
     return _ELEMENT_ID.sub(_vervang, motivatie).strip()
 
