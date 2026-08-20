@@ -1,5 +1,5 @@
 # Self-contained image voor de BWB-importservice (FastAPI).
-FROM python:3.13-slim
+FROM python:3.14-slim
 
 WORKDIR /app
 
