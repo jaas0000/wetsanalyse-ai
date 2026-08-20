@@ -6,7 +6,7 @@ name: frontend-docker-publish
 
 on:
   push:
-    branches: [master]
+    branches: [master, release/acceptance]
     tags: ["v*"]
     paths:
       - "frontend/**"
@@ -125,9 +125,10 @@ jobs:
           exit-code: "1"
 
       - name: Azure Container App update (frontend)
-        if: ${{ github.ref == 'refs/heads/master' && env.AZURE_CLIENT_ID != '' && env.AZURE_CLIENT_SECRET != '' }}
+        if: ${{ (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/release/acceptance') && env.AZURE_CLIENT_ID != '' && env.AZURE_CLIENT_SECRET != '' }}
         env:
           IMAGE_DIGEST_REF: ${{ env.IMAGE }}@${{ steps.build.outputs.digest }}
+          APP: ${{ github.ref == 'refs/heads/release/acceptance' && 'wetsanalyse-acc-frontend' || 'wetsanalyse-frontend' }}
         run: |
           az login --service-principal \
             --username "$AZURE_CLIENT_ID" \
@@ -135,6 +136,6 @@ jobs:
             --tenant "$AZURE_TENANT_ID"
           az account set --subscription "$AZURE_SUBSCRIPTION_ID"
           az containerapp update \
-            --name wetsanalyse-frontend \
+            --name "$APP" \
             --resource-group rg-wetsanalyse \
             --image "$IMAGE_DIGEST_REF"

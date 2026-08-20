@@ -4,13 +4,17 @@
 //
 // Deployment (vanuit de projectroot):
 //   python3 deploy/azure/gen-deploy.py "<azure-ai-key>" \
-//       --llm-api-base https://<resource>.services.ai.azure.com [--run]
+//       --llm-api-base https://<resource>.services.ai.azure.com \
+//       --env-name dev|acc [--run]
 
 @description('Azure-regio; erft van de resource group.')
 param location string = resourceGroup().location
 
 @description('Naam-prefix voor alle resources.')
 param appName string = 'wetsanalyse'
+
+@description('Env-naam voor OTel deployment.environment en app-side env-checks (dev | acc). Verplicht — geen default zodat een acc-deploy nooit stil DEPLOY_ENV=dev stampt.')
+param envName string
 
 @description('PostgreSQL-servernaam (moet globaal uniek zijn in Azure).')
 param dbServerName string = '${appName}-db'
@@ -145,6 +149,7 @@ resource mcpApp 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'MCP_TRANSPORT',     value: 'http' }
             { name: 'PORT',              value: '3000' }
             { name: 'MCP_ALLOW_NO_AUTH', value: '1' }
+            { name: 'DEPLOY_ENV',        value: envName }
           ]
           probes: [
             {
@@ -228,6 +233,7 @@ resource apiApp 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'LLM_API_BASE',                value: llmApiBase }
             { name: 'WETTENBANK_MCP_URL',          value: mcpInternalUrl }
             { name: 'WETSANALYSE_AUTH_REQUIRED',   value: '1' }
+            { name: 'DEPLOY_ENV',                  value: envName }
             { name: 'HOME',                        value: '/tmp' }
             { name: 'LLM_API_KEY_FILE',              value: '/run/secrets/llm_api_key' }
             { name: 'LLM_CONFIG_SECRET_FILE',        value: '/run/secrets/llm_config_secret' }
@@ -324,6 +330,7 @@ resource graphQaApp 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'QA_API_TOKEN_FILE',          value: '/run/secrets/qa_api_token' }
             { name: 'SIMILARITY_INDEX',           value: 'bwb_similarity' }
             { name: 'ENABLE_DECOMPOSITION',       value: '1' }
+            { name: 'DEPLOY_ENV',                 value: envName }
             // Ephemere CA-FS: schrijfbaar pad; gespreksgeheugen reset bij redeploy (ok voor Fase 1).
             { name: 'CHECKPOINT_DB_PATH',         value: '/tmp/checkpoints.db' }
             { name: 'HOME',                       value: '/tmp' }
@@ -406,6 +413,7 @@ resource frontendApp 'Microsoft.App/containerApps@2024-03-01' = {
           ]
           env: [
             { name: 'NODE_ENV',              value: 'production' }
+            { name: 'DEPLOY_ENV',            value: envName }
             { name: 'API_BASE_URL',          value: apiInternalUrl }
             { name: 'GRAPH_QA_URL',          value: graphQaInternalUrl }
             { name: 'AUTH_URL',              value: frontendPublicUrl }
