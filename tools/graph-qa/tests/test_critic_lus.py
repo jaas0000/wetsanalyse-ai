@@ -488,3 +488,52 @@ def test_elke_statusregel_volgt_hetzelfde_idioom():
     _, events = _annoteer_uitkomst(llm)
     for regel in _statusregels(events):
         assert " · " in regel, f"statusregel zonder scheiding: {regel!r}"
+
+
+# --- wat de Critic in ronde 2 te horen krijgt -----------------------------------------------------
+
+def test_een_uitgevoerde_correctie_heet_uitgevoerd():
+    """Anders draait de Critic zijn eigen oordeel terug.
+
+    Op dev gebeurde precies dat: ronde 1 "maak er een Rechtsbetrekking van" werd uitgevoerd, en
+    ronde 2 begon met "vorige ronde gemeld maar ongewijzigd" en stelde de omgekeerde wijziging voor.
+    De vlag die het geheugenblok las werd namelijk alleen door de herziener gezet, niet door de
+    patcher — dus las de Critic zijn eigen uitgevoerde instructie als genegeerd, en de prompt zegt
+    dat genegeerde kritiek een meningsverschil is.
+    """
+    from agent.annotatie_prompt import _vorige_ronde_blok
+
+    voorstel = {
+        "id": "a", "klasse": "Rechtsbetrekking", "tekst": "x", "alternatieven": [],
+        "critic_rondes": [{"ronde": 1, "aandacht": "rood", "actie": "vervang",
+                           "voorstel_klasse": "Rechtsbetrekking", "toegepast": True}],
+    }
+    blok = _vorige_ronde_blok([voorstel], [])
+    assert "UITGEVOERD zoals je vroeg" in blok
+    assert "ongewijzigd" not in blok
+
+
+def test_een_alternatief_heet_voorgelegd_aan_de_jurist():
+    from agent.annotatie_prompt import _vorige_ronde_blok
+
+    voorstel = {
+        "id": "a", "klasse": "Tijdsaanduiding", "tekst": "x",
+        "alternatieven": [{"klasse": "Parameter en parameterwaarde", "motivatie": "m"}],
+        "critic_rondes": [{"ronde": 1, "aandacht": "geel", "actie": "vervang",
+                           "voorstel_klasse": "Parameter en parameterwaarde", "toegepast": False}],
+    }
+    blok = _vorige_ronde_blok([voorstel], [])
+    assert "ALTERNATIEF aan de jurist voorgelegd" in blok
+    assert "herhaal het niet" in blok
+
+
+def test_een_genegeerde_instructie_heet_nog_steeds_genegeerd():
+    """De bestaande betekenis blijft: hier is het wél een gemotiveerd meningsverschil."""
+    from agent.annotatie_prompt import _vorige_ronde_blok
+
+    voorstel = {
+        "id": "a", "klasse": "Rechtsfeit", "tekst": "x", "alternatieven": [],
+        "critic_rondes": [{"ronde": 1, "aandacht": "rood", "actie": "vervang",
+                           "voorstel_klasse": "Voorwaarde", "toegepast": False}],
+    }
+    assert "ongewijzigd gelaten" in _vorige_ronde_blok([voorstel], [])

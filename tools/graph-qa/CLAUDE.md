@@ -290,6 +290,13 @@ weg: ze bestonden alleen om een cyclus te laten stoppen die er niet meer is.
 - **`CRITIC_MAX_RONDES` telt geen rondes meer**, ondanks zijn naam: 0 = uit (exact `annoteer → critic
   → emit`, de terugvaloptie in productie), > 0 = aan. De naam blijft zodat een draaiende deployment
   niet omvalt. Er is een test die het uit-gedrag bewaakt.
+- **Het geheugenblok moet de waarheid vertellen.** `_stand_van` leidt uit het spoor af wat er met
+  het vorige oordeel gebeurde: *uitgevoerd* (de patcher deed het), *als alternatief voorgelegd* (de
+  voorgestelde klasse staat nu bij de jurist), *aangepast* (de herziener) of *ongewijzigd gelaten*.
+  Dat onderscheid is niet cosmetisch: de prompt leest "ongewijzigd" als een gemotiveerd
+  meningsverschil, en toen een uitgevoerde correctie nog als "ongewijzigd" binnenkwam draaide de
+  Critic op dev zijn eigen oordeel om — ronde 1 "maak er Rechtsbetrekking van" (uitgevoerd), ronde 2
+  "dit is geen Rechtsbetrekking maar een Rechtsobject".
 - **De Critic heeft geheugen.** Vanaf ronde 2 krijgt hij per element zijn vorige oordeel terug plus of
   de annoteerder het aanpaste (`_vorige_ronde_blok`), en de al gemelde ontbrekende elementen. Zonder
   dat begon hij elke ronde met een schone lei: hij kon nooit zeggen "dit is opgelost" en bedacht elke

@@ -111,6 +111,29 @@ NIET DE EERSTE RONDE? Dan staat er onder de voorstellen wat je vórige ronde von
 ELEMENTEN GEMARKEERD MET "DOOR DE JURIST" heeft een mens zelf aangebracht. Beoordeel ze net zo eerlijk, maar weet dat je oordeel daar een SUGGESTIE is die de jurist naast zich neer mag leggen: gebruik `actie: "behoud"` tenzij je echt denkt dat er iets mis is, en formuleer de motivatie als een vraag of overweging, niet als een correctie."""
 
 
+def _stand_van(voorstel: dict, laatste_ronde: dict) -> str:
+    """Wat er met je vorige oordeel is gebeurd — in de bewoording die klopt.
+
+    Dit stond op één regel ("aangepast" of "ongewijzigd gelaten"), en die vlag zette alleen de
+    herziener. Een correctie die de patcher uitvoerde kwam dus binnen als "ongewijzigd gelaten" — en
+    omdat de prompt dat leest als een gemotiveerd meningsverschil, escaleerde de Critic. Op dev
+    draaide hij daardoor zijn eigen oordeel terug: ronde 1 "maak er Rechtsbetrekking van" (uitgevoerd),
+    ronde 2 "dit is geen Rechtsbetrekking maar een Rechtsobject".
+
+    Alles hier is afgeleid uit het spoor zelf; er is geen extra state voor nodig.
+    """
+    if laatste_ronde.get("toegepast"):
+        return "UITGEVOERD zoals je vroeg — dit is de nieuwe versie, beoordeel die"
+    voorstel_klasse = str(laatste_ronde.get("voorstel_klasse", "")).strip()
+    if voorstel_klasse and any(
+        str(a.get("klasse")) == voorstel_klasse for a in (voorstel.get("alternatieven") or [])
+    ):
+        return "als ALTERNATIEF aan de jurist voorgelegd — die kiest; herhaal het niet"
+    if voorstel.get("aangepast_na_kritiek"):
+        return "de annotator heeft dit AANGEPAST"
+    return "ongewijzigd gelaten"
+
+
 def _vorige_ronde_blok(voorstellen: list[dict], gemeld_ontbrekend: list[str]) -> str:
     """Wat de Critic vorige ronde zei, en wat de annotator ermee deed.
 
@@ -127,7 +150,7 @@ def _vorige_ronde_blok(voorstellen: list[dict], gemeld_ontbrekend: list[str]) ->
         kop = f"[{v.get('id', '')}] {laatste.get('aandacht', '')} · {laatste.get('actie', 'behoud')}"
         if laatste.get("voorstel_klasse"):
             kop += f" → {laatste['voorstel_klasse']}"
-        stand = "de annotator heeft dit AANGEPAST" if v.get("aangepast_na_kritiek") else "ongewijzigd gelaten"
+        stand = _stand_van(v, laatste)
         regels.append(f"{kop}\n       {stand}")
 
     if not regels and not gemeld_ontbrekend:
