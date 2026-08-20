@@ -458,6 +458,67 @@ async def test_fragmentvoorstel_op_een_agentelement_landt_wel(client):
     assert el["critic_suggestie"]["status"] == "open"
 
 
+async def test_klassevoorstel_op_een_agentelement_landt_ook(client):
+    """In een eerdere ronde maakt de patcher er een alternatief van; in de eindronde draait die niet."""
+    slug = await _maak_doc(client)
+    doc = (await _put(client, slug, [{"klasse": "Rechtsobject", "tekst": "de ontvanger"}])).json()
+    agent_id = doc["elementen"][0]["id"]
+
+    doc = (await client.put(f"{BASIS}/{slug}/elementen", json={
+        "elementen": [{"id": agent_id, "klasse": "Rechtsobject", "tekst": "de ontvanger"}],
+        "suggesties": [{"element_id": agent_id, "aandacht": "geel", "motivatie": "eerder een subject",
+                        "voorstel_klasse": "Rechtssubject"}],
+        "ronde": 1,
+    })).json()
+
+    el = doc["elementen"][0]
+    assert el["klasse"] == "Rechtsobject", "een suggestie wijzigt nooit iets"
+    assert el["critic_suggestie"]["voorstel_klasse"] == "Rechtssubject"
+
+
+async def test_een_overgenomen_suggestie_gaat_dicht(client):
+    """Anders blijft de kaart om een keuze vragen die al gemaakt is.
+
+    Op dev las dat als "er gebeurt niets": de jurist nam het voorgestelde fragment over, de
+    kanttekening bleef staan met dezelfde knop, en hij bleef klikken.
+    """
+    slug = await _maak_doc(client)
+    doc = (await _put(client, slug, [{"klasse": "Voorwaarde",
+                                      "tekst": "de ontvanger verleent uitstel"}])).json()
+    agent_id = doc["elementen"][0]["id"]
+    await client.put(f"{BASIS}/{slug}/elementen", json={
+        "elementen": [{"id": agent_id, "klasse": "Voorwaarde", "tekst": "de ontvanger verleent uitstel"}],
+        "suggesties": [{"element_id": agent_id, "aandacht": "geel", "motivatie": "korter kan",
+                        "voorstel_tekst": "verleent uitstel"}],
+        "ronde": 1,
+    })
+
+    doc = (await _beslis(client, slug, agent_id, type="edit",
+                         wijziging={"tekst": "verleent uitstel"})).json()
+    el = next(e for e in doc["elementen"] if e["id"] == agent_id)
+    assert el["tekst"] == "verleent uitstel"
+    assert el["critic_suggestie"]["status"] == "geaccepteerd"
+
+
+async def test_een_eigen_wijziging_laat_de_suggestie_openstaan(client):
+    """Alleen overnemen sluit hem; iets anders doen is geen antwoord op het voorstel."""
+    slug = await _maak_doc(client)
+    doc = (await _put(client, slug, [{"klasse": "Voorwaarde",
+                                      "tekst": "de ontvanger verleent uitstel"}])).json()
+    agent_id = doc["elementen"][0]["id"]
+    await client.put(f"{BASIS}/{slug}/elementen", json={
+        "elementen": [{"id": agent_id, "klasse": "Voorwaarde", "tekst": "de ontvanger verleent uitstel"}],
+        "suggesties": [{"element_id": agent_id, "aandacht": "geel", "motivatie": "korter kan",
+                        "voorstel_tekst": "verleent uitstel"}],
+        "ronde": 1,
+    })
+
+    doc = (await _beslis(client, slug, agent_id, type="edit",
+                         wijziging={"tekst": "de ontvanger"})).json()
+    el = next(e for e in doc["elementen"] if e["id"] == agent_id)
+    assert el["critic_suggestie"]["status"] == "open"
+
+
 # --- het fragment inkorten/uitbreiden: het anker moet meeschuiven -------------------------------
 #
 # Zonder dat wijzen de offsets naar het oude fragment en springt de markering na herladen naar een
@@ -650,12 +711,26 @@ async def test_reviewreden_volgt_uit_de_diff(client, wijziging, verwacht):
     assert audit[-1]["detail"]["review_reason"] == verwacht
 
 
-async def test_een_edit_zonder_echte_wijziging_is_anders(client):
-    """Niets veranderd → lege diff → geen van de vaste redenen past."""
+async def test_een_edit_zonder_echte_wijziging_schrijft_geen_beslissing(client):
+    """Niets veranderd is geen beslissing — ook al antwoordt de server netjes met 200.
+
+    Op dev leverde één suggestie die niet zichtbaar werd overgenomen zestien beslissingen op
+    hetzelfde element op, waarvan vijftien leeg: de jurist bleef klikken omdat hij niets zag
+    gebeuren. Een auditspoor vol niet-gebeurtenissen is moeilijker te lezen dan een kort spoor, en
+    dat spoor is hier het product.
+    """
     slug, el = await _een_element(client, lid="1")
-    doc = (await _beslis(client, slug, el, type="edit",
-                         wijziging={"klasse": "Voorwaarde"})).json()
-    assert doc["elementen"][0]["beslissingen"][-1]["review_reason"] == "anders"
+    voor = len((await _beslis(client, slug, el, type="comment",
+                              comment="x")).json()["elementen"][0]["beslissingen"])
+
+    r = await _beslis(client, slug, el, type="edit", wijziging={"klasse": "Voorwaarde"})
+    assert r.status_code == 200, "geen fout: er valt niets te melden, niet iets dat misging"
+    element = r.json()["elementen"][0]
+    assert len(element["beslissingen"]) == voor
+    assert element["lifecycle"] != "edited", "onaangeroerd blijft onaangeroerd"
+
+    acties = [a["actie"] for a in (await client.get(f"{BASIS}/{slug}/audit")).json()]
+    assert "beslissing-edit" not in acties
 
 
 async def test_reject_vraagt_de_reden_nog_steeds_aan_de_mens(client):

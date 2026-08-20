@@ -93,7 +93,8 @@ def _reden_uit_diff(diff: dict) -> ReviewReason:
     server aannam maar nooit kon controleren — in een systeem dat om herleidbaarheid draait hoort
     hij te worden vastgesteld waar het bewijs ligt.
 
-    Alleen `lid` (of niets) valt onder `anders`: geen van de vaste redenen dekt dat.
+    Alleen `lid`, of meer dan één veld tegelijk, valt onder `anders`: geen van de vaste redenen
+    dekt dat. Een lege diff komt hier niet: die wordt eerder als no-op afgevangen.
     Bij een REJECT blijft de reden een vraag aan de mens — die informatie staat niet in een diff.
     """
     if len(diff) != 1:
@@ -312,14 +313,14 @@ async def zet_elementen(
                 el.lifecycle = Lifecycle.critic_checked if el.aandacht is not None else el.lifecycle
 
         # Kanttekeningen bij eigen markeringen. Op een agent-element hoort een kaal oordeel gewoon
-        # in `aandacht` thuis — maar een concreet fragmentvoorstel uit de eindbeoordeling past daar
-        # niet in, en er komt geen correctiestap meer overheen. Dat mag hier dus wél landen, zodat de
-        # jurist het met één klik overneemt in plaats van het met de hand na te selecteren.
+        # in `aandacht` thuis — maar een concreet voorstel uit de eindbeoordeling past daar niet in,
+        # en er komt geen correctiestap meer overheen. Dat mag hier dus wél landen, zodat de jurist
+        # het met één klik overneemt in plaats van het met de hand na te doen.
         for s in req.suggesties:
             el = op_id.get(s.element_id)
             if el is None:
                 continue
-            if el.herkomst != "mens" and not s.voorstel_tekst:
+            if el.herkomst != "mens" and not (s.voorstel_tekst or s.voorstel_klasse):
                 continue
             el.critic_suggestie = CriticSuggestie(
                 aandacht=s.aandacht, motivatie=s.motivatie,
@@ -480,6 +481,7 @@ async def beslis(
 
     diff_holder: dict = {}
     anker_verplaatst: dict = {}
+    geen_wijziging: dict[str, bool] = {}
     reden_holder: dict[str, ReviewReason | None] = {"reden": req.review_reason}
 
     def toepassen(doc: AnnotatieDocument, el: AnnotatieElement):
@@ -518,6 +520,14 @@ async def beslis(
             elif req.wijziging.anker is not None:
                 el.anker = req.wijziging.anker
                 anker_verplaatst["ja"] = True
+            # Een edit die niets verandert is geen beslissing. Zonder deze poort schreef elke klik
+            # er één, ook als de waarde al zo stond: op dev leverde één suggestie die niet zichtbaar
+            # werd overgenomen zestien beslissingen op hetzelfde element, waarvan vijftien leeg.
+            # Een auditspoor dat vol staat met niet-gebeurtenissen is moeilijker te lezen dan een
+            # kort spoor, en dat spoor is hier het product.
+            if not diff:
+                geen_wijziging["ja"] = True
+                return None
             el.lifecycle = Lifecycle.edited
             # NIET `herkomst` — dat blijft wie het element aanmaakte. Een edit door de jurist maakt
             # er geen mens-element van; anders is later niet meer te zien dat de agent het voorstelde.
@@ -525,6 +535,15 @@ async def beslis(
             el.diff = diff
             # De reden volgt uit de diff die hier net is berekend, niet uit wat de client meestuurde.
             reden_holder["reden"] = _reden_uit_diff(diff)
+            # Neemt de jurist over wat de Critic voorstelde, dan is die kanttekening afgehandeld.
+            # Bleef hij op "open" staan, dan bleef de kaart om een keuze vragen die al gemaakt is —
+            # en dat las als "er gebeurt niets".
+            sug = el.critic_suggestie
+            if sug and sug.status == "open" and (
+                ("tekst" in diff and diff["tekst"]["na"] == sug.voorstel_tekst)
+                or ("klasse" in diff and diff["klasse"]["na"] == sug.voorstel_klasse)
+            ):
+                sug.status = "geaccepteerd"
         elif req.type == BeslissingType.approve:
             el.lifecycle = Lifecycle.human_approved
         elif req.type == BeslissingType.reject:
@@ -560,6 +579,10 @@ async def beslis(
             status_code=409,
             detail="Dit element staat niet op slot en hoeft dus niet heropend te worden.",
         )
+
+    # Niets veranderd, dus ook niets te melden. Zie de poort in `toepassen`.
+    if geen_wijziging.get("ja"):
+        return resultaat
 
     await store.schrijf_audit(
         slug, client_id, user_id, f"beslissing-{req.type.value}", element_id=element_id,

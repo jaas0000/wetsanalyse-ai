@@ -259,7 +259,8 @@ class ElementInvoer(BaseModel):
 
 class SuggestieInvoer(BaseModel):
     """Kanttekening van de Critic: bij een element dat de JURIST maakte, of — als er een concreet
-    `voorstel_tekst` in zit — bij een agent-element waarvan de eindbeoordeling nog iets voorstelt."""
+    voorstel in zit (klasse en/of fragment) — bij een agent-element waarvan de eindbeoordeling nog
+    iets voorstelt."""
 
     element_id: str
     aandacht: Aandacht | None = None
