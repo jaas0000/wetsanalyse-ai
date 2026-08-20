@@ -133,10 +133,18 @@ jobs:
         run: |
           set -euo pipefail
           DOCKER="$PORTAINER_URL/api/endpoints/$ENDPOINT_ID/docker"
-          # Via de auth-proxy, want die is het pad dat graph-qa gebruikt.
+          # GraphDB-security staat aan: zonder credentials geeft /rest/repositories een 401 en
+          # concludeerde deze stap ten onrechte dat `inning` weg was. Het service-account leeft in
+          # de stack-env van graphdb, dus dat halen we daar op.
+          sid=$(jq -r '.[] | select(.Name=="graphdb") | .Id' /tmp/stacks.json | head -n1)
+          env_json=$(curl -sS -H "X-API-Key: $PORTAINER_API_KEY" "$PORTAINER_URL/api/stacks/$sid" | jq '.Env // []')
+          SVC_U=$(jq -r '.[] | select(.name=="GRAPHDB_SVC_USER") | .value' <<<"$env_json")
+          SVC_P=$(jq -r '.[] | select(.name=="GRAPHDB_SVC_PASSWORD") | .value' <<<"$env_json")
+          [ -n "$SVC_U" ] || { echo "::error::GRAPHDB_SVC_USER niet gevonden in de graphdb-stack"; exit 1; }
           ex=$(curl -sS -X POST -H "X-API-Key: $PORTAINER_API_KEY" -H "Content-Type: application/json" \
                 "$DOCKER/containers/graphdb/exec" \
-                -d '{"AttachStdout":true,"Cmd":["sh","-c","wget -qO- http://localhost:7200/rest/repositories | head -c 200"]}' \
+                -d "$(jq -n --arg u "$SVC_U" --arg p "$SVC_P" \
+                     '{AttachStdout:true, Cmd:["sh","-c","wget -qO- --user=\($u) --password=\($p) http://localhost:7200/rest/repositories | head -c 200"]}')" \
                 | jq -r .Id)
           uit=$(curl -sS -X POST -H "X-API-Key: $PORTAINER_API_KEY" -H "Content-Type: application/json" \
                  "$DOCKER/exec/$ex/start" -d '{"Detach":false,"Tty":false}' | tr -d '\000-\010\013\014\016-\037')
