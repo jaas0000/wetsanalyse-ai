@@ -3,7 +3,7 @@
 # dashboard. Draait tegen een bestaande Grafana via de HTTP-API. Alerting staat apart in
 # alerting/apply.sh. Vereist env: GRAFANA_URL, GRAFANA_TOKEN.
 #
-#   GRAFANA_URL=https://grafana.ipalm.nl GRAFANA_TOKEN=glsa_… ./provision-grafana.sh
+#   GRAFANA_URL=https://grafana.example GRAFANA_TOKEN=glsa_… ./provision-grafana.sh
 set -euo pipefail
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 : "${GRAFANA_URL:?zet GRAFANA_URL}"; : "${GRAFANA_TOKEN:?zet GRAFANA_TOKEN}"

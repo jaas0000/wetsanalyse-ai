@@ -23,19 +23,19 @@ jobs:
       PORTAINER_URL: ${{ secrets.PORTAINER_URL }}
       PORTAINER_API_KEY: ${{ secrets.PORTAINER_API_KEY }}
       PORTAINER_STACK_ID: ${{ vars.PORTAINER_OBSERVABILITY_STACK_ID }}
-      # Docker-LXC op Proxmox (endpoint 3).
-      PORTAINER_ENDPOINT_ID: ${{ vars.DEV_PORTAINER_ENDPOINT_ID || '3' }}
+      # Het Portainer-endpoint van de docker-host; welk nummer dat is staat in de repo-variabele.
+      PORTAINER_ENDPOINT_ID: ${{ vars.DEV_PORTAINER_ENDPOINT_ID }}
       # De stack maakt zijn eigen netwerk aan; app-stacks joinen daar als extern netwerk op.
       OBS_NETWORK: ${{ vars.OBS_NETWORK || 'observability_default' }}
       GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
-      GRAFANA_ROOT_URL: ${{ vars.GRAFANA_ROOT_URL || 'https://grafana.ipalm.nl' }}
+      GRAFANA_ROOT_URL: ${{ vars.GRAFANA_ROOT_URL }}
       GRAFANA_URL: ${{ secrets.GRAFANA_URL }}
       GRAFANA_TOKEN: ${{ secrets.GRAFANA_TOKEN }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Backends-stack redeployen (Portainer)
-        if: ${{ env.PORTAINER_API_KEY != '' && env.PORTAINER_STACK_ID != '' }}
+        if: ${{ env.PORTAINER_API_KEY != '' && env.PORTAINER_STACK_ID != '' && env.PORTAINER_ENDPOINT_ID != '' && env.GRAFANA_ROOT_URL != '' }}
         run: |
           set -euo pipefail
           [ -n "${GRAFANA_ADMIN_PASSWORD:-}" ] || { echo "::error::secrets.GRAFANA_ADMIN_PASSWORD ontbreekt (Grafana hoort bij deze stack)"; exit 1; }

@@ -1,5 +1,5 @@
 # Self-contained observability-stack (configs inline i.p.v. bindmounts).
-# Gedeployd via Portainer-API als standalone-string-stack op de docker-LXC (endpoint 3).
+# Gedeployd via Portainer-API als standalone-string-stack op de docker-host.
 # Bevat Grafana zelf, met de drie datasources als file-provisioning.
 services:
   otel-collector:
@@ -101,12 +101,12 @@ services:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?zet GRAFANA_ADMIN_PASSWORD}
       # Achter nginx-proxy-manager; Grafana moet zijn eigen externe URL kennen voor links/redirects.
-      GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-https://grafana.ipalm.nl}
+      GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:?GRAFANA_ROOT_URL is verplicht — de publieke Grafana-origin}
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_ANALYTICS_REPORTING_ENABLED: "false"
       GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
     ports:
-      # NPM draait op een andere LXC en deelt geen docker-netwerk → hostpoort nodig.
+      # NPM draait op een andere host en deelt geen docker-netwerk → hostpoort nodig.
       - "${GRAFANA_HOST_PORT:-3001}:3000"
     configs:
       - source: grafana_datasources

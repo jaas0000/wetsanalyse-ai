@@ -171,7 +171,7 @@ cp .env.example .env   # vul GRAPHDB_* in (bij anonieme GraphDB volstaan de defa
 .venv/bin/python main.py BWBR0004770 BWBR0005537 BWBR0024096
 
 # Naar een externe GraphDB
-GRAPHDB_URL=https://graphdb.ipalm.nl .venv/bin/python main.py BWBR0004770
+GRAPHDB_URL=https://graphdb.example .venv/bin/python main.py BWBR0004770
 ```
 
 Na afloop verschijnt per wet een overzicht met tellingen per elementtype
@@ -200,7 +200,7 @@ graaf. Aanroepen gebeurt van binnen het docker-netwerk `graphdb_default`, bv. me
 
 ## Deployment
 
-De service draait als container op de **docker-LXC** van Proxmox, stack `bwb-import`
+De service draait als container op de **docker-host** van Proxmox, stack `bwb-import`
 (zie `deploy/bwb-import/`). Het image `ghcr.io/palmw01/bwb-import` wordt door
 `.github/workflows/bwb-import-docker-publish.yml` gebouwd en gepusht bij een push
 naar `master` die `tools/bwb-import/**` raakt.

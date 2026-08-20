@@ -3,7 +3,7 @@
 # worden geüpsert (X-Disable-Provenance:true houdt ze UI-bewerkbaar). Vereist env: GRAFANA_URL,
 # GRAFANA_TOKEN.
 #
-#   GRAFANA_URL=https://grafana.ipalm.nl GRAFANA_TOKEN=glsa_... ./apply.sh
+#   GRAFANA_URL=https://grafana.example GRAFANA_TOKEN=glsa_... ./apply.sh
 #
 # De map "wetsanalyse" (folderUID) en de datasource-uid's wa-prometheus/wa-loki/wa-tempo moeten
 # bestaan (zie README). De regels dragen géén eigen contactpunt en volgen het **default

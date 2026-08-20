@@ -3,8 +3,8 @@
 # certificaat). OPTIONEEL — draait alleen als NPM_URL gezet is. De NPM-API varieert licht per versie;
 # verifieer/pas aan bij de eerste run (niet lokaal te testen).
 #
-# NPM draait op een andere LXC dan de docker-host, dus <forward_host> is het IP van die docker-host
-# (bv. 192.168.10.23) met de gepubliceerde poort — niet een containernaam.
+# NPM draait op een andere host dan de docker-host, dus <forward_host> is het IP van die docker-host
+# (bv. 10.0.0.10) met de gepubliceerde poort — niet een containernaam.
 #
 # Gebruik:  npm-host.sh create <host> <forward_host> <forward_port>
 #           npm-host.sh delete <host>

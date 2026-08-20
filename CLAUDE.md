@@ -8,9 +8,8 @@ Een **agent-platform** voor **Wetsanalyse**: het gestructureerd, brongetrouw en 
 van Nederlandse wet- en regelgeving volgens de methode Wetsanalyse (Ausems, Bulles & Lokin) en het
 Juridisch Analyseschema (JAS). De kern is een gedeployde dienst — de **wetsanalyse-API**, de
 **webapp met de werkplek** en de eigen **QA/annotatie-agent (`tools/graph-qa/`, **Lex**)** op de
-**BWB-kennisgraaf** — die draait op de docker-LXC van Proxmox (Portainer,
-endpoint 3). De graaf wordt gevuld door de **BWB-importer** (`tools/bwb-import/`), die de wettekst
-rechtstreeks bij overheid.nl ophaalt.
+**BWB-kennisgraaf** — die als Portainer-stacks op een docker-host draait. De graaf wordt gevuld
+door de **BWB-importer** (`tools/bwb-import/`), die de wettekst rechtstreeks bij overheid.nl ophaalt.
 
 Brongetrouwheid is niet onderhandelbaar: werk alleen met letterlijk opgehaalde wettekst, citeer
 letterlijk, en houd elke markering/annotatie herleidbaar naar artikel + lid + `bronreferentie`
@@ -64,8 +63,8 @@ plaats van schijnzekerheid.
 5. **De kennisgraaf zelf** (`deploy/graphdb/`) — GraphDB 11.4 met de repository `inning`, plus een
    nginx'je dat het bearer-token controleert en het GraphDB-service-account injecteert. **GraphDB
    ≥ 11.2 heeft de MCP-server ingebouwd** op `/mcp`, dus er is geen aparte MCP-container.
-   GraphDB-security staat aan. Data lokaal op de LXC (`/var/lib/graphdb/home`); dagelijkse RDF-dump om
-   03:00 die meelift in de vzdump van 03:30.
+   GraphDB-security staat aan. Data lokaal op de docker-host (`/var/lib/graphdb/home`); dagelijkse RDF-dump die
+   meelift in de host-back-up.
 6. **`.claude/skills/wetsanalyse/`** — de inhoudelijke skill: de operationele uitwerking van de
    JAS-methode (de dertien klassen, het volg-beleid voor verwijzingen, de reviewcontracten) plus de
    scripts eromheen. Zie §*De wetsanalyse-skill*.
@@ -139,9 +138,9 @@ ze emitteren gestructureerde JSON-logs (één gedeelde vorm, bv. `frontend/lib/l
 en kunnen OpenTelemetry (traces/metrics/logs) naar een **configureerbaar OTLP-endpoint** sturen
 (`OTEL_EXPORTER_OTLP_ENDPOINT`; leeg = alleen logs, nul overhead). Eén trace-id verbindt de keten
 frontend → API → graph-qa. De **verzamelstack staat in `deploy/observability/`** en draait op de
-docker-LXC (Portainer-endpoint 3, stack `observability`): OTel-Collector (met
+docker-host (stack `observability`): OTel-Collector (met
 **spanmetrics/servicegraph-connectors** die topologie-edges uit de traces afleiden) + Tempo + Loki +
-Prometheus, plus **Alloy** dat stdout-logs naar Loki shipt en **Grafana zelf** (grafana.ipalm.nl; de
+Prometheus, plus **Alloy** dat stdout-logs naar Loki shipt en **Grafana zelf** (grafana.example; de
 datasources komen als file-provisioning uit de stack en zijn in de UI dus read-only). Twee
 kant-en-klare dashboards (`grafana-dashboard-wetsanalyse.json` = trends;
 `grafana-dashboard-topologie.json` = *"systeemtopologie"*: de live keten die oplicht op basis van de
@@ -152,8 +151,8 @@ uitleg (env-vars, logschema, AVG-redactie, dashboard/alerting) staat in **`docs/
 
 ## Uitrollen
 
-**Dev** — één vaste, gedeelde omgeving op **https://dev.wetsanalyse.ipalm.nl** met een eigen database,
-naast de graaf en de observability-stack op dezelfde docker-LXC. Handmatig: Actions → *dev-deploy* →
+**Dev** — één vaste, gedeelde omgeving op **https://dev.wetsanalyse.example** met een eigen database,
+naast de graaf en de observability-stack op dezelfde docker-host. Handmatig: Actions → *dev-deploy* →
 *Run workflow* → kies de branch; `destroy: true` breekt stack, database en proxyhost weer af.
 Workflow `.github/workflows/dev-deploy.yml` + stack `deploy/dev/docker-compose.yml`; setup en de
 volgorde-afhankelijkheden (graaf en observability eerst, want hun netwerken zijn extern) staan in
@@ -173,8 +172,8 @@ volgorde uit (GraphDB eerst: die maakt het netwerk `graphdb_default` waar de res
 | 5 | `frontend/` | — | `wetsanalyse_internal` + observability | 8080 |
 
 De eerste drie maken de netwerken; deployt een latere stack eerder, dan faalt hij op een ontbrekend
-extern netwerk. **nginx-proxy-manager draait op een andere LXC** en deelt dus geen docker-netwerk:
-wie publiek moet zijn publiceert een hostpoort en NPM forwardt naar `<docker-lxc-ip>:<poort>`.
+extern netwerk. **nginx-proxy-manager draait op een andere host** en deelt dus geen docker-netwerk:
+wie publiek moet zijn publiceert een hostpoort en NPM forwardt naar `<docker-host-ip>:<poort>`.
 graph-qa is bewust intern-only.
 
 **Images** — `{api,frontend,graph-qa,bwb-import}-docker-publish.yml` bouwen bij een push naar master

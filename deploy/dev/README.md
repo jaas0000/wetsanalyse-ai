@@ -1,4 +1,4 @@
-# Dev-omgeving — https://dev.wetsanalyse.ipalm.nl
+# Dev-omgeving
 
 Eén vaste, gedeelde omgeving (postgres + api + graph-qa + frontend) naast productie, met een **eigen
 database**. Bedoeld om een branch echt te kunnen gebruiken voordat hij naar master gaat.
@@ -13,22 +13,23 @@ database**. Bedoeld om een branch echt te kunnen gebruiken voordat hij naar mast
 
 ## Waar het draait
 
-| onderdeel | plek |
+Deze repo is publiek en noemt daarom geen hostnamen, IP's of endpoint-nummers: die staan in de
+repo-variabelen (zie de tabel hieronder). Wat de omgeving *nodig* heeft, staat hier wel.
+
+| onderdeel | rol |
 |---|---|
-| Portainer | `portainer.ipalm.nl` = `192.168.10.23:9443`, **endpoint-id 3** (de enige; `1` bestaat niet) |
-| Docker-host | Proxmox-LXC **103** (`docker`) — draait verder alleen `ntfy`, `portainer`, `watchtower` |
-| nginx-proxy-manager | Proxmox-LXC **101** — een **andere** LXC |
+| Portainer | beheert de docker-host; het endpoint-nummer komt uit `DEV_PORTAINER_ENDPOINT_ID` |
+| Docker-host | draait de dev-stack; hoeft verder niets te draaien |
+| nginx-proxy-manager | terminatie van https, draait **buiten** de docker-host |
 | Kennisgraaf (GraphDB-MCP) + LLM | externe, gedeelde diensten |
 
-Omdat NPM op een andere LXC draait, delen ze geen docker-netwerk: proxyen op containernaam kan niet.
-Daarom publiceert alleen de frontend een hostpoort (**8090**, vrij naast ntfy's 8080 en Portainers
-8000/9443) en stuurt NPM `dev.wetsanalyse.ipalm.nl` door naar `192.168.10.23:8090`. De overige
-containers blijven op het interne netwerk.
+Omdat NPM elders draait, deelt hij geen docker-netwerk met de stack: proxyen op containernaam kan
+niet. Daarom publiceert alleen de frontend een hostpoort (**8090**) en stuurt NPM de dev-hostnaam
+door naar `<docker-host>:8090`. De overige containers blijven op het interne netwerk.
 
-> ⚠️ **Ruimte op LXC 103.** De LXC heeft **2 GB RAM** en een rootfs van 4 GB waarvan **~2,2 GB vrij**.
-> De vier images samen (postgres 17, api, frontend, graph-qa) halen dat niet met marge. Vergroot de
-> LXC vóór de eerste deploy, bijvoorbeeld: `pct resize 103 rootfs +16G` op `pve01`, en overweeg
-> `pct set 103 -memory 4096`. Zonder die ruimte faalt de deploy op een image-pull.
+> ⚠️ **Ruimte op de docker-host.** De vier images samen (postgres 17, api, frontend, graph-qa) vragen
+> ruim meer dan 2 GB schijf en zijn krap in 2 GB RAM. Controleer vóór de eerste deploy dat er marge
+> is; zonder die ruimte faalt de deploy op een image-pull. (Dat is hier één keer echt misgegaan.)
 
 ## Eenmalige setup
 
@@ -39,25 +40,27 @@ Bestaand (hergebruikt): `secrets.PORTAINER_URL`, `secrets.PORTAINER_API_KEY`, `s
 | naam | type | status | doel |
 |---|---|---|---|
 | `PREVIEW_SECRET_SEED` | secret | ✅ gezet | seed voor de deterministische dev-secrets (`openssl rand -hex 32`) |
-| `PORTAINER_URL` | secret | ✅ gezet | `https://portainer.ipalm.nl` (endpoint 3). Een stack-id uit een andere Portainer-instantie geeft hier **HTTP 403** — de stack bestaat dan niet. |
-| `DEV_PORTAINER_ENDPOINT_ID` | var | niet nodig | default `3` — geverifieerd |
-| `DEV_HOSTNAME` | var | niet nodig | default `dev.wetsanalyse.ipalm.nl` |
-| `DEV_HOST_PORT` / `DEV_FORWARD_HOST` | var | niet nodig | defaults `8090` / `192.168.10.23` |
-| `GRAPHDB_MCP_URL` / `GRAPH_QA_SIMILARITY_INDEX` | var | niet nodig | defaults gelijk aan de graph-qa-productiestack |
+| `PORTAINER_URL` | secret | ✅ gezet | basis-URL van je Portainer. Een stack-id uit een *andere* Portainer-instantie geeft **HTTP 403** — de stack bestaat daar dan niet. |
+| `DEV_PORTAINER_ENDPOINT_ID` | var | **verplicht** | het Portainer-endpoint van de docker-host |
+| `DEV_HOSTNAME` | var | **verplicht** | publieke hostnaam van dev |
+| `DEV_FORWARD_HOST` | var | **verplicht** | IP van de docker-host waar NPM naartoe forwardt |
+| `DEV_HOST_PORT` | var | niet nodig | default `8090` (geen identifier, dus een default mag) |
+| `GRAPHDB_MCP_URL` | var | **verplicht** | de graaf-MCP; graph-qa weigert te starten zonder |
+| `GRAPH_QA_SIMILARITY_INDEX` | var | niet nodig | leeg = semantic_search uit |
 | `NPM_URL` + `secrets.NPM_IDENTITY`/`secrets.NPM_SECRET` + `NPM_CERT_ID` | var/secret | ⬜ open | **optioneel** — NPM-host-automatisering; zonder deze vier maak je de proxyhost handmatig |
 
 De preflight-stap faalt met een duidelijke melding als een verplichte waarde ontbreekt.
 
 ### DNS + TLS
-`dev.wetsanalyse.ipalm.nl` → hetzelfde publieke IP als de andere hosts, en in nginx-proxy-manager een
-certificaat voor die naam (noteer het `certificate_id` → `vars.NPM_CERT_ID`). https is nodig omdat
+Laat `DEV_HOSTNAME` naar hetzelfde publieke IP wijzen als je andere hosts, en maak in
+nginx-proxy-manager een certificaat voor die naam (noteer het `certificate_id` → `vars.NPM_CERT_ID`). https is nodig omdat
 Auth.js `secure`-cookies zet; over http breekt de login.
 
 ### NPM-host: automatisch of handmatig
 - **Automatisch** (aanbevolen): zet `NPM_URL`/`NPM_IDENTITY`/`NPM_SECRET`/`NPM_CERT_ID`. `npm-host.sh`
-  maakt/verwijdert de proxyhost `dev.wetsanalyse.ipalm.nl` → `192.168.10.23:8090` (met
+  maakt/verwijdert de proxyhost `$DEV_HOSTNAME` → `$DEV_FORWARD_HOST:$DEV_HOST_PORT` (met
   `proxy_buffering off;` voor de SSE-stream). *De NPM-API varieert per versie — verifieer de eerste run.*
-- **Handmatig** (fallback): laat de NPM-vars leeg en maak zelf een proxyhost naar `192.168.10.23:8090`.
+- **Handmatig** (fallback): laat de NPM-vars leeg en maak zelf een proxyhost naar dezelfde host/poort.
 
 ## Eerste run / validatie
 
@@ -65,9 +68,9 @@ De schrijvende Portainer-/NPM-calls zijn niet lokaal te testen; de eerste run is
 Verwacht:
 
 1. 3 images met tag `dev` in GHCR.
-2. Stack `wetsanalyse-dev` draait op endpoint 3 (4 containers) — de workflow wacht daarop en faalt
+2. Stack `wetsanalyse-dev` draait op het ingestelde endpoint (4 containers) — de workflow wacht daarop en faalt
    als er één ontbreekt.
-3. `https://dev.wetsanalyse.ipalm.nl/setup` → maak de eerste beheerder (verse, lege DB).
+3. `https://<DEV_HOSTNAME>/setup` → maak de eerste beheerder (verse, lege DB).
 4. Een vraag + een annotatie in `/workbench` werkt.
 5. `destroy: true` → stack, volume en NPM-host weg.
 

@@ -276,9 +276,9 @@ recreate een api-image-redeploy de DB nooit. De API verbindt cross-stack op `pos
 `deploy/postgres/README.md`.
 
 Docker-image + Portainer-stack (`docker-compose.yml`). De stack publiceert een hostpoort
-(`HOST_PORT`, default 8081) omdat NPM op een andere LXC draait en geen docker-netwerk deelt; die
+(`HOST_PORT`, default 8081) omdat NPM op een andere host draait en geen docker-netwerk deelt; die
 poort is alleen nodig als de API van buiten bereikbaar moet zijn (bv. voor de admin-MCP op
-`wetsanalyse-api.ipalm.nl`). De frontend praat server→server over het interne netwerk. De dienst is
+`api.wetsanalyse.example`). De frontend praat server→server over het interne netwerk. De dienst is
 **horizontaal veilig** te schalen (stateless request-afhandeling; de opslag is de gedeelde DB). De
 containers draaien **non-root** en **PostgreSQL draait met authenticatie**. Alle secrets staan als
 bestanden op de host (`*_FILE`-patroon). Build vanaf de **projectroot**:

@@ -1,4 +1,4 @@
-# Deploy van de graaf-stacks op de docker-LXC: GraphDB (met de ingebouwde MCP + auth-proxy) en de
+# Deploy van de graaf-stacks op de docker-host: GraphDB (met de ingebouwde MCP + auth-proxy) en de
 # BWB-importservice. Handmatig of bij wijzigingen in hun compose/README.
 #
 # Twee losse stacks in één workflow omdat ze samen horen en dezelfde volgorde-afhankelijkheid delen:

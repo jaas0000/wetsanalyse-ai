@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Gedeelde Portainer-redeploy met convergentie-verificatie voor de app-stacks (api/frontend/mcp).
 #
-# Waarom: een Portainer stack-update doet een in-place `docker compose up`. Op de (trage) Synology-
+# Waarom: een Portainer stack-update doet een in-place `docker compose up`. Op een trage 
 # daemon kan de recreate transient struikelen op "removal of container … already in progress" (HTTP
 # 500), waarna de stack half-applied blijft: de NIEUWE container blijft in `Created` staan terwijl de
 # OUDE blijft draaien. Een kale `/health`-check kan dan false-passen (de oude container antwoordt) →

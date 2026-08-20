@@ -1,14 +1,17 @@
-# DEV-omgeving — https://dev.wetsanalyse.ipalm.nl
+# DEV-omgeving
 #
-# Eén vaste, gedeelde stack (postgres + api + graph-qa + frontend) naast productie, op de docker-LXC
-# van Proxmox (Portainer-endpoint 3). Handmatig gestart: kies in de Actions-UI de branch die je op dev
+# Eén vaste, gedeelde stack (postgres + api + graph-qa + frontend) naast productie, op de docker-host
+# die Portainer beheert. Welke host, welk domein en welk endpoint dat zijn staat niet hier maar in de
+# repo-variabelen (DEV_HOSTNAME, DEV_FORWARD_HOST, DEV_PORTAINER_ENDPOINT_ID); deze repo is publiek en
+# hoort niet te vertellen waar hij landt. Handmatig gestart: kies in de Actions-UI de branch die je op dev
 # wilt zien. Zo blijft dev een bewuste keuze en overschrijft een merge naar master niet stilletjes
 # waar je aan werkt.
 #
 # `destroy: true` breekt de stack af en wist de dev-database.
 #
 # LET OP: de schrijvende Portainer-/NPM-calls zijn niet lokaal te testen; de eerste run is de
-# live-validatie. Zie deploy/dev/README.md voor de eenmalige setup (DNS, certificaat, LXC-ruimte).
+# live-validatie. Zie deploy/dev/README.md voor de eenmalige setup (DNS, certificaat, schijfruimte)
+# en voor de volledige lijst met variabelen die je vooraf moet zetten.
 
 name: dev-deploy
 
@@ -28,10 +31,10 @@ env:
   OWNER: ${{ github.repository_owner }}
   STACK: wetsanalyse-dev
   IMAGE_TAG: dev
-  ENDPOINT_ID: ${{ vars.DEV_PORTAINER_ENDPOINT_ID || '3' }}
-  HOSTNAME_: ${{ vars.DEV_HOSTNAME || 'dev.wetsanalyse.ipalm.nl' }}
-  HOST_PORT: ${{ vars.DEV_HOST_PORT || '8090' }}
-  FORWARD_HOST: ${{ vars.DEV_FORWARD_HOST || '192.168.10.23' }}
+  ENDPOINT_ID: ${{ vars.DEV_PORTAINER_ENDPOINT_ID }}
+  HOSTNAME_: ${{ vars.DEV_HOSTNAME }}
+  HOST_PORT: ${{ vars.DEV_HOST_PORT || '8090' }}   # geen identifier, dus een default mag
+  FORWARD_HOST: ${{ vars.DEV_FORWARD_HOST }}
 
 jobs:
   # --- Bouw de 3 dev-images (tag `dev`) ------------------------------------------------------------
@@ -89,7 +92,7 @@ jobs:
       contents: read
     environment:
       name: dev
-      url: https://${{ vars.DEV_HOSTNAME || 'dev.wetsanalyse.ipalm.nl' }}
+      url: https://${{ vars.DEV_HOSTNAME }}
     env:
       PORTAINER_URL: ${{ secrets.PORTAINER_URL }}
       PORTAINER_API_KEY: ${{ secrets.PORTAINER_API_KEY }}
@@ -110,7 +113,8 @@ jobs:
       - name: Preflight (secrets aanwezig én Portainer bereikbaar?)
         run: |
           set -euo pipefail
-          for v in PORTAINER_URL PORTAINER_API_KEY SEED LLM_API_BASE LLM_API_KEY GRAPHDB_TOKEN; do
+          for v in PORTAINER_URL PORTAINER_API_KEY SEED LLM_API_BASE LLM_API_KEY GRAPHDB_TOKEN \
+                   ENDPOINT_ID HOSTNAME_ FORWARD_HOST; do
             [ -n "${!v:-}" ] || { echo "::error::ontbrekende secret/var: $v (zie deploy/dev/README.md)"; exit 1; }
           done
           # Auth vóór de deploy controleren: een verlopen API-key uitte zich anders verderop als een
@@ -193,7 +197,7 @@ jobs:
           done
           echo "::error::niet alle dev-containers draaien na de deploy:$missing"; exit 1
 
-      # Elke deploy trekt nieuwe image-lagen naar de docker-LXC en laat de oude staan. Dat liep op
+      # Elke deploy trekt nieuwe image-lagen naar de docker-host en laat de oude staan. Dat liep op
       # 15 aug 2026 vol (28 GB, 92 images waarvan 40 GB ongebruikt) en legde álles op die host plat:
       # Docker draaide nog maar kon niets meer wegschrijven. Opruimen hoort dus bij het uitrollen.
       #
@@ -205,7 +209,7 @@ jobs:
       # Waarom 24 uur en geen week: met `168h` ruimde hij op 15 aug níéts op, terwijl er 40 GB aan
       # ongebruikte images lag — ze waren allemaal jonger dan een week. Bij dit tempo (watchtower plus
       # de deploys) is een week bewaren hetzelfde als niet opruimen.
-      - name: Oude images opruimen op de docker-LXC
+      - name: Oude images opruimen op de docker-host
         continue-on-error: true
         run: |
           set -uo pipefail
@@ -219,7 +223,7 @@ jobs:
           echo "Opgeruimd: $aantal image-verwijzingen, $(( vrij / 1024 / 1024 )) MB vrijgemaakt."
           echo "- **Opgeruimd:** $aantal image-verwijzingen, $(( vrij / 1024 / 1024 )) MB" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: NPM-proxyhost (optioneel — dev-host → docker-LXC:${HOST_PORT}, https)
+      - name: NPM-proxyhost (optioneel — dev-host → docker-host:${HOST_PORT}, https)
         if: ${{ env.NPM_URL != '' && env.NPM_IDENTITY != '' }}
         run: bash deploy/dev/npm-host.sh create "$HOSTNAME_" "$FORWARD_HOST" "$HOST_PORT"
 
@@ -249,6 +253,13 @@ jobs:
       NPM_SECRET: ${{ secrets.NPM_SECRET }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Preflight (variabelen aanwezig?)
+        run: |
+          set -euo pipefail
+          for v in PORTAINER_URL PORTAINER_API_KEY ENDPOINT_ID; do
+            [ -n "${!v:-}" ] || { echo "::error::ontbrekende secret/var: $v (zie deploy/dev/README.md)"; exit 1; }
+          done
 
       - name: Portainer-stack verwijderen (idempotent)
         run: |

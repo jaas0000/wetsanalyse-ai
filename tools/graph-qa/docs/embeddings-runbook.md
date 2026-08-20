@@ -18,7 +18,7 @@ op exacte termen.
 - De GraphDB-`similarity_search`-MCP-tool vraagt om een `similarityIndex` → de **Similarity-plugin
   is aanwezig**, er is alleen nog geen index.
 
-> ⚠️ **Doe dit eerst:** de GraphDB-REST op `https://graphdb.ipalm.nl` staat **open (geen auth) en
+> ⚠️ **Doe dit eerst:** de GraphDB-REST op `https://graphdb.example` staat **open (geen auth) en
 > writable**. Zet 'm achter authenticatie (GraphDB Security aanzetten + NPM-basic-auth of een
 > service-account), anders is elke read-only-garantie in de MCP-client omzeilbaar. Zonder dit is
 > een vector-index net zo goed publiek muteerbaar.

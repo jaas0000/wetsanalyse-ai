@@ -1,7 +1,7 @@
 # Wetsanalyse op Azure — standby-omgeving
 
 Een **zelfstandige** kopie van het platform op Azure Container Apps: eigen kennisgraaf, eigen
-database, geen verbinding met de docker-LXC. Bedoeld om **klaar te staan**, niet om te draaien —
+database, geen verbinding met de docker-host. Bedoeld om **klaar te staan**, niet om te draaien —
 zolang je niets deployt, kost deze map niets.
 
 | Component | Type | Bereikbaar |
@@ -19,7 +19,7 @@ Alleen de frontend heeft een publiek adres. De rest praat binnen de Container Ap
 
 **Zonder licentie is deze omgeving niet bruikbaar.** GraphDB 11 laat zonder licentiebestand alleen
 *lezen* toe; het eerste schrijf-verzoek van de import-job krijgt een `500 No license was set`. Op de
-docker-LXC zit die licentie in de persistente datadirectory (`/opt/graphdb/home/work/graphdb.license`)
+docker-host zit die licentie in de persistente datadirectory (`/opt/graphdb/home/work/graphdb.license`)
 en valt hij niet op — een verse instantie heeft hem niet.
 
 Geef het bestand mee met `--license-file`; het script codeert het naar base64 en zet het als secret
@@ -99,15 +99,15 @@ bij overheid.nl. Gevolgen:
 - De similarity-index `bwb_similarity` (voor `semantic_search`) overleeft een herstart evenmin en
   moet opnieuw gebouwd worden; tot dat moment valt de tool terug op `search_wetgeving`.
 
-## Beveiliging — hoe dit afwijkt van de LXC
+## Beveiliging — hoe dit afwijkt van de zelfgehoste opzet
 
-Op de LXC draait GraphDB met eigen security en zit er een auth-proxy voor die het bearer-token van
+Zelfgehost draait GraphDB met eigen security en zit er een auth-proxy voor die het bearer-token van
 graph-qa controleert en vervangt door een service-account. **Hier niet**: de graaf is alleen binnen
 de Container Apps Environment bereikbaar (`external: false`), en dat is de grens. `GRAPHDB_TOKEN`
 wordt wel gezet — de code eist het fail-closed — maar het is hier geen slot.
 
 Voor een standby-/demo-omgeving is dat verdedigbaar. Wordt dit ooit een productieomgeving, dan hoort
-hetzelfde service-account + proxy-patroon als op de LXC erbij.
+hetzelfde service-account + proxy-patroon als in de zelfgehoste opzet erbij.
 
 Verder ongewijzigd: alle applicatie-secrets zijn **bestanden** (`*_FILE`-patroon via secret-volumes),
 nooit platte env-vars.

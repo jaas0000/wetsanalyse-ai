@@ -4,11 +4,11 @@
 # praat intern met de API op `wetsanalyse-api:3000` en met graph-qa op `graph-qa:8080` — de browser
 # ziet die twee nooit rechtstreeks.
 #
-# Bereikbaarheid: nginx-proxy-manager draait op een ANDERE LXC en deelt dus geen docker-netwerk met
+# Bereikbaarheid: nginx-proxy-manager draait op een ANDERE host en deelt dus geen docker-netwerk met
 # deze host. Proxyen op containernaam kan daarom niet — de frontend publiceert een hostpoort
 # (${HOST_PORT}, default 8080) en NPM forwardt daarheen.
 #
-# In NPM → Proxy Hosts → Add: Domain `wetsanalyse.ipalm.nl`, Scheme `http`,
+# In NPM → Proxy Hosts → Add: Domain `wetsanalyse.example` (jouw domein), Scheme `http`,
 # Forward Hostname `<docker-lxc-ip>`, Forward Port `${HOST_PORT}`, SSL (Let's Encrypt) aan.
 # Belangrijk voor SSE: zet in NPM (Advanced) proxy buffering uit, bv.
 #   proxy_buffering off;
@@ -20,7 +20,7 @@
 #   HOST_PORT      — hostpoort waar NPM heen forwardt (default 8080).
 #   OBS_NETWORK    — netwerk van de observability-stack (default observability_default).
 #   SECRETS_DIR    — host-pad naar de secrets-map (gedeeld met de API-stack).
-#   AUTH_URL       — PUBLIEKE origin van de webapp (bv. https://wetsanalyse.ipalm.nl). Verplicht
+#   AUTH_URL       — PUBLIEKE origin van de webapp (bv. https://wetsanalyse.example). Verplicht
 #                    achter een reverse proxy: Auth.js pint hierop z'n login/logout-redirects.
 #                    Zonder dit valt het terug op het interne 0.0.0.0:3000 en springt de browser
 #                    daarheen bij in-/uitloggen.
@@ -47,7 +47,7 @@ services:
     container_name: wetsanalyse-frontend
     restart: unless-stopped
     ports:
-      # Enige naar buiten geopende poort: NPM (andere LXC) proxyt hierheen over het LAN.
+      # Enige naar buiten geopende poort: NPM (andere host) proxyt hierheen over het LAN.
       - "${HOST_PORT:-8080}:3000"
     environment:
       API_BASE_URL: "http://wetsanalyse-api:3000"
@@ -58,7 +58,7 @@ services:
       GRAPH_QA_URL: "${GRAPH_QA_URL:-http://graph-qa:8080}"
       GRAPH_QA_TOKEN_FILE: /run/secrets/graph_qa_token
       # Publieke origin voor Auth.js-redirects (achter NPM). Override via de stack-env AUTH_URL.
-      AUTH_URL: "${AUTH_URL:-https://wetsanalyse.ipalm.nl}"
+      AUTH_URL: "${AUTH_URL:?AUTH_URL is verplicht — de publieke origin van de webapp}"
       NODE_ENV: production
       # Observability (BFF). OTEL_EXPORTER_OTLP_ENDPOINT leeg = OpenTelemetry uit (alleen JSON-logs
       # naar stdout); zet 'm op de OTel-Collector om traces/metrics te exporteren.
