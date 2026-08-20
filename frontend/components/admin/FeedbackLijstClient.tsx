@@ -1,5 +1,6 @@
 "use client";
 
+import { BevestigKnop } from "@/components/ui/BevestigKnop";
 import { useCallback, useEffect, useState } from "react";
 import { Card, Section } from "@/components/ui/Card";
 import { Melding } from "@/components/ui/Melding";
@@ -40,6 +41,9 @@ export function FeedbackLijstClient() {
   }, []);
 
   useEffect(() => {
+    // De setState zit ín de async callback, dus pas ná het await — geen synchrone cascading
+    // render. De regel kan daar niet doorheen kijken.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void laad(1);
   }, [laad]);
 
@@ -48,8 +52,8 @@ export function FeedbackLijstClient() {
     void laad(p);
   }
 
+  // Bevestigen doet de knop zelf (twee klikken), zoals overal in deze app.
   async function onVerwijder(id: number) {
-    if (!confirm("Dit feedbackbericht verwijderen?")) return;
     setBezig(id);
     try {
       await verwijderFeedback(id);
@@ -87,15 +91,16 @@ export function FeedbackLijstClient() {
                     timeStyle: "short",
                   })}
                 </span>
-                <button
-                  type="button"
-                  onClick={() => void onVerwijder(item.id)}
+                <BevestigKnop
+                  onBevestig={() => void onVerwijder(item.id)}
                   disabled={bezig === item.id}
-                  aria-label={`Feedbackbericht #${item.id} verwijderen`}
-                  className="text-xs text-fout opacity-60 transition-opacity hover:opacity-100 disabled:cursor-not-allowed"
+                  ariaLabel={`Feedbackbericht #${item.id} verwijderen`}
+                  bevestigTekst="Verwijderen?"
+                  className="focus-ring -mr-2 inline-flex min-h-[32px] items-center rounded-kaart px-2 text-xs text-fout opacity-60 transition-opacity hover:opacity-100 disabled:cursor-not-allowed coarse:min-h-[44px]"
+                  bevestigClassName="font-medium opacity-100"
                 >
                   {bezig === item.id ? "…" : "Verwijderen"}
-                </button>
+                </BevestigKnop>
               </div>
               {item.pagina && (
                 <p className="mt-2 text-xs text-muted">

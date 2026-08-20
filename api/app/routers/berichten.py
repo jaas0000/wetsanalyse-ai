@@ -17,7 +17,7 @@ from pydantic import BaseModel
 
 from .. import berichten as svc
 from ..auth import require_client
-from .auth import huidige_userid
+from .auth import actieve_userid
 
 router = APIRouter(
     prefix="/berichten",
@@ -71,20 +71,20 @@ def _to_out(row: dict) -> BerichtOut:
 # --- endpoints (static routes vóór parameterized) ------------------------------
 
 @router.get("/ongelezen-aantal", response_model=OngelezenAantalOut)
-async def get_ongelezen_aantal(userid: str = Depends(huidige_userid)):
+async def get_ongelezen_aantal(userid: str = Depends(actieve_userid)):
     aantal = await svc.ongelezen_aantal(userid)
     return OngelezenAantalOut(aantal=aantal)
 
 
 @router.post("/lees-alles", status_code=status.HTTP_204_NO_CONTENT)
-async def post_lees_alles(userid: str = Depends(huidige_userid)):
+async def post_lees_alles(userid: str = Depends(actieve_userid)):
     await svc.markeer_alles_gelezen(userid)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("", response_model=BerichtenPaginaOut)
 async def get_berichten(
-    userid: str = Depends(huidige_userid),
+    userid: str = Depends(actieve_userid),
     pagina: int = Query(default=1, ge=1),
     per_pagina: int = Query(default=20, ge=1, le=100),
     ongelezen: bool = Query(default=False),

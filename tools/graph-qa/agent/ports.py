@@ -32,6 +32,13 @@ class GraphPort(Protocol):
     def close(self) -> None: ...
 
 
+# Het systeemblok van één call. Eén string is het gewone geval; een reeks strings zegt: alles
+# behalve het laatste deel is STABIEL over calls heen, en daar mag de provider een prompt-cache op
+# zetten. De volgorde is dus betekenisdragend — caching is een prefix-match, dus één byte verschil
+# vóór het cache-punt maakt de hele cache waardeloos.
+Systeem = str | list[str]
+
+
 @runtime_checkable
 class LLMPort(Protocol):
     """Eén blocking chat-completion met tool-use.
@@ -46,7 +53,7 @@ class LLMPort(Protocol):
         *,
         model: str,
         max_tokens: int,
-        system: str,
+        system: Systeem,
         tools: list[dict[str, Any]],
         messages: list[dict[str, Any]],
     ) -> Any: ...
@@ -56,7 +63,7 @@ class LLMPort(Protocol):
         *,
         model: str,
         max_tokens: int,
-        system: str,
+        system: Systeem,
         tools: list[dict[str, Any]],
         messages: list[dict[str, Any]],
     ) -> "LLMStream":

@@ -55,7 +55,7 @@ function BerichtItem({ bericht }: { bericht: BerichtOut }) {
   );
 }
 
-export function BerichtenPanel() {
+export function BerichtenPanel({ positie, containerClassName }: { positie?: string; containerClassName?: string } = {}) {
   const [ongelezen, setOngelezen] = useState(0);
   const [berichten, setBerichten] = useState<BerichtOut[] | null>(null);
   const [laden, setLaden] = useState(false);
@@ -71,6 +71,9 @@ export function BerichtenPanel() {
   }, []);
 
   useEffect(() => {
+    // De setState zit ín de async callback, dus pas ná het await — geen synchrone cascading
+    // render. De regel kan daar niet doorheen kijken.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void laadAantal();
     const id = setInterval(() => void laadAantal(), 60_000);
     return () => clearInterval(id);
@@ -98,7 +101,12 @@ export function BerichtenPanel() {
 
   return (
     <Popover
-      className="w-80 max-h-[480px] overflow-y-auto rounded-button border border-line bg-paper shadow-md"
+      positie={positie}
+      containerClassName={containerClassName}
+      // Zelfde vormgeving als het gebruikersmenu onderin de sidebar (rounded-kaart, shadow-kaart).
+      // De breedte komt uit `positie` (inset-x-3), niet uit een vaste maat: zo volgt het paneel de
+      // kolom waarin het hangt en kan het per definitie niet buiten beeld vallen.
+      className="max-h-[min(480px,70vh)] overflow-y-auto rounded-kaart border border-line bg-paper shadow-kaart"
       ariaLabel="Berichten"
       onClose={() => triggerRef.current?.focus()}
       trigger={(open, toggle) => (
@@ -111,7 +119,7 @@ export function BerichtenPanel() {
             toggle();
             if (!open) void onOpen();
           }}
-          className="relative ml-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-button text-muted transition-colors hover:text-lint focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-lint"
+          className="relative ml-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-button coarse:h-11 coarse:w-11 text-muted transition-colors hover:text-lint focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-lint"
         >
           {/* Bell-icoon */}
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -152,7 +160,7 @@ export function BerichtenPanel() {
       )}
       {!laden && (
         <div className="border-t border-line px-4 py-2">
-          <Link href="/berichten" className="text-xs text-lint hover:underline">
+          <Link href="/instellingen/berichten" className="text-xs text-lint hover:underline">
             Alle berichten bekijken →
           </Link>
         </div>

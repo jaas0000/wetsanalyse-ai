@@ -1,0 +1,128 @@
+# Deploy van de graaf-stacks op de docker-LXC: GraphDB (met de ingebouwde MCP + auth-proxy) en de
+# BWB-importservice. Handmatig of bij wijzigingen in hun compose/README.
+#
+# Twee losse stacks in één workflow omdat ze samen horen en dezelfde volgorde-afhankelijkheid delen:
+# de graphdb-stack maakt het netwerk `graphdb_default` aan, waar bwb-import én de dev-stack op joinen.
+# Deployen we bwb-import eerst, dan faalt die op een ontbrekend extern netwerk.
+
+name: deploy-graaf
+
+on:
+  workflow_dispatch:
+    inputs:
+      onderdeel:
+        description: "Wat deployen"
+        type: choice
+        options: [beide, graphdb, bwb-import]
+        default: beide
+  push:
+    branches: [master]
+    paths:
+      - "deploy/graphdb/**"
+      - "deploy/bwb-import/**"
+      - "!**/*.md"
+      - ".github/workflows/deploy-graaf.yml"
+
+concurrency:
+  group: deploy-graaf
+  cancel-in-progress: false
+
+env:
+  ENDPOINT_ID: ${{ vars.DEV_PORTAINER_ENDPOINT_ID || '3' }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      PORTAINER_URL: ${{ secrets.PORTAINER_URL }}
+      PORTAINER_API_KEY: ${{ secrets.PORTAINER_API_KEY }}
+      GRAPHDB_TOKEN: ${{ secrets.GRAPHDB_TOKEN }}
+      GRAPHDB_HEAP: ${{ vars.GRAPHDB_HEAP || '2g' }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Preflight
+        run: |
+          set -euo pipefail
+          for v in PORTAINER_URL PORTAINER_API_KEY GRAPHDB_TOKEN; do
+            [ -n "${!v:-}" ] || { echo "::error::ontbrekende secret: $v"; exit 1; }
+          done
+          code=$(curl -sS -o /tmp/stacks.json -w '%{http_code}' \
+                  -H "X-API-Key: $PORTAINER_API_KEY" "$PORTAINER_URL/api/stacks" || echo 000)
+          if [ "${code:0:1}" != "2" ] || ! jq -e 'type == "array"' /tmp/stacks.json >/dev/null 2>&1; then
+            echo "::error::Portainer weigert /api/stacks (HTTP $code) — is PORTAINER_API_KEY geldig?"
+            head -c 300 /tmp/stacks.json; exit 1
+          fi
+
+      - name: Stacks deployen
+        run: |
+          set -euo pipefail
+          KEUZE="${{ inputs.onderdeel || 'beide' }}"
+
+          deploy_stack() {
+            local naam="$1" pad="$2" env_json="$3"
+            local sid body code
+            sid=$(jq -r --arg n "$naam" '.[] | select(.Name==$n) | .Id' /tmp/stacks.json | head -n1)
+            if [ -n "$sid" ] && [ "$sid" != "null" ]; then
+              echo "→ $naam bestaat (id=$sid): update"
+              body=$(jq -n --rawfile c "$pad" --argjson env "$env_json" \
+                '{stackFileContent:$c, env:$env, prune:true, pullImage:true}')
+              code=$(curl -sS -o /tmp/resp.json -w '%{http_code}' -X PUT \
+                -H "X-API-Key: $PORTAINER_API_KEY" -H "Content-Type: application/json" \
+                "$PORTAINER_URL/api/stacks/$sid?endpointId=$ENDPOINT_ID" --data-binary @<(printf '%s' "$body"))
+            else
+              echo "→ $naam bestaat niet: aanmaken"
+              body=$(jq -n --arg name "$naam" --rawfile c "$pad" --argjson env "$env_json" \
+                '{name:$name, stackFileContent:$c, env:$env, fromAppTemplate:false}')
+              code=$(curl -sS -o /tmp/resp.json -w '%{http_code}' -X POST \
+                -H "X-API-Key: $PORTAINER_API_KEY" -H "Content-Type: application/json" \
+                "$PORTAINER_URL/api/stacks/create/standalone/string?endpointId=$ENDPOINT_ID" \
+                --data-binary @<(printf '%s' "$body"))
+            fi
+            echo "   HTTP $code"
+            [ "${code:0:1}" = "2" ] || { cat /tmp/resp.json; exit 1; }
+          }
+
+          # GraphDB eerst: die maakt het netwerk graphdb_default waar bwb-import op joint.
+          if [ "$KEUZE" = "beide" ] || [ "$KEUZE" = "graphdb" ]; then
+            deploy_stack graphdb deploy/graphdb/docker-compose.yml \
+              "$(jq -n --arg tok "$GRAPHDB_TOKEN" --arg heap "$GRAPHDB_HEAP" \
+                 '[{name:"MCP_BEARER_TOKEN",value:$tok},{name:"GRAPHDB_HEAP",value:$heap}]')"
+          fi
+          if [ "$KEUZE" = "beide" ] || [ "$KEUZE" = "bwb-import" ]; then
+            deploy_stack bwb-import deploy/bwb-import/docker-compose.yml '[]'
+          fi
+
+      - name: Wachten tot de containers draaien
+        run: |
+          set -euo pipefail
+          DOCKER="$PORTAINER_URL/api/endpoints/$ENDPOINT_ID/docker"
+          KEUZE="${{ inputs.onderdeel || 'beide' }}"
+          want="graphdb mcp-auth-proxy graphdb-backup"
+          [ "$KEUZE" = "bwb-import" ] && want="bwb-import"
+          [ "$KEUZE" = "beide" ] && want="$want bwb-import"
+          for i in $(seq 1 20); do
+            running=$(curl -sS -H "X-API-Key: $PORTAINER_API_KEY" "$DOCKER/containers/json" \
+                       | jq -r '.[].Names[]?' | tr -d '/')
+            missing=""
+            for c in $want; do echo "$running" | grep -qx "$c" || missing="$missing $c"; done
+            [ -z "$missing" ] && { echo "Alle containers draaien."; exit 0; }
+            echo "wacht op:$missing (poging $i)"; sleep 15
+          done
+          echo "::error::niet alle containers draaien:$missing"; exit 1
+
+      - name: Graaf bereikbaar?
+        run: |
+          set -euo pipefail
+          DOCKER="$PORTAINER_URL/api/endpoints/$ENDPOINT_ID/docker"
+          # Via de auth-proxy, want die is het pad dat graph-qa gebruikt.
+          ex=$(curl -sS -X POST -H "X-API-Key: $PORTAINER_API_KEY" -H "Content-Type: application/json" \
+                "$DOCKER/containers/graphdb/exec" \
+                -d '{"AttachStdout":true,"Cmd":["sh","-c","wget -qO- http://localhost:7200/rest/repositories | head -c 200"]}' \
+                | jq -r .Id)
+          uit=$(curl -sS -X POST -H "X-API-Key: $PORTAINER_API_KEY" -H "Content-Type: application/json" \
+                 "$DOCKER/exec/$ex/start" -d '{"Detach":false,"Tty":false}' | tr -d '\000-\010\013\014\016-\037')
+          echo "$uit"
+          echo "$uit" | grep -q "inning" || { echo "::error::repository 'inning' niet gevonden"; exit 1; }

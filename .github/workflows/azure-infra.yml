@@ -1,67 +1,165 @@
-# Voorziet de volledige Azure-infrastructuur via Bicep (idempotent).
-# Draait alleen bij wijzigingen in deploy/azure/** (Bicep-template, gen-deploy.py, etc.)
-# of handmatig via workflow_dispatch.
-# Per-component image-updates gaan via az containerapp update in de eigen docker-publish workflows.
+# Azure — de standby-omgeving aan- en uitzetten.
+#
+# Uitsluitend handmatig: deze omgeving hoort NIET mee te bewegen met pushes naar master. Dat is de
+# hele opzet — zolang niemand deze workflow start, draait er niets en kost het niets.
+#
+# Drie acties, met `wat-if` als default omdat die niets aanmaakt:
+#   wat-if    Azure toont welke resources zouden ontstaan/wijzigen. Veilig, en de enige manier om
+#             de template tegen je echte subscription te valideren (quota, regio, rechten).
+#   deploy    rolt de stack daadwerkelijk uit (10-15 min; PostgreSQL is de trage stap).
+#   afbreken  verwijdert de hele resource group. Vereist dat je de naam ter bevestiging intypt.
+#
+# Na een `deploy` is de omgeving nog leeg: draai de import-job om de graaf te vullen. Het commando
+# staat in de samenvatting aan het eind van de run.
+#
+# De publish-workflows doen een image-swap (`az containerapp update`) op een bestaande app in Azure
+# — die verandert geen infra, dus veilig. Deze workflow (bicep) blijft bewust handmatig: het is de
+# enige die resources kan aanmaken/veranderen/verwijderen en GraphDB is niet-persistent.
 
 name: azure-infra
 
 on:
-  push:
-    branches: [master, release/acceptance]
-    paths:
-      - "deploy/azure/**"
-      - ".github/workflows/azure-infra.yml"
   workflow_dispatch:
     inputs:
-      env_name:
-        description: "Doel-env (dev = master; acc = release/acceptance). Beide envs delen dezelfde resource group rg-wetsanalyse."
-        required: true
-        default: dev
+      actie:
+        description: "Wat doen"
         type: choice
-        options: [dev, acc]
+        options: [wat-if, deploy, afbreken]
+        default: wat-if
+      bevestig_resource_group:
+        description: "Alleen voor 'afbreken': typ de resource group ter bevestiging"
+        type: string
+        default: ""
+
+concurrency:
+  group: azure-infra
+  cancel-in-progress: false
+
+env:
+  RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP || 'rg-wetsanalyse' }}
+  AZURE_LOCATION: ${{ vars.AZURE_LOCATION || 'northeurope' }}
 
 jobs:
-  deploy:
+  azure:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-
     env:
       AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
       AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
       AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
       AZURE_AI_KEY: ${{ secrets.AZURE_AI_KEY }}
-      GRAPHDB_TOKEN: ${{ secrets.GRAPHDB_TOKEN }}
+      GRAPHDB_LICENSE_B64: ${{ secrets.GRAPHDB_LICENSE_B64 }}
       LLM_API_BASE: ${{ vars.LLM_API_BASE }}
-      AZURE_LOCATION: ${{ vars.AZURE_LOCATION }}
-
-    if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/release/acceptance' || github.event_name == 'workflow_dispatch'
+      LLM_MODEL: ${{ vars.LLM_MODEL || 'claude-sonnet-4-6' }}
 
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        with:
-          python-version: '3.12'
-
-      - name: Azure infra-deployment (Bicep)
-        if: ${{ env.AZURE_CLIENT_ID != ''
-            && env.AZURE_CLIENT_SECRET != ''
-            && env.AZURE_AI_KEY != ''
-            && env.GRAPHDB_TOKEN != ''
-            && env.LLM_API_BASE != '' }}
-        env:
-          ENV_NAME: ${{ github.event_name == 'workflow_dispatch' && inputs.env_name || (github.ref == 'refs/heads/release/acceptance' && 'acc' || 'dev') }}
+      - name: Preflight (secrets aanwezig, bevestiging bij afbreken)
         run: |
+          set -euo pipefail
+          for v in AZURE_CLIENT_ID AZURE_TENANT_ID AZURE_SUBSCRIPTION_ID AZURE_CLIENT_SECRET; do
+            [ -n "${!v:-}" ] || { echo "::error::ontbrekende secret: $v"; exit 1; }
+          done
+
+          if [ "${{ inputs.actie }}" = "afbreken" ]; then
+            if [ "${{ inputs.bevestig_resource_group }}" != "$RESOURCE_GROUP" ]; then
+              echo "::error::Afbreken verwijdert de hele resource group '$RESOURCE_GROUP'. Typ die naam in het bevestigingsveld."
+              exit 1
+            fi
+            exit 0
+          fi
+
+          # Alleen voor wat-if/deploy: zonder deze twee komt de stack niet werkend op.
+          for v in AZURE_AI_KEY LLM_API_BASE; do
+            [ -n "${!v:-}" ] || { echo "::error::ontbrekende secret/var: $v"; exit 1; }
+          done
+          if [ -z "${GRAPHDB_LICENSE_B64:-}" ]; then
+            echo "::warning::secrets.GRAPHDB_LICENSE_B64 ontbreekt — GraphDB komt read-only op en de import-job zal falen. Zie deploy/azure/README.md."
+          fi
+
+      - name: Inloggen bij Azure
+        run: |
+          set -euo pipefail
           az login --service-principal \
             --username "$AZURE_CLIENT_ID" \
             --password "$AZURE_CLIENT_SECRET" \
-            --tenant "$AZURE_TENANT_ID"
+            --tenant "$AZURE_TENANT_ID" >/dev/null
           az account set --subscription "$AZURE_SUBSCRIPTION_ID"
-          python3 deploy/azure/gen-deploy.py \
-            --llm-api-base "$LLM_API_BASE" \
-            --graphdb-token "$GRAPHDB_TOKEN" \
-            --env-name "$ENV_NAME" \
-            --location "${AZURE_LOCATION:-northeurope}" \
-            --run
+          echo "Ingelogd op: $(az account show --query name -o tsv)"
+
+      - name: Resource group afbreken
+        if: ${{ inputs.actie == 'afbreken' }}
+        run: |
+          set -euo pipefail
+          if ! az group exists --name "$RESOURCE_GROUP" | grep -q true; then
+            echo "Resource group '$RESOURCE_GROUP' bestaat niet — niets te doen."
+            exit 0
+          fi
+          echo "Verwijderen van '$RESOURCE_GROUP' (draait door op de achtergrond in Azure)…"
+          az group delete --name "$RESOURCE_GROUP" --yes --no-wait
+          echo "Opdracht gegeven. Controleer in de portal wanneer het klaar is."
+
+      - name: Resource group waarborgen
+        if: ${{ inputs.actie != 'afbreken' }}
+        run: |
+          set -euo pipefail
+          az group create --name "$RESOURCE_GROUP" --location "$AZURE_LOCATION" --output none
+          echo "Resource group '$RESOURCE_GROUP' gereed in $AZURE_LOCATION."
+
+      - name: Licentie klaarzetten
+        if: ${{ inputs.actie != 'afbreken' }}
+        run: |
+          set -euo pipefail
+          # Het secret is base64; gen-deploy.py verwacht het RUWE bestand en codeert zelf.
+          if [ -n "${GRAPHDB_LICENSE_B64:-}" ]; then
+            printf '%s' "$GRAPHDB_LICENSE_B64" | base64 -d > "$RUNNER_TEMP/graphdb.license"
+            echo "Licentie geplaatst ($(wc -c < "$RUNNER_TEMP/graphdb.license") bytes)."
+          fi
+
+      - name: Template valideren (what-if)
+        if: ${{ inputs.actie == 'wat-if' }}
+        run: |
+          set -euo pipefail
+          args=(--llm-api-base "$LLM_API_BASE" --llm-model "$LLM_MODEL"
+                --resource-group "$RESOURCE_GROUP" --location "$AZURE_LOCATION" --what-if)
+          [ -f "$RUNNER_TEMP/graphdb.license" ] && args+=(--license-file "$RUNNER_TEMP/graphdb.license")
+          python3 deploy/azure/gen-deploy.py "$AZURE_AI_KEY" "${args[@]}"
+
+      - name: Uitrollen
+        if: ${{ inputs.actie == 'deploy' }}
+        run: |
+          set -euo pipefail
+          args=(--llm-api-base "$LLM_API_BASE" --llm-model "$LLM_MODEL"
+                --resource-group "$RESOURCE_GROUP" --location "$AZURE_LOCATION" --run)
+          [ -f "$RUNNER_TEMP/graphdb.license" ] && args+=(--license-file "$RUNNER_TEMP/graphdb.license")
+          python3 deploy/azure/gen-deploy.py "$AZURE_AI_KEY" "${args[@]}"
+
+      - name: Samenvatting
+        if: ${{ always() && inputs.actie == 'deploy' }}
+        run: |
+          set -euo pipefail
+          url=$(az deployment group show -g "$RESOURCE_GROUP" -n wetsanalyse-infra \
+                  --query properties.outputs.frontendUrl.value -o tsv 2>/dev/null || echo "")
+          {
+            echo "## Azure-omgeving uitgerold"
+            echo ""
+            [ -n "$url" ] && echo "- Webapp: $url"
+            echo "- Resource group: \`$RESOURCE_GROUP\` ($AZURE_LOCATION)"
+            echo ""
+            echo "### Nog te doen"
+            echo '1. Vul de graaf (duurt ~20s):'
+            echo '   ```'
+            echo "   az containerapp job start -n wetsanalyse-bwb-import -g $RESOURCE_GROUP"
+            echo '   ```'
+            echo "2. Maak de eerste beheerder aan op \`$url/setup\`."
+            echo ""
+            echo "> De graaf heeft geen persistente opslag: na een herstart van de graphdb-app moet"
+            echo "> stap 1 opnieuw, en de similarity-index opnieuw gebouwd worden."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Opruimen
+        if: ${{ always() }}
+        run: rm -f "$RUNNER_TEMP/graphdb.license" deploy/azure/params.json

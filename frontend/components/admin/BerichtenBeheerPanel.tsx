@@ -1,5 +1,6 @@
 "use client";
 
+import { BevestigKnop } from "@/components/ui/BevestigKnop";
 import { useCallback, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { ButtonRow } from "@/components/ui/ButtonRow";
@@ -68,8 +69,8 @@ export function BerichtenBeheerPanel() {
     }
   }
 
+  // Bevestigen doet de knop zelf (twee klikken), zoals overal in deze app.
   async function onVerwijder(b: AdminBerichtOut) {
-    if (!confirm(`Bericht "${b.titel}" definitief verwijderen?`)) return;
     try {
       await verwijderBericht(b.id);
       await laad(pagina);
@@ -159,9 +160,14 @@ export function BerichtenBeheerPanel() {
                       <Button size="sm" variant="secondary" onClick={() => void onPublicatie(b)}>
                         {b.gepubliceerd ? "Depubliceren" : "Publiceren"}
                       </Button>
-                      <Button size="sm" variant="danger" onClick={() => void onVerwijder(b)}>
+                      <BevestigKnop
+                        onBevestig={() => void onVerwijder(b)}
+                        bevestigTekst="Definitief verwijderen?"
+                        className="focus-ring inline-flex min-h-[40px] shrink-0 items-center justify-center rounded-field border border-fout px-3 text-sm font-medium text-fout transition coarse:min-h-[48px]"
+                        bevestigClassName="bg-fout text-paper"
+                      >
                         Verwijderen
-                      </Button>
+                      </BevestigKnop>
                     </ButtonRow>
                   </div>
                 )}

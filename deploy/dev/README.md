@@ -38,8 +38,8 @@ Bestaand (hergebruikt): `secrets.PORTAINER_URL`, `secrets.PORTAINER_API_KEY`, `s
 
 | naam | type | status | doel |
 |---|---|---|---|
-| `PREVIEW_SECRET_SEED` | secret | ✅ gezet (2026-08-12) | seed voor de deterministische dev-secrets (`openssl rand -hex 32`) |
-| `PORTAINER_URL` | secret | ⚠️ **controleren** | moet naar `https://portainer.ipalm.nl` wijzen; `deploy-observability.yml` faalt daar sinds 18 juli met **HTTP 403** op stack 239 — die stack bestaat op deze Portainer niet (de NAS-instantie is vervangen) |
+| `PREVIEW_SECRET_SEED` | secret | ✅ gezet | seed voor de deterministische dev-secrets (`openssl rand -hex 32`) |
+| `PORTAINER_URL` | secret | ✅ gezet | `https://portainer.ipalm.nl` (endpoint 3). Een stack-id uit een andere Portainer-instantie geeft hier **HTTP 403** — de stack bestaat dan niet. |
 | `DEV_PORTAINER_ENDPOINT_ID` | var | niet nodig | default `3` — geverifieerd |
 | `DEV_HOSTNAME` | var | niet nodig | default `dev.wetsanalyse.ipalm.nl` |
 | `DEV_HOST_PORT` / `DEV_FORWARD_HOST` | var | niet nodig | defaults `8090` / `192.168.10.23` |
@@ -78,7 +78,3 @@ Gaat stap 2 mis op een oudere Portainer, dan is de create-call
 ## GHCR-retentie
 `ghcr-cleanup.yml` ontziet de `dev`-tag (`exclude-tags: latest,dev`), anders zou de retentie na een
 productie-build de image onder de draaiende dev-stack vandaan halen.
-
-## Azure (geparkeerd)
-De Azure-variant (eigen resource group via de al-prefixbare Bicep) is bewust uitgesteld; later op
-dezelfde workflow bij te prikken.

@@ -6,7 +6,7 @@ name: graph-qa-docker-publish
 
 on:
   push:
-    branches: [master, release/acceptance]
+    branches: [master]
     tags: ["v*"]
     paths:
       - "tools/graph-qa/**"
@@ -27,7 +27,7 @@ jobs:
       run:
         working-directory: tools/graph-qa
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - name: Set up uv
         uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
         with:
@@ -48,13 +48,13 @@ jobs:
       AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
       AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Set up Buildx
         uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
 
       - name: Log in bij GHCR
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -95,7 +95,7 @@ jobs:
 
       - name: Upload Trivy-resultaten naar Security-tab
         if: always()
-        uses: github/codeql-action/upload-sarif@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4
+        uses: github/codeql-action/upload-sarif@5595ccaf912efad79be6eef63a5619ff05969be3 # v4
         with:
           sarif_file: trivy-results.sarif
 
@@ -108,11 +108,13 @@ jobs:
           severity: CRITICAL
           exit-code: "1"
 
+      # Auto-deploy: image-swap op de bestaande container app in Azure. Infra-wijzigingen (bicep)
+      # gaan bewust via de handmatige azure-infra-workflow — hier alleen de image-refresh.
       - name: Azure Container App update (graph-qa)
-        if: ${{ (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/release/acceptance') && env.AZURE_CLIENT_ID != '' && env.AZURE_CLIENT_SECRET != '' }}
+        if: ${{ github.ref == 'refs/heads/master' && env.AZURE_CLIENT_ID != '' && env.AZURE_CLIENT_SECRET != '' }}
         env:
           IMAGE_DIGEST_REF: ${{ env.IMAGE }}@${{ steps.build.outputs.digest }}
-          APP: ${{ github.ref == 'refs/heads/release/acceptance' && 'wetsanalyse-acc-graph-qa' || 'wetsanalyse-graph-qa' }}
+          RG: ${{ vars.AZURE_RESOURCE_GROUP || 'rg-wetsanalyse' }}
         run: |
           az login --service-principal \
             --username "$AZURE_CLIENT_ID" \
@@ -120,6 +122,6 @@ jobs:
             --tenant "$AZURE_TENANT_ID"
           az account set --subscription "$AZURE_SUBSCRIPTION_ID"
           az containerapp update \
-            --name "$APP" \
-            --resource-group rg-wetsanalyse \
+            --name wetsanalyse-graph-qa \
+            --resource-group "$RG" \
             --image "$IMAGE_DIGEST_REF"

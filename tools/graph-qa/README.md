@@ -1,4 +1,9 @@
-# graph-qa
+# graph-qa — Lex
+
+> **De dienst heet `graph-qa`, de assistent heet Lex.** Naar de gebruiker stelt de agent zich voor als
+> **Lex**, het hulpmiddel voor wetsanalyse; de map, het image (`ghcr.io/palmw01/graph-qa`), de stack en
+> de env-vars houden hun technische naam. Zijn zelfbeschrijving staat in het IDENTITEIT-blok van
+> `agent/prompts.py`, zijn toon in `docs/schrijfrichtlijn-lex.md`.
 
 Een vraag-antwoorddienst voor **Nederlandse invorderings- en belastingwetgeving** die in een
 **GraphDB-kennisgraaf** is opgeslagen. `graph-qa` beantwoordt een natuurlijke-taalvraag door die graaf
@@ -14,18 +19,25 @@ vraag bevraagt de agent eerst de graaf via een **getypeerde toollaag**, en een a
 verifieert achteraf dat elke citaat in het antwoord ook echt uit een tool-resultaat komt. Vragen die
 niet over de wetgeving in de graaf gaan, worden beleefd afgewezen.
 
-Eén vraag doorloopt een vaste keten (een LangGraph-graaf):
+Eén opdracht doorloopt een LangGraph-graaf. Een **supervisor** kiest eerst welke worker hem
+behandelt; een vraag die niet over wetgeving gaat wordt daar al afgewezen.
 
-1. **Router** — één LLM-call bepaalt welke *specialist* de vraag behandelt en schetst kort de aanpak;
-   een vraag buiten het onderwerp wordt hier al afgewezen.
-2. **Specialist (reason ↔ retrieve)** — de gekozen specialist redeneert en roept tools aan; de agent
-   voert die uit tegen de graaf en voegt de resultaten toe aan een *tool-trace*. Dit herhaalt tot er
-   geen tool-aanroep meer volgt (of tot een beurten-limiet).
-3. **Verify (grounding)** — deterministische controle of de vindplaatsen in het antwoord voorkomen in
-   de tool-trace. Niet-onderbouwde citaten worden gemarkeerd; desgewenst volgt één corrigerende
-   her-vraag.
-4. **Finalize** — de bronnenlijst wordt uit de tool-trace opgebouwd en beperkt tot de in het antwoord
+**De antwoord-worker** — voor vragen:
+
+1. **Specialist (reason ↔ retrieve)** — de gekozen specialist (definitie/duiding/algemeen) redeneert
+   en roept tools aan; de agent voert die uit tegen de graaf en voegt de resultaten toe aan een
+   *tool-trace*. Dit herhaalt tot er geen tool-aanroep meer volgt (of tot een beurten-limiet).
+2. **Verify (grounding)** — deterministische controle of de vindplaatsen én de citaten in het
+   antwoord voorkomen in de tool-trace. Wat niet klopt wordt gemarkeerd; desgewenst volgt één
+   corrigerende her-vraag.
+3. **Finalize** — de bronnenlijst wordt uit de tool-trace opgebouwd en beperkt tot de in het antwoord
    aangehaalde regelingen; het antwoord, de bronnen en het grounding-oordeel worden uitgestuurd.
+
+**De annotatie-worker** — voor een opdracht als *"annoteer artikel 36 lid 4 van de Invorderingswet
+1990"*: ophalen → annoteren → **Critic** → de eenduidige correcties door code laten uitvoeren → een
+eindbeoordeling → de elementen uitsturen. Elk voorstel is een letterlijk fragment met een JAS-klasse
+en een aandacht-niveau (🟢🟡🔴); de jurist beoordeelt ze in de werkplek. Zie `CLAUDE.md` voor de
+volledige keten en de regels die daarbij gelden.
 
 ### Decompositie (multi-hop, optioneel)
 
@@ -38,10 +50,10 @@ gestreamd zonder synthese-stap** — zo betaalt een simpele lookup geen extra ko
 samengestelde vragen krijgen de volle multi-hop. Staat de toggle uit, dan draait de bovenstaande
 enkele reason↔retrieve-lus.
 
-### Specialisten (multi-agent supervisor)
+### Specialisten (binnen de antwoord-worker)
 
-De router kiest per vraag één specialist; elk krijgt een eigen instructie én een **subset** van de
-tools:
+De supervisor kiest per vraag één specialist; elk krijgt een eigen instructie én een **subset** van
+de tools (`agent/specialists.py`):
 
 | Specialist | Waarvoor | Kern-tools |
 |---|---|---|
@@ -51,12 +63,12 @@ tools:
 
 ### De toollaag (retrieval)
 
-Het model krijgt **geen** vrije SPARQL, maar een set van twaalf getypeerde tools; alleen `raw_sparql`
-is een afgeschermd laatste redmiddel:
+Het model krijgt **geen** vrije SPARQL, maar een set van dertien getypeerde tools; alleen
+`raw_sparql` is een afgeschermd laatste redmiddel:
 
 - **Zoeken** — `search_wetgeving` (full-text/Lucene, exacte termen) en `semantic_search` (op betekenis,
   via een GraphDB-similarity-index; te combineren als hybride zoekstap).
-- **Ophalen** — `get_artikel`, `get_lid`.
+- **Ophalen** — `get_artikel`, `get_lid`, `get_bepaling`.
 - **Regelingen** — `list_regelingen`, `get_regeling_info` (soort, geldigheid, uitgevende organisatie).
 - **Verwijzingen** — `follow_verwijzingen` (uitgaand), `referenced_by` (inkomend).
 - **Context (GraphRAG)** — `get_context`: een bepaling mét haar bevattende delen, leden en
@@ -84,16 +96,34 @@ altijd opnieuw via de tools geverifieerd.
 
 ## API
 
+**De werkplek loopt over de run-endpoints, niet over `/v1/chat`.** Een beurt duurt 60-90 seconden en
+hoort niet aan één browserverbinding te hangen: de run draait als achtergrondtaak bij de agent en de
+browser kijkt mee. Sluit je het tabblad, dan loopt het werk door.
+
 | Endpoint | Doel |
 |---|---|
 | `GET /health` | Liveness (geen auth). |
-| `POST /v1/chat` | **SSE-stream**: body `{question, conversation_id?}`. De unified agent kiest per vraag een worker-keten. Antwoord-events: `status` · `reason` (denkproces) · `token` (eindantwoord) · `sources` · `grounding` · `done` · `error` · `conversation_id`. Kiest de supervisor de **annotatie-worker**, dan komen daar `doel` · `element` (per brongetrouw JAS-element, mét `aandacht` 🟢🟡🔴 + `critic`) · `ontbrekend` bij — de basis van de werkplek (agent produceert, mens reviewt). |
+| `POST /v1/runs` | Start een beurt; geeft `run_id`. **409 + het lopende run_id** als er al een run voor dit gesprek is. Body als bij `/v1/chat`, plus optioneel `doel` (dan slaat de keten het zoeken over) en `modus: "advies"`. |
+| `GET /v1/runs/{id}/events?vanaf=<seq>` | **SSE**: eerst replay vanaf `vanaf`, dan live. Elk frame draagt zijn `seq`, zodat je na een onderbreking op het juiste punt aanhaakt. |
+| `POST /v1/runs/{id}/cancel` | 202 — stoppen is een verzoek, geen feit: de lopende stap maakt zichzelf af. |
+| `GET /v1/conversations/{id}/run` | De run waar je op kunt aanhaken, of `null`. |
+| `DELETE /v1/conversations/{id}` | Wist het agent-geheugen van één gesprek (idempotent → 204) en stopt een lopende beurt. |
+| `POST /v1/chat` | Eén beurt **aan de verbinding gekoppeld** (SSE; body `{question, conversation_id?}`). Zonder eigenaarscontrole, dus niet de weg voor de webapp — bedoeld voor scripts en handmatig testen. |
 | `GET /v1/artikel` | Artikeltekst uit de kennisgraaf voor het documentpaneel van de werkplek: query `bwb_id`, `artikel`, optioneel `lid`. |
 
-Authenticatie is optioneel (`QA_API_TOKEN`, timing-safe vergeleken); bij een
-intern-only deployment staat het slot doorgaans uit. Verdere beveiliging: CORS met credentials
-uitsluitend bij een expliciete origin-lijst, een per-IP rate-limit, en een read-only-vangnet dat
-SPARQL-updates weigert.
+**De events** zijn hetzelfde over beide wegen: `status` · `reason` (denkproces) · `token`
+(eindantwoord) · `sources` · `grounding` · `conversation_id` · `done` · `error`. Draait de
+annotatie-worker, dan komen daar `doel` · `element` (per brongetrouw JAS-element, mét `aandacht`
+🟢🟡🔴 + `critic`) · `ontbrekend` · `suggestie` · `kandidaten` · `run` · `opgeslagen` ·
+`waarschuwing` bij. Over de run-events kan er ook een `gat` voorbijkomen: dan is er vluchtig verkeer
+weggevallen bij het cappen van de log, en toont de client "…" in plaats van een verminkt antwoord.
+
+**Authenticatie.** `QA_API_TOKEN` wordt timing-safe vergeleken. Legt de agent zijn beurten zelf vast
+bij de wetsanalyse-API (`WETSANALYSE_API_URL` + `_TOKEN` gezet), dan is dat token **verplicht** en weigert de
+dienst te starten zonder — het schrijfpad naar de api is niet aan één gebruiker gebonden. Verdere
+beveiliging: CORS met credentials uitsluitend bij een expliciete origin-lijst, een rate-limit **per
+gebruiker** (`X-User-Id`, met het IP als terugval), en een read-only-vangnet dat SPARQL-updates
+weigert.
 
 ## Lokaal draaien
 
@@ -120,14 +150,18 @@ uv run --extra dev pytest -q                    # tests
 | `SIMILARITY_INDEX` | Naam van de GraphDB-similarity-index voor `semantic_search`. Leeg → die tool degradeert naar `search_wetgeving`. Zie `docs/embeddings-runbook.md`. |
 | `AZURE_FOUNDRY_API_KEY` *(verplicht)* | Azure-AI-Foundry-key (of `_FILE`). |
 | `AZURE_FOUNDRY_BASE_URL` *(verplicht)* | Foundry-endpoint **met** `/anthropic`-suffix. |
-| `LLM_MODEL` | Modelnaam (default `claude-sonnet-4-6`). |
+| `LLM_MODEL` | Modelnaam (default `claude-sonnet-4-6`). Draagt de annoteerder, de Critic en de QA-specialisten — die hebben bewust géén eigen knop. |
+| `LLM_MODEL_ROUTER` | Model voor de supervisor (kiest de worker; 300 tokens, respons wordt toch hard gesaneerd). Leeg = `LLM_MODEL`. |
+| `LLM_MODEL_OPHAAL` | Model voor de ophaal-agent. Leeg = `LLM_MODEL`. Verlaag pas na meting met `eval/run_eval.py`: kiest hij de verkeerde bepaling, dan is alles daarna brongetrouw én verkeerd. |
 | `QA_API_TOKEN` | API-/chat-secret (of `_FILE`); leeg = open. |
 | `CORS_ORIGINS` | Kommagescheiden origins; `*` = open (alleen dev). |
 | `CHECKPOINT_DB_PATH` | Pad voor de durable checkpointer; leeg = in-memory (geen continuïteit over herstarts). |
 | `MAX_TURNS` | Max. reason↔retrieve-beurten per vraag. |
+| `GROUNDING_CORRECT` | Eén corrigerende ronde bij een ongegrond antwoord (verzonnen vindplaats of een citaat dat niet letterlijk is). **Default aan**; `false` maakt de controle weer alleen een melding onder het antwoord. Kost alleen een extra call als er werkelijk iets mis is. |
 | `ENABLE_DECOMPOSITION` | `1` = multi-hop decompositie aan (default uit). |
 | `MAX_SUBQUESTIONS` | Cap op het aantal deelvragen (default 5). |
 | `SUB_MAX_TURNS` | Max. reason↔retrieve-beurten per deelvraag (default 8). |
+| `CRITIC_MAX_RONDES` | Correctie na de Critic: **0 = uit**, **> 0 = aan** (default 2). Telt géén rondes meer ondanks de naam — de keten ligt vast (`annoteer → critic → patch → [herzie] → [critic] → emit`). Uit = exact `annoteer → critic → emit`. |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | OTLP-endpoint; leeg = alleen gestructureerde JSON-logs (nul overhead). |
 
 ## De graaf

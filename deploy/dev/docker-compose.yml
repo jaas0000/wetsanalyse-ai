@@ -36,16 +36,21 @@ services:
     restart: unless-stopped
     environment:
       WETSANALYSE_AUTH_REQUIRED: "1"
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_ENDPOINT:-http://otel-collector:4318}
+      OTEL_SERVICE_NAME:           wetsanalyse-api
       LLM_PROVIDER:              azure_ai
       LLM_MODEL:                 ${LLM_MODEL:-claude-sonnet-4-6}
       LLM_API_BASE:              ${LLM_API_BASE:?zet LLM_API_BASE}
       LLM_API_KEY:               ${LLM_API_KEY:?zet LLM_API_KEY}
       LLM_CONFIG_SECRET:         ${LLM_CONFIG_SECRET:?zet LLM_CONFIG_SECRET}
-      WETSANALYSE_API_TOKENS:    frontend:${API_TOKEN:?zet API_TOKEN}
+      # Twee clients: de webapp én graph-qa, die de uitkomst van een beurt zelf vastlegt. Eigen
+      # token per client, zodat het auditspoor laat zien wie er schreef.
+      WETSANALYSE_API_TOKENS:    frontend:${API_TOKEN:?zet API_TOKEN},graph-qa:${GRAPH_QA_API_TOKEN:?zet GRAPH_QA_API_TOKEN}
       WETSANALYSE_ADMIN_TOKENS:  admin:${ADMIN_TOKEN:?zet ADMIN_TOKEN}
       DATABASE_URL:              postgresql+asyncpg://wetsanalyse:${POSTGRES_PASSWORD}@postgres:5432/wetsanalyse
     networks:
       - internal
+      - observability
     depends_on:
       postgres:
         condition: service_healthy
@@ -64,17 +69,32 @@ services:
       AZURE_FOUNDRY_BASE_URL: ${LLM_API_BASE}/anthropic
       AZURE_FOUNDRY_API_KEY:  ${LLM_API_KEY}
       LLM_MODEL:              ${LLM_MODEL:-claude-sonnet-4-6}
-      GRAPHDB_MCP_URL:        ${GRAPHDB_MCP_URL:-https://graphdb-mcp.ipalm.nl/mcp}
+      # GraphDB draait als aparte stack op dezelfde host; we praten intern via het gedeelde
+      # netwerk graphdb_default (geen omweg via de proxy, geen TLS). De publieke naam
+      GRAPHDB_MCP_URL:        ${GRAPHDB_MCP_URL:-http://mcp-auth-proxy:8004/mcp}
       GRAPHDB_TOKEN:          ${GRAPHDB_TOKEN:?zet GRAPHDB_TOKEN}
       GRAPHDB_REPOSITORY_ID:  inning
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_ENDPOINT:-http://otel-collector:4318}
+      OTEL_SERVICE_NAME:      graph-qa
       QA_API_TOKEN:           ${QA_API_TOKEN:?zet QA_API_TOKEN}
+      # Hier legt graph-qa de uitkomst van een beurt vast. Zonder deze twee blijft de werkplek dat
+      # doen — en dan kost een gesloten tabblad nog steeds het werk.
+      WETSANALYSE_API_URL:    http://api:3000
+      WETSANALYSE_API_TOKEN:  ${GRAPH_QA_API_TOKEN:?zet GRAPH_QA_API_TOKEN}
       SIMILARITY_INDEX:       ${SIMILARITY_INDEX:-bwb_similarity}
-      ENABLE_DECOMPOSITION:   "1"
+      # Uit: dan draait de pure agentische lus (supervisor → agent ⇄ tools → verify → finalize) en
+      # bepaalt de agent zelf zijn stappen. Met decompositie ligt er een vast recept overheen
+      # (splits de vraag → los elk stuk op → vat samen) waarin solve_node zijn eigen, met de hand
+      # nagebouwde agent-lus draait — een tweede implementatie met eigen vangnetten, die daardoor
+      # uiteen kan lopen met agent_node. Aan te zetten als multi-hop-vragen het nodig blijken.
+      ENABLE_DECOMPOSITION:   ${ENABLE_DECOMPOSITION:-0}
       # Gespreksgeheugen in de dev-eigen Postgres (psycopg-scheme → geen +asyncpg).
       CHECKPOINT_DB_URL:      postgresql://wetsanalyse:${POSTGRES_PASSWORD}@postgres:5432/wetsanalyse
       HOME:                   /tmp
     networks:
       - internal
+      - graaf
+      - observability
     depends_on:
       postgres:
         condition: service_healthy
@@ -91,6 +111,8 @@ services:
     restart: unless-stopped
     environment:
       NODE_ENV:             production
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_ENDPOINT:-http://otel-collector:4318}
+      OTEL_SERVICE_NAME:    wetsanalyse-frontend
       API_BASE_URL:         http://api:3000
       GRAPH_QA_URL:         http://graph-qa:8080
       AUTH_URL:             ${AUTH_URL:?zet AUTH_URL}
@@ -104,6 +126,7 @@ services:
       - "${HOST_PORT:-8090}:3000"
     networks:
       - internal
+      - observability
     depends_on:
       api:
         condition: service_healthy
@@ -122,3 +145,13 @@ volumes:
 networks:
   internal:
     driver: bridge
+  # Netwerk van de GraphDB-stack (deploy/graphdb/) — alleen graph-qa zit erop. Die stack moet
+  # dus eerst gedeployd zijn; anders faalt de dev-deploy op een ontbrekend extern netwerk.
+  graaf:
+    external: true
+    name: ${GRAAF_NETWORK:-graphdb_default}
+  # Netwerk van de observability-stack (deploy/observability/) — voor OTLP naar de collector.
+  # Die stack moet dus eerst gedeployd zijn.
+  observability:
+    external: true
+    name: ${OBS_NETWORK:-observability_default}

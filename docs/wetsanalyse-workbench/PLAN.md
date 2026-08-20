@@ -34,8 +34,15 @@ Concreet:
   Bewaart annotatie-documenten, human-decisions, **audit trail**, **lessons-learned**, en bezit het
   **enige, geauthenticeerde graaf-schrijfpad** (latere fase). Een **vers annotatie-domein**, los van de
   analyse-contracten.
-- **graph-qa = de annotatie-intelligentie** (nieuwe `annotatie`-specialist + Critic; stateless per
-  verzoek; streamt voorstellen). Vers uit de bron. Blijft **read-only** op de graaf.
+- **graph-qa = de annotatie-intelligentie** (nieuwe `annotatie`-specialist + Critic; streamt
+  voorstellen). Vers uit de bron. Blijft **read-only** op de graaf.
+
+  > **Bijgesteld (19 aug 2026).** "Stateless per verzoek" gold niet vol te houden: zolang de beurt
+  > aan de HTTP-verbinding hing, brak van gesprek wisselen of herladen een lopend antwoord af, en
+  > omdat de brówser het resultaat wegschreef kostte een gesloten tabblad al het werk. graph-qa houdt
+  > nu **runs** vast (in-proces register, `agent/runs.py`) en legt de uitkomst zélf vast bij de api
+  > (`agent/beurt.py`). "api = system of record" blijft daarmee overeind — graph-qa bewaart geen
+  > eigen kopie, alleen de lopende beurt.
 - **frontend = de review-workbench** (documentpaneel + review-queue + decision-cards + tijdlijn). BFF →
   api voor state, → graph-qa voor de agent.
 - **Graaf = bestemming**: geaccordeerde annotaties → JAS-annotatielaag in GraphDB (latere fase).
@@ -85,7 +92,7 @@ grounding, patroon-afwijking). Géén ondoorzichtig kwaliteitscijfer → een **d
 
 ### Deliverable 0 — Architectuur-artifact (HTML) — GELEVERD
 Visie + architectuur + datamodel + review-workflow + fasering, visueel/deelbaar. Repo-kopie
-`docs/wetsanalyse-workbench/architectuur-artifact.html` + claude.ai-Artifact; graph-qa-deck aangevuld.
+architectuur-artifact (claude.ai-Artifact) + graph-qa-deck aangevuld.
 
 ### Fase 1 — MVP: dun agent→review-segment (verticaal, alle 3 lagen)
 Het eindtoestand-hart in het klein, end-to-end:
@@ -133,7 +140,7 @@ DI + tests per laag. **Brongetrouwheid + mens-beslist in elke fase.**
 - **graph-qa**: `agent/specialists.py` (annotatie-specialist + Critic), `agent/tools/` (annotatie-/
   lessons-tools), nieuwe prompt vers uit de JAS-bron.
 - **frontend**: nieuw workbench-scherm + componenten (documentpaneel, review-queue, decision-card,
-  tijdlijn) + BFF-routes; JAS-kleuren uit `docs/wa-table.png`.
+  tijdlijn) + BFF-routes; JAS-kleuren uit `docs/wetsanalyse/wa-table.png`.
 
 ## Verificatie (per fase)
 Unit-tests met DI/fakes; een gescript end-to-end pad; live rooktest via de workbench. **Geen

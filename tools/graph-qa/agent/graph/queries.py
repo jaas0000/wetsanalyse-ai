@@ -1,7 +1,7 @@
 """
 Geparametriseerde SPARQL-bouwers voor de kennisgraaf.
 
-Deze module is de code-vorm van de recepten die voorheen als proza in de
+Deze module is de code-vorm van de queryrecepten; ze stonden eerder als proza in de
 system-prompt stonden: de eigen-IRI-ruimte-filters die owl:sameAs-tweelingen
 ontdubbelen, de directe artikel-/lid-IRI-patronen, de Lucene-FTS en de
 verwijzings-/SKOS-vormen. De invoer wordt gevalideerd/ge-escaped zodat het model
@@ -107,8 +107,15 @@ def list_regelingen() -> str:
 
 
 def get_artikel(bwb_id: str, artikel: str) -> str:
+    """Artikel met zijn leden, plus de onderdelen die rechtstreeks onder het artikel hangen.
+
+    Die directe onderdelen (`heeftOnderdeel`) zijn er bij artikelen zónder leden — een opsomming
+    a/b/c direct onder het artikel — en ontbraken volledig. Onderdelen die onder een *lid* hangen
+    komen bewust niet mee: bij een definitieartikel zijn dat er tientallen en dan kapt de
+    8000-tekenslimiet het resultaat af. Daarvoor is `get_lid`, dat ze wél levert.
+    """
     iri = artikel_iri(bwb_id, artikel)
-    return PREFIXES + f"""SELECT ?tekst ?jci ?lid ?lidnummer ?lidtekst WHERE {{
+    return PREFIXES + f"""SELECT ?tekst ?jci ?lid ?lidnummer ?lidtekst ?onderdeel ?onderdeeltekst WHERE {{
   OPTIONAL {{ <{iri}> bwb:tekst ?tekst }}
   OPTIONAL {{ <{iri}> bwb:jci ?jci }}
   OPTIONAL {{
@@ -117,16 +124,53 @@ def get_artikel(bwb_id: str, artikel: str) -> str:
     OPTIONAL {{ ?lid bwb:nummer ?lidnummer }}
     OPTIONAL {{ ?lid bwb:tekst ?lidtekst }}
   }}
-}} ORDER BY ?lid"""
+  OPTIONAL {{
+    <{iri}> bwb:heeftOnderdeel ?o .
+    FILTER(STRSTARTS(STR(?o), "{NS}"))
+    OPTIONAL {{ ?o bwb:nummer ?onderdeel }}
+    OPTIONAL {{ ?o bwb:tekst ?onderdeeltekst }}
+  }}
+}} ORDER BY ?lid ?o"""
 
 
 def get_lid(bwb_id: str, artikel: str, lid: str) -> str:
+    """Lid mét zijn onderdelen.
+
+    Zonder de onderdelen is een definitielid nagenoeg leeg: artikel 2, lid 1 IW 1990 heeft als
+    eigen tekst alleen "Deze wet verstaat onder:" — de 25 definities zitten in de onderdelen a t/m
+    t. De agent ging dat compenseren met een reeks raw_sparql-pogingen (acht beurten voor één
+    definitievraag). `bwb:bevat` is vlak opgeslagen, dus dit haalt ook geneste onderdelen op.
+    """
     iri = lid_iri(bwb_id, artikel, lid)
-    return PREFIXES + f"""SELECT ?nummer ?tekst ?jci WHERE {{
+    # De onderdelen in één cel (GROUP_CONCAT) i.p.v. één rij per onderdeel: anders herhaalt de
+    # lidtekst zich per onderdeel en loopt een definitielid tegen de 8000-tekenslimiet, waarna juist
+    # de laatste onderdelen wegvallen. De subquery met ORDER BY houdt de volgorde a, b, c, …
+    return PREFIXES + f"""SELECT ?nummer ?tekst ?jci
+       (GROUP_CONCAT(?regel; separator=" ⏐ ") AS ?onderdelen) WHERE {{
   OPTIONAL {{ <{iri}> bwb:nummer ?nummer }}
   OPTIONAL {{ <{iri}> bwb:tekst ?tekst }}
   OPTIONAL {{ <{iri}> bwb:jci ?jci }}
-}}"""
+  OPTIONAL {{
+    {{ SELECT ?regel WHERE {{
+        <{iri}> bwb:bevat ?o .
+        FILTER(STRSTARTS(STR(?o), "{NS}"))
+        OPTIONAL {{ ?o bwb:nummer ?on }}
+        OPTIONAL {{ ?o bwb:tekst ?ot }}
+        OPTIONAL {{ ?o bwb:jci ?oj }}
+        # De jci van het onderdeel zélf meegeven, niet die van het lid: anders citeert de agent
+        # "onderdeel k" maar verwijst de vindplaats naar het hele definitielid. Ook geneste
+        # onderdelen hebben er een (…&o=aa&o=1).
+        #
+        # Zonder de datumstaart (&z=…&g=…): die is voor 25 onderdelen ~700 tekens aan herhaling en
+        # staat al in de jci van het lid hierboven. Wat overblijft is een geldige jci-verwijzing.
+        BIND(IF(BOUND(?oj),
+                IF(CONTAINS(?oj, "&z="), STRBEFORE(?oj, "&z="), ?oj),
+                "") AS ?ojk)
+        BIND(CONCAT(COALESCE(?on, ""), " ", COALESCE(?ot, ""),
+                    IF(?ojk != "", CONCAT(" [", ?ojk, "]"), "")) AS ?regel)
+      }} ORDER BY ?o }}
+  }}
+}} GROUP BY ?nummer ?tekst ?jci"""
 
 
 def get_bepaling(bwb_id: str, nummer: str) -> str:

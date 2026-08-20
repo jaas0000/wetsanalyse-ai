@@ -5,23 +5,26 @@ description = "Deployable API-backend voor de Wetsanalyse (JAS) — orchestreert
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.141.1",
-    "uvicorn>=0.52.3",
+    "uvicorn>=0.52.1",
     "pydantic>=2.7",
     "httpx>=0.27",
-    "sqlalchemy[asyncio]>=2.0.52",
+    "sqlalchemy[asyncio]>=2.0.51",
     "asyncpg>=0.30",
     "cryptography>=50.0.0",
     # Security-floor op een transitive (via fastapi/sse-starlette/mcp): CVE-2026-54283 in <1.3.1.
-    "starlette>=1.6.0",
+    "starlette>=1.5.0",
     # Login-module: wachtwoord-hashing (bcrypt) + optionele 2FA (TOTP).
     "bcrypt>=4.1",
     "pyotp>=2.9",
+    # Annotatie-export naar PDF (pure-python wheel; geen systeemlibs zoals cairo/pango nodig).
+    # Bewust geen optionele extra: exporteren hoort altijd te werken.
+    "reportlab>=4.2",
 ]
 
 [project.optional-dependencies]
 # LiteLLM (LLM-adapter) en mcp (MCP-client) zijn alleen nodig voor de engine.
 # Beide worden lazy geïmporteerd, zodat de tests zonder deze (zwaardere) dependencies draaien.
-llm = ["litellm>=1.96.2", "mcp>=2.0.0"]
+llm = ["litellm>=1.95.0", "mcp>=2.0.0"]
 # OpenTelemetry (traces/metrics/logs). Optioneel: alleen nodig als OTEL_EXPORTER_OTLP_ENDPOINT
 # gezet is; zonder deze extra draait de app met alleen gestructureerde JSON-logging.
 otel = [

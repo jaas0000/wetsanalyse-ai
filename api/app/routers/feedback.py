@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 from .. import feedback as svc
 from ..auth import require_client
 from ..ratelimit import rate_limited_client
-from .auth import huidige_userid
+from .auth import actieve_userid
 
 router = APIRouter(
     prefix="/feedback",
@@ -34,7 +34,7 @@ class FeedbackBevestigd(BaseModel):
 async def post_feedback(
     body: FeedbackIn,
     client_id: str = Depends(rate_limited_client),
-    userid: str = Depends(huidige_userid),
+    userid: str = Depends(actieve_userid),
 ):
     feedback_id = await svc.dien_in(
         client_id=client_id,

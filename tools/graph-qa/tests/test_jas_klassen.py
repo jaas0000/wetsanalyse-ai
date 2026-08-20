@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from agent.jas_klassen import GELDIGE_JAS_KLASSEN, JAS_KLASSEN, JAS_KLASSEN_VOLGORDE
 
-# De canonieke JAS-namen + weergave-volgorde (docs/wa-table.png). Deze test is de drift-guard:
+# De canonieke JAS-namen + weergave-volgorde (docs/wetsanalyse/wa-table.png). Deze test is de drift-guard:
 # wijzigen van een naam moet bewust gebeuren en gelijk blijven met de rest van het systeem
 # (validation.JAS_KLASSEN_VOLGORDE in het api-/skill-spoor).
 VERWACHT: tuple[str, ...] = (

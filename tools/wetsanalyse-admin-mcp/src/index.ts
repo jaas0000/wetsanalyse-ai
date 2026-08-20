@@ -3,8 +3,8 @@
  * Wetsanalyse-admin MCP-server (stdio).
  *
  * Ontsluit de bestaande admin-API van de Wetsanalyse-webapp (`/v1/admin/*`) als agent-tools, zodat
- * een MCP-client (Claude Code) de productie-app kan configureren: modelprofielen, wet-catalogus,
- * runtime-settings (chat/capture), gebruikers, token-verbruik en de genereerbare API-tokens (read).
+ * een MCP-client (Claude Code) de productie-app kan configureren: modelprofielen, gebruikers en de
+ * genereerbare API-tokens (read).
  *
  * Config via env (nooit in de repo):
  *   WETSANALYSE_ADMIN_API_URL   — basis-URL van de API, bv. https://wetsanalyse-api.ipalm.nl
@@ -84,7 +84,7 @@ const TOOLS: ToolDef[] = [
   // — modelprofielen —
   {
     name: "list_profiles",
-    description: "Lijst de LLM-modelprofielen (incl. verbruik per profiel).",
+    description: "Lijst de LLM-modelprofielen.",
     input: S({}),
     run: () => apiFetch("GET", "/v1/admin/profiles"),
   },
@@ -131,49 +131,6 @@ const TOOLS: ToolDef[] = [
       return { ok: true };
     },
   },
-  // — wet-catalogus —
-  {
-    name: "list_wetten",
-    description: "Lijst de wet-catalogus (BWB-id + naam).",
-    input: S({}),
-    run: () => apiFetch("GET", "/v1/admin/wetten"),
-  },
-  {
-    name: "upsert_wet",
-    description: "Maak of werk een wet-catalogus-item bij (BWB-id + leesbare naam).",
-    input: S({ bwbId: z.string(), naam: z.string().optional() }),
-    run: ({ bwbId, naam }) => apiFetch("PUT", `/v1/admin/wetten/${seg(bwbId as string)}`, { naam: naam ?? "" }),
-  },
-  {
-    name: "resolve_wet",
-    description: "Stel de officiële citeertitel van een wet voor via de wettenbank-MCP.",
-    input: S({ bwbId: z.string() }),
-    run: (a) => apiFetch("POST", `/v1/admin/wetten/${seg(a.bwbId as string)}/resolve`),
-  },
-  {
-    name: "delete_wet",
-    description: "Verwijder een wet-catalogus-item.",
-    input: S({ bwbId: z.string() }),
-    run: async (a) => {
-      await apiFetch("DELETE", `/v1/admin/wetten/${seg(a.bwbId as string)}`);
-      return { ok: true };
-    },
-  },
-  // — runtime-instellingen —
-  {
-    name: "get_settings",
-    description: "Lees de runtime-instellingen (LLM-call-capture-toggle + chatbot-config; secret nooit).",
-    input: S({}),
-    run: () => apiFetch("GET", "/v1/admin/settings"),
-  },
-  {
-    name: "set_settings",
-    description: "Werk runtime-instellingen bij. Momenteel ondersteund: capture_llm_calls (bool).",
-    input: S({
-      capture_llm_calls: z.boolean().optional(),
-    }),
-    run: (body) => apiFetch("PUT", "/v1/admin/settings", body),
-  },
   // — gebruikers —
   {
     name: "list_users",
@@ -194,63 +151,12 @@ const TOOLS: ToolDef[] = [
     input: S({ userid: z.string(), role: z.enum(["analist", "beheerder"]).optional(), active: z.boolean().optional() }),
     run: ({ userid, ...body }) => apiFetch("PATCH", `/v1/admin/users/${seg(userid as string)}`, body),
   },
-  // — verbruik + tokens (read) —
-  {
-    name: "get_usage",
-    description: "Token-verbruik (aggregatie over de analyses).",
-    input: S({ group_by: z.string().optional() }),
-    run: (a) => apiFetch("GET", `/v1/admin/usage?group_by=${seg((a.group_by as string) ?? "model")}`),
-  },
+  // — API-tokens (read) —
   {
     name: "list_api_tokens",
     description: "Lijst de genereerbare API-tokens (alleen metadata; nooit het token zelf).",
     input: S({}),
     run: () => apiFetch("GET", "/v1/admin/api-tokens"),
-  },
-  // — berichten (release notes) —
-  {
-    name: "maak_bericht",
-    description:
-      "Maak een concept-release-note aan. Titel max ~60 tekens, inhoud max 2 zinnen. " +
-      "Type: 'update' (nieuwe functie/verbetering), 'waarschuwing' (gedrag verandert), " +
-      "'info' (neutraal), 'kritiek' (dringende aandacht). Publiceert nog niet — roep daarna " +
-      "publiceer_bericht aan met het teruggegeven id.",
-    input: S({
-      titel:  z.string().max(256).describe("Beschrijft wat er veranderd is, max ~60 tekens."),
-      inhoud: z.string().max(10000).describe("Max 2 zinnen — wat is er veranderd en wat betekent dat voor de gebruiker. Markdown toegestaan."),
-      type:   z.enum(["update", "waarschuwing", "info", "kritiek"]).default("update"),
-      versie: z.string().max(32).optional().describe("Optioneel, bv. 'v1.3.0' of '2026-08'."),
-    }),
-    run: ({ titel, inhoud, type, versie }) =>
-      apiFetch("POST", "/v1/admin/berichten", { titel, inhoud, type, versie: versie ?? null }),
-  },
-  {
-    name: "publiceer_bericht",
-    description: "Publiceer een bericht zodat alle analisten het zien (badge + panel). Geef het id terug van maak_bericht.",
-    input: S({ id: z.number().int().positive() }),
-    run: (a) => apiFetch("PATCH", `/v1/admin/berichten/${a.id as number}/publicatie`, { gepubliceerd: true }),
-  },
-  {
-    name: "list_berichten_admin",
-    description: "Lijst alle berichten (incl. concepten). Handig om bestaande id's op te zoeken voor publiceer_bericht of update_bericht.",
-    input: S({}),
-    run: async () => {
-      const resp = await apiFetch("GET", "/v1/admin/berichten") as { items: unknown };
-      return resp.items;
-    },
-  },
-  {
-    name: "update_bericht",
-    description: "Pas de inhoud van een bestaand bericht aan (ook al gepubliceerd). Roep eerst list_berichten_admin aan om de huidige waarden te zien — PUT vervangt alle velden.",
-    input: S({
-      id:     z.number().int().positive(),
-      titel:  z.string().max(256).describe("Beschrijft wat er veranderd is, max ~60 tekens."),
-      inhoud: z.string().max(10000).describe("Max 2 zinnen — wat is er veranderd en wat betekent dat voor de gebruiker. Markdown toegestaan."),
-      type:   z.enum(["update", "waarschuwing", "info", "kritiek"]),
-      versie: z.string().max(32).optional().describe("Optioneel, bv. 'v1.3.0' of '2026-08'."),
-    }),
-    run: ({ id, ...body }) =>
-      apiFetch("PUT", `/v1/admin/berichten/${id as number}`, body),
   },
 ];
 

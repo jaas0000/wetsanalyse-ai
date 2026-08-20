@@ -1,0 +1,91 @@
+# BWB-importservice — laadt Nederlandse wetgeving (Basiswettenbestand) in de kennisgraaf.
+#
+# De broncode staat in tools/bwb-import/ en CI bouwt het image naar GHCR
+# (.github/workflows/bwb-import-docker-publish.yml) — net als api/frontend/graph-qa. Geen `build:`
+# hier, want Portainer kan bij een string-deploy niet bouwen.
+#
+# De service hangt alleen aan het graaf-netwerk, is intern bereikbaar op http://bwb-import:8000 en
+# publiceert bewust geen hostpoort: importeren is een schrijfactie op de graaf en hoort niet van
+# buiten aanroepbaar te zijn.
+
+services:
+  bwb-import:
+    # Default is het op de LXC gebouwde image. Zodra bwb-import-docker-publish.yml op master heeft
+    # gedraaid staat het in GHCR: zet dan BWB_IMAGE=ghcr.io/palmw01/bwb-import:latest als stack-env.
+    image: ${BWB_IMAGE:-bwb-import:0.1}
+    container_name: bwb-import
+    restart: unless-stopped
+    environment:
+      GRAPHDB_URL:          http://graphdb:7200
+      GRAPHDB_REPOSITORY:   ${GRAPHDB_REPOSITORY:-inning}
+      # GraphDB-security staat aan: schrijven vereist het service-account.
+      GRAPHDB_USER:         ${GRAPHDB_SVC_USER:?zet GRAPHDB_SVC_USER}
+      GRAPHDB_PASSWORD:     ${GRAPHDB_SVC_PASSWORD:?zet GRAPHDB_SVC_PASSWORD}
+      GRAPHDB_BASE_IRI:     https://ipalm.nl/bwb/
+      GRAPHDB_ONTOLOGY_IRI: https://ipalm.nl/ns/bwb#
+      BWB_DEFAULT_ID:       ${BWB_DEFAULT_ID:-BWBR0004770}
+      BWB_VALIDATE_XSD:     "true"
+      # WTI-verrijking: citeertitels/afkortingen, rechtsgebieden (skos), grondslagen.
+      BWB_IMPORT_WTI:       "true"
+      # Ongetagde tekstverwijzingen ("artikel 3:2 Awb") herkennen als soort=tekstueel.
+      BWB_DETECT_TEKSTUELE_REFS: "true"
+      TZ: Europe/Amsterdam
+    networks:
+      - graaf
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c 'import urllib.request,sys; sys.exit(0 if urllib.request.urlopen(\"http://127.0.0.1:8000/health\").status==200 else 1)'"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  # Wekelijkse herimport. Zonder die herhaling veroudert de graaf stilzwijgend terwijl
+  # brongetrouwheid de kernbelofte van het platform is: een wetswijziging is niet zichtbaar tot
+  # iemand handmatig herimporteert.
+  #
+  # De import is per wet idempotent (named-graph PUT), dus opnieuw draaien is veilig: verdwenen
+  # artikelen verdwijnen mee, ongewijzigde wetten leveren dezelfde graaf op.
+  bwb-import-cron:
+    image: alpine:3.21
+    container_name: bwb-import-cron
+    restart: unless-stopped
+    depends_on:
+      - bwb-import
+    environment:
+      # De te onderhouden regelingen. Expliciet in plaats van "alles wat in de graaf zit", zodat een
+      # lege of beschadigde graaf niet stilzwijgend tot een lege lijst leidt.
+      BWB_IDS: ${BWB_IDS:-BWBR0002320,BWBR0004766,BWBR0004770,BWBR0005537,BWBR0018472,BWBR0019237,BWBR0024096}
+      TZ: Europe/Amsterdam
+    command:
+      - sh
+      - -c
+      - |
+        apk add --no-cache curl tzdata >/dev/null
+        cp /usr/share/zoneinfo/Europe/Amsterdam /etc/localtime
+        cat > /usr/local/bin/herimport.sh << 'ENDOFIMPORT'
+        #!/bin/sh
+        set -eu
+        # Komma-gescheiden lijst → JSON-array.
+        IDS=$$(echo "$$BWB_IDS" | tr ',' '\n' | sed 's/^/"/; s/$$/"/' | paste -sd, -)
+        echo "$$(date -Iseconds) herimport gestart: $$BWB_IDS"
+        # Ruime timeout: zeven regelingen ophalen, valideren en wegschrijven duurt ~20s, maar een
+        # trage bron mag de run niet halverwege afkappen.
+        curl -fsS --max-time 3600 -X POST http://bwb-import:8000/import \
+          -H 'Content-Type: application/json' \
+          -d "{\"bwb_ids\": [$$IDS]}" \
+          | head -c 2000
+        echo
+        echo "$$(date -Iseconds) herimport klaar"
+        ENDOFIMPORT
+        chmod +x /usr/local/bin/herimport.sh
+        echo '0 6 * * 1 /usr/local/bin/herimport.sh 2>&1' > /etc/crontabs/root
+        echo "herimport-cron actief (maandag 06:00) voor: $$BWB_IDS"
+        exec crond -f -l 8
+    networks:
+      - graaf
+
+networks:
+  # Netwerk van de GraphDB-stack (deploy/graphdb/) — daar moet de graaf dus al draaien.
+  graaf:
+    external: true
+    name: ${GRAAF_NETWORK:-graphdb_default}

@@ -29,19 +29,44 @@ class MCPError(Exception):
     pass
 
 
-# Update-vormen: een verb gevolgd door typische update-syntax, óf een query die
-# (na eventuele PREFIX-regels) met een update-verb begint. Een SELECT met het woord
-# "delete" in een FILTER tript hier bewust niet op.
-_UPDATE_RE = re.compile(
-    r"\b(?:insert|delete)\s+(?:data|where)\b"
-    r"|\b(?:insert|delete)\s*\{"
-    r"|^\s*(?:insert|delete|load|clear|drop|create|copy|move|add)\b",
-    re.IGNORECASE | re.MULTILINE,
+# Allowlist in plaats van blocklist. De vorige opzet zocht naar update-sleutelwoorden, en dat is
+# een spel dat je niet wint: `LOAD`/`CLEAR`/`DROP` werden alleen aan het BEGIN van een regel
+# herkend, dus `PREFIX x: <http://a/> LOAD <http://evil/x.ttl>` liep er zo doorheen. Nu is de vraag
+# omgedraaid — wat overblijft na het strippen van commentaar, PREFIX en BASE moet met een
+# lees-vorm beginnen. Alles wat daar niet aan voldoet wordt geweigerd, ook wat we nog niet kennen.
+_LEESVORMEN = ("select", "ask", "construct", "describe")
+
+# Commentaar tot regeleinde — maar niet elk '#' begint commentaar: een stringliteral kan er een
+# bevatten ("nr. #3") en vrijwel elke prefix-IRI eindigt erop (<https://ipalm.nl/ns/bwb#>). Beide
+# vormen matchen daarom éérst, zodat alleen een echt losstaand '#' als commentaar wordt gestript.
+_STRING_OF_HASH = re.compile(r'"(?:[^"\\]|\\.)*"' r"|'(?:[^'\\]|\\.)*'" r"|<[^>\s]*>" r"|#[^\n]*")
+# Een PREFIX-/BASE-declaratie vooraan; herhaald strippen tot de eigenlijke query overblijft.
+_DECLARATIE_RE = re.compile(
+    r"^\s*(?:base\s*<[^>]*>|prefix\s+[^\s:]*:\s*<[^>]*>)\s*", re.IGNORECASE
 )
 
 
+def _query_kern(query: str) -> str:
+    """De query zonder commentaar en zonder PREFIX-/BASE-declaraties — wat er echt wordt uitgevoerd."""
+    zonder_commentaar = _STRING_OF_HASH.sub(lambda m: "" if m.group(0).startswith("#") else m.group(0), query or "")
+    kern = zonder_commentaar.lstrip()
+    while True:
+        nieuw = _DECLARATIE_RE.sub("", kern, count=1)
+        if nieuw == kern:
+            return kern.lstrip()
+        kern = nieuw.lstrip()
+
+
 def _looks_like_update(query: str) -> bool:
-    return bool(_UPDATE_RE.search(query))
+    """True voor alles wat geen leesquery is — inclusief een lege of onherkenbare query.
+
+    Bewust streng: het GraphDB-service-account achter de auth-proxy mág schrijven op de repository,
+    dus dit vangnet is in de praktijk wat een schrijf-SPARQL vanuit de agent tegenhoudt. Bij twijfel
+    weigeren kost hooguit een tool-foutmelding die het model kan herstellen; doorlaten kan de graaf
+    kosten.
+    """
+    kern = _query_kern(query).lower()
+    return not kern.startswith(_LEESVORMEN)
 
 
 def _content_to_text(content: list[Any]) -> str:

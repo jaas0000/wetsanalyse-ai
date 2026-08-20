@@ -1,11 +1,11 @@
-# Retentie voor de GHCR-images ghcr.io/<owner>/wettenbank-mcp en .../wetsanalyse-api.
+# Retentie voor de GHCR-image ghcr.io/<owner>/wetsanalyse-api.
 # Bewaart structureel de 5 nieuwste builds (getagde versies) plus hun bijbehorende
 # untagged child-manifests (SBOM/provenance-attestaties); oudere builds en verweesde
 # untagged digests worden opgeruimd. dataaxiom/ghcr-cleanup-action snapt de multi-arch-/
 # attestatie-graaf, zodat een behouden image of z'n provenance niet breekt.
 #
 # Twee triggers:
-#   * workflow_run  — draait automatisch ná een geslaagde docker-publish (echte opruiming).
+#   * workflow_run  — draait automatisch ná een geslaagde api-docker-publish (echte opruiming).
 #   * workflow_dispatch — handmatig; standaard dry-run (toont alleen wat zou worden verwijderd).
 #                          Zet de input `dry_run` op false om de eenmalige opschoning echt uit
 #                          te voeren.
@@ -20,7 +20,7 @@ on:
         type: boolean
         default: true
   workflow_run:
-    workflows: ["docker-publish", "api-docker-publish"]
+    workflows: ["api-docker-publish"]
     branches: [master]
     types: [completed]
 
@@ -32,18 +32,6 @@ jobs:
     permissions:
       packages: write
     steps:
-      - name: MCP-image opruimen (bewaar laatste 5 builds)
-        uses: dataaxiom/ghcr-cleanup-action@d52806a0dc70b430571a37da1fde39733ffd640f # v1
-        with:
-          package: wettenbank-mcp
-          keep-n-tagged: 5        # bewaar de 5 nieuwste getagde builds
-          exclude-tags: latest    # latest nooit verwijderen (extra vangnet)
-          delete-untagged: true   # verweesde untagged digests opruimen
-          validate: true          # na afloop de integriteit van de behouden images checken
-          # Handmatig = dry-run (preview) tenzij expliciet uitgezet; automatisch = echt.
-          dry-run: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
-          token: ${{ secrets.GITHUB_TOKEN }}
-
       - name: API-image opruimen (bewaar laatste 5 builds)
         uses: dataaxiom/ghcr-cleanup-action@d52806a0dc70b430571a37da1fde39733ffd640f # v1
         with:

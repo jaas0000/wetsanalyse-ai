@@ -1,30 +1,12 @@
 # Automatisch kwetsbaarheids-/update-PR's (BIO2 / ISO 27002:2022 §8.8 kwetsbaarhedenbeheer).
-# Houdt alle npm-dependencies, base-images en GitHub Actions actueel.
+# Houdt alle dependencies, base-images en GitHub Actions actueel.
 #
 # Groepering: `patch-and-minor` bundelt patch/minor-bumps per manifest in ÉÉN wekelijkse PR
 # (dev én prod, want de risk-lat ligt bij semver-major, niet bij dep-type). Majors landen
-# als losse PR's zodat ze individueel reviewbaar zijn — dat is de grens die de
-# `security-updates`-skill hanteert.
+# als losse PR's zodat ze individueel reviewbaar zijn.
 version: 2
 updates:
   # ── MCP-servers (TypeScript) ──────────────────────────────────────────────────
-  - package-ecosystem: npm
-    directory: /tools/wettenbank-mcp
-    schedule:
-      interval: weekly
-    open-pull-requests-limit: 5
-    groups:
-      patch-and-minor:
-        update-types: ["patch", "minor"]
-
-  - package-ecosystem: docker
-    directory: /tools/wettenbank-mcp
-    schedule:
-      interval: weekly
-    groups:
-      patch-and-minor:
-        update-types: ["patch", "minor"]
-
   - package-ecosystem: npm
     directory: /tools/wetsanalyse-admin-mcp
     schedule:
@@ -34,7 +16,16 @@ updates:
       patch-and-minor:
         update-types: ["patch", "minor"]
 
-  # ── Frontend (Next.js, BFF met werkplek + beheerscherm) ───────────────────────
+  - package-ecosystem: npm
+    directory: /tools/proxmox-mcp
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      patch-and-minor:
+        update-types: ["patch", "minor"]
+
+  # ── Frontend (Next.js, BFF met de werkplek) ───────────────────────────────────
   - package-ecosystem: npm
     directory: /frontend
     schedule:
@@ -46,24 +37,6 @@ updates:
 
   - package-ecosystem: docker
     directory: /frontend
-    schedule:
-      interval: weekly
-    groups:
-      patch-and-minor:
-        update-types: ["patch", "minor"]
-
-  # ── Frontend-chat (Next.js, Juridische Assistent) ─────────────────────────────
-  - package-ecosystem: npm
-    directory: /frontend-chat
-    schedule:
-      interval: weekly
-    open-pull-requests-limit: 5
-    groups:
-      patch-and-minor:
-        update-types: ["patch", "minor"]
-
-  - package-ecosystem: docker
-    directory: /frontend-chat
     schedule:
       interval: weekly
     groups:
@@ -100,6 +73,24 @@ updates:
 
   - package-ecosystem: docker
     directory: /tools/graph-qa
+    schedule:
+      interval: weekly
+    groups:
+      patch-and-minor:
+        update-types: ["patch", "minor"]
+
+  # ── BWB-importer (Python, requirements.txt) ───────────────────────────────────
+  - package-ecosystem: pip
+    directory: /tools/bwb-import
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      patch-and-minor:
+        update-types: ["patch", "minor"]
+
+  - package-ecosystem: docker
+    directory: /tools/bwb-import
     schedule:
       interval: weekly
     groups:

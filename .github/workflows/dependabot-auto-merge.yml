@@ -1,7 +1,6 @@
 # Auto-merge voor Dependabot-PR's die patch/minor zijn of uit een van onze
 # expliciete groepen komen (zie `.github/dependabot.yml` → `groups.patch-and-minor`).
-# Semver-majors gaan HIER NIET vanzelf door — die verdienen menselijke review
-# (of behandeling via de `security-updates`-skill in .claude/skills/).
+# Semver-majors gaan HIER NIET vanzelf door — die verdienen menselijke review.
 #
 # Voorwaarde: Settings → General → "Allow auto-merge" moet AAN staan op de repo,
 # anders faalt `gh pr merge --auto` met "auto-merge is not allowed for this repository".

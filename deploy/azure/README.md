@@ -1,101 +1,131 @@
-# Wetsanalyse — Azure deployment
+# Wetsanalyse op Azure — standby-omgeving
 
-Deployt de volledige Wetsanalyse-stack op **Azure Container Apps** met vijf componenten:
+Een **zelfstandige** kopie van het platform op Azure Container Apps: eigen kennisgraaf, eigen
+database, geen verbinding met de docker-LXC. Bedoeld om **klaar te staan**, niet om te draaien —
+zolang je niets deployt, kost deze map niets.
 
-| Component | Image | Bereikbaar |
+| Component | Type | Bereikbaar |
 |---|---|---|
-| PostgreSQL | Azure Database for PostgreSQL | intern |
-| Wettenbank MCP | `ghcr.io/palmw01/wettenbank-mcp` | intern |
-| API | `ghcr.io/palmw01/wetsanalyse-api` | intern |
-| graph-qa | `ghcr.io/palmw01/graph-qa` | intern |
-| Frontend | `ghcr.io/palmw01/wetsanalyse-frontend` | publiek HTTPS |
+| PostgreSQL | Flexible Server (B1ms) | intern |
+| GraphDB | Container App | intern |
+| BWB-import | Container Apps **Job** (handmatig) | — |
+| API | Container App | intern |
+| graph-qa | Container App | intern |
+| Frontend | Container App | **publiek HTTPS** |
 
-> **graph-qa + de kennisgraaf.** graph-qa is de agent achter de werkplek (QA + annotatie). **Fase 1**
-> verbindt met de **huidige** graaf via de publieke GraphDB-MCP (`--graphdb-mcp-url`, default
-> `https://graphdb-mcp.ipalm.nl/mcp`) met het `GRAPHDB_TOKEN`. **Fase 2** (toekomst): een eigen
-> GraphDB-instantie — dan alleen `--graphdb-mcp-url` + het token omzetten (+ eigen similarity-index).
-> In CI komt `GRAPHDB_TOKEN` uit de repo-secret `GRAPHDB_TOKEN` (`azure-infra.yml`).
+Alleen de frontend heeft een publiek adres. De rest praat binnen de Container Apps Environment.
 
----
+## Vooraf: de GraphDB-licentie
 
-## Azure deployment
+**Zonder licentie is deze omgeving niet bruikbaar.** GraphDB 11 laat zonder licentiebestand alleen
+*lezen* toe; het eerste schrijf-verzoek van de import-job krijgt een `500 No license was set`. Op de
+docker-LXC zit die licentie in de persistente datadirectory (`/opt/graphdb/home/work/graphdb.license`)
+en valt hij niet op — een verse instantie heeft hem niet.
 
-### Vereisten
+Geef het bestand mee met `--license-file`; het script codeert het naar base64 en zet het als secret
+in de deployment, waarna een init-container het op zijn plek schrijft. Controleer eerst of je
+licentievoorwaarden een tweede, gelijktijdig draaiende instantie toestaan — dat is een vraag aan
+Ontotext, niet aan deze README.
 
-- [Azure CLI](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli) geïnstalleerd
-- Azure-subscription met rechten om resources aan te maken
-- Python 3.10+
+Zonder `--license-file` slaagt de deployment wél; je houdt dan een lege, read-only graaf.
 
-### Stap 1 — Inloggen en resource group aanmaken
+## Deployen
+
+### Via GitHub Actions (aanbevolen)
+
+Actions → **azure-infra** → *Run workflow*, met drie keuzes:
+
+| actie | wat het doet |
+|---|---|
+| `wat-if` *(default)* | Azure toont welke resources zouden ontstaan of wijzigen. Maakt niets aan — de enige manier om de template tegen je echte subscription te toetsen (quota, regio, rechten). |
+| `deploy` | rolt de stack uit. De samenvatting aan het eind bevat de webapp-URL en de vervolgstappen. |
+| `afbreken` | verwijdert de hele resource group. Vraagt om de naam ter bevestiging. |
+
+Benodigde repo-secrets: `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`,
+`AZURE_CLIENT_SECRET`, `AZURE_AI_KEY` en `GRAPHDB_LICENSE_B64` (de licentie als
+`base64 -w0 graphdb.license`). Repo-vars: `LLM_API_BASE`, optioneel `LLM_MODEL`,
+`AZURE_RESOURCE_GROUP` en `AZURE_LOCATION`.
+
+De publish-workflows raken Azure **niet** aan — die zouden bij elke master-push naar een lege
+resource group praten. Een image-update is hier dus een nieuwe `deploy`.
+
+### Met de hand
 
 ```bash
 az login
-
 az group create --name rg-wetsanalyse --location westeurope
-```
 
-### Stap 2 — Deployment uitvoeren
-
-```bash
-python3 deploy/azure/gen-deploy.py "<azure-ai-foundry-key>" \
+# 1. Kijk eerst wat er zou gebeuren (maakt niets aan)
+python3 deploy/azure/gen-deploy.py "<azure-ai-key>" \
     --llm-api-base "https://<resource>.services.ai.azure.com" \
-    --graphdb-token "<graphdb-mcp-bearer>" \
-    --resource-group rg-wetsanalyse \
+    --license-file /pad/naar/graphdb.license \
+    --what-if
+
+# 2. Uitrollen (10-15 min; PostgreSQL is de trage stap)
+python3 deploy/azure/gen-deploy.py "<azure-ai-key>" \
+    --llm-api-base "https://<resource>.services.ai.azure.com" \
+    --license-file /pad/naar/graphdb.license \
     --run
 ```
 
-`--graphdb-token` (of de env `GRAPHDB_TOKEN`) is verplicht: het is de bearer van de huidige GraphDB-MCP
-waarmee graph-qa verbindt. Voeg 'm in CI toe als repo-secret `GRAPHDB_TOKEN`.
-
-Het script genereert alle benodigde tokens en wachtwoorden automatisch.
-De deployment duurt 10–15 minuten. Daarna verschijnt de frontend-URL in de output.
-
-### Stap 3 — Eerste beheerdersaccount
-
-Ga naar `<frontendUrl>/setup` en registreer de eerste beheerder.
-
----
-
-## Lokaal draaien
-
-Dezelfde vijf containers lokaal opstarten via Docker of Podman.
-
-### Vereisten
-
-- Docker + Docker Compose, of Podman + podman-compose
-- Python 3.10+
-
-### Stap 1 — Configuratie
+Daarna twee handelingen:
 
 ```bash
-cd deploy/azure
-cp .env.example .env
-# Vul LLM_API_BASE, LLM_API_KEY, AUTH_URL en GRAPHDB_TOKEN in
+# de graaf vullen (~20s voor zeven regelingen)
+az containerapp job start -n wetsanalyse-bwb-import -g rg-wetsanalyse
+
+# de eerste beheerder aanmaken
+open "<frontendUrl>/setup"     # frontendUrl staat in de deployment-output
 ```
 
-### Stap 2 — Secrets genereren
+Het script genereert bij elke run **verse** tokens en wachtwoorden. Op een draaiende omgeving
+betekent opnieuw deployen dus dat sessies vervallen en de admin-tokens wijzigen. Voor een omgeving
+die je aan- en uitzet is dat prima; wil je ze stabiel houden, bewaar dan het parameterbestand
+(`--params-file`) buiten de repo en hergebruik het.
 
-```bash
-python3 gen-secrets.py
-```
+## De graaf is bewust vluchtig
 
-### Stap 3 — Stack starten
+GraphDB draait **zonder persistente opslag**. Dat is geen bezuiniging maar een gevolg van hoe zijn
+opslaglaag werkt: geheugen-gemapte bestanden en file-locking verdragen netwerkopslag slecht (traag,
+en in het slechtste geval stille indexcorruptie), en Azure Files is de enige persistente mount die
+een container-app kan krijgen. Een managed disk zou het oplossen maar vraagt een VM.
 
-```bash
-docker compose up -d
-# of:
-podman-compose up -d
-```
+Dat kan hier, omdat de graaf **reproduceerbaar** is: de import-job haalt alle regelingen rechtstreeks
+bij overheid.nl. Gevolgen:
 
-De frontend is bereikbaar op `http://localhost:3000`.
-Ga naar `/setup` voor het eerste beheerdersaccount.
+- De graphdb-app schaalt **niet naar nul** (`minReplicas: 1`) — anders is de graaf bij de volgende
+  request leeg. Dit is de component die doorloopt zolang de omgeving aan staat.
+- Na elke herstart van die app moet de import-job opnieuw draaien.
+- De similarity-index `bwb_similarity` (voor `semantic_search`) overleeft een herstart evenmin en
+  moet opnieuw gebouwd worden; tot dat moment valt de tool terug op `search_wetgeving`.
 
----
+## Beveiliging — hoe dit afwijkt van de LXC
 
-## Opruimen (Azure)
+Op de LXC draait GraphDB met eigen security en zit er een auth-proxy voor die het bearer-token van
+graph-qa controleert en vervangt door een service-account. **Hier niet**: de graaf is alleen binnen
+de Container Apps Environment bereikbaar (`external: false`), en dat is de grens. `GRAPHDB_TOKEN`
+wordt wel gezet — de code eist het fail-closed — maar het is hier geen slot.
 
-Verwijder de volledige resource group om alle kosten te stoppen:
+Voor een standby-/demo-omgeving is dat verdedigbaar. Wordt dit ooit een productieomgeving, dan hoort
+hetzelfde service-account + proxy-patroon als op de LXC erbij.
 
-```bash
-az group delete --name rg-wetsanalyse --yes
-```
+Verder ongewijzigd: alle applicatie-secrets zijn **bestanden** (`*_FILE`-patroon via secret-volumes),
+nooit platte env-vars.
+
+## Kosten drukken
+
+- **Uit**: `az group delete -n rg-wetsanalyse` — de omgeving is in een kwartier terug te zetten.
+- **Pauze**: `az postgres flexible-server stop -n wetsanalyse-db -g rg-wetsanalyse` plus de
+  graphdb-app op nul replica's. Api, graph-qa en frontend schalen zelf terug (frontend houdt één
+  replica: een cold start laat Auth.js-redirects timeouten).
+
+## Bestanden
+
+| bestand | wat |
+|---|---|
+| `main.bicep` | de volledige infrastructuur |
+| `gen-deploy.py` | genereert de secrets + parameters en roept `az deployment` aan (`--what-if` / `--run`) |
+| `.gitignore` | houdt `params.json` en licentiebestanden buiten de repo |
+
+Het image dat elke app draait is een parameter (`apiImage`, `graphQaImage`, …), zodat CI een digest
+kan meegeven in plaats van `:latest`.

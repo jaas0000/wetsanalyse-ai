@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import asyncio
 
-from agent.agent import answer_stream
+from agent.agent import answer_stream, delete_conversation
 from fakes import FakeGraph, FakeLLM, make_settings, response, text_block, tool_block
 
 ART_IRI = "https://ipalm.nl/bwb/BWBR0004770/artikel/9"
@@ -53,6 +53,31 @@ def test_nieuw_gesprek_start_leeg(tmp_path):
     msgs = llm.calls[0]["messages"]
     # Alleen de nieuwe user-vraag; geen eerdere historie.
     assert len(msgs) == 1 and msgs[0]["role"] == "user"
+
+
+def test_delete_conversation_wist_de_thread(tmp_path):
+    """Na delete_conversation start dezelfde conversation_id met een LEGE historie (privacy)."""
+    db = str(tmp_path / "cp.db")
+    settings = make_settings(enable_planning=False, checkpoint_db_path=db)
+
+    graph1 = FakeGraph(result=f"<{ART_IRI}> bwb:tekst 'zes weken' .")
+    _run(answer_stream("Wat is artikel 9 IW?", "weg-1", settings=settings, llm=_turn1_llm(), graph=graph1))
+
+    import asyncio
+    asyncio.run(delete_conversation("weg-1", settings=settings))
+
+    # Volgende beurt op diezelfde id: alleen de nieuwe user-vraag, geen eerdere historie.
+    llm2 = FakeLLM([response([text_block("Vers.")], "end_turn")])
+    _run(answer_stream("Nieuwe vraag.", "weg-1", settings=settings, llm=llm2, graph=FakeGraph(result="")))
+    msgs = llm2.calls[0]["messages"]
+    assert len(msgs) == 1 and msgs[0]["role"] == "user"
+
+
+def test_delete_onbekende_conversation_is_idempotent(tmp_path):
+    """Een onbekende id wissen is geen fout (idempotent)."""
+    import asyncio
+    settings = make_settings(enable_planning=False, checkpoint_db_path=str(tmp_path / "cp.db"))
+    asyncio.run(delete_conversation("bestaat-niet", settings=settings))
 
 
 def test_zonder_memory_context_geen_injectie(tmp_path):

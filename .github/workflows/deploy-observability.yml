@@ -1,5 +1,5 @@
 # Reproduceerbare deploy van de observability-laag: de backends-stack (OTel-Collector + Tempo + Loki +
-# Prometheus + Alloy) naar Portainer, plus Grafana-provisioning (datasources + dashboard) en alerting.
+# Prometheus + Alloy) naar Portainer, plus Grafana-provisioning (datasources + dashboards) en alerting.
 # Handmatig (workflow_dispatch) of bij wijzigingen in deploy/observability/**. Géén image-build:
 # upstream images. Inactief tot de secrets/vars bestaan.
 
@@ -23,24 +23,28 @@ jobs:
       PORTAINER_URL: ${{ secrets.PORTAINER_URL }}
       PORTAINER_API_KEY: ${{ secrets.PORTAINER_API_KEY }}
       PORTAINER_STACK_ID: ${{ vars.PORTAINER_OBSERVABILITY_STACK_ID }}
-      PORTAINER_ENDPOINT_ID: "1"
-      PROXY_NETWORK: "homeinfra_internal"
+      # Docker-LXC op Proxmox (endpoint 3).
+      PORTAINER_ENDPOINT_ID: ${{ vars.DEV_PORTAINER_ENDPOINT_ID || '3' }}
+      # De stack maakt zijn eigen netwerk aan; app-stacks joinen daar als extern netwerk op.
+      OBS_NETWORK: ${{ vars.OBS_NETWORK || 'observability_default' }}
+      GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
+      GRAFANA_ROOT_URL: ${{ vars.GRAFANA_ROOT_URL || 'https://grafana.ipalm.nl' }}
       GRAFANA_URL: ${{ secrets.GRAFANA_URL }}
       GRAFANA_TOKEN: ${{ secrets.GRAFANA_TOKEN }}
-      # Optioneel: read-only jobstore-wachtwoord voor de live jobs-tabel (datasource wa-postgres).
-      # Leeg = provision-grafana.sh slaat die datasource over (de rest werkt gewoon).
-      GRAFANA_WA_PG_PASSWORD: ${{ secrets.GRAFANA_WA_PG_PASSWORD }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Backends-stack redeployen (Portainer)
         if: ${{ env.PORTAINER_API_KEY != '' && env.PORTAINER_STACK_ID != '' }}
         run: |
           set -euo pipefail
+          [ -n "${GRAFANA_ADMIN_PASSWORD:-}" ] || { echo "::error::secrets.GRAFANA_ADMIN_PASSWORD ontbreekt (Grafana hoort bij deze stack)"; exit 1; }
           jq -n --rawfile compose deploy/observability/docker-compose.stack.yml \
-            --arg net "$PROXY_NETWORK" \
+            --arg net "$OBS_NETWORK" --arg gfpw "$GRAFANA_ADMIN_PASSWORD" --arg gfurl "$GRAFANA_ROOT_URL" \
             '{stackFileContent:$compose,
-              env:[{name:"PROXY_NETWORK",value:$net}],
+              env:[{name:"OBS_NETWORK",value:$net},
+                   {name:"GRAFANA_ADMIN_PASSWORD",value:$gfpw},
+                   {name:"GRAFANA_ROOT_URL",value:$gfurl}],
               pullImage:true, prune:false}' > /tmp/obs-payload.json
           # Idempotente PUT met retry op de transiënte 5xx-recreate-race.
           put() {
@@ -59,9 +63,9 @@ jobs:
               *)  [ "$a" -lt 3 ] && { echo "::warning::HTTP $code — backoff"; sleep $((a*30)); } || echo "::warning::HTTP $code na 3 pogingen" ;;
             esac
           done
-          echo "Wachten tot de 5 backends draaien…"
+          echo "Wachten tot de 6 backends draaien…"
           DOCKER="$PORTAINER_URL/api/endpoints/$PORTAINER_ENDPOINT_ID/docker"
-          check_py="import sys,json; want={'otel-collector','tempo','loki','prometheus','alloy'}; run={n.strip('/') for c in json.load(sys.stdin) if c.get('State')=='running' for n in c.get('Names',[])}; print('OK' if want<=run else 'WACHT')"
+          check_py="import sys,json; want={'otel-collector','tempo','loki','prometheus','alloy','grafana'}; run={n.strip('/') for c in json.load(sys.stdin) if c.get('State')=='running' for n in c.get('Names',[])}; print('OK' if want<=run else 'WACHT')"
           for i in $(seq 1 20); do
             ok=$(curl -sS -H "X-API-Key: $PORTAINER_API_KEY" "$DOCKER/containers/json" | python3 -c "$check_py" || echo ERR)
             echo "poging $i: $ok"
@@ -89,10 +93,10 @@ jobs:
           done
           echo "::error::Grafana werd niet gereed na de redeploy."; cat /tmp/gh.json || true; exit 1
 
-      - name: Grafana provisionen (datasources + dashboard)
+      - name: Grafana provisionen (datasources + dashboards)
         if: ${{ env.GRAFANA_TOKEN != '' }}
         run: bash deploy/observability/provision-grafana.sh
 
-      - name: Alerting toepassen (contactpunt + regels)
+      - name: Alerting toepassen (regels)
         if: ${{ env.GRAFANA_TOKEN != '' }}
         run: bash deploy/observability/alerting/apply.sh

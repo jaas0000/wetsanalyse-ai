@@ -1,5 +1,6 @@
-# Self-contained observability-backends-stack (configs inline i.p.v. bindmounts).
-# Gedeployd via Portainer-API als standalone-string-stack. Netwerk: homeinfra_internal.
+# Self-contained observability-stack (configs inline i.p.v. bindmounts).
+# Gedeployd via Portainer-API als standalone-string-stack op de docker-LXC (endpoint 3).
+# Bevat Grafana zelf, met de drie datasources als file-provisioning.
 services:
   otel-collector:
     image: otel/opentelemetry-collector-contrib:0.119.0
@@ -89,7 +90,80 @@ services:
       - loki
     mem_limit: 256m
 
+  # Grafana hoort bij deze stack, zodat de verzamelstack zelfstandig bruikbaar is. Datasources
+  # worden hier
+  # geprovisioneerd, dashboards laadt provision-grafana.sh na de deploy (te groot om inline te zetten).
+  grafana:
+    image: grafana/grafana:11.6.0
+    container_name: grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?zet GRAFANA_ADMIN_PASSWORD}
+      # Achter nginx-proxy-manager; Grafana moet zijn eigen externe URL kennen voor links/redirects.
+      GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-https://grafana.ipalm.nl}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+    ports:
+      # NPM draait op een andere LXC en deelt geen docker-netwerk → hostpoort nodig.
+      - "${GRAFANA_HOST_PORT:-3001}:3000"
+    configs:
+      - source: grafana_datasources
+        target: /etc/grafana/provisioning/datasources/wetsanalyse.yaml
+    volumes:
+      - grafana_data:/var/lib/grafana
+    networks:
+      - proxy
+    depends_on:
+      - prometheus
+      - loki
+      - tempo
+    mem_limit: 512m
+
+
 configs:
+  # Datasource-provisioning voor de Grafana in deze stack. Let op de dubbele $$ in derivedFields:
+  # compose interpoleert enkelvoudige ${...} weg.
+  grafana_datasources:
+    content: |
+      apiVersion: 1
+      datasources:
+        - name: Prometheus (wetsanalyse)
+          uid: wa-prometheus
+          type: prometheus
+          access: proxy
+          url: http://prometheus:9090
+          isDefault: true
+          jsonData:
+            httpMethod: POST
+        - name: Loki (wetsanalyse)
+          uid: wa-loki
+          type: loki
+          access: proxy
+          url: http://loki:3100
+          jsonData:
+            derivedFields:
+              - name: TraceID
+                matcherType: label
+                matcherRegex: trace_id
+                datasourceUid: wa-tempo
+                url: "$${__value.raw}"
+        - name: Tempo (wetsanalyse)
+          uid: wa-tempo
+          type: tempo
+          access: proxy
+          url: http://tempo:3200
+          jsonData:
+            serviceMap:
+              datasourceUid: wa-prometheus
+            nodeGraph:
+              enabled: true
+            tracesToLogsV2:
+              datasourceUid: wa-loki
+              spanStartTimeShift: -1h
+              spanEndTimeShift: 1h
+              filterByTraceID: true
   alloy_config:
     content: |
       discovery.docker "containers" {
@@ -99,7 +173,7 @@ configs:
         targets = discovery.docker.containers.targets
         rule {
           source_labels = ["__meta_docker_container_name"]
-          regex         = "/(wetsanalyse-frontend|wettenbank-mcp)"
+          regex         = "/(wetsanalyse-dev-.*|graphdb|bwb-import|mcp-auth-proxy)"
           action        = "keep"
         }
         rule {
@@ -261,8 +335,10 @@ volumes:
   loki_data:
   prometheus_data:
   alloy_data:
+  grafana_data:
 
 networks:
+  # Eigen netwerk met een vaste naam, zodat andere stacks er als extern netwerk op kunnen joinen
+  # (OTLP naar http://otel-collector:4318).
   proxy:
-    external: true
-    name: ${PROXY_NETWORK:-homeinfra_internal}
+    name: ${OBS_NETWORK:-observability_default}

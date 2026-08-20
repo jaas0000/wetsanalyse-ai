@@ -5,7 +5,7 @@ Vers afgeleid uit de brondocumentatie (`docs/wetsanalyse/wetsanalyse-rijk/H2-JAS
 omschrijving, een herken-vraag (à la zinsontleding) en de uitdrukkingswijze in wetgeving. Deze
 referentie voedt de annotatie-prompt (`agent/annotatie_prompt.py`).
 
-De klasse-*namen* zijn de canonieke JAS-namen (dezelfde weergave-volgorde als `docs/wa-table.png`),
+De klasse-*namen* zijn de canonieke JAS-namen (dezelfde weergave-volgorde als `docs/wetsanalyse/wa-table.png`),
 zodat annotaties niet driften t.o.v. de rest van het systeem. Alléén de namen zijn gedeeld; de
 inhoudelijke duiding hieronder komt vers uit de bron, niet uit de skill-prompts.
 """

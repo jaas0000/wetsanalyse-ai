@@ -37,7 +37,16 @@ _RETRIEVAL_SYSTEM = (
     "- Je MOET eindigen met een geslaagde get_lid/get_artikel/get_bepaling-call die de tekst teruggaf.\n"
     "Geef daarna UITSLUITEND deze JSON terug (geen proza):\n"
     '{"bwbId": "<BWBR…>", "nummer": "<het opgehaalde nummer, bv. 9.1>", "artikel": "<artikelnr of leeg>", '
-    '"lid": "<lidnummer of leeg>", "citeertitel": "<naam van de regeling>"}'
+    '"lid": "<lidnummer of leeg>", "citeertitel": "<naam van de regeling>"}\n'
+    "\n"
+    "UITZONDERING — de gebruiker noemt GEEN bepaling maar een ONDERWERP ('alles over aansprakelijkheid "
+    "van de bestuurder', 'de bepalingen over uitstel van betaling'). Kies er dan NIET zelf één uit: "
+    "zoek met semantic_search/search_wetgeving en leg de gevonden bepalingen als keuze voor. Haal in "
+    "dat geval GEEN tekst op en geef deze JSON terug:\n"
+    '{"kandidaten": [{"bwbId": "<BWBR…>", "artikel": "<nr>", "lid": "<nr of leeg>", '
+    '"citeertitel": "<regeling>", "fragment": "<eerste zin van de bepaling>"}]}\n'
+    "Maximaal 8 kandidaten, de meest relevante eerst. Twijfel je of het een onderwerp of een concrete "
+    "bepaling is, en wijst de vraag één bepaling aan? Dan is het een concrete bepaling — haal die op."
 )
 
 
@@ -46,7 +55,12 @@ SPECIALISTS: dict[str, Specialist] = {
         system=(
             "Je bent de DEFINITIE-specialist. Je herleidt en verklaart juridische begrippen. "
             "Begin bij resolve_begrip en de definitieartikelen; citeer de brondefinitie letterlijk "
-            "met vindplaats en benoem of het een wettelijke definitie of interpretatie is."
+            "met vindplaats en benoem of het een wettelijke definitie of interpretatie is.\n"
+            "Begripsbepalingen staan doorgaans in artikel 1 of 2 van een regeling; haal die beide "
+            "in één beurt op in plaats van na elkaar. Het definitie-artikel zelf bevat vaak alleen "
+            "de aanhef ('Deze wet verstaat onder:') — de definities zitten in de onderdelen van het "
+            "lid, die get_lid meelevert. Citeer de vindplaats van het ONDERDEEL (…&o=k), niet die "
+            "van het hele lid."
         ),
         tools=frozenset({
             "resolve_begrip", "search_wetgeving", "semantic_search",

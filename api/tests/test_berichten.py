@@ -27,19 +27,25 @@ async def client(monkeypatch):
 
     from app import db, ratelimit
     from app.config import get_settings
-    from app.deps import get_store
+    from app.deps import get_annotatie_store
 
     get_settings.cache_clear()
-    get_store.cache_clear()
+    get_annotatie_store.cache_clear()
     ratelimit.reset()
     db.init_engine("sqlite+aiosqlite://")
     await db.create_all()
+
+    # De gescopete endpoints lopen via `actieve_userid`: die eist dat het account bestaat en actief
+    # is, dus een verzonnen X-User-Id geeft 401. Zet de userids die deze tests sturen als echte
+    # accounts neer ("bestaat-niet" bewust niet — die hoort juist te falen).
+    from conftest import maak_testgebruikers
+    await maak_testgebruikers("user1", "user2", "irrelevant")
 
     from app.main import app
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         yield ac
 
-    get_store.cache_clear()
+    get_annotatie_store.cache_clear()
     await db.dispose_engine()
 
 
@@ -314,7 +320,7 @@ async def test_analist_ziet_gepubliceerd_bericht(client):
 
 async def test_ongelezen_aantal_route_basis(client):
     """Route retourneert 0 voor een gebruiker zonder berichten."""
-    r = await client.get("/v1/berichten/ongelezen-aantal", headers={"X-User-Id": "u1"})
+    r = await client.get("/v1/berichten/ongelezen-aantal", headers={"X-User-Id": "user2"})
     assert r.status_code == 200
     assert r.json()["aantal"] == 0
 

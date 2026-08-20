@@ -63,12 +63,24 @@ class FakeLLM:
         self.index += 1
         return resp
 
-    def create(self, **kwargs: Any) -> SimpleNamespace:
+    def _leg_vast(self, kwargs: dict[str, Any]) -> None:
+        """Onthoud de call, met `system` als één string.
+
+        De aanroeper mag het systeemblok gesplitst aanleveren (`[stabiel, variabel]`) zodat de echte
+        adapter er een prompt-cache-punt tussen kan zetten; wat het model uiteindelijk leest is de
+        aaneenschakeling. Tests vragen naar dát — de splitsing zelf staat in `system_delen`.
+        """
+        systeem = kwargs.get("system")
+        if isinstance(systeem, list):
+            kwargs = {**kwargs, "system_delen": systeem, "system": "\n\n".join(d for d in systeem if d)}
         self.calls.append(kwargs)
+
+    def create(self, **kwargs: Any) -> SimpleNamespace:
+        self._leg_vast(kwargs)
         return self._next()
 
     def stream(self, **kwargs: Any) -> _FakeStream:
-        self.calls.append(kwargs)
+        self._leg_vast(kwargs)
         return _FakeStream(self._next())
 
 

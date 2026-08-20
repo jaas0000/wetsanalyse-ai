@@ -15,10 +15,10 @@ async def client(monkeypatch):
 
     from app import db, ratelimit
     from app.config import get_settings
-    from app.deps import get_store
+    from app.deps import get_annotatie_store
 
     get_settings.cache_clear()
-    get_store.cache_clear()
+    get_annotatie_store.cache_clear()
     ratelimit.reset()
     db.init_engine("sqlite+aiosqlite://")
     await db.create_all()
@@ -26,11 +26,17 @@ async def client(monkeypatch):
     # net als in productie via de lifespan) — create_all() alleen volstaat niet voor die kolom.
     await db.reconcile_schema()
 
+    # De gescopete endpoints lopen via `actieve_userid`: die eist dat het account bestaat en actief
+    # is, dus een verzonnen X-User-Id geeft 401. Zet de userids die deze tests sturen als echte
+    # accounts neer ("bestaat-niet" bewust niet — die hoort juist te falen).
+    from conftest import maak_testgebruikers
+    await maak_testgebruikers("user1")
+
     from app.main import app
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         yield ac
 
-    get_store.cache_clear()
+    get_annotatie_store.cache_clear()
     await db.dispose_engine()
 
 

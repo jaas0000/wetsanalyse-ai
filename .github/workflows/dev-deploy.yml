@@ -54,11 +54,11 @@ jobs:
             context: tools/graph-qa
             file: tools/graph-qa/Dockerfile
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - name: Set up Buildx
         uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
       - name: Log in bij GHCR
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -105,14 +105,24 @@ jobs:
       NPM_SECRET: ${{ secrets.NPM_SECRET }}
       NPM_CERT_ID: ${{ vars.NPM_CERT_ID }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
-      - name: Preflight (verplichte secrets/vars aanwezig?)
+      - name: Preflight (secrets aanwezig én Portainer bereikbaar?)
         run: |
           set -euo pipefail
           for v in PORTAINER_URL PORTAINER_API_KEY SEED LLM_API_BASE LLM_API_KEY GRAPHDB_TOKEN; do
             [ -n "${!v:-}" ] || { echo "::error::ontbrekende secret/var: $v (zie deploy/dev/README.md)"; exit 1; }
           done
+          # Auth vóór de deploy controleren: een verlopen API-key uitte zich anders verderop als een
+          # onbegrijpelijke jq-fout ("Cannot index string with string"), omdat /api/stacks dan een
+          # foutobject teruggeeft in plaats van een array.
+          code=$(curl -sS -o /tmp/stacks.json -w '%{http_code}' \
+                  -H "X-API-Key: $PORTAINER_API_KEY" "$PORTAINER_URL/api/stacks" || echo 000)
+          if [ "${code:0:1}" != "2" ] || ! jq -e 'type == "array"' /tmp/stacks.json >/dev/null 2>&1; then
+            echo "::error::Portainer weigert /api/stacks (HTTP $code) — is PORTAINER_API_KEY nog geldig voor $PORTAINER_URL?"
+            head -c 300 /tmp/stacks.json; exit 1
+          fi
+          echo "Portainer bereikbaar; $(jq 'length' /tmp/stacks.json) stack(s) zichtbaar."
 
       - name: Deploy naar Portainer
         run: |
@@ -123,20 +133,25 @@ jobs:
           # Fernet-key = urlsafe base64 van 32 bytes (HMAC-sha256 = precies 32 bytes).
           fernet() { printf '%s' "$1-dev" | openssl dgst -sha256 -hmac "$SEED" -binary | openssl base64 -A | tr '+/' '-_'; }
           PG=$(hx pg); API_TOK=$(hx api); ADM_TOK=$(hx adm); QA_TOK=$(hx qa); AUTH=$(hx auth); FERNET=$(fernet fernet)
+          # Eigen api-token voor graph-qa: die legt de uitkomst van een beurt zelf vast, en een eigen
+          # client-id houdt in het auditspoor zichtbaar wie er schreef.
+          GQ_API_TOK=$(hx gqapi)
 
           # env-array voor de Portainer-stack (compose interpoleert ${VAR}); geheimen alleen hier, nooit gelogd.
           ENV_JSON=$(jq -n \
             --arg stack "$STACK" --arg tag "$IMAGE_TAG" --arg pg "$PG" \
             --arg base "$LLM_API_BASE" --arg key "$LLM_API_KEY" --arg fernet "$FERNET" \
             --arg apitok "$API_TOK" --arg admtok "$ADM_TOK" --arg gtok "$GRAPHDB_TOKEN" --arg qatok "$QA_TOK" \
+            --arg gqapitok "$GQ_API_TOK" \
             --arg auth "$AUTH" --arg authurl "https://$HOSTNAME_" --arg port "$HOST_PORT" \
-            --arg mcp "${GRAPHDB_MCP_URL:-https://graphdb-mcp.ipalm.nl/mcp}" \
+            --arg mcp "${GRAPHDB_MCP_URL:-http://mcp-auth-proxy:8004/mcp}" \
             --arg sim "${SIMILARITY_INDEX:-bwb_similarity}" --arg model "${LLM_MODEL:-claude-sonnet-4-6}" \
             '[
               {name:"STACK",value:$stack},{name:"IMAGE_TAG",value:$tag},{name:"POSTGRES_PASSWORD",value:$pg},
               {name:"LLM_API_BASE",value:$base},{name:"LLM_API_KEY",value:$key},{name:"LLM_CONFIG_SECRET",value:$fernet},
               {name:"API_TOKEN",value:$apitok},{name:"ADMIN_TOKEN",value:$admtok},{name:"GRAPHDB_TOKEN",value:$gtok},
-              {name:"QA_API_TOKEN",value:$qatok},{name:"AUTH_SECRET",value:$auth},{name:"AUTH_URL",value:$authurl},
+              {name:"QA_API_TOKEN",value:$qatok},{name:"GRAPH_QA_API_TOKEN",value:$gqapitok},
+              {name:"AUTH_SECRET",value:$auth},{name:"AUTH_URL",value:$authurl},
               {name:"HOST_PORT",value:$port},{name:"GRAPHDB_MCP_URL",value:$mcp},
               {name:"SIMILARITY_INDEX",value:$sim},{name:"LLM_MODEL",value:$model}
             ]')
@@ -151,14 +166,14 @@ jobs:
               '{stackFileContent:$c, env:$env, prune:true, pullImage:true}')
             code=$(curl -sS -o /tmp/resp.json -w '%{http_code}' -X PUT \
               -H "X-API-Key: $PORTAINER_API_KEY" -H "Content-Type: application/json" \
-              "$PORTAINER_URL/api/stacks/$SID?endpointId=$ENDPOINT_ID" --data-binary @<(echo "$BODY"))
+              "$PORTAINER_URL/api/stacks/$SID?endpointId=$ENDPOINT_ID" --data-binary @<(printf '%s' "$BODY"))
           else
             echo "Stack bestaat niet → aanmaken"
             BODY=$(jq -n --arg name "$STACK" --rawfile c deploy/dev/docker-compose.yml --argjson env "$ENV_JSON" \
               '{name:$name, stackFileContent:$c, env:$env, fromAppTemplate:false}')
             code=$(curl -sS -o /tmp/resp.json -w '%{http_code}' -X POST \
               -H "X-API-Key: $PORTAINER_API_KEY" -H "Content-Type: application/json" \
-              "$PORTAINER_URL/api/stacks/create/standalone/string?endpointId=$ENDPOINT_ID" --data-binary @<(echo "$BODY"))
+              "$PORTAINER_URL/api/stacks/create/standalone/string?endpointId=$ENDPOINT_ID" --data-binary @<(printf '%s' "$BODY"))
           fi
           echo "Portainer HTTP $code"
           if [ "${code:0:1}" != "2" ]; then echo "::error::Portainer deploy faalde (HTTP $code)"; cat /tmp/resp.json; exit 1; fi
@@ -177,6 +192,32 @@ jobs:
             echo "wacht op:$missing (poging $a)"; sleep 15
           done
           echo "::error::niet alle dev-containers draaien na de deploy:$missing"; exit 1
+
+      # Elke deploy trekt nieuwe image-lagen naar de docker-LXC en laat de oude staan. Dat liep op
+      # 15 aug 2026 vol (28 GB, 92 images waarvan 40 GB ongebruikt) en legde álles op die host plat:
+      # Docker draaide nog maar kon niets meer wegschrijven. Opruimen hoort dus bij het uitrollen.
+      #
+      # `dangling=false` betekent in de Docker-API "verwijder ook getagde images die nergens aan
+      # hangen" (het equivalent van `prune -a`). `until=24h` spaart wat vandaag is binnengehaald, zodat
+      # een stack die net even stilstaat zijn image nog vindt. Images van draaiende containers worden
+      # nooit geraakt. Faalt het opruimen, dan is dat geen reden om de deploy rood te maken.
+      #
+      # Waarom 24 uur en geen week: met `168h` ruimde hij op 15 aug níéts op, terwijl er 40 GB aan
+      # ongebruikte images lag — ze waren allemaal jonger dan een week. Bij dit tempo (watchtower plus
+      # de deploys) is een week bewaren hetzelfde als niet opruimen.
+      - name: Oude images opruimen op de docker-LXC
+        continue-on-error: true
+        run: |
+          set -uo pipefail
+          DOCKER="$PORTAINER_URL/api/endpoints/$ENDPOINT_ID/docker"
+          FILTERS='{"dangling":{"false":true},"until":{"24h":true}}'
+          resp=$(curl -sS -X POST -H "X-API-Key: $PORTAINER_API_KEY" \
+                   --get --data-urlencode "filters=$FILTERS" "$DOCKER/images/prune" \
+                 || echo '{}')
+          vrij=$(printf '%s' "$resp" | jq -r '.SpaceReclaimed // 0')
+          aantal=$(printf '%s' "$resp" | jq -r '(.ImagesDeleted // []) | length')
+          echo "Opgeruimd: $aantal image-verwijzingen, $(( vrij / 1024 / 1024 )) MB vrijgemaakt."
+          echo "- **Opgeruimd:** $aantal image-verwijzingen, $(( vrij / 1024 / 1024 )) MB" >> "$GITHUB_STEP_SUMMARY"
 
       - name: NPM-proxyhost (optioneel — dev-host → docker-LXC:${HOST_PORT}, https)
         if: ${{ env.NPM_URL != '' && env.NPM_IDENTITY != '' }}
@@ -207,7 +248,7 @@ jobs:
       NPM_IDENTITY: ${{ secrets.NPM_IDENTITY }}
       NPM_SECRET: ${{ secrets.NPM_SECRET }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Portainer-stack verwijderen (idempotent)
         run: |
