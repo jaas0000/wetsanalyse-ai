@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { naEenGebrokenStream, onthoudRun, standVanVorigeRun, vergeetRun } from "./lopendeRun";
+import {
+  definitieveStroomfout, herstelWachttijd, naEenGebrokenStream, onthoudRun, standVanVorigeRun,
+  vergeetRun,
+} from "./lopendeRun";
 
 describe("standVanVorigeRun", () => {
   it("zegt niets als er geen beurt openstond", () => {
@@ -40,23 +43,64 @@ describe("onthoudRun / vergeetRun", () => {
 describe("naEenGebrokenStream", () => {
   it("negeert een stream die we zelf afbraken", () => {
     // Unmount of van gesprek wisselen: de run draait door, er valt niets te melden of te herstellen.
-    expect(naEenGebrokenStream(true, 0, 1, true)).toBe("negeren");
+    expect(naEenGebrokenStream(true, true, false)).toBe("negeren");
   });
 
   it("haakt opnieuw aan als de verbinding wegvalt", () => {
     // Dit is het geval dat bij een deploy optrad: de frontend-container werd vervangen, het tabblad
     // zag "network error", en de beurt liep ondertussen door en slaagde.
-    expect(naEenGebrokenStream(false, 0, 1, true)).toBe("opnieuw");
+    expect(naEenGebrokenStream(false, true, false)).toBe("opnieuw");
   });
 
-  it("meldt pas als de herkansing op is", () => {
-    // Eén poging, niet meer: is de dienst echt weg, dan is doorproberen een molen die de gebruiker
-    // niets vertelt.
-    expect(naEenGebrokenStream(false, 1, 1, true)).toBe("melden");
+  it("blijft aanhaken, ook na een eerdere mislukte poging", () => {
+    // Er is geen cap: de melding staat in beeld en de wachttijd loopt op, dus doorproberen is geen
+    // molen. Eén poging was te weinig voor een herstart van graph-qa.
+    expect(naEenGebrokenStream(false, true, false)).toBe("opnieuw");
   });
 
-  it("probeert niet opnieuw als het venster weg is", () => {
-    // Zonder venster is er niemand om het antwoord aan te tonen; de run draait gewoon door.
-    expect(naEenGebrokenStream(false, 0, 1, false)).toBe("melden");
+  it("meldt een fout waar opnieuw aanhaken niet bij helpt", () => {
+    // De agent stuurde zelf een fout, of de run bestaat niet meer: replay levert hetzelfde.
+    expect(naEenGebrokenStream(false, true, true)).toBe("melden");
+  });
+
+  it("doet niets meer als het venster weg is", () => {
+    // Zonder venster is er niemand om iets aan te tonen; de run draait gewoon door bij de agent.
+    expect(naEenGebrokenStream(false, false, false)).toBe("negeren");
+    expect(naEenGebrokenStream(false, false, true)).toBe("negeren");
+  });
+});
+
+describe("definitieveStroomfout", () => {
+  it("herkent een fout die de agent zelf stuurde", () => {
+    // Zelfde status als "BFF kon graph-qa niet bereiken" (502); alleen `agentFout` scheidt ze.
+    expect(definitieveStroomfout({ status: 502, detail: "x", agentFout: true })).toBe(true);
+    expect(definitieveStroomfout({ status: 502, detail: "x" })).toBe(false);
+  });
+
+  it("herkent een run die niet (meer) van jou is of niet bestaat", () => {
+    for (const status of [401, 403, 404]) {
+      expect(definitieveStroomfout({ status, detail: "x" })).toBe(true);
+    }
+  });
+
+  it("houdt netwerkfouten en 5xx tijdelijk", () => {
+    expect(definitieveStroomfout({ status: 0, detail: "De verbinding viel stil." })).toBe(false);
+    expect(definitieveStroomfout({ status: 503, detail: "x" })).toBe(false);
+    expect(definitieveStroomfout(new TypeError("Failed to fetch"))).toBe(false);
+    expect(definitieveStroomfout(null)).toBe(false);
+  });
+});
+
+describe("herstelWachttijd", () => {
+  it("loopt op", () => {
+    expect(herstelWachttijd(0)).toBe(1500);
+    expect(herstelWachttijd(1)).toBe(3000);
+    expect(herstelWachttijd(2)).toBe(6000);
+    expect(herstelWachttijd(3)).toBe(12_000);
+  });
+
+  it("heeft een plafond, zodat herstel vlot blijft", () => {
+    expect(herstelWachttijd(4)).toBe(15_000);
+    expect(herstelWachttijd(50)).toBe(15_000);
   });
 });

@@ -92,9 +92,11 @@ export async function GET(req: Request) {
       headers: { "Content-Type": upstream.headers.get("content-type") ?? "application/json" },
     });
   } catch (err) {
-    // Zachtjes falen: geen actieve run kunnen vinden mag de werkplek niet blokkeren — je ziet dan
-    // gewoon de gehydrateerde geschiedenis, zoals voorheen.
+    // Een fout is géén `null`: `null` betekent "er loopt niets", en dat is een uitspraak die we hier
+    // juist niet kunnen doen. Gaven we hem toch, dan las de werkplek een timeout als een beurt die
+    // verdwenen was — mét de bijbehorende waarschuwing — terwijl de run gewoon doorliep. De client
+    // maakt dat onderscheid wél (`haalActieveRun` → `"onbekend"`) en laat het dan stil.
     logger.warn("Run-proxy: actieve run niet op te halen", { fout: (err as Error).message });
-    return Response.json(null);
+    return Response.json({ detail: "Actieve run niet op te halen." }, { status: 502 });
   }
 }

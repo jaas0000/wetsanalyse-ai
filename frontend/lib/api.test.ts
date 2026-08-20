@@ -116,6 +116,60 @@ describe("verwerkSseStroom — via volgRun", () => {
   });
 });
 
+describe("een stroom die breekt of stilvalt", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  });
+
+  it("merkt een fout van de agent zélf als definitief", async () => {
+    // Zowel dit als "de BFF kan graph-qa niet bereiken" is een 502; alleen `agentFout` scheidt ze,
+    // en dáár hangt aan of opnieuw aanhaken zin heeft.
+    const frames = [
+      `data: ${JSON.stringify({ type: "token", content: "Halve " })}\r\n\r\n`,
+      `data: ${JSON.stringify({ type: "error", message: "Agent mislukt." })}\r\n\r\n`,
+    ];
+    vi.stubGlobal("fetch", vi.fn(async () => sseResponse(frames)));
+
+    await expect(volgRun("run-1", {})).rejects.toMatchObject({
+      status: 502,
+      detail: "Agent mislukt.",
+      agentFout: true,
+    });
+  });
+
+  it("meldt een levensteken bij het eerste event", async () => {
+    // Hierop haalt de werkplek de "verbinding weg"-melding weg. Zonder dit zou een geslaagd
+    // heraanhaken pas aan het eind van de beurt zichtbaar zijn.
+    const frames = [
+      `data: ${JSON.stringify({ type: "status", message: "Bezig" })}\r\n\r\n`,
+      `data: ${JSON.stringify({ type: "token", content: "Ja." })}\r\n\r\n`,
+    ];
+    vi.stubGlobal("fetch", vi.fn(async () => sseResponse(frames)));
+
+    let levenstekens = 0;
+    await volgRun("run-1", { onLeeft: () => levenstekens++ });
+    expect(levenstekens).toBe(2);
+  });
+
+  it("verwerpt een stroom die stilvalt in plaats van eeuwig te wachten", async () => {
+    // Een halfopen socket levert nooit een fout en nooit `done`: de werkplek bleef "bezig" tonen
+    // zonder ooit het herstelpad te raken. De heartbeat van de agent (~15 s) hoort de bewaking
+    // telkens te resetten; blijft ook die weg, dan is de verbinding weg.
+    vi.useFakeTimers();
+    const stil = new ReadableStream<Uint8Array>({ start() {} }); // levert niets, sluit nooit
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(stil, { status: 200 })),
+    );
+
+    const belofte = volgRun("run-1", {});
+    const uitkomst = expect(belofte).rejects.toMatchObject({ status: 0 });
+    await vi.advanceTimersByTimeAsync(45_000);
+    await uitkomst;
+  });
+});
+
 describe("volgRun — aanhaken bij een lopende beurt", () => {
   afterEach(() => vi.restoreAllMocks());
 

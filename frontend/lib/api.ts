@@ -399,6 +399,10 @@ export type AgentHandlers = {
   /** Het volgnummer van het laatst verwerkte event. Daarmee haakt een client na een onderbreking
    *  weer aan op precies het juiste punt in plaats van vanaf het begin. */
   onSeq?: (seq: number) => void;
+  /** Levensteken: er kwam een event over deze verbinding binnen. Geen inhoud, alleen het feit dát
+   *  de stroom loopt — daarop haalt de werkplek de "verbinding weg"-melding weg en zet ze de
+   *  herstelteller terug. Zonder dit zou een geslaagd heraanhaken pas zichtbaar zijn aan het eind. */
+  onLeeft?: () => void;
   /** Er zijn events weggevallen (de eventlog van de run is gecapt). Toon een gat in plaats van te
    *  doen alsof de tekst compleet is. */
   onGat?: (aantal: number) => void;
@@ -462,6 +466,20 @@ export interface RunLooptAlFout extends ApiError {
   loopendeRun?: string;
 }
 
+/** Een fout die de agent zélf over de stroom stuurde (`error`-event), en niet een verbinding die
+ *  brak. Het verschil is niet uit de status af te lezen — beide zijn 502 — en het bepaalt wél of
+ *  opnieuw aanhaken zin heeft. Zie `definitieveStroomfout` in `lib/lopendeRun.ts`. */
+export interface AgentFout extends ApiError {
+  agentFout?: true;
+}
+
+/** Hoe lang een stroom stil mag vallen voordat we hem als verbroken beschouwen.
+ *
+ *  sse-starlette stuurt elke ~15 seconden een `:`-heartbeat, dus drie gemiste hartslagen is een
+ *  veilige ondergrens. Zonder deze bewaking blijft `reader.read()` eeuwig hangen op een halfopen
+ *  socket — geen fout, geen einde, en een werkplek die tot in het oneindige "bezig" toont. */
+const STROOM_STILTE_MS = 45_000;
+
 /** Vist het actieve run_id uit een 409-detail. Levert niets op bij een onverwachte vorm — dan is
  *  het gewoon een fout en hoort hij als fout behandeld te worden. */
 function runIdUitDetail(detail: string): string | null {
@@ -524,9 +542,20 @@ async function verwerkSseStroom(res: Response, handlers: AgentHandlers): Promise
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
+  // De stiltebewaking. Bewust een verwérpende timer en géén `reader.cancel()`: cancellen levert
+  // `done`, en dan zou een halve stroom als een keurig afgeronde beurt eindigen.
+  let stilteTimer: ReturnType<typeof setTimeout> | undefined;
+  const stilte = () =>
+    new Promise<never>((_, mis) => {
+      stilteTimer = setTimeout(
+        () => mis({ status: 0, detail: "De verbinding viel stil." } as ApiError),
+        STROOM_STILTE_MS,
+      );
+    });
   try {
     for (;;) {
-      const { done, value } = await reader.read();
+      const { done, value } = await Promise.race([reader.read(), stilte()]);
+      clearTimeout(stilteTimer);
       if (done) break;
       // sse-starlette scheidt met \r\n; strip de CR zodat indexOf("\n\n") de frame-grens vindt.
       buffer += decoder.decode(value, { stream: true }).replace(/\r/g, "");
@@ -565,6 +594,9 @@ async function verwerkSseStroom(res: Response, handlers: AgentHandlers): Promise
             }
           | null;
         if (!ev) continue;
+        // Er komt iets door: deze verbinding leeft. Vóór alle inhoudelijke afhandeling, zodat ook
+        // een stroom die met een `error`-event begint het herstel eerst als geslaagd afmeldt.
+        handlers.onLeeft?.();
         if (typeof ev.seq === "number") handlers.onSeq?.(ev.seq);
         if (ev.type === "gat") handlers.onGat?.(ev.weggevallen ?? 0);
         else if (ev.type === "status") handlers.onStatus?.(ev.message ?? "");
@@ -588,10 +620,14 @@ async function verwerkSseStroom(res: Response, handlers: AgentHandlers): Promise
         else if (ev.type === "opgeslagen")
           handlers.onOpgeslagen?.({ annotatie_slug: ev.annotatie_slug ?? "", run_id: ev.run_id ?? "" });
         else if (ev.type === "waarschuwing") handlers.onWaarschuwing?.(ev.message ?? "");
-        else if (ev.type === "error") throw { status: 502, detail: ev.message ?? "Agent mislukt." } as ApiError;
+        // `agentFout` onderscheidt dit van een 502 die zegt "de BFF kon graph-qa niet bereiken":
+        // die is tijdelijk en mag opnieuw, deze is een uitkomst van de beurt zelf.
+        else if (ev.type === "error")
+          throw { status: 502, detail: ev.message ?? "Agent mislukt.", agentFout: true } as AgentFout;
       }
     }
   } finally {
+    clearTimeout(stilteTimer);
     reader.cancel().catch(() => {});
   }
 }

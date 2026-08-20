@@ -44,8 +44,8 @@ import {
   vraagContextVan, vraagSuggesties,
 } from "@/lib/annotatie";
 import {
-  leesLopendeRuns, naEenGebrokenStream, onthoudRun, schrijfLopendeRuns, standVanVorigeRun,
-  vergeetRun,
+  definitieveStroomfout, herstelWachttijd, leesLopendeRuns, naEenGebrokenStream, onthoudRun,
+  schrijfLopendeRuns, standVanVorigeRun, vergeetRun, wachtMetWekker,
 } from "@/lib/lopendeRun";
 import { useBreedScherm } from "@/lib/useBreedScherm";
 import { ChevronOmlaag, Cirkel, Waarschuwing } from "@/components/ui/Icoon";
@@ -93,14 +93,13 @@ function isAfgebroken(e: unknown): boolean {
   return (e as Error)?.name === "AbortError";
 }
 
-/** Eén keer opnieuw aanhaken bij een weggevallen verbinding, en dan pas de fout tonen.
- *
- *  Eén poging, niet meer: is de dienst echt onbereikbaar, dan blijft doorproberen een molen die de
- *  gebruiker niets vertelt. Deze ene vangt het geval waar het om gaat — een herstart of een korte
- *  onderbreking — af zonder dat een lopende beurt als mislukt in beeld komt.
- */
-const MAX_HERSTELPOGINGEN = 1;
-const HERSTEL_WACHTTIJD_MS = 1500;
+// Opnieuw aanhaken bij een weggevallen verbinding gebeurt zolang dit venster leeft, met een
+// oplopende wachttijd (`herstelWachttijd`) en een banner die zegt wat er aan de hand is. De regel
+// zelf staat in `lib/lopendeRun.ts`; hier staat alleen wat het scherm ermee doet.
+//
+// Dit was eerder één poging na 1,5 seconde. Duurde de onderbreking langer — een herstart van
+// graph-qa is dat al — dan kwam de beurt als mislukt in beeld terwijl hij gewoon doorliep, en
+// alleen een herlaadbeurt bracht hem terug.
 
 interface Props {
   /** Het te openen gesprek, of `null` voor een vers (nog niet gepersisteerd) gesprek. */
@@ -156,6 +155,10 @@ export function WerkplekClient({
   // De vorige beurt van dit gesprek is nooit afgekomen: het run-register van de agent is leeg (een
   // herstart of deploy). Beter dit zeggen dan een gesprek dat halverwege ophoudt zonder uitleg.
   const [runVerdwenen, setRunVerdwenen] = useState(false);
+  // De verbinding met de lopende beurt is weg en we haken opnieuw aan. Een tóéstand en geen tekst in
+  // de antwoordbubbel: alleen zo kan de melding vanzelf verdwijnen zodra de stroom weer loopt — wat
+  // hij eerder niet deed, zodat er niets anders op zat dan herladen.
+  const [verbindingWeg, setVerbindingWeg] = useState(false);
   const lijstRef = useRef<HTMLDivElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
   // Synchrone guard tegen dubbel-verzenden (twee Enters in dezelfde tick): de `bezig`-state komt te laat
@@ -361,6 +364,10 @@ export function WerkplekClient({
     ]);
     setBezig(true);
     stickRef.current = true; // een nieuwe beurt springt altijd naar de bodem
+    // Meldingen over de vórige beurt horen niet bij deze. `runVerdwenen` had geen enkele weg terug
+    // behalve een herlaadbeurt, en bleef dus staan terwijl je alweer een vraag stelde.
+    setRunVerdwenen(false);
+    setVerbindingWeg(false);
 
     // Zorg voor een gesprek-id (maak er bij de eerste beurt één aan; titel = de vraag, afgekapt).
     let gid = gesprekId;
@@ -471,10 +478,21 @@ export function WerkplekClient({
     // aanhaken ná de `finally` moet gebeuren: die reset `bezig`/`afbrekenRef`, en een nieuwe lus
     // die daarvóór begint raakt zijn eigen beheerser kwijt.
     let verbroken = false;
+    // Kwam er iets over déze verbinding binnen? Zo ja, dan telt een volgende breuk als een verse
+    // onderbreking en begint de wachttijd weer onderaan — anders zou een lange beurt met twee losse
+    // dips in de hoogste backoff blijven hangen.
+    let ontving = false;
     try {
       await volgRun(
         id,
         {
+          onLeeft: () => {
+            ontving = true;
+            setVerbindingWeg(false);
+            // Er ís weer contact met een lopende beurt; een eerdere "de agent is herstart"-melding
+            // slaat nu nergens meer op.
+            setRunVerdwenen(false);
+          },
           onStatus: (m) => {
             denk += (denk ? "\n" : "") + "· " + m;
             updateItem(antId, { denk });
@@ -575,13 +593,20 @@ export function WerkplekClient({
       // Een wegvallende verbinding is óók geen einde: de beurt is van de server. Zie
       // `naEenGebrokenStream` voor de regel en waarom hij bestaat.
       const besluit = naEenGebrokenStream(
-        isAfgebroken(e), herstel, MAX_HERSTELPOGINGEN, levendRef.current,
+        isAfgebroken(e), levendRef.current, definitieveStroomfout(e),
       );
-      if (besluit === "negeren") return;
+      if (besluit === "negeren") {
+        // Zelf losgekoppeld (stopknop, van gesprek wisselen): er valt niets meer te herstellen, dus
+        // ook geen melding daarover laten staan.
+        setVerbindingWeg(false);
+        return;
+      }
       verbroken = besluit === "opnieuw";
-      updateItem(antId, verbroken
-        ? { tekst: "_De verbinding viel weg. Ik haak opnieuw aan…_" }
-        : { tekst: `**Er ging iets mis.** ${foutTekst(e)}` });
+      // Bij een herkansing blijft de bubbel staan zoals hij is: het heraanhaken speelt de eventlog
+      // opnieuw af, dus de tekst wordt zo meteen alsnog opgebouwd. Wat er aan de hand is staat in de
+      // banner — die verdwijnt vanzelf zodra er weer iets binnenkomt.
+      setVerbindingWeg(verbroken);
+      if (!verbroken) updateItem(antId, { tekst: `**Er ging iets mis.** ${foutTekst(e)}` });
     } finally {
       afbrekenRef.current = null;
       setRunId(null);
@@ -592,11 +617,15 @@ export function WerkplekClient({
 
     if (verbroken && levendRef.current) {
       // Even wachten: valt de verbinding weg doordat de dienst opnieuw opstart, dan is meteen
-      // opnieuw proberen gegarandeerd weer mis. `vanaf: 0` speelt de hele eventlog terug, dus wat
-      // er tijdens de onderbreking gebeurde komt alsnog in beeld — inclusief het `opgeslagen`-event.
-      await new Promise((r) => setTimeout(r, HERSTEL_WACHTTIJD_MS));
-      if (!levendRef.current) return;
-      await volgBeurt({ runId: id, gid, antId, vanaf: 0, herstel: herstel + 1 });
+      // opnieuw proberen gegarandeerd weer mis. De wachttijd loopt op, maar wordt gewekt zodra het
+      // netwerk terug is of het tabblad weer in beeld komt. `vanaf: 0` speelt de hele eventlog
+      // terug, dus wat er tijdens de onderbreking gebeurde komt alsnog in beeld — inclusief het
+      // `opgeslagen`-event.
+      const doorgaan = await wachtMetWekker(
+        herstelWachttijd(herstel), () => levendRef.current,
+      );
+      if (!doorgaan) return;
+      await volgBeurt({ runId: id, gid, antId, vanaf: 0, herstel: ontving ? 0 : herstel + 1 });
     }
   }
 
@@ -842,6 +871,17 @@ export function WerkplekClient({
             >
               Opnieuw proberen
             </button>
+          </Melding>
+        </div>
+      )}
+
+      {/* De verbinding met de lopende beurt is weg. Geen sluitknop: deze melding hóórt vanzelf te
+          verdwijnen zodra de stroom weer loopt — dat is het hele punt. */}
+      {verbindingWeg && (
+        <div className="shrink-0 px-4 pt-2">
+          <Melding type="waarschuwing" compact>
+            De verbinding met Lex is weggevallen. Je vraag loopt gewoon door bij de agent; ik probeer
+            opnieuw te verbinden…
           </Melding>
         </div>
       )}
