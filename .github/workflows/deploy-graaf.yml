@@ -133,18 +133,16 @@ jobs:
         run: |
           set -euo pipefail
           DOCKER="$PORTAINER_URL/api/endpoints/$ENDPOINT_ID/docker"
-          # GraphDB-security staat aan: zonder credentials geeft /rest/repositories een 401 en
-          # concludeerde deze stap ten onrechte dat `inning` weg was. Het service-account leeft in
-          # de stack-env van graphdb, dus dat halen we daar op.
-          sid=$(jq -r '.[] | select(.Name=="graphdb") | .Id' /tmp/stacks.json | head -n1)
-          env_json=$(curl -sS -H "X-API-Key: $PORTAINER_API_KEY" "$PORTAINER_URL/api/stacks/$sid" | jq '.Env // []')
-          SVC_U=$(jq -r '.[] | select(.name=="GRAPHDB_SVC_USER") | .value' <<<"$env_json")
-          SVC_P=$(jq -r '.[] | select(.name=="GRAPHDB_SVC_PASSWORD") | .value' <<<"$env_json")
-          [ -n "$SVC_U" ] || { echo "::error::GRAPHDB_SVC_USER niet gevonden in de graphdb-stack"; exit 1; }
+          # **curl, geen wget, en stderr mee.** GraphDB-security staat aan, en GraphDB beantwoordt
+          # een 401 met twee challenges; GNU wget crasht daarop zodra hij door --user/--password de
+          # challenge parseert (zie de uitleg bij de healthcheck in deploy/graphdb/docker-compose.yml).
+          # Dat gaf hier een lege uitvoer en dus de valse conclusie dat `inning` weg was.
+          # De credentials staan al als GDB_USER/GDB_PASSWORD in de container, dus we sturen ze niet
+          # mee over de API. AttachStderr aan, anders is een falend commando niet van een leeg
+          # antwoord te onderscheiden.
           ex=$(curl -sS -X POST -H "X-API-Key: $PORTAINER_API_KEY" -H "Content-Type: application/json" \
                 "$DOCKER/containers/graphdb/exec" \
-                -d "$(jq -n --arg u "$SVC_U" --arg p "$SVC_P" \
-                     '{AttachStdout:true, Cmd:["sh","-c","wget -qO- --user=\($u) --password=\($p) http://localhost:7200/rest/repositories | head -c 200"]}')" \
+                -d '{"AttachStdout":true,"AttachStderr":true,"Cmd":["sh","-c","curl -fsS -u \"$GDB_USER:$GDB_PASSWORD\" http://localhost:7200/rest/repositories | head -c 200"]}' \
                 | jq -r .Id)
           uit=$(curl -sS -X POST -H "X-API-Key: $PORTAINER_API_KEY" -H "Content-Type: application/json" \
                  "$DOCKER/exec/$ex/start" -d '{"Detach":false,"Tty":false}' | tr -d '\000-\010\013\014\016-\037')
