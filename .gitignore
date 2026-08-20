@@ -40,4 +40,9 @@ docs/regelspraak/
 api/secrets/
 api/docker-compose.override.yml
 api/_data/
+
+# Door de BWB-importer gedownloade wettekst (XML + WTI). Afgeleide data die de importer
+# zelf bij overheid.nl ophaalt en als cache bewaart; hoort niet in de repo — 47 MB per
+# volledige import, en de bron is de wettenbank, niet git.
+tools/bwb-import/data/
 api/spike_act2.json
