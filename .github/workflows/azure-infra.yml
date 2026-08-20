@@ -12,8 +12,9 @@
 # Na een `deploy` is de omgeving nog leeg: draai de import-job om de graaf te vullen. Het commando
 # staat in de samenvatting aan het eind van de run.
 #
-# De publish-workflows updaten Azure BEWUST niet — die zouden bij elke master-push naar een lege
-# resource group praten. Een image-update is hier dus een nieuwe `deploy`.
+# De publish-workflows doen een image-swap (`az containerapp update`) op een bestaande app in Azure
+# — die verandert geen infra, dus veilig. Deze workflow (bicep) blijft bewust handmatig: het is de
+# enige die resources kan aanmaken/veranderen/verwijderen en GraphDB is niet-persistent.
 
 name: azure-infra
 
@@ -36,7 +37,7 @@ concurrency:
 
 env:
   RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP || 'rg-wetsanalyse' }}
-  AZURE_LOCATION: ${{ vars.AZURE_LOCATION || 'westeurope' }}
+  AZURE_LOCATION: ${{ vars.AZURE_LOCATION || 'northeurope' }}
 
 jobs:
   azure:

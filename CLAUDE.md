@@ -184,14 +184,16 @@ wie publiek moet zijn publiceert een hostpoort en NPM forwardt naar `<docker-lxc
 graph-qa is bewust intern-only.
 
 **Images** — `{api,frontend,graph-qa,bwb-import}-docker-publish.yml` bouwen bij een push naar master
-naar GHCR, met pip-audit/npm-audit vooraf en een Trivy-gate achteraf. Ze publiceren alleen; het
-uitrollen is een aparte, expliciete stap.
+naar GHCR, met pip-audit/npm-audit vooraf en een Trivy-gate achteraf. Bij master doen ze
+aansluitend een `az containerapp update` (of `az containerapp job update` bij bwb-import) op de
+Azure-omgeving — image-swap, geen infra-wijziging. Op de Portainer-productie is uitrollen wél een
+aparte, expliciete stap.
 
-**Azure (standby)** — `deploy/azure/` beschrijft een zelfstandige kopie op Container Apps, mét eigen
-GraphDB en importer. Bedoeld om klaar te staan, niet te draaien: `azure-infra.yml` is handmatig en
-kent `wat-if` (valideert, maakt niets aan), `deploy` en `afbreken`. Zolang niemand die start, kost
-het niets. Zie `deploy/azure/README.md` — let vooral op de GraphDB-licentie, zonder welke de graaf
-read-only opkomt.
+**Azure** — `deploy/azure/` is de tweede uitrolplek van de stack, mét eigen GraphDB en importer.
+`azure-infra.yml` is handmatig (bicep-wijzigingen raken GraphDB en die is niet-persistent) en kent
+`wat-if` (valideert, maakt niets aan), `deploy` en `afbreken`. Image-refreshes komen automatisch
+uit de publish-workflows. Zie `deploy/azure/README.md` — let vooral op de GraphDB-licentie, zonder
+welke de graaf read-only opkomt.
 
 ## Referentiedocumentatie
 
