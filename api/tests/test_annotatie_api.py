@@ -392,6 +392,66 @@ async def test_eigen_markering_valideert_de_klasse(client):
                               json={"klasse": "Rechtssubject", "tekst": "x"})).status_code == 404
 
 
+# --- één kapot element sleept de rest niet mee ---------------------------------------------------
+
+async def test_een_element_dat_het_schema_niet_haalt_sleept_de_rest_niet_mee(client):
+    """Twee poorten hadden tegengesteld beleid; dat verschil was de fout, niet de strengheid.
+
+    De merge verwerpt een ongeldige klasse al per element, met een teller. De request-validatie
+    ervóór was alles-of-niets: één schemafout gaf 422 en dan landde er níéts. Op dev kostte dat een
+    complete annotatie van vijftien markeringen — de agent was klaar en gegrond.
+    """
+    slug = await _maak_doc(client)
+    r = await client.put(f"{BASIS}/{slug}/elementen", json={
+        "elementen": [
+            {"klasse": "Voorwaarde", "tekst": "indien betaling uitblijft"},
+            {"klasse": "Rechtssubject", "aandacht": "paars", "tekst": "de ontvanger"},  # geen niveau
+            {"klasse": "Rechtsfeit", "tekst": "de melding"},
+        ],
+        "ronde": 1,
+    })
+
+    assert r.status_code == 200, "de goede elementen horen gewoon te landen"
+    teksten = {e["tekst"] for e in r.json()["elementen"]}
+    assert teksten == {"indien betaling uitblijft", "de melding"}
+    assert r.headers.get("X-Verworpen") == "1", "en de aanroeper hoort te wéten dat er iets weg is"
+
+
+async def test_het_auditspoor_zegt_wat_er_sneuvelde(client):
+    """Een teller vertelt dát er iets weg is; dit vertelt wát, zodat de jurist het zelf kan zetten."""
+    slug = await _maak_doc(client)
+    await client.put(f"{BASIS}/{slug}/elementen", json={
+        "elementen": [
+            {"klasse": "Voorwaarde", "tekst": "indien betaling uitblijft"},
+            {"klasse": "Rechtssubject", "aandacht": "paars", "tekst": "de ontvanger"},
+        ],
+        "ronde": 1,
+    })
+
+    audit = (await client.get(f"{BASIS}/{slug}/audit")).json()
+    ronde = next(a for a in audit if a["actie"] == "elementen-voorgesteld")
+    assert ronde["detail"]["aangeboden"] == 2, "aangeboden telt ook wat er sneuvelde"
+    assert ronde["detail"]["verworpen"] == 1
+    geweigerd = ronde["detail"]["geweigerd"][0]
+    assert geweigerd["tekst"] == "de ontvanger"
+    assert "aandacht" in geweigerd["reden"]
+
+
+async def test_zonder_verworpen_geen_header(client):
+    """Een header die er altijd staat, valt niemand meer op."""
+    slug = await _maak_doc(client)
+    r = await _put(client, slug, [{"klasse": "Voorwaarde", "tekst": "indien betaling uitblijft"}])
+    assert "X-Verworpen" not in r.headers
+
+
+async def test_een_kapot_veld_buiten_de_elementen_blijft_een_422(client):
+    """Gedeeltelijk slagen is een uitzondering voor de elementenlijst, geen algemene versoepeling."""
+    slug = await _maak_doc(client)
+    r = await client.put(f"{BASIS}/{slug}/elementen",
+                         json={"elementen": [], "ronde": "geen getal"})
+    assert r.status_code == 422
+
+
 # --- de Critic kijkt mee op eigen markeringen: advies, nooit een wijziging ----------------------
 
 async def test_suggestie_landt_op_eigen_markering_zonder_die_te_wijzigen(client):

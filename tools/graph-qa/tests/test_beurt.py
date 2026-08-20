@@ -33,6 +33,7 @@ class NepApi:
         self.element_puts: list[dict[str, Any]] = []
         self.berichten: list[tuple[str, dict[str, Any]]] = []
         self.gesloten = False
+        self.verworpen = 0
 
     async def maak_document(self, **kw: Any) -> str:
         self.documenten.append(kw)
@@ -200,6 +201,36 @@ async def test_mislukte_elementen_beloven_geen_bewaarde_annotatie(monkeypatch):
     assert "leeg document" in fout["message"]
     assert "opnieuw" in fout["message"], "hier is opnieuw proberen juist wél het advies"
     assert "bewaard" not in fout["message"]
+
+
+@asyncio_test
+async def test_verworpen_markeringen_worden_gemeld(monkeypatch):
+    """De api laat een kapot element vallen in plaats van de ronde te weigeren — dat maakt een luide
+    fout stil. Zonder deze melding ziet de jurist dertien markeringen zonder te weten dat het er
+    vijftien hadden moeten zijn."""
+    nep = NepApi()
+    nep.verworpen = 2
+    monkeypatch.setattr("agent.beurt.WetsanalyseApi", lambda *_a, **_k: nep)
+    uit = await _draai([
+        {"type": "doel", "doel": {"bwbId": "B", "artikel": "9", "citeertitel": "Wet"}},
+        {"type": "element", "element": {"id": "e1", "klasse": "Rechtssubject", "tekst": "t"}},
+        {"type": "done"},
+    ])
+
+    waarschuwing = [e for e in uit if e["type"] == "waarschuwing"][0]
+    assert "2 markeringen" in waarschuwing["message"]
+    assert not [e for e in uit if e["type"] == "error"], "de beurt is geslaagd, dit is geen fout"
+    assert [e for e in uit if e["type"] == "opgeslagen"], "en wat er wél is, is opgeslagen"
+
+
+@asyncio_test
+async def test_zonder_verworpen_geen_waarschuwing(api):
+    uit = await _draai([
+        {"type": "doel", "doel": {"bwbId": "B", "artikel": "9", "citeertitel": "Wet"}},
+        {"type": "element", "element": {"id": "e1", "klasse": "Rechtssubject", "tekst": "t"}},
+        {"type": "done"},
+    ])
+    assert not [e for e in uit if e["type"] == "waarschuwing"]
 
 
 @asyncio_test

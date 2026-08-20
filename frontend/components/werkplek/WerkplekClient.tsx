@@ -513,6 +513,7 @@ export function WerkplekClient({
             }
           },
           onOpgeslagen: (uitkomst) => (opgeslagen = uitkomst),
+          onWaarschuwing: (bericht) => setMelding(bericht),
         },
         vanaf,
         beheerser.signal,

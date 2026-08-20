@@ -84,6 +84,9 @@ class WetsanalyseApi:
             "Content-Type": "application/json",
         }
         self._client = httpx.AsyncClient(timeout=TIMEOUT)
+        #: Hoeveel markeringen de api liet vallen bij de laatste `zet_elementen`. Zie daar.
+        self.verworpen = 0
+        self._laatste_headers: dict[str, str] = {}
 
     async def aclose(self) -> None:
         await self._client.aclose()
@@ -98,6 +101,7 @@ class WetsanalyseApi:
         antwoord = await self._client.request(
             methode, f"{self._basis}{pad}", json=payload, headers=self._headers,
         )
+        self._laatste_headers = dict(antwoord.headers)
         if antwoord.status_code == 404 and "/gesprekken/" in pad:
             raise GesprekVerdwenen(f"{methode} {pad} → 404", 404)
         if antwoord.status_code >= 400:
@@ -138,6 +142,7 @@ class WetsanalyseApi:
     ) -> dict[str, Any]:
         """De uitkomst van deze agent-ronde. De api merget op id/tekst+lid en bevriest wat de jurist
         al beoordeeld heeft — die semantiek zit daar, niet hier."""
+        self.verworpen = 0
         payload: dict[str, Any] = {
             "elementen": [naar_contract(e) for e in elementen],
             "suggesties": [_leeg_is_niets(s) for s in suggesties],
@@ -147,7 +152,12 @@ class WetsanalyseApi:
             # `tijd` is bij ons optioneel en bij de api verplicht mét default. Hem als `None`
             # meesturen is dus géén "laat maar leeg" maar een validatiefout; weglaten wél.
             payload["run"] = {k: v for k, v in run.items() if not (k == "tijd" and v is None)}
-        return await self._put(f"/v1/annotatie/documenten/{slug}/elementen", payload)
+        uit = await self._put(f"/v1/annotatie/documenten/{slug}/elementen", payload)
+        # De api laat een element dat zijn schema niet haalt vallen in plaats van de hele ronde te
+        # weigeren — beter, maar daarmee wordt een lúíde fout een stille. Daarom telt hij ze in
+        # `X-Verworpen` en zeggen wij het tegen de jurist.
+        self.verworpen = int(self._laatste_headers.get("X-Verworpen", 0) or 0)
+        return uit
 
     # -- gesprekken-domein -----------------------------------------------------------------------
 

@@ -405,6 +405,9 @@ export type AgentHandlers = {
   /** De agent heeft de uitkomst zelf vastgelegd (bericht + eventueel annotatiedocument). Komt vlak
    *  vóór het einde. Blijft hij uit, dan schrijft de werkplek zelf weg, zoals vroeger. */
   onOpgeslagen?: (uitkomst: { annotatie_slug: string; run_id: string }) => void;
+  /** De beurt slaagde, maar niet alles is bewaard — bv. een markering die de api niet accepteerde.
+   *  Geen fout (het meeste staat er wél), maar de jurist hoort te weten dat er iets ontbreekt. */
+  onWaarschuwing?: (bericht: string) => void;
 };
 
 // --- Runs: de beurt is van de server -----------------------------------------
@@ -584,6 +587,7 @@ async function verwerkSseStroom(res: Response, handlers: AgentHandlers): Promise
         else if (ev.type === "kandidaten") handlers.onKandidaten?.(ev.kandidaten ?? []);
         else if (ev.type === "opgeslagen")
           handlers.onOpgeslagen?.({ annotatie_slug: ev.annotatie_slug ?? "", run_id: ev.run_id ?? "" });
+        else if (ev.type === "waarschuwing") handlers.onWaarschuwing?.(ev.message ?? "");
         else if (ev.type === "error") throw { status: 502, detail: ev.message ?? "Agent mislukt." } as ApiError;
       }
     }

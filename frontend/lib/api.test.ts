@@ -92,6 +92,28 @@ describe("verwerkSseStroom — via volgRun", () => {
     expect(elementen).toEqual([element]);
     expect(ontbrekend).toEqual([{ klasse: "Rechtsfeit", reden: "handeling" }]);
   });
+
+  it("geeft een waarschuwing door zonder de beurt te laten mislukken", async () => {
+    // De api laat een markering die zijn schema niet haalt vallen in plaats van de hele ronde te
+    // weigeren. Dat maakt een luide fout stil, dus meldt de agent het — maar het is geen `error`:
+    // de rest staat er wél en de stream loopt gewoon door tot `done`.
+    const frames = [
+      `data: ${JSON.stringify({ type: "waarschuwing", message: "2 markeringen niet opgeslagen." })}\r\n\r\n`,
+      `data: ${JSON.stringify({ type: "token", content: "Klaar." })}\r\n\r\n`,
+      `data: ${JSON.stringify({ type: "done" })}\r\n\r\n`,
+    ];
+    vi.stubGlobal("fetch", vi.fn(async () => sseResponse(frames)));
+
+    let waarschuwing = "";
+    let tekst = "";
+    await volgRun("run-1", {
+      onWaarschuwing: (m) => (waarschuwing = m),
+      onToken: (t) => (tekst += t),
+    });
+
+    expect(waarschuwing).toBe("2 markeringen niet opgeslagen.");
+    expect(tekst).toBe("Klaar.");
+  });
 });
 
 describe("volgRun — aanhaken bij een lopende beurt", () => {

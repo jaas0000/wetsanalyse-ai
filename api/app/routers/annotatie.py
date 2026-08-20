@@ -243,7 +243,10 @@ async def zet_elementen(
     nieuw Critic-oordeel. Ongeldige klasse of leeg fragment wordt verworpen (stil, met een teller in
     de audit — de agent grondt zelf al en dit is het vangnet).
     """
-    verworpen = 0
+    # Twee soorten "verworpen", één teller: wat het schema niet haalde (afgevangen door
+    # `ElementenInvoer._weiger_per_element`, anders was dit een 422 en landde er níéts) en wat de
+    # merge hieronder afwijst op klasse of leeg fragment. Voor de jurist is dat hetzelfde feit.
+    verworpen = len(req.geweigerd)
     regels: list[tuple] = []
 
     def merge(doc: AnnotatieDocument):
@@ -358,7 +361,12 @@ async def zet_elementen(
                ("element-voorgesteld", "element-herzien", "element-ingetrokken", "critic-suggestie")}
     await store.schrijf_auditregels(slug, client_id, user_id, [
         ("elementen-voorgesteld", None, {
-            "ronde": req.ronde, "aangeboden": len(req.elementen), "verworpen": verworpen,
+            "ronde": req.ronde,
+            "aangeboden": len(req.elementen) + len(req.geweigerd),
+            "verworpen": verworpen,
+            # Wát er sneuvelde, niet alleen hoevéél. Een teller vertelt de jurist dat er iets weg is;
+            # dit vertelt hem wat, zodat hij het zelf kan markeren.
+            **({"geweigerd": req.geweigerd} if req.geweigerd else {}),
             "nieuw": telling["element-voorgesteld"], "herzien": telling["element-herzien"],
             "ingetrokken": telling["element-ingetrokken"], "suggesties": telling["critic-suggestie"],
             # De onwijzigbare vastlegging van de herkomst: het document draagt de huidige staat,
@@ -372,6 +380,12 @@ async def zet_elementen(
         *regels,
     ])
     response.headers["ETag"] = etag_van(doc)
+    # De aanroeper (graph-qa) leest dit en waarschuwt de jurist. Zonder dat ruilen we een luide fout
+    # — een leeg document, meteen zichtbaar — in voor een stille: dertien markeringen waarvan
+    # niemand weet dat het er vijftien hadden moeten zijn. Een header, want de respons is het
+    # document en dat hoort niet met verwerkingsdetails te vervuilen.
+    if verworpen:
+        response.headers["X-Verworpen"] = str(verworpen)
     return doc
 
 

@@ -194,6 +194,17 @@ async def _leg_vast(
                 run=schrijver.run,
             )
             elementen_bewaard = True
+            if getattr(api, "verworpen", 0):
+                # Niet als `error`: de beurt is geslaagd en de rest staat er. Maar wél zeggen —
+                # anders ziet de jurist dertien markeringen en weet hij niet dat het er vijftien
+                # hadden moeten zijn. Een stil verlies is erger dan een luide fout.
+                aantal = api.verworpen
+                yield {
+                    "type": "waarschuwing",
+                    "message": (f"{aantal} markering{'en' if aantal > 1 else ''} kon niet worden "
+                                f"opgeslagen en {'staan' if aantal > 1 else 'staat'} niet in de "
+                                f"annotatie. Wat er wél is, vind je hieronder."),
+                }
             bericht |= {
                 "annotatie_slug": slug,
                 "annotatie_titel": _titel(doel),

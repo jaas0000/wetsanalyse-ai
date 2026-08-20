@@ -11,7 +11,7 @@ from __future__ import annotations
 from datetime import datetime
 from enum import Enum
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, ValidationError, model_validator
 
 from .db import utcnow
 
@@ -270,9 +270,23 @@ class SuggestieInvoer(BaseModel):
 
 
 class ElementenInvoer(BaseModel):
-    """De volledige uitkomst van één agent-ronde voor dit document."""
+    """De volledige uitkomst van één agent-ronde voor dit document.
+
+    **Eén kapot element mag de rest niet meeslepen.** De merge in de handler verwerpt een element met
+    een ongeldige klasse of een leeg fragment al per stuk, met een teller — maar de request-validatie
+    ervóór was alles-of-niets, dus een schemafout leverde een 422 op en dan landde er níéts. Twee
+    poorten met tegengesteld beleid: dat verschil was de fout, niet de strengheid. Op dev kostte het
+    een complete annotatie van vijftien markeringen.
+
+    Wat het schema niet haalt gaat daarom naar `geweigerd` in plaats van het verzoek te laten
+    sneuvelen. De handler telt het op bij `verworpen`, zodat er precies één begrip "verworpen" is en
+    de aanroeper het te horen krijgt.
+    """
 
     elementen: list[ElementInvoer]
+    #: Aangeboden elementen die het schema niet haalden, met de reden. Alleen gevuld door de
+    #: validator hieronder; een client die dit zelf meestuurt, ziet het overschreven worden.
+    geweigerd: list[dict] = []
     # Oordelen over MENS-elementen komen hier binnen, niet in `elementen`: die zijn bevroren en
     # mogen niet als voorstel terugkomen. Ze landen in `critic_suggestie` — advies, geen wijziging.
     suggesties: list[SuggestieInvoer] = []
@@ -284,6 +298,31 @@ class ElementenInvoer(BaseModel):
     # Agent-elementen die in deze ronde niet meer voorkomen: intrekken (default) of laten staan.
     # Elementen van de jurist en elementen met een beslissing worden nooit ingetrokken.
     trek_ontbrekende_in: bool = True
+
+    @model_validator(mode="before")
+    @classmethod
+    def _weiger_per_element(cls, data: object) -> object:
+        """Valideer `elementen` stuk voor stuk in plaats van als geheel. Zie de klasse-docstring.
+
+        Alleen de lijst zelf wordt zo behandeld: is `elementen` geen lijst, of gaat er iets mis in
+        een ánder veld, dan blijft het een gewone 422. Dit is een uitzondering voor de plek waar
+        gedeeltelijk slagen beter is dan helemaal niet, geen algemene versoepeling.
+        """
+        if not isinstance(data, dict) or not isinstance(data.get("elementen"), list):
+            return data
+        goed, geweigerd = [], []
+        for rauw in data["elementen"]:
+            try:
+                goed.append(ElementInvoer.model_validate(rauw))
+            except ValidationError as fout:
+                geweigerd.append({
+                    "tekst": (rauw or {}).get("tekst", "") if isinstance(rauw, dict) else "",
+                    "klasse": (rauw or {}).get("klasse", "") if isinstance(rauw, dict) else "",
+                    "reden": "; ".join(
+                        f"{'.'.join(str(x) for x in f['loc'])}: {f['msg']}" for f in fout.errors()[:3]
+                    ),
+                })
+        return {**data, "elementen": goed, "geweigerd": geweigerd}
 
 
 class MensElementInvoer(BaseModel):
