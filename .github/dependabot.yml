@@ -16,15 +16,6 @@ updates:
       patch-and-minor:
         update-types: ["patch", "minor"]
 
-  - package-ecosystem: npm
-    directory: /tools/proxmox-mcp
-    schedule:
-      interval: weekly
-    open-pull-requests-limit: 5
-    groups:
-      patch-and-minor:
-        update-types: ["patch", "minor"]
-
   # ── Frontend (Next.js, BFF met de werkplek) ───────────────────────────────────
   - package-ecosystem: npm
     directory: /frontend

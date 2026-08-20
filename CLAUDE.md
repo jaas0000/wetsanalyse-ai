@@ -73,17 +73,12 @@ plaats van schijnzekerheid.
 ### Ondersteunende tools
 
 - **`tools/wetsanalyse-admin-mcp/`** — stdio-MCP die de admin-API (`/v1/admin/*`) als tools ontsluit.
-- **`tools/proxmox-mcp/`** — read-only MCP op de Proxmox-API (17 tools, uitsluitend GET).
 
 ## De onderdelen hangen via paden samen
 
 Dit is een verzameling losse onderdelen, geen monorepo met één buildsysteem. Het bindmiddel
 zijn **projectrelatieve paden**, zodat de map portabel is tussen machines/OS'en:
 
-- `.mcp.json` → drie **sessie-tools**: `wetsanalyse-admin` (token via `WETSANALYSE_ADMIN_TOKEN` — zie
-  `tools/wetsanalyse-admin-mcp/README.md`), `proxmox` (read-only; `PROXMOX_TOKEN_SECRET`) en
-  `grafana` (de officiële `mcp/grafana`-server voor datasources/dashboards; `GRAFANA_URL` +
-  `GRAFANA_SERVICE_ACCOUNT_TOKEN=${GRAFANA_TOKEN}`).
 - `.claude/settings.json` → **gedeeld en gecommit**: bevat een `PreToolUse`-hook die
   `.claude/skills/wetsanalyse/scripts/write_guard.py` aanroept bij elke Write/Edit-tool. De guard
   blokkeert schrijven naar `analyses/**/werk/**/feedback.json` (uitsluitend de review-server schrijft
@@ -91,9 +86,8 @@ zijn **projectrelatieve paden**, zodat de map portabel is tussen machines/OS'en:
   zodra `feedback.json` in de ronde-map bestaat (gereviewde rondes zijn immutabel; correcties vóór de
   review mogen wél). De hook is **cwd-relatief**: draai Write/Edit vanaf de projectroot of met
   absolute paden.
-- `.claude/settings.local.json` → `enabledMcpjsonServers` plus een **machine-lokale** allowlist en de
-  tokens (`WETSANALYSE_ADMIN_TOKEN`, `PROXMOX_TOKEN_SECRET`, `GRAFANA_TOKEN`). Dit bestand is
-  **gitignored**, dus het reist niet mee: een andere machine/analist bouwt z'n eigen lijst opnieuw op
+- `.claude/settings.local.json` → een **machine-lokale** allowlist plus de tokens (o.a.
+  `WETSANALYSE_ADMIN_TOKEN`). Dit bestand is **gitignored**, dus het reist niet mee: een andere machine/analist bouwt z'n eigen lijst opnieuw op
   via de permissieprompts. De allowlist is bewust krap en portabel — de grants gebruiken wildcards
   in plaats van absolute paden.
 
