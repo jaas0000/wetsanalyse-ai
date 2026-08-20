@@ -221,8 +221,9 @@ resource graphdbApp 'Microsoft.App/containerApps@2024-03-01' = {
         {
           name: 'graphdb'
           image: graphdbImage
+          // Azure ACA Consumption vereist een geldige CPU/geheugen-combi; 4Gi kan alleen met 2.0 CPU.
           resources: {
-            cpu: json('1.0')
+            cpu: json('2.0')
             memory: '4Gi'
           }
           volumeMounts: heeftLicentie ? [
