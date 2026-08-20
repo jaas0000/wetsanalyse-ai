@@ -175,9 +175,15 @@ jobs:
             az postgres flexible-server list --query "[].{server:name, rg:resourceGroup, versie:version, sku:sku.name, opslagGB:storage.storageSizeGB}" -o table 2>/dev/null || echo "(geen of geen rechten)"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
-          # Ook naar stdout, zodat het in de runlog terugleesbaar is.
-          az group list --query "[].name" -o tsv
-          az containerapp list --query "[].{app:name, rg:resourceGroup}" -o tsv
+          # Ook naar stdout: de step summary is niet via de API terug te lezen, de runlog wel.
+          echo "--- container apps ---"
+          az containerapp list \
+            --query "sort_by([].{app:name, extern:properties.configuration.ingress.external, minRepl:properties.template.scale.minReplicas, image:properties.template.containers[0].image}, &app)" \
+            -o tsv
+          echo "--- jobs ---"
+          az containerapp job list --query "[].{job:name, trigger:properties.configuration.triggerType}" -o tsv
+          echo "--- postgres ---"
+          az postgres flexible-server list --query "[].{server:name, versie:version, sku:sku.name}" -o tsv 2>/dev/null || true
 
       - name: Graaf vullen (import-job)
         if: ${{ inputs.actie == 'vul-graaf' }}

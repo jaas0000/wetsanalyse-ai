@@ -1,0 +1,1192 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wetsanalyse AI — Projectoverzicht</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Sans:wght@300;400;500;600;700&family=Fira+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    /* Design tokens — identiek aan globals.css van de webapp */
+    :root {
+      --paper:        #FFFFFF;
+      --surface:      #F5F6F8;
+      --surface-2:    #EDF0F4;
+      --ink:          #1A1A1A;
+      --lint:         #154273;
+      --lint-donker:  #0e2d4f;
+      --muted:        #4A5A6E;
+      --faint:        #6B7685;
+      --line:         #D1D6DD;
+      --accent:       #154273;
+      --accent-soft:  #007BC7;
+      --link:         #01689B;
+      --succes:       #39870C;
+      --waarschuwing: #E17000;
+      --fout:         #D52B1E;
+
+      --schaduw-zacht: 0 1px 2px rgb(21 66 115 / 0.06), 0 1px 3px rgb(21 66 115 / 0.05);
+      --schaduw-kaart: 0 4px 14px rgb(21 66 115 / 0.08), 0 1px 3px rgb(21 66 115 / 0.06);
+      --schaduw-zwaar: 0 8px 28px rgb(21 66 115 / 0.12), 0 2px 6px rgb(21 66 115 / 0.08);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html {
+      font-size: 100%;
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+      scroll-behavior: smooth;
+    }
+
+    body {
+      background: var(--paper);
+      color: var(--ink);
+      font-family: 'Fira Sans', system-ui, sans-serif;
+      line-height: 1.6;
+    }
+
+    h1, h2, h3, h4 {
+      font-family: 'Fira Sans', system-ui, sans-serif;
+      color: var(--lint);
+      letter-spacing: -0.01em;
+      line-height: 1.25;
+    }
+
+    a { color: var(--link); }
+    a:hover { color: var(--accent-soft); }
+
+    /* ── Topbar ───────────────────────────────────────────────────── */
+    .topbar {
+      background: var(--lint);
+      padding: 0 2rem;
+      height: 64px;
+      display: flex;
+      align-items: center;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      box-shadow: 0 2px 8px rgb(0 0 0 / 0.18);
+    }
+
+    .topbar-inner {
+      max-width: 1200px;
+      width: 100%;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .logo-wrap {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .logo-svg { height: 40px; width: auto; }
+
+    .topbar-title {
+      color: #fff;
+      font-size: 0.95rem;
+      font-weight: 500;
+      letter-spacing: 0.01em;
+      border-left: 1px solid rgba(255,255,255,0.3);
+      padding-left: 1rem;
+      margin-left: 0.25rem;
+    }
+
+    .topbar-nav {
+      display: flex;
+      gap: 1.5rem;
+      list-style: none;
+    }
+
+    .topbar-nav a {
+      color: rgba(255,255,255,0.85);
+      text-decoration: none;
+      font-size: 0.875rem;
+      font-weight: 500;
+      transition: color 0.15s;
+    }
+
+    .topbar-nav a:hover { color: #fff; }
+
+    /* ── Layout shell ─────────────────────────────────────────────── */
+    .page { max-width: 1200px; margin: 0 auto; padding: 0 2rem; }
+
+    section { padding: 4rem 0; }
+    section + section { border-top: 1px solid var(--line); }
+
+    /* ── Hero ─────────────────────────────────────────────────────── */
+    .hero {
+      background: linear-gradient(135deg, var(--lint) 0%, #1a5a9a 100%);
+      color: #fff;
+      padding: 5rem 2rem 4.5rem;
+    }
+
+    .hero-inner {
+      max-width: 1200px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 3rem;
+      align-items: center;
+    }
+
+    .hero-label {
+      display: inline-block;
+      background: rgba(255,255,255,0.15);
+      color: rgba(255,255,255,0.9);
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding: 0.3rem 0.75rem;
+      border-radius: 4px;
+      margin-bottom: 1rem;
+    }
+
+    .hero h1 {
+      color: #fff;
+      font-size: clamp(2rem, 4vw, 3rem);
+      font-weight: 700;
+      margin-bottom: 1rem;
+    }
+
+    .hero-sub {
+      font-size: 1.125rem;
+      color: rgba(255,255,255,0.85);
+      max-width: 60ch;
+      margin-bottom: 1.75rem;
+      line-height: 1.7;
+    }
+
+    .hero-principle {
+      background: rgba(255,255,255,0.1);
+      border: 1px solid rgba(255,255,255,0.2);
+      border-left: 3px solid rgba(255,255,255,0.7);
+      border-radius: 6px;
+      padding: 0.875rem 1.125rem;
+      font-size: 0.925rem;
+      color: rgba(255,255,255,0.9);
+      max-width: 60ch;
+      font-style: italic;
+    }
+
+    .hero-badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-top: 1.5rem;
+    }
+
+    .hero-badge {
+      background: rgba(255,255,255,0.15);
+      border: 1px solid rgba(255,255,255,0.25);
+      color: #fff;
+      font-size: 0.8rem;
+      font-weight: 500;
+      padding: 0.3rem 0.7rem;
+      border-radius: 999px;
+    }
+
+    .hero-diagram {
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.18);
+      border-radius: 14px;
+      padding: 1.5rem 1.75rem;
+      font-family: 'Fira Mono', monospace;
+      font-size: 0.8rem;
+      color: rgba(255,255,255,0.85);
+      white-space: pre;
+      line-height: 1.7;
+      min-width: 280px;
+    }
+
+    .hero-diagram .dim  { color: rgba(255,255,255,0.45); }
+    .hero-diagram .hi   { color: #7dd3fc; font-weight: 500; }
+    .hero-diagram .hi2  { color: #86efac; }
+    .hero-diagram .hi3  { color: #fde68a; }
+
+    /* ── Sectie-koppen ────────────────────────────────────────────── */
+    .section-header {
+      display: flex;
+      align-items: baseline;
+      gap: 1rem;
+      margin-bottom: 2rem;
+    }
+
+    .section-header h2 {
+      font-size: 1.5rem;
+      font-weight: 700;
+    }
+
+    .section-label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+      color: var(--faint);
+      border: 1px solid var(--line);
+      padding: 0.2rem 0.6rem;
+      border-radius: 4px;
+    }
+
+    .section-intro {
+      color: var(--muted);
+      font-size: 1rem;
+      max-width: 72ch;
+      margin-bottom: 2.5rem;
+      line-height: 1.7;
+    }
+
+    /* ── Principes ────────────────────────────────────────────────── */
+    .principes-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+      gap: 1rem;
+    }
+
+    .principe-kaart {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 1.25rem 1.375rem;
+      display: flex;
+      gap: 0.875rem;
+      align-items: flex-start;
+    }
+
+    .principe-icon {
+      font-size: 1.5rem;
+      flex-shrink: 0;
+      margin-top: 0.1rem;
+    }
+
+    .principe-kaart h4 {
+      font-size: 0.9rem;
+      font-weight: 600;
+      margin-bottom: 0.35rem;
+      color: var(--lint);
+    }
+
+    .principe-kaart p {
+      font-size: 0.85rem;
+      color: var(--muted);
+      line-height: 1.55;
+    }
+
+    /* ── Platform-componenten ─────────────────────────────────────── */
+    .componenten-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      gap: 1.25rem;
+    }
+
+    .component-kaart {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 1.5rem;
+      box-shadow: var(--schaduw-kaart);
+      display: flex;
+      flex-direction: column;
+      gap: 0.875rem;
+      transition: box-shadow 0.2s, transform 0.2s;
+    }
+
+    .component-kaart:hover {
+      box-shadow: var(--schaduw-zwaar);
+      transform: translateY(-2px);
+    }
+
+    .component-header {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .component-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      background: var(--lint);
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.2rem;
+      flex-shrink: 0;
+    }
+
+    .component-icon.groen  { background: #39870C; }
+    .component-icon.blauw  { background: var(--lint); }
+    .component-icon.paars  { background: #6b3fa0; }
+    .component-icon.oranje { background: #a05800; }
+    .component-icon.donker { background: #2c3e50; }
+    .component-icon.grijs  { background: #4A5A6E; }
+
+    .component-naam {
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--lint);
+      margin-bottom: 0.15rem;
+    }
+
+    .component-pad {
+      font-size: 0.75rem;
+      color: var(--faint);
+      font-family: 'Fira Mono', monospace;
+    }
+
+    .component-beschrijving {
+      font-size: 0.875rem;
+      color: var(--muted);
+      line-height: 1.6;
+      flex: 1;
+    }
+
+    .component-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.375rem;
+      margin-top: auto;
+    }
+
+    .tag {
+      font-size: 0.72rem;
+      font-weight: 500;
+      padding: 0.2rem 0.55rem;
+      border-radius: 4px;
+      border: 1px solid;
+    }
+
+    .tag-blauw  { background: #d8eaf7; border-color: #a8b6c0; color: var(--ink); }
+    .tag-groen  { background: #dff0d0; border-color: #b0d490; color: #2c6608; }
+    .tag-grijs  { background: var(--surface-2); border-color: var(--line); color: var(--muted); }
+    .tag-paars  { background: #ede0f7; border-color: #c9b0de; color: #4a1f7a; }
+    .tag-oranje { background: #fef0dc; border-color: #f5c88a; color: #7a3d00; }
+
+    /* ── Methode ──────────────────────────────────────────────────── */
+    .methode-stappen {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 1.25rem;
+      counter-reset: stap;
+    }
+
+    .stap-kaart {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 1.5rem;
+      box-shadow: var(--schaduw-zacht);
+      position: relative;
+      counter-increment: stap;
+    }
+
+    .stap-kaart::before {
+      content: counter(stap);
+      position: absolute;
+      top: 1.25rem;
+      right: 1.25rem;
+      font-size: 3rem;
+      font-weight: 700;
+      color: var(--lint);
+      opacity: 0.07;
+      line-height: 1;
+      font-family: 'Fira Sans', sans-serif;
+    }
+
+    .stap-nummer {
+      display: inline-block;
+      width: 28px;
+      height: 28px;
+      background: var(--lint);
+      color: #fff;
+      border-radius: 50%;
+      font-size: 0.8rem;
+      font-weight: 700;
+      text-align: center;
+      line-height: 28px;
+      margin-bottom: 0.75rem;
+    }
+
+    .stap-kaart h3 {
+      font-size: 1rem;
+      font-weight: 700;
+      margin-bottom: 0.6rem;
+    }
+
+    .stap-kaart p {
+      font-size: 0.875rem;
+      color: var(--muted);
+      line-height: 1.65;
+    }
+
+    /* ── JAS-klassen ──────────────────────────────────────────────── */
+    .jas-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 0.625rem;
+    }
+
+    .jas-badge {
+      border: 1px solid;
+      border-radius: 8px;
+      padding: 0.6rem 0.875rem;
+      font-size: 0.82rem;
+      font-weight: 500;
+      color: var(--ink);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      transition: transform 0.15s;
+    }
+
+    .jas-badge:hover { transform: scale(1.02); }
+
+    .jas-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      border: 1px solid rgba(0,0,0,0.12);
+    }
+
+    /* Exacte kleuren uit jas.ts */
+    .jas-1  { background: #d8eaf7; border-color: #a8b6c0; }
+    .jas-2  { background: #b2c3e3; border-color: #8a98b1; }
+    .jas-3  { background: #90a2d0; border-color: #707ea2; }
+    .jas-4  { background: #bad8f1; border-color: #91a8bb; }
+    .jas-5  { background: #b7d8cd; border-color: #8ea89f; }
+    .jas-6  { background: #d47479; border-color: #a55a5e; }
+    .jas-7  { background: #f5dc5e; border-color: #bfab49; }
+    .jas-8  { background: #e6b8bb; border-color: #b38f91; }
+    .jas-9  { background: #d7e8e2; border-color: #a7b4b0; }
+    .jas-10 { background: #cbb8d6; border-color: #9e8fa6; }
+    .jas-11 { background: #e6d3e5; border-color: #b3a4b2; }
+    .jas-12 { background: #b0b1b2; border-color: #898a8a; }
+    .jas-13 { background: #edefef; border-color: #b8baba; }
+
+    .jas-1  .jas-dot { background: #d8eaf7; }
+    .jas-2  .jas-dot { background: #b2c3e3; }
+    .jas-3  .jas-dot { background: #90a2d0; }
+    .jas-4  .jas-dot { background: #bad8f1; }
+    .jas-5  .jas-dot { background: #b7d8cd; }
+    .jas-6  .jas-dot { background: #d47479; }
+    .jas-7  .jas-dot { background: #f5dc5e; }
+    .jas-8  .jas-dot { background: #e6b8bb; }
+    .jas-9  .jas-dot { background: #d7e8e2; }
+    .jas-10 .jas-dot { background: #cbb8d6; }
+    .jas-11 .jas-dot { background: #e6d3e5; }
+    .jas-12 .jas-dot { background: #b0b1b2; }
+    .jas-13 .jas-dot { background: #edefef; }
+
+    .jas-toelichting {
+      margin-top: 1.25rem;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 1rem 1.25rem;
+      font-size: 0.85rem;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+
+    /* ── Architectuur / Deployment ────────────────────────────────── */
+    .deploy-tabel {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.875rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .deploy-tabel thead th {
+      text-align: left;
+      padding: 0.6rem 1rem;
+      background: var(--surface-2);
+      color: var(--lint);
+      font-weight: 700;
+      font-size: 0.8rem;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+      border-bottom: 2px solid var(--line);
+    }
+
+    .deploy-tabel thead th:first-child { border-radius: 8px 0 0 0; }
+    .deploy-tabel thead th:last-child  { border-radius: 0 8px 0 0; }
+
+    .deploy-tabel tbody tr {
+      border-bottom: 1px solid var(--line);
+      transition: background 0.15s;
+    }
+
+    .deploy-tabel tbody tr:hover { background: var(--surface); }
+
+    .deploy-tabel td {
+      padding: 0.7rem 1rem;
+      color: var(--ink);
+      vertical-align: top;
+    }
+
+    .deploy-tabel td:first-child {
+      font-weight: 600;
+      color: var(--lint);
+      white-space: nowrap;
+    }
+
+    .deploy-tabel code {
+      background: var(--surface-2);
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      padding: 0.1rem 0.4rem;
+      font-family: 'Fira Mono', monospace;
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+
+    /* ── Observability blokken ────────────────────────────────────── */
+    .obs-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 1rem;
+      margin-top: 1.5rem;
+    }
+
+    .obs-kaart {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 1.125rem 1.25rem;
+    }
+
+    .obs-kaart h4 {
+      font-size: 0.875rem;
+      font-weight: 700;
+      margin-bottom: 0.4rem;
+    }
+
+    .obs-kaart p {
+      font-size: 0.8rem;
+      color: var(--muted);
+      line-height: 1.55;
+    }
+
+    /* ── Call-out blok ────────────────────────────────────────────── */
+    .callout {
+      background: var(--surface);
+      border-left: 3px solid var(--lint);
+      border-radius: 0 10px 10px 0;
+      padding: 1rem 1.25rem;
+      font-size: 0.875rem;
+      color: var(--muted);
+      margin: 1.5rem 0;
+      line-height: 1.65;
+    }
+
+    .callout strong { color: var(--lint); }
+
+    /* ── Footer ───────────────────────────────────────────────────── */
+    footer {
+      background: var(--lint);
+      color: rgba(255,255,255,0.8);
+      padding: 3rem 2rem;
+      margin-top: 0;
+    }
+
+    .footer-inner {
+      max-width: 1200px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 2.5rem;
+    }
+
+    footer h4 {
+      color: #fff;
+      font-size: 0.85rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 0.75rem;
+    }
+
+    footer p, footer li {
+      font-size: 0.82rem;
+      line-height: 1.65;
+      color: rgba(255,255,255,0.7);
+    }
+
+    footer ul { list-style: none; }
+    footer li + li { margin-top: 0.35rem; }
+    footer a { color: rgba(255,255,255,0.8); }
+    footer a:hover { color: #fff; }
+
+    .footer-copy {
+      max-width: 1200px;
+      margin: 2rem auto 0;
+      padding-top: 1.5rem;
+      border-top: 1px solid rgba(255,255,255,0.15);
+      font-size: 0.78rem;
+      color: rgba(255,255,255,0.5);
+    }
+
+    /* ── Responsive ───────────────────────────────────────────────── */
+    @media (max-width: 900px) {
+      .hero-inner { grid-template-columns: 1fr; }
+      .hero-diagram { display: none; }
+      .footer-inner { grid-template-columns: 1fr; }
+      .topbar-nav { display: none; }
+    }
+
+    @media (max-width: 600px) {
+      .page { padding: 0 1rem; }
+      section { padding: 2.5rem 0; }
+      .hero { padding: 3rem 1rem 2.5rem; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── Topbar ─────────────────────────────────────────────────────── -->
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="logo-wrap">
+      <!-- Belastingdienst-logo (inline SVG, wit op lintblauw) -->
+      <svg class="logo-svg" viewBox="0 0 275 125" xmlns="http://www.w3.org/2000/svg" aria-label="Belastingdienst">
+        <rect y="0" fill="#154273" width="50" height="100"/>
+        <path fill="#FFFFFF" d="M25.9,77.4H25V75h0.9V77.4z M29.8,66.7H29v-2.4h0.9v2.4H29.8z M13.7,62.6c-0.1,0-0.5,0-0.5,0.1s0.2,0,0.5,0.1c0.7,0.1,1,0.5,1.5,0.5c0.4,0,0.9-0.3,0.7-0.9c0-0.1-0.1-0.1-0.1,0c-0.1,0.3-0.4,0.5-0.8,0.5C14.5,62.7,14.4,62.6,13.7,62.6z M8.9,65c0.1,0.1,0.9,1.2-0.4,1.6c-0.1,0-0.1,0.1,0,0.1c0.9,0.4,1.4-0.3,1.4-0.3c0.5,1.1-0.3,1.7-0.3,1.7c0.1,0.2,0.5,0.5,1.2,0.7c0.3-0.1,0.6-0.4,0.8-0.8c0,0,0.2,0.5,0,0.9c1.9,0.2,2.6-1.3,4-1.1c0,0,0.1,0,0.1-0.1c0-0.9-0.6-2.7-2.4-3S12,63.6,12,63.6c0.8,0,1.2,0.3,1.2,0.3c0.1-0.2-0.1-0.5-0.1-0.5c0.1-0.1,0.1-0.4,0.1-0.4c-0.9,0-1.1-0.2-1.1-0.2c-0.1-0.5,0.2-1.2,1.5-0.5c0.3-0.3,0.3-0.7,0.3-0.7c0.1,0,0.2-0.2,0.2-0.3c0-0.2-1-0.8-1.3-0.9c-0.1-0.3-0.5-0.8-1.7-0.6c-0.6,0.1-1-0.1-0.8-0.4c0-0.1-0.1-0.1-0.1,0c-0.1,0.1-0.3,0.5,0.2,0.8S11,61,11,61.1c0,0.1-0.1,0.1-0.2,0c-0.3-0.9-1.5-1.1-2.3-0.6c0,0.5,0.6,0.8,0.9,0.8c0.2,0,0.4-0.2,0.4-0.4c0-0.1,0.1-0.1,0.1,0c0.1,0.3-0.4,1-1.1,0.6c-0.7,0.7-0.4,1.7-0.4,2c0.1,0.6-0.2,1.2-0.7,0.9H7.6C7.8,64.9,8.3,65.3,8.9,65z"/>
+        <path fill="#154273" d="M61.9,64.5c0.5-0.1,0.9-0.5,0.9-1.1v-7.6l-1-0.3V55c1-0.2,1.6-0.2,3.1-0.2c2.2,0,3.3,0.8,3.3,2.3c0,1.2-1.1,2.3-2.3,2.5l0,0c1.6,0,2.7,0.9,2.7,2.3c0,1.7-1.6,3-4,3c-1.1,0-2,0-2.8-0.2v-0.2H61.9z"/>
+        <!-- Belastingdienst tekst vereenvoudigd als placeholder -->
+        <text x="60" y="67" font-family="'Fira Sans', sans-serif" font-size="12" fill="#154273" font-weight="500">Belastingdienst</text>
+      </svg>
+      <span class="topbar-title">Wetsanalyse AI</span>
+    </div>
+    <nav>
+      <ul class="topbar-nav">
+        <li><a href="#platform">Platform</a></li>
+        <li><a href="#methode">Methode</a></li>
+        <li><a href="#jas">JAS-klassen</a></li>
+        <li><a href="#uitrollen">Uitrollen</a></li>
+      </ul>
+    </nav>
+  </div>
+</header>
+
+<!-- ── Hero ──────────────────────────────────────────────────────── -->
+<div class="hero">
+  <div class="hero-inner">
+    <div>
+      <span class="hero-label">Intern platform · Belastingdienst Inning &amp; invordering</span>
+      <h1>Wetsanalyse AI</h1>
+      <p class="hero-sub">
+        Een agent-platform voor het gestructureerd, brongetrouw en traceerbaar duiden van
+        Nederlandse wet- en regelgeving volgens de methode Wetsanalyse (Ausems, Bulles &amp; Lokin)
+        en het Juridisch Analyseschema (JAS).
+      </p>
+      <p class="hero-principle">
+        De AI produceert, de mens beoordeelt en corrigeert. Interpretatiekeuzes — inclusief
+        twijfel en aannames — worden expliciet gemaakt in plaats van schijnzekerheid te produceren.
+      </p>
+      <div class="hero-badges">
+        <span class="hero-badge">FastAPI</span>
+        <span class="hero-badge">Next.js</span>
+        <span class="hero-badge">LangGraph</span>
+        <span class="hero-badge">GraphDB</span>
+        <span class="hero-badge">MCP</span>
+        <span class="hero-badge">OpenTelemetry</span>
+        <span class="hero-badge">Docker / Portainer</span>
+        <span class="hero-badge">Azure</span>
+      </div>
+    </div>
+    <div class="hero-diagram" aria-hidden="true"><span class="hi">Jurist</span>
+  │
+  ▼
+<span class="hi2">Werkplek</span> <span class="dim">(Next.js)</span>
+  │  SSE
+  ▼
+<span class="hi3">Lex</span> <span class="dim">(graph-qa · LangGraph)</span>
+  │  MCP
+  ▼
+<span class="hi2">BWB-kennisgraaf</span> <span class="dim">(GraphDB)</span>
+  │
+  ▼
+<span class="dim">overheid.nl</span> <span class="hi">(CC-0 wettekst)</span>
+  │
+<span class="dim">API ──► PostgreSQL</span></div>
+  </div>
+</div>
+
+<!-- ── Kerndoelen ─────────────────────────────────────────────────── -->
+<div class="page">
+  <section id="principes">
+    <div class="section-header">
+      <h2>Kerndoelen &amp; grondslagen</h2>
+      <span class="section-label">Scope: activiteit 2</span>
+    </div>
+    <p class="section-intro">
+      Het platform levert het markeren en classificeren van wetsformuleringen in JAS-klassen
+      (activiteit 2). Begrippen (activiteit 3) en de RegelSpraak-formalisering (activiteit 4)
+      worden later op agentische basis gebouwd.
+    </p>
+    <div class="principes-grid">
+      <div class="principe-kaart">
+        <span class="principe-icon">⚖️</span>
+        <div>
+          <h4>Brongetrouwheid</h4>
+          <p>Alleen letterlijk opgehaalde wettekst. Citeer letterlijk en houd elke markering herleidbaar naar artikel + lid + jci-uri bronreferentie.</p>
+        </div>
+      </div>
+      <div class="principe-kaart">
+        <span class="principe-icon">👤</span>
+        <div>
+          <h4>Human-in-the-loop</h4>
+          <p>De agent stelt voor, de jurist beslist. Elke beslissing landt in een append-only auditlog. De Critic markeert aandachtsniveaus.</p>
+        </div>
+      </div>
+      <div class="principe-kaart">
+        <span class="principe-icon">🔎</span>
+        <div>
+          <h4>Traceerbaarheid</h4>
+          <p>Gestructureerde JSON-logs en OpenTelemetry-tracing door de hele keten: frontend → API → Lex. Eén trace-id verbindt alles.</p>
+        </div>
+      </div>
+      <div class="principe-kaart">
+        <span class="principe-icon">🔒</span>
+        <div>
+          <h4>Expliciete twijfel</h4>
+          <p>Interpretatiekeuzes, aannames en onzekerheden worden zichtbaar gemaakt — geen schijnzekerheid door een AI-systeem.</p>
+        </div>
+      </div>
+      <div class="principe-kaart">
+        <span class="principe-icon">🔄</span>
+        <div>
+          <h4>Idempotent &amp; veilig</h4>
+          <p>Per wet idempotent herimporteren is altijd veilig. Gereviewde rondes zijn immutabel. De write-guard blokkeert ongeplande overschrijvingen.</p>
+        </div>
+      </div>
+      <div class="principe-kaart">
+        <span class="principe-icon">🏛️</span>
+        <div>
+          <h4>Rijkshuisstijl</h4>
+          <p>Belastingdienst-stijlvak: lintblauw #154273, Fira Sans, officieel logo. JAS-klassekleuren uit de officiële wa-table.png.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<!-- ── Platform-componenten ───────────────────────────────────────── -->
+<div style="background: var(--surface); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line);">
+  <div class="page">
+    <section id="platform">
+      <div class="section-header">
+        <h2>Platform-componenten</h2>
+        <span class="section-label">6 onderdelen</span>
+      </div>
+      <p class="section-intro">
+        De stack is een verzameling losse onderdelen — geen monorepo met één buildsysteem.
+        Het bindmiddel zijn projectrelatieve paden en gedeelde docker-netwerken op de Portainer-host.
+      </p>
+      <div class="componenten-grid">
+
+        <!-- Wetsanalyse API -->
+        <div class="component-kaart">
+          <div class="component-header">
+            <div class="component-icon blauw">🗄️</div>
+            <div>
+              <div class="component-naam">Wetsanalyse API</div>
+              <div class="component-pad">api/ · FastAPI · PostgreSQL · poort 8081</div>
+            </div>
+          </div>
+          <p class="component-beschrijving">
+            Headless backend voor de werkplek. Bedient het <strong>annotatie-domein</strong>
+            (<code>/v1/annotatie/*</code>: documenten, elementen, beslissingen + append-only auditlog),
+            de <strong>chatgeschiedenis</strong> (<code>/v1/gesprekken/*</code>), het
+            <strong>login/gebruikersbeheer</strong> (identiteitsbron van de webapp) en het
+            <strong>LLM-modelprofielbeheer</strong> (<code>/v1/admin/*</code>). Annotaties en gesprekken zijn per gebruiker gescopet. Per-client bearer-auth.
+          </p>
+          <div class="component-tags">
+            <span class="tag tag-blauw">FastAPI</span>
+            <span class="tag tag-blauw">PostgreSQL</span>
+            <span class="tag tag-grijs">bearer-auth</span>
+            <span class="tag tag-grijs">Pydantic</span>
+            <span class="tag tag-groen">OpenTelemetry</span>
+          </div>
+        </div>
+
+        <!-- Frontend / Werkplek -->
+        <div class="component-kaart">
+          <div class="component-header">
+            <div class="component-icon blauw">💬</div>
+            <div>
+              <div class="component-naam">Werkplek — Lex-pagina</div>
+              <div class="component-pad">frontend/ · Next.js App Router · poort 8080</div>
+            </div>
+          </div>
+          <p class="component-beschrijving">
+            Next.js-webapp (BFF). De app <em>is de werkplek</em>: één chat-achtig gespreksvenster
+            voor <strong>vragen én JAS-annotatie</strong>, live via SSE tegen graph-qa. Account,
+            beheer en instellingen openen als dialoog over de werkplek heen (intercepting routes).
+            Achter een login met userid + wachtwoord, rollen <code>beheerder</code>/<code>analist</code>
+            en optionele TOTP-2FA. Het token blijft server-side (BFF-patroon).
+          </p>
+          <div class="component-tags">
+            <span class="tag tag-blauw">Next.js 15</span>
+            <span class="tag tag-blauw">Auth.js</span>
+            <span class="tag tag-grijs">SSE</span>
+            <span class="tag tag-grijs">Rijkshuisstijl</span>
+            <span class="tag tag-groen">TOTP 2FA</span>
+          </div>
+        </div>
+
+        <!-- Graph-QA / Lex -->
+        <div class="component-kaart">
+          <div class="component-header">
+            <div class="component-icon paars">🤖</div>
+            <div>
+              <div class="component-naam">Lex — graph-qa agent</div>
+              <div class="component-pad">tools/graph-qa/ · LangGraph · intern only</div>
+            </div>
+          </div>
+          <p class="component-beschrijving">
+            De eigen QA/annotatie-agent: beantwoordt vragen over wet- en regelgeving door de
+            BWB-kennisgraaf via MCP te bevragen, brongetrouw onderbouwd. Eén
+            <strong>unified LangGraph-agent</strong>: een supervisor kiest per vraag de
+            <strong>antwoord-worker</strong> (specialisten definitie/duiding/algemeen) of de
+            <strong>annotatie-worker</strong> (ophaal → annoteer → Critic → advance, 🟢🟡🔴).
+            De werkplek praat er direct mee via SSE; de review-state loopt via de API.
+          </p>
+          <div class="component-tags">
+            <span class="tag tag-paars">LangGraph</span>
+            <span class="tag tag-paars">MCP-client</span>
+            <span class="tag tag-grijs">SSE</span>
+            <span class="tag tag-grijs">Critic</span>
+            <span class="tag tag-groen">GHCR image</span>
+          </div>
+        </div>
+
+        <!-- BWB-importer -->
+        <div class="component-kaart">
+          <div class="component-header">
+            <div class="component-icon oranje">📥</div>
+            <div>
+              <div class="component-naam">BWB-importer</div>
+              <div class="component-pad">tools/bwb-import/ · wekelijkse herimport</div>
+            </div>
+          </div>
+          <p class="component-beschrijving">
+            Haalt de wettekst op bij <code>repository.officiele-overheidspublicaties.nl</code>,
+            valideert tegen de officiële XSD's, parseert de structuur (regeling → hoofdstuk/afdeling
+            → artikel → lid → onderdeel, met verwijzingen) en schrijft RDF naar GraphDB,
+            repository <code>inning</code>. Met <code>BWB_IMPORT_WTI=true</code> komt WTI-verrijking
+            mee (organisatie, wetsfamilie, grondslagen, rechtsgebieden, citeertitels). Per wet
+            idempotent — herimporteren is altijd veilig.
+          </p>
+          <div class="component-tags">
+            <span class="tag tag-oranje">RDF / SPARQL</span>
+            <span class="tag tag-oranje">XSD-validatie</span>
+            <span class="tag tag-grijs">idempotent</span>
+            <span class="tag tag-grijs">CC-0 data</span>
+          </div>
+        </div>
+
+        <!-- Kennisgraaf / GraphDB -->
+        <div class="component-kaart">
+          <div class="component-header">
+            <div class="component-icon donker">🕸️</div>
+            <div>
+              <div class="component-naam">BWB-kennisgraaf</div>
+              <div class="component-pad">deploy/graphdb/ · GraphDB 11.4 · poort 7200</div>
+            </div>
+          </div>
+          <p class="component-beschrijving">
+            GraphDB 11.4 met repository <code>inning</code> en de <strong>ingebouwde MCP-server</strong>
+            (<code>/mcp</code>, geen aparte container nodig). Achter een nginx-auth-proxy die het
+            bearer-token controleert en het GraphDB-service-account injecteert. GraphDB-security
+            staat aan. Data lokaal op de docker-host; dagelijkse RDF-dump met host-back-up.
+          </p>
+          <div class="component-tags">
+            <span class="tag tag-blauw">GraphDB 11.4</span>
+            <span class="tag tag-blauw">MCP ingebouwd</span>
+            <span class="tag tag-grijs">SPARQL</span>
+            <span class="tag tag-grijs">RDF</span>
+            <span class="tag tag-groen">dagelijkse dump</span>
+          </div>
+        </div>
+
+        <!-- Observability -->
+        <div class="component-kaart">
+          <div class="component-header">
+            <div class="component-icon grijs">📊</div>
+            <div>
+              <div class="component-naam">Observability-stack</div>
+              <div class="component-pad">deploy/observability/ · Grafana · poort 3001</div>
+            </div>
+          </div>
+          <p class="component-beschrijving">
+            Verzamelstack: OTel-Collector (met spanmetrics/servicegraph-connectors) + Tempo + Loki +
+            Prometheus + Alloy (stdout-logs naar Loki) + Grafana. Twee kant-en-klare dashboards:
+            <em>Wetsanalyse trends</em> en <em>Systeemtopologie</em> (live keten op basis van de
+            trace-servicegraph). Alerting (3 regels, volgt het Grafana-notificatiebeleid).
+            Eén trace-id verbindt de keten frontend → API → Lex.
+          </p>
+          <div class="component-tags">
+            <span class="tag tag-groen">Grafana</span>
+            <span class="tag tag-groen">Tempo</span>
+            <span class="tag tag-groen">Loki</span>
+            <span class="tag tag-groen">Prometheus</span>
+            <span class="tag tag-groen">OTel</span>
+          </div>
+        </div>
+
+      </div>
+    </section>
+  </div>
+</div>
+
+<!-- ── Methode ────────────────────────────────────────────────────── -->
+<div class="page">
+  <section id="methode">
+    <div class="section-header">
+      <h2>De methode Wetsanalyse</h2>
+      <span class="section-label">JAS · activiteit 2</span>
+    </div>
+    <p class="section-intro">
+      De methode Wetsanalyse (Ausems, Bulles &amp; Lokin) maakt de betekenis van wetgeving
+      expliciet en uitlegbaar via het Juridisch Analyseschema (JAS). Het platform voert
+      activiteit 2 uit: markeren en classificeren.
+    </p>
+
+    <div class="callout">
+      <strong>Brongetrouwheid is niet onderhandelbaar.</strong> Werk alleen met letterlijk opgehaalde
+      wettekst, citeer letterlijk, en houd elke markering/annotatie herleidbaar naar artikel + lid +
+      <code>bronreferentie</code> (jci-uri).
+    </div>
+
+    <div class="methode-stappen">
+      <div class="stap-kaart">
+        <div class="stap-nummer">1</div>
+        <h3>Verwijzingen inventariseren &amp; volgen</h3>
+        <p>
+          De uitgaande verwijzingen van een bepaling opsporen en classificeren naar functie
+          (delegatie, definitie, schakelb…), en de relevante volgen met een diepte-cap van 1
+          plus een relevantie-gate. Brondefinities en afwijkende hoofdregels wegen zo
+          brongetrouw mee. Een gevolgde delegatie kan promoveren tot een eigen bron in het werkgebied.
+        </p>
+      </div>
+      <div class="stap-kaart">
+        <div class="stap-nummer">2</div>
+        <h3>Markeren &amp; classificeren — activiteit 2</h3>
+        <p>
+          Relevante wetsformuleringen markeren en elk een van de <strong>dertien JAS-klassen</strong>
+          toewijzen: rechtssubject, rechtsobject, rechtsbetrekking, rechtsfeit, voorwaarde,
+          afleidingsregel, variabele, parameter, operator, tijdsaanduiding, plaatsaanduiding,
+          delegatiebevoegdheid of brondefinitie.
+        </p>
+      </div>
+      <div class="stap-kaart">
+        <div class="stap-nummer">3</div>
+        <h3>Review — human-in-the-loop</h3>
+        <p>
+          De analist beoordeelt elk voorgesteld element: goedkeuren, bijstellen of afwijzen.
+          Elke beslissing landt in een append-only auditlog. De Critic markeert per element
+          het aandachtsniveau (🟢 laag / 🟡 matig / 🔴 hoog). Gereviewde rondes zijn
+          immutabel; correcties vóór de review zijn altijd mogelijk.
+        </p>
+      </div>
+    </div>
+  </section>
+</div>
+
+<!-- ── JAS-klassen ────────────────────────────────────────────────── -->
+<div style="background: var(--surface); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line);">
+  <div class="page">
+    <section id="jas">
+      <div class="section-header">
+        <h2>De dertien JAS-klassen</h2>
+        <span class="section-label">Canonieke volgorde</span>
+      </div>
+      <p class="section-intro">
+        De JAS-klassen zijn de kern van activiteit 2. De kleuren zijn de exacte labelkleuren
+        uit de officiële JAS-tabel (<code>docs/wetsanalyse/wa-table.png</code>). De canonieke
+        lijst staat in <code>.claude/skills/wetsanalyse/scripts/validate_analyse.py</code>
+        en wordt op runtime door de API ingelezen — er is geen tweede bron.
+      </p>
+      <div class="jas-grid">
+        <div class="jas-badge jas-1"><div class="jas-dot"></div>Rechtssubject</div>
+        <div class="jas-badge jas-2"><div class="jas-dot"></div>Rechtsobject</div>
+        <div class="jas-badge jas-3"><div class="jas-dot"></div>Rechtsbetrekking</div>
+        <div class="jas-badge jas-4"><div class="jas-dot"></div>Rechtsfeit</div>
+        <div class="jas-badge jas-5"><div class="jas-dot"></div>Voorwaarde</div>
+        <div class="jas-badge jas-6"><div class="jas-dot"></div>Afleidingsregel</div>
+        <div class="jas-badge jas-7"><div class="jas-dot"></div>Variabele en variabelewaarde</div>
+        <div class="jas-badge jas-8"><div class="jas-dot"></div>Parameter en parameterwaarde</div>
+        <div class="jas-badge jas-9"><div class="jas-dot"></div>Operator</div>
+        <div class="jas-badge jas-10"><div class="jas-dot"></div>Tijdsaanduiding</div>
+        <div class="jas-badge jas-11"><div class="jas-dot"></div>Plaatsaanduiding</div>
+        <div class="jas-badge jas-12"><div class="jas-dot"></div>Delegatiebevoegdheid en delegatie-invulling</div>
+        <div class="jas-badge jas-13"><div class="jas-dot"></div>Brondefinitie</div>
+      </div>
+      <div class="jas-toelichting">
+        De canonieke klassenlijst is de <strong>enige bron</strong>. Voeg geen klassen toe buiten
+        <code>validate_analyse.py</code>. De API laadt dit script op runtime in via
+        <code>api/app/validation.py</code>; graph-qa heeft een eigen kopie met een drift-guard-test.
+        Wijzig je de lijst, doe dit dan op beide plekken tegelijk.
+      </div>
+    </section>
+  </div>
+</div>
+
+<!-- ── Uitrollen ──────────────────────────────────────────────────── -->
+<div class="page">
+  <section id="uitrollen">
+    <div class="section-header">
+      <h2>Architectuur &amp; uitrollen</h2>
+      <span class="section-label">Portainer · Azure · GitHub Actions</span>
+    </div>
+    <p class="section-intro">
+      Vijf losse Portainer-stacks met een volgorde-afhankelijkheid via de docker-netwerken.
+      nginx-proxy-manager draait op een andere host en publiceert via hostpoorten.
+      graph-qa is bewust intern-only.
+    </p>
+
+    <table class="deploy-tabel">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Stack</th>
+          <th>Map</th>
+          <th>Maakt netwerk</th>
+          <th>Hostpoort</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>1</td>
+          <td>postgres</td>
+          <td><code>deploy/postgres/</code></td>
+          <td><code>wetsanalyse_internal</code></td>
+          <td>nee</td>
+        </tr>
+        <tr>
+          <td>2</td>
+          <td>graphdb</td>
+          <td><code>deploy/graphdb/</code></td>
+          <td><code>graphdb_default</code></td>
+          <td>7200 + 8004</td>
+        </tr>
+        <tr>
+          <td>3</td>
+          <td>observability</td>
+          <td><code>deploy/observability/</code></td>
+          <td><code>observability_default</code></td>
+          <td>3001 (Grafana)</td>
+        </tr>
+        <tr>
+          <td>4</td>
+          <td>api + graph-qa</td>
+          <td><code>api/</code> · <code>tools/graph-qa/</code></td>
+          <td>—</td>
+          <td>api: 8081; graph-qa: intern</td>
+        </tr>
+        <tr>
+          <td>5</td>
+          <td>frontend</td>
+          <td><code>frontend/</code></td>
+          <td>—</td>
+          <td>8080</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout">
+      <strong>Volgorde is kritisch.</strong> Deployt een latere stack eerder, dan faalt hij op
+      een ontbrekend extern netwerk. De eerste drie stacks maken de netwerken; de rest joint erop.
+      Zie <code>deploy/dev/README.md</code> voor de volgorde-afhankelijkheden.
+    </div>
+
+    <div class="obs-grid">
+      <div class="obs-kaart">
+        <h4>Dev-omgeving</h4>
+        <p>Eén vaste gedeelde omgeving op <code>dev.wetsanalyse.example</code>.
+           Handmatig via Actions → <em>dev-deploy</em> → <em>Run workflow</em>.</p>
+      </div>
+      <div class="obs-kaart">
+        <h4>CI — image-build</h4>
+        <p>Push naar master triggert de <code>*-docker-publish.yml</code>-workflows:
+           pip-audit/npm-audit vooraf, Trivy-gate achteraf. Images naar GHCR.</p>
+      </div>
+      <div class="obs-kaart">
+        <h4>Azure</h4>
+        <p>Tweede uitrolplek via <code>deploy/azure/</code> met eigen GraphDB en importer.
+           Handmatig <code>bicep</code>-uitrol; images via Azure Container Apps.</p>
+      </div>
+      <div class="obs-kaart">
+        <h4>Grafana dashboards</h4>
+        <p>Twee dashboards: <em>Wetsanalyse trends</em> en <em>Systeemtopologie</em>.
+           Alerting via 3 regels die het Grafana-notificatiebeleid volgen.</p>
+      </div>
+      <div class="obs-kaart">
+        <h4>BWB-herimport</h4>
+        <p>Wekelijkse herimport via de bwb-import-stack. Per wet idempotent —
+           herimporteren is altijd veilig, ook bij een reeds gevulde graaf.</p>
+      </div>
+      <div class="obs-kaart">
+        <h4>Graaf-deploy</h4>
+        <p>Eigen workflow <code>deploy-graaf.yml</code>: eerst GraphDB (maakt het
+           netwerk), dan de importer. GraphDB-licentie vereist voor read-write.</p>
+      </div>
+    </div>
+  </section>
+</div>
+
+<!-- ── Footer ────────────────────────────────────────────────────── -->
+<footer>
+  <div class="footer-inner">
+    <div>
+      <h4>Databron &amp; licentie</h4>
+      <p>
+        De wettekst komt van de publieke diensten van <code>overheid.nl</code>
+        (SRU + BWB-repository); geen API-key nodig, data is CC-0. De methode Wetsanalyse
+        en het JAS zijn afkomstig uit de Rijksoverheid-publicatie in
+        <code>docs/wetsanalyse/wetsanalyse-rijk/</code>.
+      </p>
+    </div>
+    <div>
+      <h4>Documentatie</h4>
+      <ul>
+        <li><code>api/CLAUDE.md</code> — API-architectuur</li>
+        <li><code>frontend/CLAUDE.md</code> — Frontend-architectuur</li>
+        <li><code>tools/graph-qa/CLAUDE.md</code> — Agent-architectuur</li>
+        <li><code>docs/observability.md</code> — Observability</li>
+        <li><code>docs/schrijfrichtlijn-lex.md</code> — Toon van Lex</li>
+        <li><code>deploy/dev/README.md</code> — Dev-uitrol</li>
+        <li><code>deploy/azure/README.md</code> — Azure-uitrol</li>
+      </ul>
+    </div>
+    <div>
+      <h4>Skills &amp; methode</h4>
+      <ul>
+        <li><code>.claude/skills/wetsanalyse/SKILL.md</code></li>
+        <li><code>references/jas-klassen-referentie.md</code></li>
+        <li><code>references/verwijzingen-volgen.md</code></li>
+        <li><code>references/review-checkpoints.md</code></li>
+        <li><code>references/harness-diagnose.md</code></li>
+      </ul>
+      <p style="margin-top: 0.75rem;">
+        Scope: activiteit 2 — markeren &amp; classificeren in JAS-klassen.
+        Begrippen (act. 3) en RegelSpraak (act. 4) zijn gepland voor later.
+      </p>
+    </div>
+  </div>
+  <div class="footer-copy">
+    Wetsanalyse AI &mdash; Belastingdienst Inning &amp; invordering &mdash; intern platform
+  </div>
+</footer>
+
+</body>
+</html>
