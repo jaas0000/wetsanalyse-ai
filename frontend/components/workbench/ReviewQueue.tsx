@@ -514,6 +514,9 @@ function DecisionCard({
                 {el.critic_suggestie.voorstel_klasse}
               </span></>
             )}
+            {el.critic_suggestie.voorstel_tekst && (
+              <> Voorgesteld fragment: <q className="italic">{el.critic_suggestie.voorstel_tekst}</q></>
+            )}
           </p>
           <div className="mt-1.5 flex flex-wrap gap-1.5">
             {el.critic_suggestie.voorstel_klasse && (
@@ -523,6 +526,17 @@ function DecisionCard({
                 className={`${KNOP_BASIS} ${KNOP_PRIMAIR}`}
               >
                 Overnemen
+              </button>
+            )}
+            {/* Zonder anker: de server wist het oude dan, want dat wees naar het fragment zoals het
+                wás. Zie `Wijziging.anker`. */}
+            {el.critic_suggestie.voorstel_tekst && (
+              <button
+                disabled={bezig}
+                onClick={() => void wijzig({ tekst: el.critic_suggestie!.voorstel_tekst })}
+                className={`${KNOP_BASIS} ${KNOP_PRIMAIR}`}
+              >
+                Fragment overnemen
               </button>
             )}
             <button

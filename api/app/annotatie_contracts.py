@@ -127,7 +127,11 @@ class CriticRonde(BaseModel):
 
 
 class CriticSuggestie(BaseModel):
-    """Critic-oordeel op een element dat de JURIST maakte. Puur advies: wordt nooit toegepast."""
+    """Critic-oordeel als advies: nooit automatisch toegepast, altijd een klik van de jurist.
+
+    Twee bronnen: een oordeel over een markering die de jurist zelf maakte, en een fragmentvoorstel
+    uit de eindbeoordeling van de agent — die komt te laat voor de patcher en zou anders alleen in de
+    motivatietekst blijven staan."""
 
     aandacht: Aandacht | None = None
     motivatie: str = ""
@@ -254,7 +258,8 @@ class ElementInvoer(BaseModel):
 
 
 class SuggestieInvoer(BaseModel):
-    """Kanttekening van de Critic bij een element dat de JURIST maakte."""
+    """Kanttekening van de Critic: bij een element dat de JURIST maakte, of — als er een concreet
+    `voorstel_tekst` in zit — bij een agent-element waarvan de eindbeoordeling nog iets voorstelt."""
 
     element_id: str
     aandacht: Aandacht | None = None

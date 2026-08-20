@@ -311,11 +311,15 @@ async def zet_elementen(
             elif critic_bij:
                 el.lifecycle = Lifecycle.critic_checked if el.aandacht is not None else el.lifecycle
 
-        # Kanttekeningen bij eigen markeringen. Alleen op mens-elementen: op een agent-element
-        # hoort een oordeel gewoon in `aandacht` thuis.
+        # Kanttekeningen bij eigen markeringen. Op een agent-element hoort een kaal oordeel gewoon
+        # in `aandacht` thuis — maar een concreet fragmentvoorstel uit de eindbeoordeling past daar
+        # niet in, en er komt geen correctiestap meer overheen. Dat mag hier dus wél landen, zodat de
+        # jurist het met één klik overneemt in plaats van het met de hand na te selecteren.
         for s in req.suggesties:
             el = op_id.get(s.element_id)
-            if el is None or el.herkomst != "mens":
+            if el is None:
+                continue
+            if el.herkomst != "mens" and not s.voorstel_tekst:
                 continue
             el.critic_suggestie = CriticSuggestie(
                 aandacht=s.aandacht, motivatie=s.motivatie,

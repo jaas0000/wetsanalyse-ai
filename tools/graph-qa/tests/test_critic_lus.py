@@ -693,3 +693,45 @@ def test_gewone_tekst_blijft_ongemoeid():
 
     tekst = "Rechtssubject correct gemarkeerd; drie jaren is een vaste termijn."
     assert vervang_ids_door_citaat(tekst, []) == tekst
+
+
+def _met_eindvoorstel(**overschrijf) -> dict:
+    """Een element waarvan de EINDbeoordeling nog een fragment voorstelt."""
+    ronde = {"ronde": 2, "aandacht": "geel", "actie": "vervang", "toegepast": False,
+             "voorstel_klasse": "", "voorstel_tekst": "de schuldenaar",
+             "motivatie": "korter is scherper", **overschrijf}
+    return {"id": "a", "klasse": "Rechtssubject", "tekst": "indien de schuldenaar daarom verzoekt",
+            "critic_rondes": [{"ronde": 1, "aandacht": "groen", "actie": "behoud"}, ronde]}
+
+
+def test_een_fragmentvoorstel_uit_de_eindbeoordeling_wordt_een_suggestie():
+    """Anders komt het door geen enkele stap meer heen; de patcher draaide al.
+
+    Op dev gebeurde dat twee keer in één run: "overweeg het fragment te beperken tot 'is
+    aansprakelijk'", met het exacte fragment in de data, terwijl de jurist het met de hand moest
+    naselecteren.
+    """
+    from agent.annotatie import openstaand_fragmentvoorstel
+
+    tekst, waarom = openstaand_fragmentvoorstel(_met_eindvoorstel(), CORPUS)
+    assert tekst == "de schuldenaar"
+    assert waarom == "korter is scherper"
+
+
+@pytest.mark.parametrize("overschrijf, waarom", [
+    ({"actie": "behoud"}, "zonder vervang-instructie is er niets voorgesteld"),
+    ({"toegepast": True}, "al uitgevoerd door de patcher"),
+    ({"voorstel_tekst": ""}, "geen fragment"),
+    ({"voorstel_tekst": "de belastingschuldige"}, "staat niet letterlijk in de bron"),
+    ({"voorstel_tekst": "indien de schuldenaar daarom verzoekt"}, "gelijk aan wat er al staat"),
+])
+def test_wanneer_er_geen_suggestie_volgt(overschrijf, waarom):
+    from agent.annotatie import openstaand_fragmentvoorstel
+
+    assert openstaand_fragmentvoorstel(_met_eindvoorstel(**overschrijf), CORPUS) == ("", ""), waarom
+
+
+def test_een_element_zonder_oordeel_levert_niets_op():
+    from agent.annotatie import openstaand_fragmentvoorstel
+
+    assert openstaand_fragmentvoorstel({"id": "a", "tekst": "x"}, CORPUS) == ("", "")

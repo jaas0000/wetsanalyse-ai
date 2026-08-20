@@ -259,6 +259,32 @@ def vervang_ids_door_citaat(motivatie: str, voorstellen: list[dict[str, Any]]) -
     return _ELEMENT_ID.sub(_vervang, motivatie).strip()
 
 
+def openstaand_fragmentvoorstel(voorstel: dict[str, Any], corpus: str) -> tuple[str, str]:
+    """Het fragment dat de EINDbeoordeling voorstelt maar dat niemand meer uitvoert, plus de reden.
+
+    De patcher draait vóór de eindbeoordeling; wat de Critic dáár nog voorstelt, komt door geen enkele
+    stap meer heen. Op dev gebeurde dat twee keer in één run: "overweeg het fragment te beperken tot
+    'is aansprakelijk'", met het exacte fragment in de data, terwijl de jurist het met de hand moest
+    naselecteren.
+
+    Uitvoeren doen we het niet — het oordeel ís het sluitstuk, en er komt geen ronde meer overheen die
+    er iets van kan vinden. Maar het als aanklikbare suggestie naast de kaart leggen kan wel; dan
+    landt het als een beslissing van de jurist. Dezelfde eis als overal: letterlijk in de bron.
+    """
+    rondes = voorstel.get("critic_rondes") or []
+    if not rondes:
+        return "", ""
+    laatste = rondes[-1]
+    if str(laatste.get("actie", "")) != "vervang":
+        return "", ""
+    tekst = str(laatste.get("voorstel_tekst", "")).strip()
+    if not tekst or tekst == str(voorstel.get("tekst", "")):
+        return "", ""
+    if laatste.get("toegepast") or not komt_letterlijk_voor(corpus, tekst):
+        return "", ""
+    return tekst, str(laatste.get("motivatie", "")).strip()
+
+
 def _markeer_toegepast(voorstel: dict[str, Any]) -> None:
     """Zet `toegepast` op de laatste Critic-ronde van dit element.
 

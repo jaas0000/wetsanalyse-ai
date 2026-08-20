@@ -419,8 +419,8 @@ async def test_suggestie_landt_op_eigen_markering_zonder_die_te_wijzigen(client)
     assert "critic-suggestie" in acties
 
 
-async def test_suggestie_op_een_agentelement_wordt_genegeerd(client):
-    """Op een agent-element hoort een oordeel gewoon in `aandacht`, niet als suggestie."""
+async def test_kaal_oordeel_op_een_agentelement_wordt_genegeerd(client):
+    """Een oordeel zónder voorstel hoort op een agent-element gewoon in `aandacht` thuis."""
     slug = await _maak_doc(client)
     doc = (await _put(client, slug, [{"klasse": "Rechtssubject", "tekst": "de ontvanger"}])).json()
     agent_id = doc["elementen"][0]["id"]
@@ -431,6 +431,31 @@ async def test_suggestie_op_een_agentelement_wordt_genegeerd(client):
         "ronde": 1,
     })).json()
     assert doc["elementen"][0]["critic_suggestie"] is None
+
+
+async def test_fragmentvoorstel_op_een_agentelement_landt_wel(client):
+    """De eindbeoordeling komt te laat voor de patcher; anders bleef het voorstel in de tekst hangen.
+
+    Op dev stond er twee keer "overweeg het fragment te beperken tot 'is aansprakelijk'" met het
+    exacte fragment in de data, terwijl de jurist het met de hand moest naselecteren.
+    """
+    slug = await _maak_doc(client)
+    doc = (await _put(client, slug, [{"klasse": "Rechtsbetrekking",
+                                      "tekst": "de ontvanger verleent uitstel"}])).json()
+    agent_id = doc["elementen"][0]["id"]
+
+    doc = (await client.put(f"{BASIS}/{slug}/elementen", json={
+        "elementen": [{"id": agent_id, "klasse": "Rechtsbetrekking",
+                       "tekst": "de ontvanger verleent uitstel"}],
+        "suggesties": [{"element_id": agent_id, "aandacht": "geel", "motivatie": "korter is scherper",
+                        "voorstel_tekst": "verleent uitstel"}],
+        "ronde": 1,
+    })).json()
+
+    el = doc["elementen"][0]
+    assert el["tekst"] == "de ontvanger verleent uitstel", "een suggestie wijzigt nooit iets"
+    assert el["critic_suggestie"]["voorstel_tekst"] == "verleent uitstel"
+    assert el["critic_suggestie"]["status"] == "open"
 
 
 # --- het fragment inkorten/uitbreiden: het anker moet meeschuiven -------------------------------

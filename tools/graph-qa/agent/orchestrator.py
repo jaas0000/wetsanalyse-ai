@@ -31,7 +31,7 @@ from langgraph.graph import END, START, StateGraph
 from .agent_common import BeurtGestopt, truncate
 from .annotatie import (
     _verwerk, _verwerk_critic, demp_zelfweerspreking, komt_letterlijk_voor, pas_critic_toe,
-    sleutel_van, vervang_ids_door_citaat,
+    openstaand_fragmentvoorstel, sleutel_van, vervang_ids_door_citaat,
 )
 from .artikel import artikel_corpus
 from .annotatie_prompt import (
@@ -1283,6 +1283,7 @@ def build_graph(
         doel = _bepaal_doel(state)
         aanduiding = doel.get("artikel") or doel.get("nummer") or ""
         ontbrekend = state.get("critic_ontbrekend") or []
+        corpus = _corpus(state)
 
         # Vóór de elementen: met welk model deze voorstellen zijn gemaakt. Zonder dit is achteraf
         # niet meer vast te stellen wat een markering produceerde — de werkplek legt het vast bij
@@ -1315,6 +1316,16 @@ def build_graph(
                 # anders verdrinkt een écht aandachtspunt tussen de disambiguaties.
                 met_twijfel += 1
             writer({"type": "element", "element": v})
+
+            # Een fragmentvoorstel uit de EINDbeoordeling komt door geen enkele stap meer heen — de
+            # patcher draaide al. Als suggestie ernaast leggen kan wel: dan neemt de jurist het over
+            # met één klik, en landt het als zíjn beslissing in het spoor.
+            tekst, waarom = openstaand_fragmentvoorstel(v, corpus)
+            if tekst:
+                writer({"type": "suggestie", "suggestie": {
+                    "element_id": v.get("id", ""), "aandacht": v.get("aandacht", ""),
+                    "motivatie": waarom, "voorstel_tekst": tekst,
+                }})
         writer({"type": "ontbrekend", "items": ontbrekend})
 
         eigen = [v for v in voorstellen if v.get("van_jurist")]
