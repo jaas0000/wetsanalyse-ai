@@ -696,7 +696,7 @@ def test_gewone_tekst_blijft_ongemoeid():
 
 
 def _met_eindvoorstel(**overschrijf) -> dict:
-    """Een element waarvan de EINDbeoordeling nog een fragment voorstelt."""
+    """Een element waarvan de EINDbeoordeling nog iets voorstelt."""
     ronde = {"ronde": 2, "aandacht": "geel", "actie": "vervang", "toegepast": False,
              "voorstel_klasse": "", "voorstel_tekst": "de schuldenaar",
              "motivatie": "korter is scherper", **overschrijf}
@@ -711,27 +711,49 @@ def test_een_fragmentvoorstel_uit_de_eindbeoordeling_wordt_een_suggestie():
     aansprakelijk'", met het exacte fragment in de data, terwijl de jurist het met de hand moest
     naselecteren.
     """
-    from agent.annotatie import openstaand_fragmentvoorstel
+    from agent.annotatie import openstaand_voorstel
 
-    tekst, waarom = openstaand_fragmentvoorstel(_met_eindvoorstel(), CORPUS)
-    assert tekst == "de schuldenaar"
+    klasse, tekst, waarom = openstaand_voorstel(_met_eindvoorstel(), CORPUS)
+    assert (klasse, tekst) == ("", "de schuldenaar")
     assert waarom == "korter is scherper"
+
+
+def test_ook_een_klassevoorstel_uit_de_eindbeoordeling_wordt_een_suggestie():
+    """Bij een eerdere ronde maakt de patcher er een alternatief van; in de eindronde draait die niet.
+
+    Op dev stelde de Critic bij 'Tot de weerlegging van het vermoeden wordt slechts toegelaten' zowel
+    een klasse als een fragment voor; alleen het fragment kwam op de kaart.
+    """
+    from agent.annotatie import openstaand_voorstel
+
+    klasse, tekst, _ = openstaand_voorstel(_met_eindvoorstel(voorstel_klasse="Voorwaarde"), CORPUS)
+    assert (klasse, tekst) == ("Voorwaarde", "de schuldenaar")
+
+
+def test_een_klassevoorstel_zonder_bruikbaar_fragment_komt_er_alleen_door():
+    from agent.annotatie import openstaand_voorstel
+
+    klasse, tekst, _ = openstaand_voorstel(
+        _met_eindvoorstel(voorstel_klasse="Voorwaarde", voorstel_tekst="de belastingschuldige"), CORPUS)
+    assert (klasse, tekst) == ("Voorwaarde", ""), "het fragment staat niet letterlijk in de bron"
 
 
 @pytest.mark.parametrize("overschrijf, waarom", [
     ({"actie": "behoud"}, "zonder vervang-instructie is er niets voorgesteld"),
     ({"toegepast": True}, "al uitgevoerd door de patcher"),
-    ({"voorstel_tekst": ""}, "geen fragment"),
+    ({"voorstel_tekst": ""}, "geen fragment en geen klasse"),
     ({"voorstel_tekst": "de belastingschuldige"}, "staat niet letterlijk in de bron"),
     ({"voorstel_tekst": "indien de schuldenaar daarom verzoekt"}, "gelijk aan wat er al staat"),
+    ({"voorstel_klasse": "Rechtssubject", "voorstel_tekst": ""}, "klasse is al zo"),
+    ({"voorstel_klasse": "Verzonnen klasse", "voorstel_tekst": ""}, "geen JAS-klasse"),
 ])
 def test_wanneer_er_geen_suggestie_volgt(overschrijf, waarom):
-    from agent.annotatie import openstaand_fragmentvoorstel
+    from agent.annotatie import openstaand_voorstel
 
-    assert openstaand_fragmentvoorstel(_met_eindvoorstel(**overschrijf), CORPUS) == ("", ""), waarom
+    assert openstaand_voorstel(_met_eindvoorstel(**overschrijf), CORPUS) == ("", "", ""), waarom
 
 
 def test_een_element_zonder_oordeel_levert_niets_op():
-    from agent.annotatie import openstaand_fragmentvoorstel
+    from agent.annotatie import openstaand_voorstel
 
-    assert openstaand_fragmentvoorstel({"id": "a", "tekst": "x"}, CORPUS) == ("", "")
+    assert openstaand_voorstel({"id": "a", "tekst": "x"}, CORPUS) == ("", "", "")

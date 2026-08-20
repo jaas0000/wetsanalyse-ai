@@ -31,7 +31,7 @@ from langgraph.graph import END, START, StateGraph
 from .agent_common import BeurtGestopt, truncate
 from .annotatie import (
     _verwerk, _verwerk_critic, demp_zelfweerspreking, komt_letterlijk_voor, pas_critic_toe,
-    openstaand_fragmentvoorstel, sleutel_van, vervang_ids_door_citaat,
+    openstaand_voorstel, sleutel_van, vervang_ids_door_citaat,
 )
 from .artikel import artikel_corpus
 from .annotatie_prompt import (
@@ -1317,14 +1317,14 @@ def build_graph(
                 met_twijfel += 1
             writer({"type": "element", "element": v})
 
-            # Een fragmentvoorstel uit de EINDbeoordeling komt door geen enkele stap meer heen — de
-            # patcher draaide al. Als suggestie ernaast leggen kan wel: dan neemt de jurist het over
-            # met één klik, en landt het als zíjn beslissing in het spoor.
-            tekst, waarom = openstaand_fragmentvoorstel(v, corpus)
-            if tekst:
+            # Een voorstel uit de EINDbeoordeling komt door geen enkele stap meer heen — de patcher
+            # draaide al. Als suggestie ernaast leggen kan wel: dan neemt de jurist het over met één
+            # klik, en landt het als zíjn beslissing in het spoor.
+            klasse, tekst, waarom = openstaand_voorstel(v, corpus)
+            if klasse or tekst:
                 writer({"type": "suggestie", "suggestie": {
                     "element_id": v.get("id", ""), "aandacht": v.get("aandacht", ""),
-                    "motivatie": waarom, "voorstel_tekst": tekst,
+                    "motivatie": waarom, "voorstel_klasse": klasse, "voorstel_tekst": tekst,
                 }})
         writer({"type": "ontbrekend", "items": ontbrekend})
 

@@ -259,30 +259,38 @@ def vervang_ids_door_citaat(motivatie: str, voorstellen: list[dict[str, Any]]) -
     return _ELEMENT_ID.sub(_vervang, motivatie).strip()
 
 
-def openstaand_fragmentvoorstel(voorstel: dict[str, Any], corpus: str) -> tuple[str, str]:
-    """Het fragment dat de EINDbeoordeling voorstelt maar dat niemand meer uitvoert, plus de reden.
+def openstaand_voorstel(voorstel: dict[str, Any], corpus: str) -> tuple[str, str, str]:
+    """Wat de EINDbeoordeling voorstelt maar niemand meer uitvoert: (klasse, fragment, reden).
 
     De patcher draait vóór de eindbeoordeling; wat de Critic dáár nog voorstelt, komt door geen enkele
     stap meer heen. Op dev gebeurde dat twee keer in één run: "overweeg het fragment te beperken tot
     'is aansprakelijk'", met het exacte fragment in de data, terwijl de jurist het met de hand moest
-    naselecteren.
+    naselecteren. Hetzelfde geldt voor een voorgestelde klasse: bij een eerdere ronde maakt de patcher
+    daar een alternatief van, maar in de eindronde draait die niet meer.
 
     Uitvoeren doen we het niet — het oordeel ís het sluitstuk, en er komt geen ronde meer overheen die
     er iets van kan vinden. Maar het als aanklikbare suggestie naast de kaart leggen kan wel; dan
     landt het als een beslissing van de jurist. Dezelfde eis als overal: letterlijk in de bron.
     """
+    leeg = ("", "", "")
     rondes = voorstel.get("critic_rondes") or []
     if not rondes:
-        return "", ""
+        return leeg
     laatste = rondes[-1]
-    if str(laatste.get("actie", "")) != "vervang":
-        return "", ""
+    if str(laatste.get("actie", "")) != "vervang" or laatste.get("toegepast"):
+        return leeg
+
+    klasse = str(laatste.get("voorstel_klasse", "")).strip()
+    if klasse not in GELDIGE_JAS_KLASSEN or klasse == str(voorstel.get("klasse", "")):
+        klasse = ""
+
     tekst = str(laatste.get("voorstel_tekst", "")).strip()
-    if not tekst or tekst == str(voorstel.get("tekst", "")):
-        return "", ""
-    if laatste.get("toegepast") or not komt_letterlijk_voor(corpus, tekst):
-        return "", ""
-    return tekst, str(laatste.get("motivatie", "")).strip()
+    if tekst == str(voorstel.get("tekst", "")) or not komt_letterlijk_voor(corpus, tekst):
+        tekst = ""
+
+    if not klasse and not tekst:
+        return leeg
+    return klasse, tekst, str(laatste.get("motivatie", "")).strip()
 
 
 def _markeer_toegepast(voorstel: dict[str, Any]) -> None:
