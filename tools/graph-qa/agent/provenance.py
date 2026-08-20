@@ -9,10 +9,10 @@ als het model de IRI parafraseert zonder hem uit te typen.
 De citatie-herkenning (`iter_refs`) wordt gedeeld met `agent/grounding.py`, dat
 dezelfde patronen op de antwoordtekst toepast om niet-onderbouwde verwijzingen te
 markeren. We herkennen:
-  - document-IRI's in de eigen graafruimte  (https://ipalm.nl/bwb/...)
+  - document-IRI's in de eigen graafruimte  (zie `agent/namespace.py`)
   - jci-vindplaatsstrings                    (jci1.3:c:BWBR....)
   - kale BWB-id's                            (BWBR\\d+), alleen als losse bron
-De vocabulaire-namespace (https://ipalm.nl/ns/bwb#...) valt er bewust buiten:
+De vocabulaire-namespace (`ONTOLOGIE`) valt er bewust buiten:
 dat zijn predicaten, geen vindplaatsen.
 """
 from __future__ import annotations
@@ -21,10 +21,11 @@ import re
 from collections.abc import Iterable, Iterator
 
 from .models import Source
+from .namespace import vindplaats_patroon
 
 # Backslash uitgesloten uit de char-class zodat een naijlende escape (bv. "...g=2026-07-01\\")
 # niet mee in de IRI/jci wordt gezogen.
-_IRI_RE = re.compile(r"https?://ipalm\.nl/bwb/[^\s\"'<>)\]}\\]+")
+_IRI_RE = re.compile(vindplaats_patroon())
 _JCI_RE = re.compile(r"jci[\d.]+:c:BWBR\d+[^\s\"'<>)\]}\\]*")
 _BWB_RE = re.compile(r"\bBWBR\d+\b")
 

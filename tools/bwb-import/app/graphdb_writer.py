@@ -197,7 +197,7 @@ class GraphDbWriter:
         *,
         url: str,
         repository: str,
-        vocab: Vocab | None = None,
+        vocab: Vocab,
         user: str | None = None,
         password: str | None = None,
         session: requests.Session | None = None,
@@ -206,7 +206,7 @@ class GraphDbWriter:
     ) -> None:
         self._url = url.rstrip("/")
         self._repo = repository
-        self._vocab = vocab or Vocab()
+        self._vocab = vocab
         self._auth = (user, password) if user else None
         self._http = session or requests.Session()
         self._timeout = timeout

@@ -12,6 +12,8 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+from .rdf_vocab import DEFAULT_BASE_IRI, DEFAULT_ONTOLOGY_IRI
+
 # Wortel van het project (bwb-import/), onafhankelijk van de werkdirectory.
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
@@ -69,6 +71,6 @@ class Settings:
             graphdb_repository=os.getenv("GRAPHDB_REPOSITORY", "inning"),
             graphdb_user=os.getenv("GRAPHDB_USER") or None,
             graphdb_password=os.getenv("GRAPHDB_PASSWORD") or None,
-            graphdb_base_iri=os.getenv("GRAPHDB_BASE_IRI", "https://ipalm.nl/bwb/"),
-            graphdb_ontology_iri=os.getenv("GRAPHDB_ONTOLOGY_IRI", "https://ipalm.nl/ns/bwb#"),
+            graphdb_base_iri=os.getenv("GRAPHDB_BASE_IRI", DEFAULT_BASE_IRI),
+            graphdb_ontology_iri=os.getenv("GRAPHDB_ONTOLOGY_IRI", DEFAULT_ONTOLOGY_IRI),
         )

@@ -13,7 +13,9 @@ from __future__ import annotations
 
 import re
 
-PREFIXES = """PREFIX bwb: <https://ipalm.nl/ns/bwb#>
+from ..namespace import BASIS, ONTOLOGIE
+
+PREFIXES = f"""PREFIX bwb: <{ONTOLOGIE}>
 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
 PREFIX luc: <http://www.ontotext.com/connectors/lucene#>
@@ -23,7 +25,7 @@ PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
 
 # Eigen IRI-ruimte — filter hierop om owl:sameAs-tweelingen (wetten.overheid.nl)
 # buiten tellingen/resultaten te houden.
-NS = "https://ipalm.nl/bwb/"
+NS = BASIS
 
 _BWB_RE = re.compile(r"^BWBR\d+$")
 _ART_RE = re.compile(r"^[0-9]+[a-z]*$", re.IGNORECASE)
