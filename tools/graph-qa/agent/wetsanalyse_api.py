@@ -34,6 +34,28 @@ logger = logging.getLogger("graph_qa.api")
 TIMEOUT = httpx.Timeout(connect=5.0, read=30.0, write=30.0, pool=5.0)
 
 
+#: Velden waar de agent en de api een ándere opvatting van "geen waarde" hebben: de agent gebruikt de
+#: lege string (`aandacht: str = ""`), de api een enum met `None` (`Aandacht | None`). Zo'n lege
+#: string is voor de api geen geldige waarde maar een 422 — en omdat de PUT alles-of-niets is, sleurt
+#: één zo'n veld de complete annotatie mee. Dat is op dev gebeurd: agent klaar en gegrond, jurist een
+#: leeg document.
+#:
+#: De vertaling hoort hier, op de grens, en niet bij elke aanroeper: dit is de enige plek waar de
+#: agent-representatie het contract van een ánder proces binnengaat. `tests/test_contract_drift.py`
+#: bewaakt dat er geen vierde veld bijkomt zonder dat iemand het merkt.
+def _leeg_is_niets(waarde: dict[str, Any], veld: str = "aandacht") -> dict[str, Any]:
+    return waarde if waarde.get(veld) else {**waarde, veld: None}
+
+
+def naar_contract(element: dict[str, Any]) -> dict[str, Any]:
+    """Eén element in de vorm die `ElementInvoer` accepteert. Zie `_leeg_is_niets`."""
+    uit = _leeg_is_niets(element)
+    rondes = uit.get("critic_rondes")
+    if rondes:
+        uit = {**uit, "critic_rondes": [_leeg_is_niets(r) for r in rondes]}
+    return uit
+
+
 class WetsanalyseApiFout(Exception):
     """De uitkomst kon niet worden vastgelegd. Expliciet, want stil verliezen is het ergste."""
 
@@ -116,9 +138,15 @@ class WetsanalyseApi:
     ) -> dict[str, Any]:
         """De uitkomst van deze agent-ronde. De api merget op id/tekst+lid en bevriest wat de jurist
         al beoordeeld heeft — die semantiek zit daar, niet hier."""
-        payload: dict[str, Any] = {"elementen": elementen, "suggesties": suggesties, "ronde": 0}
+        payload: dict[str, Any] = {
+            "elementen": [naar_contract(e) for e in elementen],
+            "suggesties": [_leeg_is_niets(s) for s in suggesties],
+            "ronde": 0,
+        }
         if run:
-            payload["run"] = run
+            # `tijd` is bij ons optioneel en bij de api verplicht mét default. Hem als `None`
+            # meesturen is dus géén "laat maar leeg" maar een validatiefout; weglaten wél.
+            payload["run"] = {k: v for k, v in run.items() if not (k == "tijd" and v is None)}
         return await self._put(f"/v1/annotatie/documenten/{slug}/elementen", payload)
 
     # -- gesprekken-domein -----------------------------------------------------------------------

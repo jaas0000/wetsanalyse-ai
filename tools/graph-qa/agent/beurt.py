@@ -98,14 +98,6 @@ class BeurtSchrijver:
                 bestaand.get("tekst") or "", bestaand.get("lid") or ""
             )
 
-        # Een leeg aandacht-veld is geen oordeel maar de afwezigheid ervan, en het contract kent
-        # daar `None` voor: `Aandacht` accepteert alleen groen/geel/rood. Een lege string liet de
-        # HELE PUT stuklopen op 422 — dus één element zonder eindoordeel wiste de complete annotatie.
-        # Op dev gebeurde dat: de agent was klaar en gegrond, en de jurist hield een leeg document
-        # over. Hier normaliseren en niet bij de bron, want elk pad hierheen kan het veld leeglaten.
-        if not element.get("aandacht"):
-            element = {**element, "aandacht": None}
-
         for i, bestaand in enumerate(self.elementen):
             if zelfde(bestaand):
                 self.elementen[i] = element

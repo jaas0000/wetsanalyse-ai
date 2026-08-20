@@ -158,9 +158,11 @@ async def test_een_element_zonder_eindoordeel_breekt_de_hele_annotatie_niet(api)
         {"type": "done"},
     ])
 
+    from agent.wetsanalyse_api import naar_contract
+
     elementen = api.element_puts[0]["elementen"]
-    assert elementen[0]["aandacht"] is None, "geen oordeel is None, niet een lege string"
-    assert elementen[1]["aandacht"] == "geel", "een echt oordeel blijft staan"
+    assert naar_contract(elementen[0])["aandacht"] is None, "geen oordeel is None, geen lege string"
+    assert naar_contract(elementen[1])["aandacht"] == "geel", "een echt oordeel blijft staan"
 
 
 @asyncio_test
