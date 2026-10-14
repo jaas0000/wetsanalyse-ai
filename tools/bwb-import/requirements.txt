@@ -6,5 +6,5 @@ fastapi~=0.142
 uvicorn[standard]~=0.54
 pytest~=9.1
 httpx~=0.28
-ruff~=0.16
+ruff~=0.17
 black~=26.5
