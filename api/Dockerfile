@@ -5,7 +5,7 @@
 # ── Builder ───────────────────────────────────────────────────────────────────
 # uv leeft alléén in deze stage: het bouwt de .venv en blijft daarna buiten de
 # runtime-image (anders scant Trivy de uv-binary en z'n gebundelde crates mee).
-FROM python:3.14-slim@sha256:cea0e6040540fb2b965b6e7fb5ffa00871e632eef63719f0ea54bca189ce14a6 AS builder
+FROM python:3.15-slim@sha256:2da676046630d7bf14c6764ae1143dc7fa0377a53f94bf5a642f0b214aca5bce AS builder
 
 COPY --from=ghcr.io/astral-sh/uv:0.11@sha256:ff07b86af50d4d9391d9daf4ff89ce427bc544f9aae87057e69a1cc0aa369946 /uv /bin/uv
 
@@ -32,7 +32,7 @@ RUN uv pip install --python /app/api/.venv/bin/python --no-cache-dir 'setuptools
 # ── Runtime ───────────────────────────────────────────────────────────────────
 # Schone base, identiek aan de builder → de venv-symlinks naar /usr/local/bin/python
 # blijven geldig. Geen uv meer; systeem-pip naar een gepatchte versie (BIO2 / ISO 27002).
-FROM python:3.14-slim@sha256:cea0e6040540fb2b965b6e7fb5ffa00871e632eef63719f0ea54bca189ce14a6 AS runtime
+FROM python:3.15-slim@sha256:2da676046630d7bf14c6764ae1143dc7fa0377a53f94bf5a642f0b214aca5bce AS runtime
 
 # OS-pakketten patchen (BIO2 / ISO 27002:2022 §8.8), spiegelt de MCP-/frontend-image.
 # De base-image loopt soms achter op Debian-security-updates (o.a. liblzma5, CVE-2026-34743).
