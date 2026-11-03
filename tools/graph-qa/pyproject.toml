@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Juridische vraagbeantwoording via GraphDB-graaf (MCP)"
 requires-python = ">=3.11"
 dependencies = [
-    "anthropic>=1,<2",
+    "anthropic>=1,<3",
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.30.0",
     "httpx>=0.27.0",
